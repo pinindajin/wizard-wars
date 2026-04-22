@@ -75,6 +75,9 @@ export default function ServerBrowser() {
   /**
    * Creates a new `game_lobby` room via the Colyseus matchmaker,
    * then navigates to `/lobby/[id]`.
+   *
+   * `create()` joins the creator as a client; we leave before navigation so the
+   * lobby page’s `joinById` is not rejected as a duplicate session for the same JWT.
    */
   const createLobby = useCallback(async () => {
     setCreating(true)
@@ -84,7 +87,10 @@ export default function ServerBrowser() {
       if (!token) throw new Error("Not authenticated")
       const client = new Client(getColyseusUrl())
       const room = await client.create<unknown>("game_lobby", { token })
-      router.push(`/lobby/${room.roomId}`)
+      const roomId = room.roomId
+      // Release create-time seat before the lobby route opens its own connection.
+      await room.leave()
+      router.push(`/lobby/${roomId}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create lobby")
       setCreating(false)
