@@ -309,7 +309,7 @@ export default function LobbyClient() {
                         selected
                           ? `${HERO_ACCENT[hero.id]} bg-opacity-30 font-semibold text-white`
                           : `border-gray-600 text-gray-300 ${HERO_ACCENT[hero.id]}`
-                      }`}
+                      } ${!isConnected ? "opacity-50 cursor-not-allowed" : ""}`}
                       onClick={() => selectHero(hero.id)}
                       type="button"
                       disabled={!isConnected}

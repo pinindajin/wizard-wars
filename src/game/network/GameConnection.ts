@@ -8,6 +8,7 @@ import type {
   AnyWsMessage,
   MessageHandler,
 } from "@/shared/types"
+import { logger } from "@/server/logger"
 
 /** Reconnect window in ms. Colyseus will attempt reconnect within this window. */
 const RECONNECT_WINDOW_MS = 60_000
@@ -214,7 +215,8 @@ export class GameConnection {
           this._room = await this.client.reconnect(this._room.reconnectionToken, RECONNECT_WINDOW_MS)
           this.wireRoomListeners()
         }
-      } catch {
+      } catch (err) {
+        logger.warn({ event: "gameconnection.reconnect_failed", err }, "Reconnect failed")
         this._room = null
         this._ready = false
       }
