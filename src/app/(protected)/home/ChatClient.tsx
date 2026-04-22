@@ -9,22 +9,25 @@ import { getColyseusUrl } from "@/lib/endpoints"
 import { RoomEvent } from "@/shared/roomEvents"
 import type { ChatMessage, ChatPresenceUser } from "@/shared/types"
 import {
-  pageShell,
-  lobbyPage,
-  gridThreeCols,
-  gridChatSpan,
-  cardPanel,
-  sectionTitle,
-  sectionTitleCaps,
-  messageName,
-  messageSep,
-  messageBody,
-  inputChat,
+  LobbyHeader,
+  LobbyPanel,
+  LobbyShell,
+  LobbyStatusPill,
+} from "@/components/lobby/LobbyChrome"
+import {
   btnPrimary,
-  btnPrimaryBlock,
+  cardInset,
+  chatViewport,
+  gridChatSpan,
+  inputChat,
+  lobbyMainGrid,
+  lobbySidebarStack,
+  messageName,
+  messageBody,
+  messageSep,
   errorBanner,
-  brandTitle,
-  subBrand,
+  metaText,
+  onlineLabelClass,
 } from "@/lib/ui/lobbyStyles"
 
 const MAX_CHARS = 200
@@ -167,117 +170,140 @@ export default function ChatClient() {
   }, [router])
 
   return (
-    <div className={pageShell}>
-      <div className={lobbyPage}>
-        {/* Page header */}
-        <div className="mb-6">
-          <h1 className={brandTitle}>⚔ Wizard Wars</h1>
-          <p className={subBrand}>Global Lobby</p>
-        </div>
-
-        <div className={gridThreeCols}>
-          {/* Left column: nav + online presence */}
-          <div className="flex flex-col gap-4">
-            <button
-              className={btnPrimaryBlock}
-              onClick={onBrowseGames}
-              type="button"
-            >
+    <LobbyShell>
+      <LobbyHeader
+        eyebrow="Wizard Wars"
+        title="Global Lobby"
+        subtitle="Meet other wizards, keep an eye on who is online, and jump into an open room when you are ready to play."
+        aside={
+          <>
+            <LobbyStatusPill tone={connected ? "success" : "warning"}>
+              <span className={`h-2 w-2 rounded-full ${connected ? "bg-emerald-300" : "bg-amber-300"}`} />
+              {connected ? "Chat Connected" : "Connecting"}
+            </LobbyStatusPill>
+            <button className={btnPrimary} onClick={onBrowseGames} type="button">
               Browse Games
             </button>
+          </>
+        }
+      />
 
-            {/* Online presence card */}
-            <div className={cardPanel}>
-              <p className={`mb-3 ${sectionTitleCaps}`}>
-                Online ({presence.length})
-              </p>
-              {presence.length === 0 ? (
-                <p className="text-xs text-gray-600 italic">No one else online.</p>
-              ) : (
-                <ul className="space-y-1">
-                  {presence.map((u) => (
-                    <li
-                      key={u.userId}
-                      className="flex items-center gap-2 text-sm text-gray-300"
-                    >
-                      <span className="h-2 w-2 rounded-full bg-green-400" />
-                      {u.username}
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              {/* Connection status */}
-              <div className="mt-4 flex items-center gap-2 text-xs">
-                <span
-                  className={`h-2 w-2 rounded-full ${connected ? "bg-green-400" : "bg-red-500"}`}
-                />
-                <span className={connected ? "text-gray-400" : "text-red-400"}>
-                  {connected ? "Connected" : "Connecting…"}
-                </span>
+      <div className={lobbyMainGrid}>
+        <div className={lobbySidebarStack}>
+          <LobbyPanel
+            eyebrow="Presence"
+            title={`Online Wizards (${presence.length})`}
+            subtitle="Everyone currently waiting in the global lobby."
+          >
+            {presence.length === 0 ? (
+              <div className={cardInset}>
+                <p className="text-sm italic text-slate-400">No one else online right now.</p>
               </div>
-            </div>
-          </div>
-
-          {/* Right 2 columns: chat panel */}
-          <div className={`${cardPanel} ${gridChatSpan}`}>
-            <h2 className={`mb-1 ${sectionTitle}`}>Global Chat</h2>
-            <p className="mb-3 text-xs text-gray-500">
-              Chat with other wizards while waiting for a match
-            </p>
-
-            {error && (
-              <div className={`mb-3 ${errorBanner}`}>{error}</div>
-            )}
-
-            {/* Message list */}
-            <div className="mb-3 flex-1 overflow-y-auto" style={{ maxHeight: "360px" }}>
-              {messages.length === 0 && !error && (
-                <p className="text-sm italic text-gray-600">No messages yet. Say hello!</p>
-              )}
-              <ul className="space-y-1">
-                {messages.map((msg) => (
-                  <li key={msg.id} className="text-sm leading-relaxed">
-                    <span className={messageName}>{msg.username}</span>
-                    <span className={messageSep}>: </span>
-                    <span className={messageBody}>{msg.text}</span>
+            ) : (
+              <ul className="space-y-3">
+                {presence.map((u) => (
+                  <li
+                    key={u.userId}
+                    className="flex items-center gap-3 rounded-2xl border border-white/8 bg-white/3 px-4 py-3 text-sm text-slate-200"
+                  >
+                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
+                    <span className="font-medium text-white">{u.username}</span>
                   </li>
                 ))}
               </ul>
-              <div ref={messagesEndRef} />
-            </div>
-
-            {/* Input row */}
-            <div className="flex items-center gap-2">
-              <input
-                ref={inputRef}
-                className={inputChat}
-                type="text"
-                placeholder="Type a message… (Enter to send, Esc to blur)"
-                maxLength={MAX_CHARS}
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                onKeyDown={onKeyDown}
-                disabled={!connected}
-              />
-              <button
-                className={btnPrimary}
-                onClick={sendMessage}
-                disabled={!connected || !inputText.trim()}
-                type="button"
-              >
-                Send
-              </button>
-            </div>
-
-            {inputText.length > MAX_CHARS * 0.85 && (
-              <p className="mt-1 text-right text-xs text-gray-500">
-                {inputText.length}/{MAX_CHARS}
-              </p>
             )}
-          </div>
+          </LobbyPanel>
+
+          <LobbyPanel eyebrow="Status" title="Lobby Connection" tone="solid">
+            <div className={cardInset}>
+              <p className={metaText}>Realtime Status</p>
+              <div className="mt-3 flex items-center gap-3">
+                <span
+                  className={`h-3 w-3 rounded-full ${connected ? "bg-emerald-400" : "bg-rose-400"}`}
+                />
+                <div>
+                  <p className="text-sm font-semibold text-white">
+                    {connected ? "Connected to global chat" : "Establishing connection"}
+                  </p>
+                  <p className={onlineLabelClass}>
+                    {connected
+                      ? "Messages and presence updates are live."
+                      : "Realtime chat will unlock as soon as the room connects."}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <button
+              className="mt-4 w-full rounded-2xl border border-white/12 bg-white/4 px-4 py-3 text-sm font-medium text-slate-100 transition hover:bg-white/8"
+              onClick={onBrowseGames}
+              type="button"
+            >
+              View Open Lobbies
+            </button>
+          </LobbyPanel>
         </div>
+
+        <LobbyPanel
+          eyebrow="Public Channel"
+          title="Global Chat"
+          subtitle="Talk strategy, find players, and coordinate your next match."
+          className={gridChatSpan}
+          contentClassName="flex h-full flex-col"
+          aside={<LobbyStatusPill tone="accent">{messages.length} messages</LobbyStatusPill>}
+        >
+          {error && <div className={`mb-4 ${errorBanner}`}>{error}</div>}
+
+          <div className={`${chatViewport} mb-4 flex-1 overflow-y-auto`} style={{ maxHeight: "360px" }}>
+            {messages.length === 0 && !error && (
+              <p className="text-sm italic text-slate-400">No messages yet. Start the conversation.</p>
+            )}
+            <ul className="space-y-3">
+              {messages.map((msg) => (
+                <li
+                  key={msg.id}
+                  className="rounded-2xl border border-white/6 bg-white/3 px-4 py-3 text-sm leading-relaxed"
+                >
+                  <span className={messageName}>{msg.username}</span>
+                  <span className={messageSep}>: </span>
+                  <span className={messageBody}>{msg.text}</span>
+                </li>
+              ))}
+            </ul>
+            <div ref={messagesEndRef} />
+          </div>
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <input
+              ref={inputRef}
+              className={inputChat}
+              type="text"
+              placeholder="Type a message... (Enter to send, Esc to blur)"
+              maxLength={MAX_CHARS}
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              onKeyDown={onKeyDown}
+              disabled={!connected}
+            />
+            <button
+              className={btnPrimary}
+              onClick={sendMessage}
+              disabled={!connected || !inputText.trim()}
+              type="button"
+            >
+              Send
+            </button>
+          </div>
+
+          <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
+            <span>{connected ? "Press Enter to send instantly." : "Waiting for chat connection."}</span>
+            {inputText.length > MAX_CHARS * 0.85 ? (
+              <span>
+                {inputText.length}/{MAX_CHARS}
+              </span>
+            ) : null}
+          </div>
+        </LobbyPanel>
       </div>
-    </div>
+    </LobbyShell>
   )
 }

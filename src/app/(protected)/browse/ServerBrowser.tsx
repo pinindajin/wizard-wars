@@ -4,9 +4,17 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Client } from "@colyseus/sdk"
 
+import {
+  LobbyEmptyState,
+  LobbyHeader,
+  LobbyPanel,
+  LobbyShell,
+  LobbyStatusPill,
+} from "@/components/lobby/LobbyChrome"
 import { fetchWsAuthToken } from "@/lib/fetch-ws-auth-token"
 import { getColyseusUrl } from "@/lib/endpoints"
 import type { LobbyListEntry } from "@/app/api/lobbies/route"
+import { btnGhost, btnPrimary, cardRow, metaText } from "@/lib/ui/lobbyStyles"
 
 const POLL_INTERVAL_MS = 5000
 
@@ -19,13 +27,16 @@ const PHASE_LABELS: Record<LobbyListEntry["lobbyPhase"], string> = {
   SCOREBOARD: "Scoreboard",
 }
 
-/** Phase badge colour classes. */
-const PHASE_COLORS: Record<LobbyListEntry["lobbyPhase"], string> = {
-  LOBBY: "bg-green-700 text-green-200",
-  WAITING_FOR_CLIENTS: "bg-yellow-700 text-yellow-200",
-  COUNTDOWN: "bg-orange-700 text-orange-200",
-  IN_PROGRESS: "bg-red-800 text-red-200",
-  SCOREBOARD: "bg-gray-600 text-gray-200",
+/** Phase badge tone keys mapped to the shared status-pill component. */
+const PHASE_TONES: Record<
+  LobbyListEntry["lobbyPhase"],
+  "neutral" | "success" | "warning" | "danger"
+> = {
+  LOBBY: "success",
+  WAITING_FOR_CLIENTS: "warning",
+  COUNTDOWN: "warning",
+  IN_PROGRESS: "danger",
+  SCOREBOARD: "neutral",
 }
 
 /**
@@ -41,6 +52,16 @@ async function fetchLobbies(): Promise<LobbyListEntry[]> {
   } catch {
     return []
   }
+}
+
+/**
+ * Formats the lobby subtitle shown under the room title.
+ *
+ * @param lobby - The lobby entry being rendered.
+ * @returns Concise scan-friendly lobby metadata.
+ */
+function getLobbyMeta(lobby: LobbyListEntry): string {
+  return `${lobby.playerCount}/${lobby.maxPlayers} players connected`
 }
 
 /**
@@ -65,7 +86,8 @@ export default function ServerBrowser() {
 
   // Initial load + polling
   useEffect(() => {
-    void loadLobbies()
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadLobbies()
     pollRef.current = setInterval(() => void loadLobbies(), POLL_INTERVAL_MS)
     return () => {
       if (pollRef.current !== null) clearInterval(pollRef.current)
@@ -117,92 +139,114 @@ export default function ServerBrowser() {
   }, [router])
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      {/* Header */}
-      <header className="border-b border-gray-700 bg-gray-800 px-6 py-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-purple-400">⚔ Wizard Wars</h1>
-          <p className="text-xs text-gray-500 mt-0.5">Browse Games</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            className="rounded-md border border-gray-600 px-4 py-2 text-sm text-gray-300 hover:bg-gray-700"
-            onClick={goHome}
-            type="button"
-          >
-            ← Back to Chat
-          </button>
-          <button
-            className="rounded-md bg-purple-600 px-5 py-2 text-sm font-semibold hover:bg-purple-700 disabled:opacity-50"
-            onClick={() => void createLobby()}
-            disabled={creating}
-            type="button"
-          >
-            {creating ? "Creating…" : "+ Create Lobby"}
-          </button>
-        </div>
-      </header>
+    <LobbyShell>
+      <LobbyHeader
+        eyebrow="Wizard Wars"
+        title="Server Browser"
+        subtitle="Browse open rooms, watch their current phase, and host a new lobby when you want to bring players together."
+        aside={
+          <>
+            <button className={btnGhost} onClick={goHome} type="button">
+              Back to Chat
+            </button>
+            <button
+              className={btnPrimary}
+              onClick={() => void createLobby()}
+              disabled={creating}
+              type="button"
+            >
+              {creating ? "Creating..." : "Create Lobby"}
+            </button>
+          </>
+        }
+      />
 
-      <main className="mx-auto max-w-4xl px-6 py-8">
-        {/* Error banner */}
+      <LobbyPanel
+        eyebrow="Open Games"
+        title="Available Lobbies"
+        subtitle="Join a room already filling up or create a fresh lobby and invite others in."
+        aside={
+          <LobbyStatusPill tone="accent">
+            {loading
+              ? "Refreshing"
+              : `${lobbies.length} lobb${lobbies.length === 1 ? "y" : "ies"} visible`}
+          </LobbyStatusPill>
+        }
+      >
         {error && (
-          <div className="mb-6 rounded border border-red-500 bg-red-900/30 px-4 py-3 text-sm text-red-300">
+          <div className="mb-4 rounded-2xl border border-red-500/35 bg-red-950/35 px-4 py-3 text-sm text-red-100">
             {error}
           </div>
         )}
 
-        {/* Lobby list */}
         {loading ? (
-          <div className="flex items-center justify-center py-20 text-gray-500">
-            <span className="animate-pulse text-lg">Loading lobbies…</span>
+          <div className="grid gap-3">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <div key={index} className={`${cardRow} animate-pulse`}>
+                <div className="h-4 w-36 rounded bg-white/10" />
+                <div className="mt-3 h-3 w-24 rounded bg-white/8" />
+              </div>
+            ))}
           </div>
         ) : lobbies.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <p className="text-2xl">🧙</p>
-            <p className="mt-3 text-gray-400 text-lg">No lobbies found</p>
-            <p className="mt-1 text-gray-600 text-sm">
-              Be the first to create one!
-            </p>
-          </div>
+          <LobbyEmptyState
+            eyebrow="No Open Rooms"
+            title="No lobbies found"
+            description="Be the first wizard to open a room. Your lobby will appear here for everyone else in the global chat."
+            action={
+              <button
+                className={btnPrimary}
+                onClick={() => void createLobby()}
+                disabled={creating}
+                type="button"
+              >
+                {creating ? "Creating..." : "Create the First Lobby"}
+              </button>
+            }
+          />
         ) : (
           <div className="space-y-3">
-            <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-4">
-              {lobbies.length} Lobb{lobbies.length === 1 ? "y" : "ies"} Available
-            </p>
             {lobbies.map((lobby) => (
               <div
                 key={lobby.lobbyId}
-                className="flex items-center justify-between rounded-lg border border-gray-700 bg-gray-800 px-5 py-4 hover:border-gray-600 transition-colors"
+                className={`${cardRow} hover:border-white/18 hover:bg-white/5`}
               >
-                <div className="flex items-center gap-4">
-                  <div>
-                    <p className="font-semibold text-white">
-                      {lobby.hostName ? `${lobby.hostName}'s Lobby` : "Open Lobby"}
-                    </p>
-                    <p className="mt-0.5 text-xs text-gray-500">
-                      {lobby.playerCount}/{lobby.maxPlayers} players
-                    </p>
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <p className="truncate text-base font-semibold text-white">
+                        {lobby.hostName ? `${lobby.hostName}'s Lobby` : "Open Lobby"}
+                      </p>
+                      <LobbyStatusPill tone={PHASE_TONES[lobby.lobbyPhase]}>
+                        {PHASE_LABELS[lobby.lobbyPhase]}
+                      </LobbyStatusPill>
+                    </div>
+                    <p className="mt-2 text-sm text-slate-300">{getLobbyMeta(lobby)}</p>
+                    <p className="mt-3 font-mono text-[11px] text-slate-500">{lobby.lobbyId}</p>
                   </div>
-                  <span
-                    className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${PHASE_COLORS[lobby.lobbyPhase]}`}
-                  >
-                    {PHASE_LABELS[lobby.lobbyPhase]}
-                  </span>
-                </div>
 
-                <button
-                  className="rounded-md bg-purple-600 px-4 py-2 text-sm font-semibold hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-40"
-                  onClick={() => joinLobby(lobby.lobbyId)}
-                  disabled={lobby.lobbyPhase === "IN_PROGRESS"}
-                  type="button"
-                >
-                  {lobby.lobbyPhase === "IN_PROGRESS" ? "In Progress" : "Join"}
-                </button>
+                  <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+                    <div className="rounded-2xl border border-white/8 bg-white/3 px-4 py-2">
+                      <p className={metaText}>Lobby Phase</p>
+                      <p className="mt-1 text-sm font-medium text-white">
+                        {PHASE_LABELS[lobby.lobbyPhase]}
+                      </p>
+                    </div>
+                    <button
+                      className={btnPrimary}
+                      onClick={() => joinLobby(lobby.lobbyId)}
+                      disabled={lobby.lobbyPhase === "IN_PROGRESS"}
+                      type="button"
+                    >
+                      {lobby.lobbyPhase === "IN_PROGRESS" ? "In Progress" : "Join Lobby"}
+                    </button>
+                  </div>
+                </div>
               </div>
             ))}
           </div>
         )}
-      </main>
-    </div>
+      </LobbyPanel>
+    </LobbyShell>
   )
 }
