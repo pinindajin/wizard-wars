@@ -139,6 +139,8 @@ export type SimCtx = {
   playerEntityMap: Map<string, number>
   entityPlayerMap: Map<number, string>
   playerUsernameMap: Map<string, string>
+  /** entity id → display username */
+  entityUsernameMap: Map<number, string>
   playerHeroIdMap: Map<string, string>
   /** fireball entity ID → owner userId */
   fireballOwnerMap: Map<number, string>
@@ -203,6 +205,8 @@ export type SimOutput = {
 export type GameSimulation = {
   world: World
   playerEntityMap: Map<string, number>
+  /** entity id → display username */
+  entityUsernameMap: Map<number, string>
   matchStartedAtMs: number
   /** Adds a player entity and returns its entity ID. */
   addPlayer: (userId: string, username: string, heroId: string, spawnIndex: number) => number
@@ -211,7 +215,7 @@ export type GameSimulation = {
   /** Steps the simulation one tick forward. */
   tick: (inputMap: Map<string, PlayerInputPayload>, serverTimeMs: number) => SimOutput
   /** Signal that the host has requested an immediate match end. */
-  signalHostEnd: () => void
+  requestHostEnd: () => void
 }
 
 // ─── Factory ─────────────────────────────────────────────────────────────
@@ -228,6 +232,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
   const playerEntityMap = new Map<string, number>()
   const entityPlayerMap = new Map<number, string>()
   const playerUsernameMap = new Map<string, string>()
+  const entityUsernameMap = new Map<number, string>()
   const playerHeroIdMap = new Map<string, string>()
   const fireballOwnerMap = new Map<number, string>()
   const commandBuffer = createCommandBuffer()
@@ -318,6 +323,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     playerEntityMap.set(userId, eid)
     entityPlayerMap.set(eid, userId)
     playerUsernameMap.set(userId, username)
+    entityUsernameMap.set(eid, username)
     playerHeroIdMap.set(userId, heroId)
     killStats.set(userId, { kills: 0, deaths: 0, goldEarned: STARTING_GOLD })
 
@@ -349,17 +355,18 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     playerEntityMap.delete(userId)
     entityPlayerMap.delete(eid)
     playerUsernameMap.delete(userId)
+    entityUsernameMap.delete(eid)
     playerHeroIdMap.delete(userId)
     prevPlayerStates.delete(eid)
   }
 
-  // ── signalHostEnd ────────────────────────────────────────────────────
+  // ── requestHostEnd ───────────────────────────────────────────────────
 
   /**
    * Signals that the host player has requested an early match end.
    * The signal is consumed by matchEndSystem on the next tick.
    */
-  function signalHostEnd(): void {
+  function requestHostEnd(): void {
     hostEndSignal = true
   }
 
@@ -385,6 +392,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       playerEntityMap,
       entityPlayerMap,
       playerUsernameMap,
+      entityUsernameMap,
       playerHeroIdMap,
       fireballOwnerMap,
       inputMap,
@@ -454,10 +462,11 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
   return {
     world,
     playerEntityMap,
+    entityUsernameMap,
     matchStartedAtMs,
     addPlayer,
     removePlayer,
     tick,
-    signalHostEnd,
+    requestHostEnd,
   }
 }

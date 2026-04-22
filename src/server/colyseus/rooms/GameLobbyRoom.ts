@@ -2,6 +2,12 @@ import { Room, type Client } from "colyseus"
 import { randomUUID } from "node:crypto"
 
 import { verifyToken } from "../../auth"
+import { createGameSimulation, type GameSimulation } from "../../game/simulation"
+import { createSessionEconomy, attemptPurchase, useQuickItemSlot, buildShopStatePayload } from "../../gameserver/sessionShop"
+import type { SessionEconomy } from "../../gameserver/sessionShop"
+import { TICK_MS } from "../../../shared/balance-config/rendering"
+import { ARENA_SPAWN_POINTS } from "../../../shared/balance-config/arena"
+import { RoomEvent } from "../../../shared/roomEvents"
 import type {
   AuthUser,
   LobbyPhase,
@@ -10,11 +16,12 @@ import type {
   LobbyChatPayload,
   LobbyScoreboardPayload,
   ScoreboardEntry,
+  PlayerInputPayload,
 } from "../../../shared/types"
-import { RoomEvent } from "../../../shared/roomEvents"
 import {
   lobbyChatPayloadSchema,
   heroSelectPayloadSchema,
+  playerInputPayloadSchema,
 } from "../../../shared/validators"
 import {
   MAX_PLAYERS_PER_MATCH,
@@ -161,12 +168,23 @@ export class GameLobbyRoom extends Room {
    */
   private clientReadySet = new Set<string>()
 
-  /**
-   * Set of `playerId`s that have sent `lobby_return_to_lobby` during
+  /** Set of `playerId`s that have sent `lobby_return_to_lobby` during
    * `SCOREBOARD`. When the set covers all connected players the scoreboard
    * timer is skipped. Cleared on `returnToLobby`.
    */
   private returnedToLobbySet = new Set<string>()
+
+  /** Active game simulation (null when not IN_PROGRESS). */
+  private simulation: GameSimulation | null = null
+
+  /** Simulation game loop interval. */
+  private gameLoopTimer: { clear: () => void } | null = null
+
+  /** Per-player session economies (userId → SessionEconomy). */
+  private readonly economies = new Map<string, SessionEconomy>()
+
+  /** Buffered inputs from clients for the current tick (userId → latest input). */
+  private readonly inputBuffer = new Map<string, import("../../../shared/types").PlayerInputPayload>()
 
   // ---------------------------------------------------------------------------
   // Colyseus lifecycle
@@ -495,9 +513,71 @@ export class GameLobbyRoom extends Room {
       this.handleReturnToLobby(client)
     })
 
+    this.onMessage(RoomEvent.PlayerInput, (client: Client, payload: unknown) => {
+      this.handlePlayerInput(client, payload)
+    })
+
+    this.onMessage(RoomEvent.ShopPurchase, (client: Client, payload: unknown) => {
+      this.handleShopPurchase(client, payload)
+    })
+
     this.onMessage("*", () => {
       this.resetInactivityTimer()
     })
+  }
+
+  /**
+   * Buffers player input for the next simulation tick.
+   *
+   * @param client - The sending client.
+   * @param payload - Raw inbound payload; validated with playerInputPayloadSchema.
+   */
+  private handlePlayerInput(client: Client, payload: unknown): void {
+    if (this.lobbyPhase !== "IN_PROGRESS" || !this.simulation) return
+    const pd = client.userData as PlayerData
+    const result = playerInputPayloadSchema.safeParse(payload)
+    if (!result.success) return
+    this.inputBuffer.set(pd.playerId, result.data)
+  }
+
+  /**
+   * Handles a shop purchase request from a player.
+   *
+   * @param client - The purchasing client.
+   * @param payload - Raw inbound payload with itemId.
+   */
+  private handleShopPurchase(client: Client, payload: unknown): void {
+    if (this.lobbyPhase !== "IN_PROGRESS") return
+    const pd = client.userData as PlayerData
+    const economy = this.economies.get(pd.playerId)
+    if (!economy) return
+    const itemId = (payload as { itemId?: string })?.itemId
+    if (!itemId) return
+
+    const result = attemptPurchase(economy, itemId)
+    if (!result.success) {
+      client.send(RoomEvent.ShopError, { reason: result.reason })
+      return
+    }
+
+    // Apply item to simulation if applicable (axe equip, swift boots)
+    const sim = this.simulation
+    if (sim && itemId === "axe") {
+      const eid = sim.playerEntityMap.get(pd.playerId)
+      if (eid !== undefined) {
+        const { Equipment } = require("../../game/components")
+        Equipment.hasAxe[eid] = 1
+      }
+    }
+    if (sim && itemId === "swift_boots") {
+      const eid = sim.playerEntityMap.get(pd.playerId)
+      if (eid !== undefined) {
+        const { Equipment } = require("../../game/components")
+        Equipment.hasSwiftBoots[eid] = 1
+      }
+    }
+
+    client.send(RoomEvent.ShopState, buildShopStatePayload(economy))
   }
 
   /**
@@ -759,6 +839,24 @@ export class GameLobbyRoom extends Room {
     this.broadcast(RoomEvent.LobbyState, this.buildLobbyState())
     this.broadcast(RoomEvent.MatchGo, {})
 
+    // Create the game simulation and session economies for all players
+    const nowMs = Date.now()
+    this.simulation = createGameSimulation(nowMs)
+    const spawnIndices = shuffle([...Array(ARENA_SPAWN_POINTS.length).keys()])
+    let spawnIdx = 0
+    for (const client of this.clients) {
+      const pd = client.userData as PlayerData
+      const economy = createSessionEconomy()
+      this.economies.set(pd.playerId, economy)
+      const idx = spawnIndices[spawnIdx++ % spawnIndices.length]
+      this.simulation.addPlayer(pd.playerId, pd.username, pd.heroId, idx)
+    }
+
+    // Start the 20 Hz game loop
+    this.gameLoopTimer = nativeSetInterval(() => {
+      this.runGameTick()
+    }, TICK_MS)
+
     logger.info(
       { event: "room.in_progress", roomId: this.roomId },
       "[GameLobbyRoom] match in progress",
@@ -778,6 +876,12 @@ export class GameLobbyRoom extends Room {
     endReason: LobbyScoreboardPayload["endReason"],
     entries: ScoreboardEntry[],
   ): void {
+    // Stop the game loop
+    this.gameLoopTimer?.clear()
+    this.gameLoopTimer = null
+    this.simulation = null
+    this.inputBuffer.clear()
+
     this.lobbyPhase = "SCOREBOARD"
     this.returnedToLobbySet.clear()
     this.updateMetadataPhase()
@@ -937,8 +1041,82 @@ export class GameLobbyRoom extends Room {
   }
 
   // ---------------------------------------------------------------------------
-  // Timers
+  // Game tick
   // ---------------------------------------------------------------------------
+
+  /**
+   * Runs one game simulation tick, broadcasts deltas and events to all clients.
+   * Called at TICK_MS (50ms) intervals during IN_PROGRESS phase.
+   */
+  private runGameTick(): void {
+    if (!this.simulation || this.lobbyPhase !== "IN_PROGRESS") {
+      return
+    }
+
+    const serverTimeMs = Date.now()
+    const inputMap = new Map(this.inputBuffer)
+    const output = this.simulation.tick(inputMap, serverTimeMs)
+
+    if (output.playerDeltas.length > 0 || output.fireballDeltas.length > 0 || output.fireballRemovedIds.length > 0) {
+      this.broadcast(RoomEvent.PlayerBatchUpdate, {
+        deltas: output.playerDeltas,
+        removedIds: [],
+        seq: 0,
+      })
+      if (output.fireballDeltas.length > 0 || output.fireballRemovedIds.length > 0) {
+        this.broadcast(RoomEvent.FireballBatchUpdate, {
+          deltas: output.fireballDeltas,
+          removedIds: output.fireballRemovedIds,
+          seq: 0,
+        })
+      }
+    }
+
+    for (const launch of output.fireballLaunches) {
+      this.broadcast(RoomEvent.FireballLaunch, launch)
+    }
+    for (const impact of output.fireballImpacts) {
+      this.broadcast(RoomEvent.FireballImpact, impact)
+    }
+    for (const bolt of output.lightningBolts) {
+      this.broadcast(RoomEvent.LightningBolt, bolt)
+    }
+    for (const swing of output.axeSwings) {
+      this.broadcast(RoomEvent.AxeSwing, swing)
+    }
+    for (const death of output.playerDeaths) {
+      this.broadcast(RoomEvent.PlayerDeath, death)
+    }
+    for (const respawn of output.playerRespawns) {
+      this.broadcast(RoomEvent.PlayerRespawn, respawn)
+    }
+    for (const float of output.damageFloats) {
+      this.broadcast(RoomEvent.DamageFloat, float)
+    }
+    for (const goldUpdate of output.goldUpdates) {
+      const client = this.findClientByUserId(goldUpdate.userId)
+      if (client) {
+        client.send(RoomEvent.GoldBalance, { gold: goldUpdate.gold })
+      }
+    }
+
+    if (output.matchEnded) {
+      this.transitionToScoreboard(output.matchEnded.reason, output.matchEnded.entries)
+    }
+  }
+
+  /**
+   * Finds a connected Colyseus client by userId (JWT sub).
+   *
+   * @param userId - The JWT sub to search for.
+   * @returns The matching client, or undefined.
+   */
+  private findClientByUserId(userId: string): Client | undefined {
+    return [...this.clients].find((c) => (c.userData as PlayerData)?.playerId === userId)
+  }
+
+  // ---------------------------------------------------------------------------
+  // Timers
 
   /**
    * Resets the idle inactivity timer to `LOBBY_IDLE_TIMEOUT_MS`.
@@ -1020,4 +1198,22 @@ export class GameLobbyRoom extends Room {
   get phase(): LobbyPhase {
     return this.lobbyPhase
   }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Fisher-Yates shuffle for spawn index permutation.
+ *
+ * @param arr - Array to shuffle in-place.
+ * @returns The same shuffled array.
+ */
+function shuffle<T>(arr: T[]): T[] {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[arr[i], arr[j]] = [arr[j], arr[i]]
+  }
+  return arr
 }
