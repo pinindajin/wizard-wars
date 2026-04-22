@@ -28,10 +28,7 @@ outside CI).
 
 ## CI
 
-The E2E job runs **only** on pull requests whose base branch is `prod`, and on direct pushes
-to `prod`. It does **not** run on `main` PRs — this keeps the main PR cycle fast.
-
-To see E2E run on CI, open a PR targeting the `prod` branch.
+The E2E job runs on pull requests whose base branch is **`main`** or **`prod`** (see `.github/workflows/ci.yml`).
 
 ## Adding new specs
 
@@ -43,3 +40,5 @@ Drop a `*.spec.ts` file under `tests/e2e/`. The `playwright.config.ts` picks up 
 | File | What it tests |
 |---|---|
 | `signup.spec.ts` | Happy-path account creation: `/signup` → fills form → redirected to `/home` → `ww-token` cookie set |
+| `lobby-countdown.spec.ts` | Host starts match; match countdown overlay appears |
+| `match-start-game-route.spec.ts` | After start, URL stays on `/lobby/.../game` with Phaser container; no redirect to `/browse` |
