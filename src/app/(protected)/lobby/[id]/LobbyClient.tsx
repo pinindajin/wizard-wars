@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Client, type Room } from "@colyseus/sdk"
 
-import { fetchWsAuthToken } from "@/lib/fetch-ws-auth-token"
+import { fetchWsAuthSession } from "@/lib/fetch-ws-auth-token"
 import { getColyseusUrl } from "@/lib/endpoints"
 import { RoomEvent } from "@/shared/roomEvents"
 import { HERO_CONFIGS } from "@/shared/balance-config/heroes"
@@ -93,6 +93,10 @@ export default function LobbyClient({ roomId }: LobbyClientProps) {
   const roomRef = useRef<Room | null>(null)
   const chatEndRef = useRef<HTMLDivElement>(null)
   const chatInputRef = useRef<HTMLInputElement>(null)
+  /** Monotonic id so stale async work from a prior effect does not join after unmount. */
+  const connectGenerationRef = useRef(0)
+  /** Chains `room.leave()` across Strict Mode remounts to avoid duplicate-session on re-join. */
+  const leaveChainRef = useRef<Promise<unknown>>(Promise.resolve())
 
   /** Scrolls the lobby chat to the bottom. */
   const scrollChat = useCallback(() => {
@@ -105,27 +109,34 @@ export default function LobbyClient({ roomId }: LobbyClientProps) {
 
   // Connect to the Colyseus game_lobby room
   useEffect(() => {
+    const gen = ++connectGenerationRef.current
     let cancelled = false
 
     async function connect() {
-      const token = await fetchWsAuthToken()
-      if (!token) {
+      await leaveChainRef.current
+      if (cancelled || gen !== connectGenerationRef.current) return
+
+      const session = await fetchWsAuthSession()
+      if (cancelled || gen !== connectGenerationRef.current) return
+      if (!session) {
         setLobbyError("Not authenticated")
         return
       }
 
       try {
         const client = new Client(getColyseusUrl())
-        const room = await client.joinById<unknown>(roomId, { token })
-        if (cancelled) {
-          room.leave()
+        const room = await client.joinById<unknown>(roomId, {
+          token: session.token,
+        })
+        if (cancelled || gen !== connectGenerationRef.current) {
+          await room.leave()
           return
         }
 
         roomRef.current = room
         setConnected(true)
-        // The server sends the sessionId which equals the playerId
-        setMyPlayerId(room.sessionId)
+        // Server playerId and hostPlayerId are JWT `sub`, not Colyseus sessionId.
+        setMyPlayerId(session.sub)
 
         /** Full lobby state snapshot (on join + phase transitions). */
         room.onMessage(RoomEvent.LobbyState, (payload: LobbyStatePayload) => {
@@ -214,8 +225,11 @@ export default function LobbyClient({ roomId }: LobbyClientProps) {
 
     return () => {
       cancelled = true
-      roomRef.current?.leave()
+      const room = roomRef.current
       roomRef.current = null
+      leaveChainRef.current = leaveChainRef.current.then(async () => {
+        if (room) await room.leave().catch(() => undefined)
+      })
     }
   }, [roomId, router])
 
