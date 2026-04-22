@@ -34,7 +34,14 @@ type CooldownState = Record<number, number>
  */
 export default function AbilityBar({ slots, room }: AbilityBarProps) {
   const [cooldowns, setCooldowns] = useState<CooldownState>({})
+  const [now, setNow] = useState(() => Date.now())
   const keybinds = useGameKeybinds()
+
+  // Keep 'now' updated for cooldown displays
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 100)
+    return () => clearInterval(id)
+  }, [])
 
   // Register hotkey listeners 1-5
   useEffect(() => {
@@ -76,7 +83,7 @@ export default function AbilityBar({ slots, room }: AbilityBarProps) {
       {slots.map((abilityId, idx) => {
         const config = abilityId ? ABILITY_CONFIGS[abilityId] : null
         const cooldownEnd = cooldowns[idx] ?? 0
-        const remainingMs = Math.max(0, cooldownEnd - Date.now())
+        const remainingMs = Math.max(0, cooldownEnd - now)
         const config2 = config
         const totalMs = config2 ? config2.cooldownMs + config2.castMs : 1
         const fraction = remainingMs / totalMs
