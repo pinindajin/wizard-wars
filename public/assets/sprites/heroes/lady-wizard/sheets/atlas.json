@@ -1,0 +1,63 @@
+{
+  "frameSize": 124,
+  "clips": {
+    "walk": {
+      "south": 15,
+      "south-east": 15,
+      "east": 15,
+      "north-east": 15,
+      "north": 15,
+      "north-west": 15,
+      "west": 15,
+      "south-west": 15
+    },
+    "idle": {
+      "south": 4,
+      "south-east": 4,
+      "east": 4,
+      "north-east": 4,
+      "north": 4,
+      "north-west": 4,
+      "west": 4,
+      "south-west": 4
+    },
+    "death": {
+      "south": 17,
+      "south-east": 17,
+      "east": 17,
+      "north-east": 17,
+      "north": 17,
+      "north-west": 17,
+      "west": 17,
+      "south-west": 17
+    },
+    "light-spell-cast": {
+      "south": 17,
+      "south-east": 17,
+      "east": 17,
+      "north-east": 17,
+      "north": 17,
+      "north-west": 17,
+      "west": 17
+    },
+    "heavy-spell-cast": {
+      "south": 17,
+      "south-east": 17,
+      "east": 17,
+      "north-east": 17,
+      "north": 17,
+      "north-west": 17,
+      "west": 17,
+      "south-west": 17
+    },
+    "summoned-axe-attack": {
+      "south": 17,
+      "south-east": 17,
+      "east": 17,
+      "north-east": 17,
+      "north": 17,
+      "north-west": 17,
+      "south-west": 17
+    }
+  }
+}

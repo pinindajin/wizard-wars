@@ -1,0 +1,38 @@
+---
+description: Wizard Wars project context for AI agents.
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# Wizard Wars — Project Context
+
+Multiplayer top-down (35° angle) arena shooter. 2-12 players per match, WASD movement, fireball + abilities, shop, lives system.
+
+## Architecture
+- **Runtime**: Bun 1.2 (replaces Vite/Node)
+- **Web**: Next.js 16 App Router
+- **API**: tRPC v11 + SuperJSON
+- **WebSockets**: Colyseus 0.17 rooms (`chat`, `game_lobby`)
+- **Game Client**: Phaser 4 (Arena.ts/.scene — Phaser Editor compatible)
+- **Game Server**: bitECS 0.4 simulation at 20 Hz
+- **Database**: PostgreSQL 16 + Prisma 6
+- **Auth**: jose JWT + bcryptjs, cookie name `ww-token`
+
+## Key constants
+- Arena: 1344×768 px (21×12 × 64px tiles), center (672, 384)
+- 12 spawn points at radius 300px around center
+- Max players: 12
+- Player radius: 20px, base speed: 200px/s
+
+## Documentation
+All architecture docs, ADRs, and learnings live at:
+`/Users/jakemcbride/Personal/Development/ObsidianVault/Projects/wizard-wars/`
+
+NOT in `docs/` folder.
+
+## Code conventions
+- JSDoc on every function (purpose, params, returns, key invariants)
+- TDD: write failing test before implementing code
+- No password reset / email verification in MVP
+- Session-only inventory (no DB persistence)
+- Y-sort depth: `sprite.depth = sprite.y`, origin (0.5, 1.0) for players/tall props

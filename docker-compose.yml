@@ -1,0 +1,51 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ww_user
+      POSTGRES_PASSWORD: ww_pass
+      POSTGRES_DB: wizardwars
+    ports:
+      - "5433:5432"
+    volumes:
+      - ww_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ww_user -d wizardwars"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  db-shadow:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ww_user
+      POSTGRES_PASSWORD: ww_pass
+      POSTGRES_DB: wizardwars_shadow
+    ports:
+      - "5434:5432"
+    volumes:
+      - ww_pgdata_shadow:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ww_user -d wizardwars_shadow"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.docker
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  ww_pgdata:
+  ww_pgdata_shadow:

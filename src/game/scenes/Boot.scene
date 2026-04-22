@@ -1,0 +1,14 @@
+{
+    "meta": {
+        "app": "Phaser Editor v5",
+        "contentType": "scene",
+        "formatVersion": "0.7"
+    },
+    "sceneType": "Scene",
+    "id": "Boot",
+    "settings": {
+        "useCamera": false
+    },
+    "prefabs": [],
+    "children": []
+}

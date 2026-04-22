@@ -4,7 +4,9 @@
         "@phaserjs/editor-scripts-base"
     ],
     "skip": [
-        "dist"
+        "dist",
+        ".next",
+        "node_modules"
     ],
-    "playUrl": "http://localhost:8080"
+    "playUrl": "http://localhost:3000/dev/phaser"
 }

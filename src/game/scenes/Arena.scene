@@ -1,0 +1,16 @@
+{
+    "meta": {
+        "app": "Phaser Editor v5",
+        "contentType": "scene",
+        "formatVersion": "0.7"
+    },
+    "sceneType": "Scene",
+    "id": "Arena",
+    "settings": {
+        "width": 1344,
+        "height": 768,
+        "backgroundColor": "#1a1a2e"
+    },
+    "prefabs": [],
+    "children": []
+}

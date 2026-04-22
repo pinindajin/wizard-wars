@@ -1,30 +1,75 @@
 {
-    "name": "phaser-editor-template-vite-ts",
-    "description": "A Phaser 3 TypeScript template using Vite.",
-    "version": "1.2.1",
-    "repository": {
-        "type": "git",
-        "url": "git+https://github.com/phaserjs/template-vite-ts.git"
-    },
-    "author": "Phaser Studio <support@phaser.io> (https://phaser.io/)",
-    "license": "MIT",
-    "licenseUrl": "http://www.opensource.org/licenses/mit-license.php",
-    "bugs": {
-        "url": "https://github.com/phaserjs/template-vite-ts/issues"
-    },
-    "homepage": "https://github.com/phaserjs/template-vite-ts#readme",
-    "scripts": {
-        "start": "vite --config vite/config.dev.mjs",
-        "build": "vite build --config vite/config.prod.mjs && phaser-asset-pack-hashing -j -r dist"
-    },
-    "devDependencies": {
-        "phaser-asset-pack-hashing": "^1.0.6",
-        "terser": "^5.28.1",
-        "typescript": "^5.3.3",
-        "vite": "^7.3.1"
-    },
-    "dependencies": {
-        "@phaserjs/editor-scripts-base": "^2.0.1",
-        "phaser": "^4.0.0-rc.6"
-    }
+  "name": "wizard-wars",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "bun@1.2.0",
+  "scripts": {
+    "dev": "tsx server.ts",
+    "build": "next build",
+    "start": "NODE_ENV=production tsx server.ts",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:all": "bun run test && bun run test:integration",
+    "docker:build": "docker build -t wizard-wars .",
+    "docker:up": "docker compose up --build",
+    "docker:down": "docker compose down",
+    "docker:reset": "docker compose down -v && docker compose up --build",
+    "docker:up:db": "docker compose up db -d",
+    "docker:down:db": "docker compose down db",
+    "dev:hybrid": "docker compose up db -d && bun dev",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio"
+  },
+  "dependencies": {
+    "@colyseus/schema": "^4.0.19",
+    "@colyseus/sdk": "^0.17.35",
+    "@colyseus/ws-transport": "^0.17.9",
+    "@prisma/client": "^6.0.0",
+    "@tanstack/react-query": "^5.90.21",
+    "@trpc/client": "^11.11.0",
+    "@trpc/server": "^11.11.0",
+    "@trpc/tanstack-react-query": "^11.11.0",
+    "bcryptjs": "^3.0.3",
+    "bitecs": "^0.4.0",
+    "colyseus": "^0.17.8",
+    "dotenv": "^17.4.1",
+    "express": "^5.2.1",
+    "jose": "^6.1.3",
+    "next": "16.1.6",
+    "phaser": "^4.0.0",
+    "pino": "^9.0.0",
+    "pino-pretty": "^13.0.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "superjson": "^2.2.6",
+    "ws": "^8.19.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@colyseus/testing": "^0.17.11",
+    "@next/env": "^16.1.6",
+    "@tailwindcss/postcss": "^4",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/bcryptjs": "^3.0.0",
+    "@types/express": "^5.0.6",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/ws": "^8.18.1",
+    "@vitest/coverage-v8": "^2.1.9",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.6",
+    "jsdom": "^26.1.0",
+    "prisma": "^6.0.0",
+    "tailwindcss": "^4",
+    "tsx": "^4.21.0",
+    "typescript": "^5",
+    "vitest": "^2.1.9"
+  }
 }

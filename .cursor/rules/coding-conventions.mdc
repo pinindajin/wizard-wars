@@ -1,0 +1,50 @@
+---
+description: Coding conventions for Wizard Wars.
+globs: ["src/**/*.ts", "src/**/*.tsx", "tests/**/*.ts"]
+alwaysApply: false
+---
+
+# Wizard Wars — Coding Conventions
+
+## JSDoc
+Every function must have a JSDoc comment:
+```ts
+/**
+ * Brief description of what the function does.
+ *
+ * @param paramName - Description of parameter.
+ * @returns Description of return value.
+ */
+```
+
+## TDD Discipline
+1. Write a FAILING test first
+2. Run test suite: confirm it fails
+3. Write minimum code to make it pass
+4. Refactor (tests must stay green)
+
+If TDD is impractical (e.g., Phaser rendering, tilemap JSON), document the exception in:
+- PR body under `## TDD Exceptions`
+- Vault at `learnings/YYYY-MM-tdd-exceptions.md`
+
+## ECS Rules (bitECS)
+- Boolean semantic (presence = true) → TAG component (no fields)
+- Numeric value → COMPONENT field
+- Composable: prefer small, single-purpose components over large monoliths
+
+## Auth
+- Cookie name: `ww-token` (not `bc-token`)
+- GlobalThis matchMaker: `__wizardWarsMatchMaker`
+
+## Imports
+- Use `@/` alias for `src/` (`@/shared/types`, `@/server/auth`, etc.)
+- Relative imports only within the same module directory
+
+## Error handling
+- Log via `logger` (pino) from `@/server/logger`
+- Use structured JSON: `logger.info({ event: "auth.login.success", userId }, "msg")`
+
+## Input Focus Lock
+When `document.activeElement` is `<input>`, `<textarea>`, or `[contenteditable]`:
+- `KeyboardController` and `MouseController` MUST early-return
+- No game keybinds fire while typing in chat

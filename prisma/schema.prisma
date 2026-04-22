@@ -1,0 +1,33 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String   @id @default(uuid())
+  username          String   @unique
+  usernameLower     String   @unique @map("username_lower")
+  passwordHash      String   @map("password_hash")
+  createdAt         DateTime @default(now()) @map("created_at")
+  combatNumbersMode String   @default("OFF") @map("combat_numbers_mode")
+  bgmVolume         Int      @default(70) @map("bgm_volume")
+  sfxVolume         Int      @default(85) @map("sfx_volume")
+  openSettingsKey   String   @default("Backslash") @map("open_settings_key")
+
+  @@map("users")
+}
+
+model ChatLog {
+  id       String   @id @default(uuid())
+  messages Json
+  savedAt  DateTime @default(now()) @map("saved_at")
+
+  @@map("chat_logs")
+}

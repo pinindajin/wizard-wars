@@ -1,0 +1,62 @@
+{
+    "meta": {
+        "app": "Phaser Editor v5",
+        "contentType": "scene",
+        "formatVersion": "0.7"
+    },
+    "sceneType": "Scene",
+    "id": "Preload",
+    "settings": {
+        "useCamera": false
+    },
+    "prefabs": [],
+    "children": [
+        {
+            "type": "Phaser.GameObjects.Rectangle",
+            "id": "progressBarBg",
+            "label": "progressBarBg",
+            "props": {
+                "x": 512,
+                "y": 384,
+                "width": 400,
+                "height": 24,
+                "fillColor": 2303786,
+                "isFilled": true,
+                "isStroked": true
+            }
+        },
+        {
+            "type": "Phaser.GameObjects.Rectangle",
+            "id": "progressBar",
+            "label": "progressBar",
+            "props": {
+                "x": 312,
+                "y": 384,
+                "width": 0,
+                "height": 24,
+                "fillColor": 10551295,
+                "isFilled": true,
+                "originX": 0,
+                "originY": 0.5
+            }
+        },
+        {
+            "type": "Phaser.GameObjects.Text",
+            "id": "loadingText",
+            "label": "loadingText",
+            "props": {
+                "x": 512,
+                "y": 340,
+                "text": "Loading...",
+                "style": {
+                    "color": "#e0e0e0",
+                    "fontFamily": "Arial",
+                    "fontSize": "22px",
+                    "align": "center"
+                },
+                "originX": 0.5,
+                "originY": 0.5
+            }
+        }
+    ]
+}
