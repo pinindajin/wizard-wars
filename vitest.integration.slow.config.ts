@@ -1,12 +1,13 @@
-import "dotenv/config"
 import path from "node:path"
 
 import { defineConfig } from "vitest/config"
 
 export default defineConfig({
   test: {
-    include: ["tests/integration/**/*.test.ts"],
-    setupFiles: ["./tests/integration/vitest-setup-env.ts"],
+    globals: true,
+    environment: "node",
+    include: ["tests/integration/**/*.slow.test.ts"],
+    setupFiles: ["./tests/integration/vitest-setup-slow.ts"],
     testTimeout: 120000,
     hookTimeout: 20000,
     teardownTimeout: 3000,
