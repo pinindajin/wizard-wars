@@ -1,25 +1,18 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { useRouter } from "next/navigation"
-import { Client, type Room } from "@colyseus/sdk"
+import { useRouter, useParams } from "next/navigation"
+import Link from "next/link"
 
-import { fetchWsAuthSession } from "@/lib/fetch-ws-auth-token"
-import { getColyseusUrl } from "@/lib/endpoints"
-import { RoomEvent } from "@/shared/roomEvents"
 import { HERO_CONFIGS } from "@/shared/balance-config/heroes"
-import type {
-  LobbyPlayer,
-  LobbyPhase,
-  LobbyStatePayload,
+import {
   LobbyChatPayload,
-  LobbyChatHistoryPayload,
-  LobbyHeroSelectPayload,
-  LobbyCountdownPayload,
   LobbyHostTransferPayload,
   LobbyKickedPayload,
   LobbyErrorPayload,
 } from "@/shared/types"
+import { WsEvent } from "@/shared/events"
+import { useLobbyConnection } from "./LobbyConnectionProvider"
 import { useLobbyMusic } from "./LobbyMusicContext"
 import {
   pageShell,
@@ -62,41 +55,34 @@ const HERO_ICON: Record<string, string> = {
   ranger: "🟢",
 }
 
-/** Props for LobbyClient. */
-type LobbyClientProps = {
-  /** Colyseus room ID passed from the server page. */
-  readonly roomId: string
-}
-
 /**
  * Main lobby UI client component.
- * Connects to the `game_lobby` Colyseus room, shows player list,
- * hero select, lobby chat, and host controls.
- *
- * @param props.roomId - The Colyseus room ID to join.
+ * Uses the shared `LobbyConnectionProvider` to interact with the game room.
+ * Shows player list, hero select, lobby chat, and host controls.
  */
-export default function LobbyClient({ roomId }: LobbyClientProps) {
+export default function LobbyClient() {
   const router = useRouter()
+  const params = useParams()
+  const roomId = typeof params?.id === "string" ? params.id : ""
   const { muted, toggleMute } = useLobbyMusic()
+  const {
+    connection,
+    lobbyState,
+    localPlayerId,
+    error: providerError,
+    isConnected,
+    onMessage,
+  } = useLobbyConnection()
 
-  const [phase, setPhase] = useState<LobbyPhase>("LOBBY")
-  const [players, setPlayers] = useState<LobbyPlayer[]>([])
-  const [hostPlayerId, setHostPlayerId] = useState<string | null>(null)
-  const [myPlayerId, setMyPlayerId] = useState<string | null>(null)
   const [chatMessages, setChatMessages] = useState<LobbyChatPayload[]>([])
   const [chatInput, setChatInput] = useState("")
   const [countdown, setCountdown] = useState<number | null>(null)
-  const [connected, setConnected] = useState(false)
   const [kicked, setKicked] = useState<string | null>(null)
   const [lobbyError, setLobbyError] = useState<string | null>(null)
+  const [hostTransferBanner, setHostTransferBanner] = useState<string | null>(null)
 
-  const roomRef = useRef<Room | null>(null)
   const chatEndRef = useRef<HTMLDivElement>(null)
   const chatInputRef = useRef<HTMLInputElement>(null)
-  /** Monotonic id so stale async work from a prior effect does not join after unmount. */
-  const connectGenerationRef = useRef(0)
-  /** Chains `room.leave()` across Strict Mode remounts to avoid duplicate-session on re-join. */
-  const leaveChainRef = useRef<Promise<unknown>>(Promise.resolve())
 
   /** Scrolls the lobby chat to the bottom. */
   const scrollChat = useCallback(() => {
@@ -107,164 +93,88 @@ export default function LobbyClient({ roomId }: LobbyClientProps) {
     scrollChat()
   }, [chatMessages, scrollChat])
 
-  // Connect to the Colyseus game_lobby room
+  // Wire incoming message handlers from the transport layer
   useEffect(() => {
-    const gen = ++connectGenerationRef.current
-    let cancelled = false
+    const unsub = onMessage((message) => {
+      switch (message.type) {
+        case WsEvent.LobbyChat:
+          setChatMessages((prev) => [...prev, message.payload as LobbyChatPayload])
+          break
 
-    async function connect() {
-      await leaveChainRef.current
-      if (cancelled || gen !== connectGenerationRef.current) return
+        case WsEvent.LobbyChatHistory:
+          setChatMessages([...(message.payload as { messages: LobbyChatPayload[] }).messages])
+          break
 
-      const session = await fetchWsAuthSession()
-      if (cancelled || gen !== connectGenerationRef.current) return
-      if (!session) {
-        setLobbyError("Not authenticated")
-        return
-      }
+        case WsEvent.LobbyCountdown:
+          setCountdown((message.payload as { remaining: number }).remaining)
+          break
 
-      try {
-        const client = new Client(getColyseusUrl())
-        const room = await client.joinById<unknown>(roomId, {
-          token: session.token,
-        })
-        if (cancelled || gen !== connectGenerationRef.current) {
-          await room.leave()
-          return
+        case WsEvent.LobbyHostTransfer: {
+          const payload = message.payload as LobbyHostTransferPayload
+          setHostTransferBanner(`${payload.hostUsername} is now the host`)
+          break
         }
 
-        roomRef.current = room
-        setConnected(true)
-        // Server playerId and hostPlayerId are JWT `sub`, not Colyseus sessionId.
-        setMyPlayerId(session.sub)
+        case WsEvent.LobbyKicked:
+          setKicked((message.payload as LobbyKickedPayload).reason)
+          setTimeout(() => router.push("/browse"), 2500)
+          break
 
-        /** Full lobby state snapshot (on join + phase transitions). */
-        room.onMessage(RoomEvent.LobbyState, (payload: LobbyStatePayload) => {
-          setPhase(payload.phase)
-          setPlayers([...payload.players])
-          setHostPlayerId(payload.hostPlayerId)
+        case WsEvent.LobbyError:
+          setLobbyError((message.payload as LobbyErrorPayload).message)
+          break
+
+        case WsEvent.LobbyState: {
+          const payload = message.payload as import("@/shared/types").LobbyStatePayload
+          // Clear countdown if server cancels it (returns to LOBBY phase)
+          if (payload.phase === "LOBBY") {
+            setCountdown(null)
+          }
           if (payload.phase === "IN_PROGRESS") {
             router.push(`/lobby/${roomId}/game`)
           }
-        })
-
-        /** Incremental lobby chat message. */
-        room.onMessage(RoomEvent.LobbyChat, (msg: LobbyChatPayload) => {
-          setChatMessages((prev) => [...prev, msg])
-        })
-
-        /** Chat history replay on join. */
-        room.onMessage(
-          RoomEvent.LobbyChatHistory,
-          (payload: LobbyChatHistoryPayload) => {
-            setChatMessages([...payload.messages])
-          },
-        )
-
-        /** Hero select update for a specific player. */
-        room.onMessage(
-          RoomEvent.LobbyHeroSelect,
-          (payload: LobbyHeroSelectPayload) => {
-            setPlayers((prev) =>
-              prev.map((p) =>
-                p.playerId === payload.playerId
-                  ? { ...p, heroId: payload.heroId }
-                  : p,
-              ),
-            )
-          },
-        )
-
-        /** Countdown tick before IN_PROGRESS. */
-        room.onMessage(
-          RoomEvent.LobbyCountdown,
-          (payload: LobbyCountdownPayload) => {
-            setCountdown(payload.remaining)
-            if (payload.remaining <= 0) {
-              setCountdown(null)
-            }
-          },
-        )
-
-        /** Host transfer after prior host disconnects. */
-        room.onMessage(
-          RoomEvent.LobbyHostTransfer,
-          (payload: LobbyHostTransferPayload) => {
-            setHostPlayerId(payload.hostPlayerId)
-          },
-        )
-
-        /** Kicked from lobby. */
-        room.onMessage(RoomEvent.LobbyKicked, (payload: LobbyKickedPayload) => {
-          setKicked(payload.reason)
-          setTimeout(() => router.push("/browse"), 2500)
-        })
-
-        /** Generic lobby error. */
-        room.onMessage(RoomEvent.LobbyError, (payload: LobbyErrorPayload) => {
-          setLobbyError(payload.message)
-        })
-
-        room.onLeave(() => {
-          if (!cancelled) setConnected(false)
-        })
-
-        room.onError((_code, message) => {
-          if (!cancelled) setLobbyError(message ?? "Room error")
-        })
-      } catch (err) {
-        if (!cancelled) {
-          setLobbyError(
-            err instanceof Error ? err.message : "Failed to connect to lobby",
-          )
+          break
         }
       }
-    }
+    })
 
-    void connect()
+    return unsub
+  }, [onMessage, router, roomId])
 
-    return () => {
-      cancelled = true
-      const room = roomRef.current
-      roomRef.current = null
-      leaveChainRef.current = leaveChainRef.current.then(async () => {
-        if (room) await room.leave().catch(() => undefined)
-      })
-    }
-  }, [roomId, router])
+  // Auto-dismiss host transfer banner after 5 seconds
+  useEffect(() => {
+    if (!hostTransferBanner) return
+    const t = setTimeout(() => setHostTransferBanner(null), 5000)
+    return () => clearTimeout(t)
+  }, [hostTransferBanner])
 
-  /**
-   * Sends a hero selection to the server.
-   *
-   * @param heroId - The ID of the hero to select.
-   */
-  const selectHero = useCallback((heroId: string) => {
-    roomRef.current?.send(RoomEvent.LobbyHeroSelect, { heroId })
-  }, [])
+  /** Sends a hero selection to the server. */
+  const selectHero = useCallback(
+    (heroId: string) => {
+      connection?.sendLobbyHeroSelect(heroId)
+    },
+    [connection],
+  )
 
-  /**
-   * Sends the start game command (host only).
-   */
+  /** Sends the start game command (host only). */
   const startGame = useCallback(() => {
-    roomRef.current?.send(RoomEvent.LobbyStartGame, {})
-  }, [])
+    connection?.sendLobbyStartGame()
+  }, [connection])
 
-  /**
-   * Sends a lobby chat message.
-   */
+  /** Sends the end lobby command (host only). */
+  const endLobby = useCallback(() => {
+    connection?.sendLobbyEndLobby()
+  }, [connection])
+
+  /** Sends a lobby chat message. */
   const sendChat = useCallback(() => {
     const text = chatInput.trim()
-    if (!text || !roomRef.current || text.length > MAX_CHARS) return
-    roomRef.current.send(RoomEvent.LobbyChat, { text })
+    if (!text || !connection || text.length > MAX_CHARS) return
+    connection.sendLobbyChat(text)
     setChatInput("")
-  }, [chatInput])
+  }, [chatInput, connection])
 
-  /**
-   * Handles keydown events on the chat input.
-   * Enter sends the message; Escape blurs the input.
-   *
-   * @param e - The keyboard event.
-   */
+  /** Handles keydown events on the chat input. */
   const onChatKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === "Enter") {
@@ -277,17 +187,40 @@ export default function LobbyClient({ roomId }: LobbyClientProps) {
     [sendChat],
   )
 
-  /**
-   * Navigates back to the browse games page.
-   */
+  /** Navigates back to the browse games page. */
   const goBack = useCallback(() => {
     router.push("/browse")
   }, [router])
 
-  const isHost = myPlayerId !== null && myPlayerId === hostPlayerId
-  const myPlayer = players.find((p) => p.playerId === myPlayerId)
+  const players = lobbyState?.players ?? []
+  const phase = lobbyState?.phase ?? "LOBBY"
+  const hostPlayerId = lobbyState?.hostPlayerId
+  const isHost = localPlayerId !== null && localPlayerId === hostPlayerId
+  const myPlayer = players.find((p) => p.playerId === localPlayerId)
 
-  // ----- Render: Kicked overlay -----
+  // ─── Render: Fatal error ───────────────────────────────────────────────────
+
+  if (providerError) {
+    return (
+      <div className={`flex items-center justify-center ${pageShell}`}>
+        <div className="max-w-md text-center">
+          <div className={`${cardPanel} p-8`}>
+            <h1 className="mb-4 text-3xl font-bold text-red-400">Lobby Not Found</h1>
+            <p className="mb-8 text-gray-400">{providerError}</p>
+            <Link
+              href="/browse"
+              className="inline-block rounded-md bg-purple-600 px-6 py-2 font-semibold text-white hover:bg-purple-700"
+            >
+              Back to Browser
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ─── Render: Kicked overlay ─────────────────────────────────────────────────
+
   if (kicked) {
     return (
       <div className={`flex items-center justify-center ${pageShell}`}>
@@ -306,9 +239,7 @@ export default function LobbyClient({ roomId }: LobbyClientProps) {
       {countdown !== null && countdown > 0 && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
           <div className="text-center">
-            <p className="text-8xl font-bold text-purple-400 tabular-nums">
-              {countdown}
-            </p>
+            <p className="text-8xl font-bold text-purple-400 tabular-nums">{countdown}</p>
             <p className="mt-4 text-xl text-gray-300">Match starting…</p>
           </div>
         </div>
@@ -329,10 +260,10 @@ export default function LobbyClient({ roomId }: LobbyClientProps) {
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5 text-xs">
               <span
-                className={`h-2 w-2 rounded-full ${connected ? "bg-green-400" : "bg-red-500"}`}
+                className={`h-2 w-2 rounded-full ${isConnected ? "bg-green-400" : "bg-red-500"}`}
               />
-              <span className={connected ? "text-gray-400" : "text-red-400"}>
-                {connected ? `${phase}` : "Connecting…"}
+              <span className={isConnected ? "text-gray-400" : "text-red-400"}>
+                {isConnected ? phase : "Connecting…"}
               </span>
             </div>
             <button
@@ -346,9 +277,21 @@ export default function LobbyClient({ roomId }: LobbyClientProps) {
           </div>
         </div>
 
-        {lobbyError && (
-          <div className={`mb-4 ${errorBanner}`}>{lobbyError}</div>
+        {/* Host transfer banner */}
+        {hostTransferBanner && (
+          <div className="mb-4 flex items-center justify-between rounded-lg bg-purple-900/40 px-4 py-2 text-sm text-purple-200 border border-purple-500/30">
+            <span>{hostTransferBanner}</span>
+            <button
+              onClick={() => setHostTransferBanner(null)}
+              className="ml-4 text-purple-400 hover:text-purple-200"
+              type="button"
+            >
+              ×
+            </button>
+          </div>
         )}
+
+        {lobbyError && <div className={`mb-4 ${errorBanner}`}>{lobbyError}</div>}
 
         <div className={gridThreeCols}>
           {/* Left column: hero select + player list */}
@@ -369,6 +312,7 @@ export default function LobbyClient({ roomId }: LobbyClientProps) {
                       }`}
                       onClick={() => selectHero(hero.id)}
                       type="button"
+                      disabled={!isConnected}
                     >
                       <span className="text-lg">{HERO_ICON[hero.id]}</span>
                       <span>{hero.displayName}</span>
@@ -383,9 +327,7 @@ export default function LobbyClient({ roomId }: LobbyClientProps) {
 
             {/* Player list */}
             <div className={cardPanel}>
-              <p className={`mb-3 ${sectionTitleCaps}`}>
-                Players ({players.length}/12)
-              </p>
+              <p className={`mb-3 ${sectionTitleCaps}`}>Players ({players.length}/12)</p>
               <ul className="space-y-2">
                 {players.map((p) => (
                   <li
@@ -394,9 +336,7 @@ export default function LobbyClient({ roomId }: LobbyClientProps) {
                   >
                     <span className="text-base">{HERO_ICON[p.heroId] ?? "⚪"}</span>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-white">
-                        {p.username}
-                      </p>
+                      <p className="truncate text-sm font-medium text-white">{p.username}</p>
                       <p className="text-xs text-gray-500">
                         {HERO_CONFIGS[p.heroId]?.displayName ?? p.heroId}
                       </p>
@@ -406,7 +346,7 @@ export default function LobbyClient({ roomId }: LobbyClientProps) {
                         Host
                       </span>
                     )}
-                    {p.playerId === myPlayerId && (
+                    {p.playerId === localPlayerId && (
                       <span className="rounded bg-gray-700 px-1.5 py-0.5 text-xs text-gray-400">
                         You
                       </span>
@@ -415,19 +355,48 @@ export default function LobbyClient({ roomId }: LobbyClientProps) {
                 ))}
               </ul>
 
-              {/* Host: start game */}
-              {isHost && phase === "LOBBY" && (
-                <div className="mt-4">
+              {/* Start/End game/lobby affordances */}
+              <div className="mt-4 flex flex-col gap-2">
+                {phase === "LOBBY" && (
                   <button
                     className={btnSuccessBlock}
                     onClick={startGame}
-                    disabled={players.length === 0}
+                    disabled={!isHost || !isConnected || players.length === 0}
                     type="button"
+                    title={!isHost ? "Only the host can start the game" : undefined}
                   >
-                    ▶ Start Game
+                    {!isConnected
+                      ? "Connecting…"
+                      : isHost
+                        ? "▶ Start Game"
+                        : "Waiting for Host…"}
                   </button>
-                </div>
-              )}
+                )}
+
+                {(isHost || phase === "IN_PROGRESS") && (
+                  <div className="flex gap-2">
+                    {isHost &&
+                      (phase === "LOBBY" || phase === "SCOREBOARD" || phase === "COUNTDOWN") && (
+                        <button
+                          className={`${btnGhost} flex-1 border-red-900/50 text-red-400 hover:bg-red-900/20`}
+                          onClick={endLobby}
+                          type="button"
+                        >
+                          End Lobby
+                        </button>
+                      )}
+
+                    {phase === "IN_PROGRESS" && (
+                      <Link
+                        href={`/lobby/${roomId}/game`}
+                        className={`${btnPrimary} flex-1 text-center text-sm`}
+                      >
+                        Join Game In Progress
+                      </Link>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -436,14 +405,9 @@ export default function LobbyClient({ roomId }: LobbyClientProps) {
             <h2 className={`mb-3 ${sectionTitle}`}>Lobby Chat</h2>
 
             {/* Messages */}
-            <div
-              className="mb-3 flex-1 overflow-y-auto"
-              style={{ maxHeight: "400px" }}
-            >
+            <div className="mb-3 flex-1 overflow-y-auto" style={{ maxHeight: "400px" }}>
               {chatMessages.length === 0 && (
-                <p className="text-sm italic text-gray-600">
-                  No messages yet. Say hello!
-                </p>
+                <p className="text-sm italic text-gray-600">No messages yet. Say hello!</p>
               )}
               <ul className="space-y-1">
                 {chatMessages.map((msg) => (
@@ -468,12 +432,12 @@ export default function LobbyClient({ roomId }: LobbyClientProps) {
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyDown={onChatKeyDown}
-                disabled={!connected}
+                disabled={!isConnected}
               />
               <button
                 className={btnPrimary}
                 onClick={sendChat}
-                disabled={!connected || !chatInput.trim()}
+                disabled={!isConnected || !chatInput.trim()}
                 type="button"
               >
                 Send

@@ -21,6 +21,7 @@ export const WsEvent = {
   LobbyReturnToLobby: "LOBBY_RETURN_TO_LOBBY",
   LobbyKicked: "LOBBY_KICKED",
   LobbyError: "LOBBY_ERROR",
+  LobbyEndLobby: "LOBBY_END_LOBBY",
 
   // Game loading gate
   ClientSceneReady: "CLIENT_SCENE_READY",

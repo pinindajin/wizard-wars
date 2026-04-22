@@ -24,6 +24,7 @@ export const RoomEvent = {
   LobbyReturnToLobby: "lobby_return_to_lobby",
   LobbyKicked: "lobby_kicked",
   LobbyError: "lobby_error",
+  LobbyEndLobby: "lobby_end_lobby",
 
   // Game loading gate
   ClientSceneReady: "client_scene_ready",
