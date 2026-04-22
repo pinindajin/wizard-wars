@@ -73,6 +73,9 @@ export type LobbyChatHistoryPayload = {
   readonly messages: readonly LobbyChatPayload[]
 }
 
+/** Client (host) → server: close the lobby or cancel countdown. */
+export type LobbyEndLobbyPayload = Record<string, never>
+
 /** Client (host) → server: start the match. */
 export type LobbyStartGamePayload = Record<string, never>
 
@@ -87,6 +90,7 @@ export type LobbyCountdownPayload = {
 /** Server → all: new host after prior host disconnected. */
 export type LobbyHostTransferPayload = {
   readonly hostPlayerId: string
+  readonly hostUsername: string
 }
 
 /** Server → all: hero select for a player. */
@@ -357,3 +361,12 @@ export type MatchCountdownStartPayload = {
 
 /** Server → all: countdown over, start playing. */
 export type MatchGoPayload = Record<string, never>
+
+/** Unified message shape for transport normalization. */
+export type AnyWsMessage = {
+  readonly type: string
+  readonly payload: unknown
+}
+
+/** Function signature for transport message subscribers. */
+export type MessageHandler = (message: AnyWsMessage) => void

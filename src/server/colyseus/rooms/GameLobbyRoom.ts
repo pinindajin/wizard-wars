@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto"
 
 import { verifyToken } from "../../auth"
 import { createGameSimulation, type GameSimulation } from "../../game/simulation"
-import { createSessionEconomy, attemptPurchase, useQuickItemSlot, buildShopStatePayload } from "../../gameserver/sessionShop"
+import { createSessionEconomy, attemptPurchase, buildShopStatePayload } from "../../gameserver/sessionShop"
 import type { SessionEconomy } from "../../gameserver/sessionShop"
 import { TICK_MS } from "../../../shared/balance-config/rendering"
 import { ARENA_SPAWN_POINTS } from "../../../shared/balance-config/arena"
@@ -14,9 +14,9 @@ import type {
   LobbyPlayer,
   LobbyStatePayload,
   LobbyChatPayload,
+  LobbyHostTransferPayload,
   LobbyScoreboardPayload,
   ScoreboardEntry,
-  PlayerInputPayload,
 } from "../../../shared/types"
 import {
   lobbyChatPayloadSchema,
@@ -36,6 +36,7 @@ import {
 } from "../../../shared/balance-config/lobby"
 import { DEFAULT_HERO_ID } from "../../../shared/balance-config/heroes"
 import { logger } from "../../logger"
+import { Equipment } from "../../game/components"
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -513,6 +514,14 @@ export class GameLobbyRoom extends Room {
       this.handleReturnToLobby(client)
     })
 
+    this.onMessage(RoomEvent.LobbyEndLobby, (client: Client) => {
+      this.handleEndLobby(client)
+    })
+
+    this.onMessage(RoomEvent.RequestResync, (client: Client) => {
+      this.handleRequestResync(client)
+    })
+
     this.onMessage(RoomEvent.PlayerInput, (client: Client, payload: unknown) => {
       this.handlePlayerInput(client, payload)
     })
@@ -565,14 +574,12 @@ export class GameLobbyRoom extends Room {
     if (sim && itemId === "axe") {
       const eid = sim.playerEntityMap.get(pd.playerId)
       if (eid !== undefined) {
-        const { Equipment } = require("../../game/components")
         Equipment.hasAxe[eid] = 1
       }
     }
     if (sim && itemId === "swift_boots") {
       const eid = sim.playerEntityMap.get(pd.playerId)
       if (eid !== undefined) {
-        const { Equipment } = require("../../game/components")
         Equipment.hasSwiftBoots[eid] = 1
       }
     }
@@ -705,6 +712,58 @@ export class GameLobbyRoom extends Room {
     const pd = client.userData as PlayerData
     this.returnedToLobbySet.add(pd.playerId)
     this.checkAllReturnedToLobby()
+  }
+
+  /**
+   * Handles an inbound `lobby_end_lobby` message.
+   * Only the host may call this. If in `COUNTDOWN`, cancels the countdown;
+   * otherwise dissolves the room entirely.
+   *
+   * @param client - The requesting client.
+   */
+  private handleEndLobby(client: Client): void {
+    const pd = client.userData as PlayerData
+    if (pd.playerId !== this.hostPlayerId) return
+
+    if (this.lobbyPhase === "COUNTDOWN") {
+      this.cancelPreGameCountdown()
+      return
+    }
+
+    if (this.lobbyPhase === "LOBBY" || this.lobbyPhase === "SCOREBOARD") {
+      this.dissolveLobby("lobby_dissolved")
+    }
+  }
+
+  /**
+   * Aborts an active match countdown and returns the room to `LOBBY` phase.
+   */
+  private cancelPreGameCountdown(): void {
+    this.countdownTimer?.clear()
+    this.countdownTimer = null
+    this.lobbyPhase = "LOBBY"
+    this.updateMetadataPhase()
+    this.broadcast(RoomEvent.LobbyState, this.buildLobbyState())
+    this.resetInactivityTimer()
+  }
+
+  /**
+   * Handles an inbound `request_resync` message.
+   * Sends the full lobby state and shop state to the requesting client.
+   * Only processed during `IN_PROGRESS`.
+   *
+   * @param client - The requesting client.
+   */
+  private handleRequestResync(client: Client): void {
+    if (this.lobbyPhase !== "IN_PROGRESS") return
+
+    const pd = client.userData as PlayerData
+    const economy = this.economies.get(pd.playerId)
+
+    client.send(RoomEvent.LobbyState, this.buildLobbyState())
+    if (economy) {
+      client.send(RoomEvent.ShopState, buildShopStatePayload(economy))
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -1006,7 +1065,10 @@ export class GameLobbyRoom extends Room {
     const newHostUsername =
       (newHostClient?.userData as PlayerData)?.username ?? "Unknown"
 
-    const payload: { hostPlayerId: string } = { hostPlayerId: newHostId }
+    const payload: LobbyHostTransferPayload = {
+      hostPlayerId: newHostId,
+      hostUsername: newHostUsername,
+    }
     this.broadcast(RoomEvent.LobbyHostTransfer, payload)
     this.setMetadata({ hostPlayerId: newHostId, hostName: newHostUsername })
 
