@@ -1,19 +1,21 @@
 "use client"
 
+import { overlayScrim, overlayScrimStyle, overlayCard } from "@/lib/ui/lobbyStyles"
+
 /**
  * LoadingGate overlay.
- * Covers 55% of the screen (opacity) while waiting for all players
- * to signal ClientSceneReady. The Phaser canvas renders beneath it.
+ * Covers the screen while waiting for all players to signal ClientSceneReady.
+ * The Phaser canvas renders beneath it.
  */
 export default function LoadingGate() {
   return (
     <div
-      className="absolute inset-0 z-40 flex flex-col items-center justify-center"
-      style={{ backgroundColor: "rgba(0,0,0,0.55)" }}
+      className={overlayScrim}
+      style={overlayScrimStyle}
       aria-live="polite"
       aria-busy="true"
     >
-      <div className="flex flex-col items-center gap-4 rounded-2xl border border-gray-700 bg-gray-900/80 px-10 py-8 backdrop-blur-sm">
+      <div className={overlayCard}>
         {/* Spinner */}
         <svg
           className="h-12 w-12 animate-spin text-purple-400"
