@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Client } from "@colyseus/sdk"
 
+import { fetchWsAuthToken } from "@/lib/fetch-ws-auth-token"
 import { getColyseusUrl } from "@/lib/endpoints"
 import type { LobbyListEntry } from "@/app/api/lobbies/route"
 
@@ -25,18 +26,6 @@ const PHASE_COLORS: Record<LobbyListEntry["lobbyPhase"], string> = {
   COUNTDOWN: "bg-orange-700 text-orange-200",
   IN_PROGRESS: "bg-red-800 text-red-200",
   SCOREBOARD: "bg-gray-600 text-gray-200",
-}
-
-/**
- * Parses the `ww-token` value from `document.cookie`.
- *
- * @returns The JWT token string, or an empty string if not found.
- */
-function getWwToken(): string {
-  const match = document.cookie
-    .split("; ")
-    .find((row) => row.startsWith("ww-token="))
-  return match ? match.split("=").slice(1).join("=") : ""
 }
 
 /**
@@ -91,7 +80,7 @@ export default function ServerBrowser() {
     setCreating(true)
     setError(null)
     try {
-      const token = getWwToken()
+      const token = await fetchWsAuthToken()
       if (!token) throw new Error("Not authenticated")
       const client = new Client(getColyseusUrl())
       const room = await client.create<unknown>("game_lobby", { token })

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Client, type Room } from "@colyseus/sdk"
 
+import { fetchWsAuthToken } from "@/lib/fetch-ws-auth-token"
 import { getColyseusUrl } from "@/lib/endpoints"
 import { RoomEvent } from "@/shared/roomEvents"
 import { HERO_CONFIGS } from "@/shared/balance-config/heroes"
@@ -43,18 +44,6 @@ const HERO_ICON: Record<string, string> = {
   ranger: "🟢",
 }
 
-/**
- * Parses the `ww-token` value from `document.cookie`.
- *
- * @returns The JWT token string, or an empty string if not found.
- */
-function getWwToken(): string {
-  const match = document.cookie
-    .split("; ")
-    .find((row) => row.startsWith("ww-token="))
-  return match ? match.split("=").slice(1).join("=") : ""
-}
-
 /** Props for LobbyClient. */
 type LobbyClientProps = {
   /** Colyseus room ID passed from the server page. */
@@ -70,7 +59,7 @@ type LobbyClientProps = {
  */
 export default function LobbyClient({ roomId }: LobbyClientProps) {
   const router = useRouter()
-  const { muted, toggleMute, onFirstInteraction } = useLobbyMusic()
+  const { muted, toggleMute } = useLobbyMusic()
 
   const [phase, setPhase] = useState<LobbyPhase>("LOBBY")
   const [players, setPlayers] = useState<LobbyPlayer[]>([])
@@ -101,7 +90,7 @@ export default function LobbyClient({ roomId }: LobbyClientProps) {
     let cancelled = false
 
     async function connect() {
-      const token = getWwToken()
+      const token = await fetchWsAuthToken()
       if (!token) {
         setLobbyError("Not authenticated")
         return
@@ -280,10 +269,7 @@ export default function LobbyClient({ roomId }: LobbyClientProps) {
   }
 
   return (
-    <div
-      className="flex min-h-screen bg-gray-900 text-white"
-      onClick={onFirstInteraction}
-    >
+    <div className="flex min-h-screen bg-gray-900 text-white">
       {/* Countdown overlay */}
       {countdown !== null && countdown > 0 && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">

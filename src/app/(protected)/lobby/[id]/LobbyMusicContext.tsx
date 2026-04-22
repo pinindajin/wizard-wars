@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react"
 
@@ -18,11 +19,6 @@ type LobbyMusicContextValue = {
   readonly muted: boolean
   /** Toggle the mute state and persist it to sessionStorage. */
   readonly toggleMute: () => void
-  /**
-   * Signal that the user has interacted with the page, allowing
-   * the AudioContext to resume (browser autoplay policy).
-   */
-  readonly onFirstInteraction: () => void
 }
 
 const LobbyMusicContext = createContext<LobbyMusicContextValue | null>(null)
@@ -58,16 +54,15 @@ function writeMuted(value: boolean): void {
 }
 
 /**
- * Provider component that manages lobby background music.
- * Music starts on first user interaction (respects browser autoplay policy).
+ * Provider component that manages lobby background music for game lobbies only.
+ * Attempts autoplay on mount; if blocked, retries on first pointer or key press.
  * Mute state is persisted in sessionStorage under `ww-lobby-muted`.
  *
  * @param props.children - React children to render inside the provider.
  */
 export function LobbyMusicProvider({ children }: { children: React.ReactNode }) {
   const [muted, setMuted] = useState<boolean>(false)
-  const [audio, setAudio] = useState<HTMLAudioElement | null>(null)
-  const [started, setStarted] = useState(false)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
 
   // Hydrate muted state from sessionStorage after mount (avoid SSR mismatch)
   useEffect(() => {
@@ -76,28 +71,27 @@ export function LobbyMusicProvider({ children }: { children: React.ReactNode }) 
 
   // Sync audio element mute state when muted changes
   useEffect(() => {
-    if (audio) {
-      audio.muted = muted
+    if (audioRef.current) {
+      audioRef.current.muted = muted
     }
-  }, [audio, muted])
+  }, [muted])
 
   /**
-   * Starts lobby music on first user interaction.
-   * Safe to call multiple times — only acts on the first call.
+   * Ensures the lobby audio element exists and attempts playback (retry after autoplay blocks).
    */
-  const onFirstInteraction = useCallback(() => {
-    if (started) return
-    setStarted(true)
-
-    const el = new Audio(LOBBY_MUSIC_PATH)
-    el.loop = true
-    el.volume = DEFAULT_BGM_VOLUME / 100
-    el.muted = readMuted()
-    el.play().catch(() => {
-      // Autoplay still blocked — audio will start on next interaction
+  const tryStartLobbyMusic = useCallback(() => {
+    let el = audioRef.current
+    if (!el) {
+      el = new Audio(LOBBY_MUSIC_PATH)
+      el.loop = true
+      el.volume = DEFAULT_BGM_VOLUME / 100
+      el.muted = readMuted()
+      audioRef.current = el
+    }
+    void el.play().catch(() => {
+      // Still blocked until user gesture — listener below retries
     })
-    setAudio(el)
-  }, [started])
+  }, [])
 
   /**
    * Toggles the lobby music mute state and persists the preference.
@@ -110,18 +104,38 @@ export function LobbyMusicProvider({ children }: { children: React.ReactNode }) 
     })
   }, [])
 
+  // Autoplay on mount + unlock on first user activation if needed
+  useEffect(() => {
+    tryStartLobbyMusic()
+
+    const onActivation = () => {
+      tryStartLobbyMusic()
+      window.removeEventListener("pointerdown", onActivation)
+      window.removeEventListener("keydown", onActivation)
+    }
+    window.addEventListener("pointerdown", onActivation)
+    window.addEventListener("keydown", onActivation)
+
+    return () => {
+      window.removeEventListener("pointerdown", onActivation)
+      window.removeEventListener("keydown", onActivation)
+    }
+  }, [tryStartLobbyMusic])
+
   // Tear down audio on unmount
   useEffect(() => {
     return () => {
-      if (audio) {
-        audio.pause()
-        audio.src = ""
+      const el = audioRef.current
+      if (el) {
+        el.pause()
+        el.src = ""
+        audioRef.current = null
       }
     }
-  }, [audio])
+  }, [])
 
   return (
-    <LobbyMusicContext.Provider value={{ muted, toggleMute, onFirstInteraction }}>
+    <LobbyMusicContext.Provider value={{ muted, toggleMute }}>
       {children}
     </LobbyMusicContext.Provider>
   )

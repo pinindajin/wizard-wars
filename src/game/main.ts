@@ -8,6 +8,8 @@ export interface MountGameOptions {
   containerId: string
   /** Colyseus room id for the active match. */
   lobbyId: string
+  /** Session JWT for reconnect (`ww-token` is HttpOnly — must come from `/api/auth/ws-token`). */
+  token: string
   /**
    * Pre-authenticated Colyseus room from the React host.
    * Passed to GameConnection so we can skip a second join call.
@@ -24,10 +26,9 @@ export interface MountGameOptions {
  * @returns A function that destroys the Phaser game and cleans up.
  */
 export const mountGame = (options: MountGameOptions): (() => void) => {
-  const { containerId, lobbyId } = options
+  const { containerId, lobbyId, token } = options
 
   // Persist join options so GameConnection can read them on scene boot
-  const token = _readWwToken()
   sessionStorage.setItem(
     "ww_join_options",
     JSON.stringify({ token, lobbyId }),
@@ -39,17 +40,4 @@ export const mountGame = (options: MountGameOptions): (() => void) => {
     game.destroy(true)
     sessionStorage.removeItem("ww_join_options")
   }
-}
-
-/**
- * Reads the `ww-token` cookie value for use in the Colyseus join options.
- *
- * @returns The JWT token string, or empty string if not found.
- */
-function _readWwToken(): string {
-  if (typeof document === "undefined") return ""
-  const match = document.cookie
-    .split("; ")
-    .find((row) => row.startsWith("ww-token="))
-  return match ? match.split("=").slice(1).join("=") : ""
 }

@@ -1,14 +1,8 @@
-import { LobbyMusicProvider } from "@/app/(protected)/lobby/[id]/LobbyMusicContext"
 import ChatClient from "./ChatClient"
 
 /**
- * Home page — global lobby chat hub.
- * Music starts on first user interaction (autoplay policy).
+ * Home page — global lobby chat hub (no lobby music; that plays only on `/lobby/[id]`).
  */
 export default function HomePage() {
-  return (
-    <LobbyMusicProvider>
-      <ChatClient />
-    </LobbyMusicProvider>
-  )
+  return <ChatClient />
 }

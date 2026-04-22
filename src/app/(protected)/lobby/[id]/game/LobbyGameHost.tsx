@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Client, type Room } from "@colyseus/sdk"
 
+import { fetchWsAuthToken } from "@/lib/fetch-ws-auth-token"
 import { getColyseusUrl } from "@/lib/endpoints"
 import { RoomEvent } from "@/shared/roomEvents"
 import type {
@@ -28,18 +29,6 @@ import type { ShopStatePayload } from "@/shared/types"
 type LobbyGameHostProps = {
   /** Colyseus lobby/room ID. */
   readonly lobbyId: string
-}
-
-/**
- * Parses the `ww-token` value from `document.cookie`.
- *
- * @returns The JWT token string, or an empty string if not found.
- */
-function getWwToken(): string {
-  const match = document.cookie
-    .split("; ")
-    .find((row) => row.startsWith("ww-token="))
-  return match ? match.split("=").slice(1).join("=") : ""
 }
 
 /**
@@ -76,7 +65,7 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
     let cancelled = false
 
     async function connect() {
-      const token = getWwToken()
+      const token = await fetchWsAuthToken()
       if (!token) return
 
       try {
@@ -155,10 +144,14 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
 
     async function mountPhaser() {
       try {
+        const token = await fetchWsAuthToken()
+        if (!token) return
+
         const { mountGame } = await import("@/game/main")
         destroyGame = mountGame({
           containerId: "phaser-container",
           lobbyId,
+          token,
           room: roomRef.current,
         })
       } catch {

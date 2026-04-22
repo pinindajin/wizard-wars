@@ -4,24 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Client, type Room } from "@colyseus/sdk"
 
+import { fetchWsAuthToken } from "@/lib/fetch-ws-auth-token"
 import { getColyseusUrl } from "@/lib/endpoints"
 import { RoomEvent } from "@/shared/roomEvents"
 import type { ChatMessage, ChatPresenceUser } from "@/shared/types"
-import { useLobbyMusic } from "@/app/(protected)/lobby/[id]/LobbyMusicContext"
 
 const MAX_CHARS = 200
-
-/**
- * Parses the `ww-token` value from `document.cookie`.
- *
- * @returns The JWT token string, or an empty string if not found.
- */
-function getWwToken(): string {
-  const match = document.cookie
-    .split("; ")
-    .find((row) => row.startsWith("ww-token="))
-  return match ? match.split("=").slice(1).join("=") : ""
-}
 
 /**
  * Fetches the latest chat log via tRPC.
@@ -41,12 +29,11 @@ async function fetchChatHistory(): Promise<ChatMessage[]> {
 
 /**
  * Global chat client component.
- * Connects to the Colyseus `chat` room, shows message history
- * and live updates, presence list, and lobby music controls.
+ * Connects to the Colyseus `chat` room, shows message history,
+ * live updates, and presence list.
  */
 export default function ChatClient() {
   const router = useRouter()
-  const { muted, toggleMute, onFirstInteraction } = useLobbyMusic()
 
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [presence, setPresence] = useState<ChatPresenceUser[]>([])
@@ -72,7 +59,7 @@ export default function ChatClient() {
       if (cancelled) return
       setMessages(history)
 
-      const token = getWwToken()
+      const token = await fetchWsAuthToken()
       if (!token) {
         setError("Not authenticated")
         return
@@ -162,10 +149,7 @@ export default function ChatClient() {
   }, [router])
 
   return (
-    <div
-      className="flex min-h-screen bg-gray-900 text-white"
-      onClick={onFirstInteraction}
-    >
+    <div className="flex min-h-screen bg-gray-900 text-white">
       {/* Sidebar */}
       <aside className="flex w-56 flex-col border-r border-gray-700 bg-gray-800 p-4">
         <div className="mb-6">
@@ -179,15 +163,6 @@ export default function ChatClient() {
           type="button"
         >
           Browse Games
-        </button>
-
-        <button
-          className="mb-6 w-full rounded-md border border-gray-600 py-2 text-sm text-gray-300 hover:bg-gray-700"
-          onClick={toggleMute}
-          type="button"
-          title={muted ? "Unmute lobby music" : "Mute lobby music"}
-        >
-          {muted ? "🔇 Music Off" : "🔊 Music On"}
         </button>
 
         {/* Online presence list */}
