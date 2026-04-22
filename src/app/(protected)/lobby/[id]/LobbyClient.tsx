@@ -4,33 +4,40 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter, useParams } from "next/navigation"
 import Link from "next/link"
 
+import {
+  LobbyHeader,
+  LobbyPanel,
+  LobbyShell,
+  LobbyStatusPill,
+} from "@/components/lobby/LobbyChrome"
 import { HERO_CONFIGS } from "@/shared/balance-config/heroes"
 import {
   LobbyChatPayload,
   LobbyHostTransferPayload,
   LobbyKickedPayload,
   LobbyErrorPayload,
+  type LobbyPhase,
 } from "@/shared/types"
 import { WsEvent } from "@/shared/events"
 import { useLobbyConnection } from "./LobbyConnectionProvider"
 import { useLobbyMusic } from "./LobbyMusicContext"
 import {
-  pageShell,
-  lobbyPage,
-  gridThreeCols,
-  gridChatSpan,
-  cardPanel,
-  cardPanelKicked,
-  sectionTitle,
-  sectionTitleCaps,
-  messageName,
-  messageSep,
-  messageBody,
-  inputChat,
+  btnGhost,
+  btnGhostCompact,
   btnPrimary,
   btnSuccessBlock,
-  btnGhost,
+  cardInset,
+  cardPanel,
+  cardPanelKicked,
+  chatViewport,
   errorBanner,
+  inputChat,
+  lobbyMainGrid,
+  lobbySidebarStack,
+  messageBody,
+  messageName,
+  messageSep,
+  metaText,
 } from "@/lib/ui/lobbyStyles"
 
 /** Maximum lobby chat message length. */
@@ -53,6 +60,21 @@ const HERO_ICON: Record<string, string> = {
   red_wizard: "🔴",
   barbarian: "🟠",
   ranger: "🟢",
+}
+
+/**
+ * Maps a lobby phase to the shared status-pill tone.
+ *
+ * @param currentPhase - The current lobby phase.
+ * @returns Visual tone for the shared status-pill component.
+ */
+function getPhaseTone(
+  currentPhase: LobbyPhase,
+): "neutral" | "accent" | "success" | "warning" | "danger" {
+  if (currentPhase === "LOBBY") return "success"
+  if (currentPhase === "WAITING_FOR_CLIENTS" || currentPhase === "COUNTDOWN") return "warning"
+  if (currentPhase === "IN_PROGRESS") return "danger"
+  return "neutral"
 }
 
 /**
@@ -126,7 +148,6 @@ export default function LobbyClient() {
 
         case WsEvent.LobbyState: {
           const payload = message.payload as import("@/shared/types").LobbyStatePayload
-          // Clear countdown if server cancels it (returns to LOBBY phase)
           if (payload.phase === "LOBBY") {
             setCountdown(null)
           }
@@ -193,7 +214,7 @@ export default function LobbyClient() {
   }, [router])
 
   const players = lobbyState?.players ?? []
-  const phase = lobbyState?.phase ?? "LOBBY"
+  const phase: LobbyPhase = (lobbyState?.phase ?? "LOBBY") as LobbyPhase
   const hostPlayerId = lobbyState?.hostPlayerId
   const isHost = localPlayerId !== null && localPlayerId === hostPlayerId
   const myPlayer = players.find((p) => p.playerId === localPlayerId)
@@ -202,20 +223,22 @@ export default function LobbyClient() {
 
   if (providerError) {
     return (
-      <div className={`flex items-center justify-center ${pageShell}`}>
-        <div className="max-w-md text-center">
-          <div className={`${cardPanel} p-8`}>
-            <h1 className="mb-4 text-3xl font-bold text-red-400">Lobby Not Found</h1>
-            <p className="mb-8 text-gray-400">{providerError}</p>
-            <Link
-              href="/browse"
-              className="inline-block rounded-md bg-purple-600 px-6 py-2 font-semibold text-white hover:bg-purple-700"
-            >
-              Back to Browser
-            </Link>
+      <LobbyShell>
+        <div className="flex min-h-[50vh] items-center justify-center">
+          <div className="max-w-md text-center">
+            <div className={`${cardPanel} p-8`}>
+              <h1 className="mb-4 text-3xl font-bold text-red-400">Lobby Not Found</h1>
+              <p className="mb-8 text-slate-400">{providerError}</p>
+              <Link
+                href="/browse"
+                className="inline-block rounded-2xl bg-violet-500 px-6 py-2.5 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(139,92,246,0.28)] hover:bg-violet-400"
+              >
+                Back to Browser
+              </Link>
+            </div>
           </div>
         </div>
-      </div>
+      </LobbyShell>
     )
   }
 
@@ -223,229 +246,256 @@ export default function LobbyClient() {
 
   if (kicked) {
     return (
-      <div className={`flex items-center justify-center ${pageShell}`}>
-        <div className={cardPanelKicked}>
-          <p className="text-2xl font-bold text-red-400">Kicked</p>
-          <p className="mt-2 text-gray-400">{kicked}</p>
-          <p className="mt-4 text-sm text-gray-600">Redirecting to browse…</p>
+      <LobbyShell>
+        <div className="flex min-h-[65vh] items-center justify-center">
+          <div className={cardPanelKicked}>
+            <p className={metaText}>Lobby Access Removed</p>
+            <p className="mt-3 text-3xl font-semibold tracking-tight text-red-200">Kicked</p>
+            <p className="mt-3 text-slate-300">{kicked}</p>
+            <p className="mt-5 text-sm text-slate-500">Redirecting to browse…</p>
+          </div>
         </div>
-      </div>
+      </LobbyShell>
     )
   }
 
   return (
-    <div className={pageShell}>
-      {/* Countdown overlay */}
+    <LobbyShell>
       {countdown !== null && countdown > 0 && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-          <div className="text-center">
-            <p className="text-8xl font-bold text-purple-400 tabular-nums">{countdown}</p>
-            <p className="mt-4 text-xl text-gray-300">Match starting…</p>
+          <div className="rounded-[32px] border border-violet-400/25 bg-slate-950/90 px-10 py-9 text-center shadow-[0_30px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+            <p className={metaText}>Match Countdown</p>
+            <p className="mt-4 text-8xl font-bold tabular-nums text-violet-300">{countdown}</p>
+            <p className="mt-4 text-xl text-slate-200">Match starting…</p>
           </div>
         </div>
       )}
 
-      <div className={lobbyPage}>
-        {/* Top bar: back, room info, mute */}
-        <div className="mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+      <LobbyHeader
+        eyebrow="Wizard Wars"
+        title="Story Lobby"
+        subtitle={`Room ${roomId}`}
+        aside={
+          <>
             <button className={btnGhost} onClick={goBack} type="button">
-              ← Browse
+              Browse Lobbies
             </button>
-            <div>
-              <p className="text-xs text-gray-500">Room</p>
-              <p className="font-mono text-xs text-gray-300">{roomId}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 text-xs">
+            <LobbyStatusPill tone={isConnected ? getPhaseTone(phase) : "warning"}>
               <span
-                className={`h-2 w-2 rounded-full ${isConnected ? "bg-green-400" : "bg-red-500"}`}
+                className={`h-2 w-2 rounded-full ${isConnected ? "bg-emerald-300" : "bg-amber-300"}`}
               />
-              <span className={isConnected ? "text-gray-400" : "text-red-400"}>
-                {isConnected ? phase : "Connecting…"}
-              </span>
-            </div>
+              {isConnected ? phase.replaceAll("_", " ") : "Connecting…"}
+            </LobbyStatusPill>
             <button
-              className={btnGhost}
+              className={btnGhostCompact}
               onClick={toggleMute}
               type="button"
               title={muted ? "Unmute lobby music" : "Mute lobby music"}
             >
-              {muted ? "🔇" : "🔊"}
+              {muted ? "Muted" : "Music On"}
             </button>
-          </div>
+          </>
+        }
+      />
+
+      {hostTransferBanner && (
+        <div className="mb-4 flex items-center justify-between rounded-2xl border border-violet-500/30 bg-violet-950/50 px-4 py-2 text-sm text-violet-200">
+          <span>{hostTransferBanner}</span>
+          <button
+            onClick={() => setHostTransferBanner(null)}
+            className="ml-4 text-violet-300 hover:text-violet-100"
+            type="button"
+          >
+            ×
+          </button>
         </div>
+      )}
 
-        {/* Host transfer banner */}
-        {hostTransferBanner && (
-          <div className="mb-4 flex items-center justify-between rounded-lg bg-purple-900/40 px-4 py-2 text-sm text-purple-200 border border-purple-500/30">
-            <span>{hostTransferBanner}</span>
-            <button
-              onClick={() => setHostTransferBanner(null)}
-              className="ml-4 text-purple-400 hover:text-purple-200"
-              type="button"
-            >
-              ×
-            </button>
-          </div>
-        )}
+      {lobbyError && <div className={`mb-6 ${errorBanner}`}>{lobbyError}</div>}
 
-        {lobbyError && <div className={`mb-4 ${errorBanner}`}>{lobbyError}</div>}
-
-        <div className={gridThreeCols}>
-          {/* Left column: hero select + player list */}
-          <div className="flex flex-col gap-4">
-            {/* Hero select */}
-            <div className={cardPanel}>
-              <p className={`mb-3 ${sectionTitleCaps}`}>Select Hero</p>
-              <div className="space-y-2">
-                {HERO_CARDS.map((hero) => {
-                  const selected = myPlayer?.heroId === hero.id
-                  return (
-                    <button
-                      key={hero.id}
-                      className={`flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
-                        selected
-                          ? `${HERO_ACCENT[hero.id]} bg-opacity-30 font-semibold text-white`
-                          : `border-gray-600 text-gray-300 ${HERO_ACCENT[hero.id]}`
-                      } ${!isConnected ? "opacity-50 cursor-not-allowed" : ""}`}
-                      onClick={() => selectHero(hero.id)}
-                      type="button"
-                      disabled={!isConnected}
-                    >
-                      <span className="text-lg">{HERO_ICON[hero.id]}</span>
-                      <span>{hero.displayName}</span>
-                      {selected && (
-                        <span className="ml-auto text-xs text-purple-400">✓ Selected</span>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-
-            {/* Player list */}
-            <div className={cardPanel}>
-              <p className={`mb-3 ${sectionTitleCaps}`}>Players ({players.length}/12)</p>
-              <ul className="space-y-2">
-                {players.map((p) => (
-                  <li
-                    key={p.playerId}
-                    className="flex items-center gap-2 rounded-lg bg-gray-900/50 px-3 py-2"
+      <div className={lobbyMainGrid}>
+        <div className={lobbySidebarStack}>
+          <LobbyPanel
+            eyebrow="Hero Select"
+            title="Choose Your Hero"
+            subtitle="Lock in your class before the host starts the match."
+            aside={
+              myPlayer?.heroId ? (
+                <LobbyStatusPill tone="accent">
+                  {HERO_CONFIGS[myPlayer.heroId]?.displayName ?? "Selected"}
+                </LobbyStatusPill>
+              ) : null
+            }
+          >
+            <div className="space-y-3">
+              {HERO_CARDS.map((hero) => {
+                const selected = myPlayer?.heroId === hero.id
+                return (
+                  <button
+                    key={hero.id}
+                    className={`flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left text-sm transition ${
+                      selected
+                        ? `${HERO_ACCENT[hero.id]} bg-white/8 font-semibold text-white`
+                        : `border-white/10 bg-white/3 text-slate-200 ${HERO_ACCENT[hero.id]}`
+                    } ${!isConnected ? "cursor-not-allowed opacity-50" : ""}`}
+                    onClick={() => selectHero(hero.id)}
+                    type="button"
+                    disabled={!isConnected}
                   >
+                    <span className="text-lg">{HERO_ICON[hero.id]}</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-white">{hero.displayName}</p>
+                      <p className="mt-1 text-xs text-slate-400">Ready for arena combat</p>
+                    </div>
+                    {selected ? (
+                      <LobbyStatusPill tone="accent" className="shrink-0">
+                        Selected
+                      </LobbyStatusPill>
+                    ) : null}
+                  </button>
+                )
+              })}
+            </div>
+          </LobbyPanel>
+
+          <LobbyPanel
+            eyebrow="Roster"
+            title={`Players (${players.length}/12)`}
+            subtitle={isHost ? "You are hosting this lobby." : "Waiting for the host to begin."}
+            aside={
+              <LobbyStatusPill tone={isHost ? "accent" : "neutral"}>
+                {isHost ? "Host Controls Enabled" : "Guest"}
+              </LobbyStatusPill>
+            }
+          >
+            <ul className="space-y-3">
+              {players.map((p) => (
+                <li key={p.playerId} className={cardInset}>
+                  <div className="flex items-center gap-3">
                     <span className="text-base">{HERO_ICON[p.heroId] ?? "⚪"}</span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-white">{p.username}</p>
-                      <p className="text-xs text-gray-500">
+                      <p className="mt-1 text-xs text-slate-400">
                         {HERO_CONFIGS[p.heroId]?.displayName ?? p.heroId}
                       </p>
                     </div>
-                    {p.isHost && (
-                      <span className="rounded bg-purple-700 px-1.5 py-0.5 text-xs text-purple-200">
-                        Host
-                      </span>
-                    )}
-                    {p.playerId === localPlayerId && (
-                      <span className="rounded bg-gray-700 px-1.5 py-0.5 text-xs text-gray-400">
-                        You
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-
-              {/* Start/End game/lobby affordances */}
-              <div className="mt-4 flex flex-col gap-2">
-                {phase === "LOBBY" && (
-                  <button
-                    className={btnSuccessBlock}
-                    onClick={startGame}
-                    disabled={!isHost || !isConnected || players.length === 0}
-                    type="button"
-                    title={!isHost ? "Only the host can start the game" : undefined}
-                  >
-                    {!isConnected
-                      ? "Connecting…"
-                      : isHost
-                        ? "▶ Start Game"
-                        : "Waiting for Host…"}
-                  </button>
-                )}
-
-                {(isHost || phase === "IN_PROGRESS") && (
-                  <div className="flex gap-2">
-                    {isHost &&
-                      (phase === "LOBBY" || phase === "SCOREBOARD" || phase === "COUNTDOWN") && (
-                        <button
-                          className={`${btnGhost} flex-1 border-red-900/50 text-red-400 hover:bg-red-900/20`}
-                          onClick={endLobby}
-                          type="button"
-                        >
-                          End Lobby
-                        </button>
-                      )}
-
-                    {phase === "IN_PROGRESS" && (
-                      <Link
-                        href={`/lobby/${roomId}/game`}
-                        className={`${btnPrimary} flex-1 text-center text-sm`}
-                      >
-                        Join Game In Progress
-                      </Link>
-                    )}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {p.isHost ? <LobbyStatusPill tone="accent">Host</LobbyStatusPill> : null}
+                      {p.playerId === localPlayerId ? (
+                        <LobbyStatusPill tone="neutral">You</LobbyStatusPill>
+                      ) : null}
+                    </div>
                   </div>
-                )}
-              </div>
-            </div>
-          </div>
+                </li>
+              ))}
+            </ul>
 
-          {/* Right 2 columns: lobby chat */}
-          <div className={`${cardPanel} ${gridChatSpan}`}>
-            <h2 className={`mb-3 ${sectionTitle}`}>Lobby Chat</h2>
-
-            {/* Messages */}
-            <div className="mb-3 flex-1 overflow-y-auto" style={{ maxHeight: "400px" }}>
-              {chatMessages.length === 0 && (
-                <p className="text-sm italic text-gray-600">No messages yet. Say hello!</p>
+            <div className="mt-5 flex flex-col gap-2">
+              {phase === "LOBBY" && (
+                <button
+                  className={btnSuccessBlock}
+                  onClick={startGame}
+                  disabled={!isHost || !isConnected || players.length === 0}
+                  type="button"
+                  title={!isHost ? "Only the host can start the game" : undefined}
+                >
+                  {!isConnected
+                    ? "Connecting…"
+                    : isHost
+                      ? "▶ Start Game"
+                      : "Waiting for Host…"}
+                </button>
               )}
-              <ul className="space-y-1">
-                {chatMessages.map((msg) => (
-                  <li key={msg.id} className="text-sm leading-relaxed">
-                    <span className={messageName}>{msg.username}</span>
-                    <span className={messageSep}>: </span>
-                    <span className={messageBody}>{msg.text}</span>
-                  </li>
-                ))}
-              </ul>
-              <div ref={chatEndRef} />
-            </div>
 
-            {/* Chat input */}
-            <div className="flex items-center gap-2">
-              <input
-                ref={chatInputRef}
-                className={inputChat}
-                type="text"
-                placeholder="Chat… (Enter to send)"
-                maxLength={MAX_CHARS}
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                onKeyDown={onChatKeyDown}
-                disabled={!isConnected}
-              />
-              <button
-                className={btnPrimary}
-                onClick={sendChat}
-                disabled={!isConnected || !chatInput.trim()}
-                type="button"
-              >
-                Send
-              </button>
+              {(isHost || phase === "IN_PROGRESS") && (
+                <div className="flex gap-2">
+                  {isHost &&
+                    (phase === "LOBBY" || phase === "SCOREBOARD" || phase === "COUNTDOWN") && (
+                      <button
+                        className={`${btnGhost} flex-1 border-red-900/50 text-red-400 hover:bg-red-900/20`}
+                        onClick={endLobby}
+                        type="button"
+                      >
+                        End Lobby
+                      </button>
+                    )}
+
+                  {phase === "IN_PROGRESS" && (
+                    <Link
+                      href={`/lobby/${roomId}/game`}
+                      className={`${btnPrimary} flex-1 text-center text-sm`}
+                    >
+                      Join Game In Progress
+                    </Link>
+                  )}
+                </div>
+              )}
             </div>
-          </div>
+          </LobbyPanel>
         </div>
+
+        <LobbyPanel
+          eyebrow="Lobby Chat"
+          title="Party Chat"
+          subtitle="Coordinate heroes, confirm readiness, and keep everyone aligned before the match begins."
+          className="min-h-144"
+          contentClassName="flex h-full flex-col"
+          aside={<LobbyStatusPill tone="neutral">{chatMessages.length} messages</LobbyStatusPill>}
+        >
+          <div
+            className={`${chatViewport} mb-4 flex-1 overflow-y-auto`}
+            style={{ maxHeight: "400px" }}
+          >
+            {chatMessages.length === 0 ? (
+              <p className="text-sm italic text-slate-400">No messages yet. Say hello!</p>
+            ) : null}
+            <ul className="space-y-3">
+              {chatMessages.map((msg) => (
+                <li
+                  key={msg.id}
+                  className="rounded-2xl border border-white/6 bg-white/3 px-4 py-3 text-sm leading-relaxed"
+                >
+                  <span className={messageName}>{msg.username}</span>
+                  <span className={messageSep}>: </span>
+                  <span className={messageBody}>{msg.text}</span>
+                </li>
+              ))}
+            </ul>
+            <div ref={chatEndRef} />
+          </div>
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <input
+              ref={chatInputRef}
+              className={inputChat}
+              type="text"
+              placeholder="Chat… (Enter to send)"
+              maxLength={MAX_CHARS}
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyDown={onChatKeyDown}
+              disabled={!isConnected}
+            />
+            <button
+              className={btnPrimary}
+              onClick={sendChat}
+              disabled={!isConnected || !chatInput.trim()}
+              type="button"
+            >
+              Send
+            </button>
+          </div>
+
+          <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
+            <span>
+              {isConnected
+                ? "Press Enter to send instantly."
+                : "Waiting for lobby connection."}
+            </span>
+            <span className="font-mono">{roomId}</span>
+          </div>
+        </LobbyPanel>
       </div>
-    </div>
+    </LobbyShell>
   )
 }
