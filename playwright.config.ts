@@ -20,5 +20,16 @@ export default defineConfig({
     timeout: 120_000,
     stdout: "pipe",
     stderr: "pipe",
+    // Defaults align with `.github/workflows/ci.yml` / `tests/e2e/README.md` so `bun run test:e2e` can start the webServer without a pre-exported AUTH_SECRET.
+    env: {
+      ...process.env,
+      AUTH_SECRET:
+        process.env.AUTH_SECRET ?? "test-secret-32-chars-minimum-required",
+      DATABASE_URL:
+        process.env.DATABASE_URL ??
+        "postgresql://ww_user:ww_pass@localhost:5433/wizardwars",
+      WIZARD_WARS_E2E: "1",
+      E2E_CLIENT_READY_TIMEOUT_MS: "800",
+    },
   },
 })

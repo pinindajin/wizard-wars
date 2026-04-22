@@ -100,6 +100,7 @@ export default function CountdownOverlay({
   return (
     <div
       className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none"
+      data-testid="match-countdown-overlay"
       style={{ opacity }}
       aria-live="assertive"
     >
