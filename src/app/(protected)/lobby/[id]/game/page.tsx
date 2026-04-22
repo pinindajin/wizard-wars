@@ -1,10 +1,4 @@
-import dynamic from "next/dynamic"
-
-/**
- * Dynamically loaded with ssr:false so Phaser (and all transitive game
- * imports) are excluded from the SSR bundle. The game is browser-only.
- */
-const LobbyGameHost = dynamic(() => import("./LobbyGameHost"), { ssr: false })
+import LobbyGameHost from "./LobbyGameHost"
 
 /**
  * Game page — server component wrapper for the in-match Phaser game host.

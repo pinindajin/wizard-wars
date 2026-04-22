@@ -88,7 +88,7 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
 
         // Expose globals for the Phaser game instance
         ;(window as Window & { __wwRoomId?: string; __wwLobbyId?: string }).__wwRoomId =
-          room.id
+          room.roomId
         ;(window as Window & { __wwRoomId?: string; __wwLobbyId?: string }).__wwLobbyId =
           lobbyId
 

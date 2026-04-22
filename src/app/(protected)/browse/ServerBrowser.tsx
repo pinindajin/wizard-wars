@@ -95,7 +95,7 @@ export default function ServerBrowser() {
       if (!token) throw new Error("Not authenticated")
       const client = new Client(getColyseusUrl())
       const room = await client.create<unknown>("game_lobby", { token })
-      router.push(`/lobby/${room.id}`)
+      router.push(`/lobby/${room.roomId}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create lobby")
       setCreating(false)

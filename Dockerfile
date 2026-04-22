@@ -10,6 +10,10 @@ RUN bunx prisma generate
 
 FROM oven/bun:1.2-slim AS builder
 WORKDIR /app
+# NODE_ENV=production avoids a known Next.js 16 bug where /_global-error
+# prerender crashes with "useContext null" if NODE_ENV is unset/development.
+ENV NODE_ENV=production
+ENV DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build"
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN bun run build
