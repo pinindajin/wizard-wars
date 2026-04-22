@@ -66,7 +66,11 @@ export function LobbyMusicProvider({ children }: { children: React.ReactNode }) 
 
   // Hydrate muted state from sessionStorage after mount (avoid SSR mismatch)
   useEffect(() => {
-    setMuted(readMuted())
+    const persisted = readMuted()
+    if (persisted) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setMuted(true)
+    }
   }, [])
 
   // Sync audio element mute state when muted changes

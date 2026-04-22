@@ -1,6 +1,5 @@
 "use client"
 
-import dynamic from "next/dynamic"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Client, type Room } from "@colyseus/sdk"
@@ -57,8 +56,8 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
   const [lives, setLives] = useState(3)
   const [gold, setGold] = useState(0)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [room, setRoom] = useState<Room | null>(null)
 
-  const roomRef = useRef<Room | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
   // Connect to the Colyseus room and wire up game events
@@ -71,19 +70,19 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
 
       try {
         const client = new Client(getColyseusUrl())
-        const room = await client.joinById<unknown>(lobbyId, { token })
-        if (cancelled) { room.leave(); return }
+        const joinedRoom = await client.joinById<unknown>(lobbyId, { token })
+        if (cancelled) { joinedRoom.leave(); return }
 
-        roomRef.current = room
+        setRoom(joinedRoom)
 
         // Expose globals for the Phaser game instance
         ;(window as Window & { __wwRoomId?: string; __wwLobbyId?: string }).__wwRoomId =
-          room.roomId
+          joinedRoom.roomId
         ;(window as Window & { __wwRoomId?: string; __wwLobbyId?: string }).__wwLobbyId =
           lobbyId
 
         /** Full lobby state updates (phase transitions). */
-        room.onMessage(RoomEvent.LobbyState, (payload: LobbyStatePayload) => {
+        joinedRoom.onMessage(RoomEvent.LobbyState, (payload: LobbyStatePayload) => {
           setPhase(payload.phase)
           if (payload.phase === "SCOREBOARD") {
             setCountdownStart(null)
@@ -91,7 +90,7 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
         })
 
         /** Loading gate cleared: all clients have signalled ready. */
-        room.onMessage(RoomEvent.MatchCountdownStart, (payload: MatchCountdownStartPayload) => {
+        joinedRoom.onMessage(RoomEvent.MatchCountdownStart, (payload: MatchCountdownStartPayload) => {
           setAllPlayersLoaded(true)
           setCountdownStart({
             startAtServerTimeMs: payload.startAtServerTimeMs,
@@ -100,29 +99,29 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
         })
 
         /** Match GO — clear countdown overlay. */
-        room.onMessage(RoomEvent.MatchGo, () => {
+        joinedRoom.onMessage(RoomEvent.MatchGo, () => {
           setCountdownStart(null)
         })
 
         /** End-of-match scoreboard. */
-        room.onMessage(RoomEvent.LobbyScoreboard, (payload: LobbyScoreboardPayload) => {
+        joinedRoom.onMessage(RoomEvent.LobbyScoreboard, (payload: LobbyScoreboardPayload) => {
           setScoreboardEntries([...payload.entries])
           setPhase("SCOREBOARD")
         })
 
         /** Shop/economy state for HUD. */
-        room.onMessage(RoomEvent.ShopState, (payload: ShopStatePayload) => {
+        joinedRoom.onMessage(RoomEvent.ShopState, (payload: ShopStatePayload) => {
           setShopState(payload)
           setGold(payload.gold)
         })
 
         /** Gold balance update. */
-        room.onMessage(RoomEvent.GoldBalance, (payload: { gold: number }) => {
+        joinedRoom.onMessage(RoomEvent.GoldBalance, (payload: { gold: number }) => {
           setGold(payload.gold)
         })
 
         // Signal to server that the client scene is ready
-        room.send(RoomEvent.ClientSceneReady, {})
+        joinedRoom.send(RoomEvent.ClientSceneReady, {})
       } catch {
         // Connection error — redirect back to lobby list
         if (!cancelled) router.push("/browse")
@@ -133,8 +132,10 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
 
     return () => {
       cancelled = true
-      roomRef.current?.leave()
-      roomRef.current = null
+      setRoom((prev) => {
+        prev?.leave()
+        return null
+      })
     }
   }, [lobbyId, router])
 
@@ -153,7 +154,7 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
           containerId: "phaser-container",
           lobbyId,
           token,
-          room: roomRef.current,
+          room: room,
         })
       } catch {
         // Phaser not yet available in this build — silently degrade
@@ -187,9 +188,9 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
    * Sends the `lobby_return_to_lobby` message and navigates back.
    */
   const onReturnToLobby = useCallback(() => {
-    roomRef.current?.send(RoomEvent.LobbyReturnToLobby ?? "lobby_return_to_lobby", {})
+    room?.send(RoomEvent.LobbyReturnToLobby ?? "lobby_return_to_lobby", {})
     router.push(`/lobby/${lobbyId}`)
-  }, [lobbyId, router])
+  }, [lobbyId, router, room])
 
   const abilitySlots = shopState?.abilitySlots ?? [null, null, null, null, null]
   const quickItems = shopState?.quickItemSlots ?? [
@@ -257,8 +258,8 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
 
           {/* Bottom: ability bar + quick items */}
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2">
-            <AbilityBar slots={abilitySlots} room={roomRef.current} />
-            <QuickItemBar slots={quickItems} room={roomRef.current} />
+            <AbilityBar slots={abilitySlots} room={room} />
+            <QuickItemBar slots={quickItems} room={room} />
           </div>
 
           {/* Backslash hint */}

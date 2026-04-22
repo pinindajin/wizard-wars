@@ -1,6 +1,6 @@
 import Phaser from "phaser"
 
-import { RoomEvent } from "@/shared/roomEvents"
+import { WsEvent } from "@/shared/events"
 import { TILEMAP_DEPTH } from "@/shared/balance-config/rendering"
 import type {
   GameStateSyncPayload,
@@ -13,7 +13,6 @@ import type {
   PlayerDeathPayload,
   PlayerRespawnPayload,
   DamageFloatPayload,
-  MatchGoPayload,
 } from "@/shared/types"
 import { GameConnection } from "../network/GameConnection"
 import { PlayerRenderSystem } from "../ecs/systems/PlayerRenderSystem"
@@ -149,56 +148,51 @@ export class Arena extends Phaser.Scene {
    * Subscribes all relevant room message handlers to the active connection.
    */
   private _subscribeRoomEvents(): void {
-    const room = this.connection.room
-    if (!room) return
-
-    room.onMessage(RoomEvent.GameStateSync, (payload: GameStateSyncPayload) => {
-      this.networkSyncSystem.applyFullSync(payload)
-      this.playerRenderSystem.applyFullSync(payload)
-    })
-
-    room.onMessage(RoomEvent.PlayerBatchUpdate, (payload: PlayerBatchUpdatePayload) => {
-      this.networkSyncSystem.applyBatchUpdate(payload)
-    })
-
-    room.onMessage(RoomEvent.FireballLaunch, (payload: FireballLaunchPayload) => {
-      this.projectileRenderSystem.spawnFireball(payload)
-    })
-
-    room.onMessage(RoomEvent.FireballBatchUpdate, (payload: FireballBatchUpdatePayload) => {
-      this.projectileRenderSystem.applyBatchUpdate(payload)
-    })
-
-    room.onMessage(RoomEvent.FireballImpact, (payload: FireballImpactPayload) => {
-      this.projectileRenderSystem.destroyFireball(payload.id)
-      this.soundManager.play("sfx-fireball-impact")
-    })
-
-    room.onMessage(RoomEvent.LightningBolt, (payload: LightningBoltPayload) => {
-      this.lightningBoltRenderSystem.spawnBolt(payload)
-      this.soundManager.play("sfx-lightning-cast")
-    })
-
-    room.onMessage(RoomEvent.AxeSwing, (payload: AxeSwingPayload) => {
-      this.axeSwingRenderSystem.spawnSwing(payload)
-      this.soundManager.play("sfx-axe-swing")
-    })
-
-    room.onMessage(RoomEvent.PlayerDeath, (payload: PlayerDeathPayload) => {
-      this.playerRenderSystem.onPlayerDeath(payload)
-      this.soundManager.play("sfx-player-death")
-    })
-
-    room.onMessage(RoomEvent.PlayerRespawn, (payload: PlayerRespawnPayload) => {
-      this.playerRenderSystem.onPlayerRespawn(payload)
-    })
-
-    room.onMessage(RoomEvent.DamageFloat, (payload: DamageFloatPayload) => {
-      this.damageFloatersSystem.spawn(payload)
-    })
-
-    room.onMessage(RoomEvent.MatchGo, (_payload: MatchGoPayload) => {
-      this._onMatchGo()
+    this.connection.onMessage((message) => {
+      switch (message.type) {
+        case WsEvent.GameStateSync: {
+          const payload = message.payload as GameStateSyncPayload
+          this.networkSyncSystem.applyFullSync(payload)
+          this.playerRenderSystem.applyFullSync(payload)
+          break
+        }
+        case WsEvent.PlayerBatchUpdate:
+          this.networkSyncSystem.applyBatchUpdate(message.payload as PlayerBatchUpdatePayload)
+          break
+        case WsEvent.FireballLaunch:
+          this.projectileRenderSystem.spawnFireball(message.payload as FireballLaunchPayload)
+          break
+        case WsEvent.FireballBatchUpdate:
+          this.projectileRenderSystem.applyBatchUpdate(message.payload as FireballBatchUpdatePayload)
+          break
+        case WsEvent.FireballImpact: {
+          const payload = message.payload as FireballImpactPayload
+          this.projectileRenderSystem.destroyFireball(payload.id)
+          this.soundManager.play("sfx-fireball-impact")
+          break
+        }
+        case WsEvent.LightningBolt:
+          this.lightningBoltRenderSystem.spawnBolt(message.payload as LightningBoltPayload)
+          this.soundManager.play("sfx-lightning-cast")
+          break
+        case WsEvent.AxeSwing:
+          this.axeSwingRenderSystem.spawnSwing(message.payload as AxeSwingPayload)
+          this.soundManager.play("sfx-axe-swing")
+          break
+        case WsEvent.PlayerDeath:
+          this.playerRenderSystem.onPlayerDeath(message.payload as PlayerDeathPayload)
+          this.soundManager.play("sfx-player-death")
+          break
+        case WsEvent.PlayerRespawn:
+          this.playerRenderSystem.onPlayerRespawn(message.payload as PlayerRespawnPayload)
+          break
+        case WsEvent.DamageFloat:
+          this.damageFloatersSystem.spawn(message.payload as DamageFloatPayload)
+          break
+        case WsEvent.MatchGo:
+          this._onMatchGo()
+          break
+      }
     })
   }
 
@@ -227,7 +221,7 @@ export class Arena extends Phaser.Scene {
     this.axeSwingRenderSystem.update(delta)
     this.damageFloatersSystem.update(delta)
 
-    if (this.connection.room) {
+    if (this.connection.isConnected()) {
       const input = this.keyboardController.collectInput(this.connection.nextSeq())
       const mouseInput = this.mouseController.collectInput()
       this.connection.sendPlayerInput({ ...input, ...mouseInput })
@@ -249,6 +243,6 @@ export class Arena extends Phaser.Scene {
    * @returns The session id string or null if not yet connected.
    */
   getLocalPlayerId(): string | null {
-    return this.connection.room?.sessionId ?? null
+    return this.connection.sessionId ?? null
   }
 }

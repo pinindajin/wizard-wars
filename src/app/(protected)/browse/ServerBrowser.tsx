@@ -65,7 +65,8 @@ export default function ServerBrowser() {
 
   // Initial load + polling
   useEffect(() => {
-    void loadLobbies()
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises, react-hooks/set-state-in-effect
+    loadLobbies()
     pollRef.current = setInterval(() => void loadLobbies(), POLL_INTERVAL_MS)
     return () => {
       if (pollRef.current !== null) clearInterval(pollRef.current)
