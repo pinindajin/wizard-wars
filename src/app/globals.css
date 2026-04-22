@@ -5,6 +5,8 @@
   --foreground: #e0e0e0;
   --accent: #c084fc;
   --accent-glow: #a855f7;
+  --panel-border: #374151; /* gray-700 */
+  --panel-bg: rgba(31, 41, 55, 0.5); /* gray-800/50 */
 }
 
 * {

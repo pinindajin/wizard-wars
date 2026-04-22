@@ -18,6 +18,7 @@ import type {
 
 import LoadingGate from "./LoadingGate"
 import CountdownOverlay from "./CountdownOverlay"
+import { hudTopPanel } from "@/lib/ui/lobbyStyles"
 import Scoreboard from "./Scoreboard"
 import AbilityBar from "./AbilityBar"
 import QuickItemBar from "./QuickItemBar"
@@ -237,16 +238,16 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
       {phase === "IN_PROGRESS" && (
         <>
           {/* Top-left: HP / lives / gold */}
-          <div className="absolute left-4 top-4 flex flex-col gap-1 rounded-lg bg-black/60 px-3 py-2 text-white text-sm backdrop-blur-sm">
+          <div className={hudTopPanel}>
             <div className="flex items-center gap-2">
-              <span className="text-red-400 font-bold">HP</span>
+              <span className="font-bold text-red-400">HP</span>
               <div className="h-3 w-32 rounded bg-gray-700">
                 <div
                   className="h-3 rounded bg-red-500 transition-all"
                   style={{ width: `${(health / maxHealth) * 100}%` }}
                 />
               </div>
-              <span className="text-gray-300 tabular-nums">{health}/{maxHealth}</span>
+              <span className="tabular-nums text-gray-300">{health}/{maxHealth}</span>
             </div>
             <div className="flex gap-4 text-xs text-gray-300">
               <span>❤️ {lives} lives</span>
@@ -261,7 +262,7 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
           </div>
 
           {/* Backslash hint */}
-          <div className="absolute bottom-4 right-4 text-xs text-gray-600">
+          <div className="absolute bottom-4 right-4 rounded border border-gray-700/50 bg-black/40 px-2 py-1 text-xs text-gray-500 backdrop-blur-sm">
             \ Settings
           </div>
         </>
