@@ -29,6 +29,7 @@ open http://localhost:3000
 |---------|-------------|
 | `bun run dev:hybrid` | Start app with docker Postgres |
 | `bun run test` | Unit tests |
+| `bun run test:coverage` | Unit tests with coverage (enforces `vitest.config.ts` thresholds) |
 | `bun run test:integration` | Integration tests |
 | `bun run test:all` | All tests |
 | `bun run db:studio` | Open Prisma Studio |

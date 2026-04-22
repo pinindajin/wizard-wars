@@ -4,6 +4,15 @@ import { FormEvent, Suspense, useState } from "react"
 import { useSearchParams } from "next/navigation"
 
 import { getTrpcMutationErrorMessage } from "../trpcMutationErrorMessage"
+import {
+  authPage,
+  brandTitle,
+  subBrand,
+  cardPanelOpaque,
+  errorBanner,
+  btnPrimaryBlock,
+  linkAccent,
+} from "@/lib/ui/lobbyStyles"
 
 type LoginResponse = {
   result?: { data?: { json?: unknown } }
@@ -48,65 +57,67 @@ const LoginForm = () => {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center p-6">
+    <main className={authPage}>
       <div className="mb-8 text-center">
-        <h1 className="text-4xl font-bold text-purple-400">⚔ Wizard Wars</h1>
-        <p className="mt-2 text-sm text-gray-400">Arena PvP for the brave</p>
+        <h1 className={brandTitle}>⚔ Wizard Wars</h1>
+        <p className={subBrand}>Arena PvP for the brave</p>
       </div>
-      <h2 className="mb-6 text-2xl font-semibold">Login</h2>
-      {error && (
-        <div className="mb-4 rounded border border-red-500 bg-red-900/30 p-3 text-sm text-red-300">
-          {error}
-        </div>
-      )}
-      <form className="space-y-4" onSubmit={onSubmit} noValidate>
-        <div className="space-y-1">
-          <label className="block text-sm font-medium" htmlFor="login-username">
-            Username
-          </label>
-          <input
-            id="login-username"
-            className="w-full"
-            name="username"
-            type="text"
-            autoComplete="username"
-            placeholder="Username"
-            maxLength={20}
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            required
-          />
-        </div>
-        <div className="space-y-1">
-          <label className="block text-sm font-medium" htmlFor="login-password">
-            Password
-          </label>
-          <input
-            id="login-password"
-            className="w-full"
-            name="password"
-            type="password"
-            autoComplete="current-password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-        </div>
-        <button
-          className="w-full rounded-md bg-purple-600 py-2.5 text-sm font-semibold hover:bg-purple-700 disabled:opacity-50"
-          type="submit"
-          disabled={loading}
-        >
-          {loading ? "Logging in…" : "Login"}
-        </button>
-      </form>
-      <p className="mt-6 text-center text-sm text-gray-400">
-        No account?{" "}
-        <a href="/signup" className="text-purple-400 hover:underline">
-          Sign up
-        </a>
-      </p>
+
+      <div className={cardPanelOpaque}>
+        <h2 className="mb-6 text-2xl font-semibold">Login</h2>
+
+        {error && (
+          <div className={`mb-4 ${errorBanner}`}>{error}</div>
+        )}
+
+        <form className="space-y-4" onSubmit={onSubmit} noValidate>
+          <div className="space-y-1">
+            <label className="block text-sm font-medium" htmlFor="login-username">
+              Username
+            </label>
+            <input
+              id="login-username"
+              className="w-full"
+              name="username"
+              type="text"
+              autoComplete="username"
+              placeholder="Username"
+              maxLength={20}
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="block text-sm font-medium" htmlFor="login-password">
+              Password
+            </label>
+            <input
+              id="login-password"
+              className="w-full"
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
+
+          <button className={btnPrimaryBlock} type="submit" disabled={loading}>
+            {loading ? "Logging in…" : "Login"}
+          </button>
+        </form>
+
+        <p className="mt-6 text-center text-sm text-gray-400">
+          No account?{" "}
+          <a href="/signup" className={linkAccent}>
+            Sign up
+          </a>
+        </p>
+      </div>
     </main>
   )
 }

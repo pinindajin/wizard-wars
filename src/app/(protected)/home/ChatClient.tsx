@@ -8,6 +8,24 @@ import { fetchWsAuthToken } from "@/lib/fetch-ws-auth-token"
 import { getColyseusUrl } from "@/lib/endpoints"
 import { RoomEvent } from "@/shared/roomEvents"
 import type { ChatMessage, ChatPresenceUser } from "@/shared/types"
+import {
+  pageShell,
+  lobbyPage,
+  gridThreeCols,
+  gridChatSpan,
+  cardPanel,
+  sectionTitle,
+  sectionTitleCaps,
+  messageName,
+  messageSep,
+  messageBody,
+  inputChat,
+  btnPrimary,
+  btnPrimaryBlock,
+  errorBanner,
+  brandTitle,
+  subBrand,
+} from "@/lib/ui/lobbyStyles"
 
 const MAX_CHARS = 200
 
@@ -149,115 +167,117 @@ export default function ChatClient() {
   }, [router])
 
   return (
-    <div className="flex min-h-screen bg-gray-900 text-white">
-      {/* Sidebar */}
-      <aside className="flex w-56 flex-col border-r border-gray-700 bg-gray-800 p-4">
+    <div className={pageShell}>
+      <div className={lobbyPage}>
+        {/* Page header */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-purple-400">⚔ Wizard Wars</h1>
-          <p className="mt-1 text-xs text-gray-500">Global Lobby</p>
+          <h1 className={brandTitle}>⚔ Wizard Wars</h1>
+          <p className={subBrand}>Global Lobby</p>
         </div>
 
-        <button
-          className="mb-3 w-full rounded-md bg-purple-600 py-2 text-sm font-semibold hover:bg-purple-700 active:bg-purple-800"
-          onClick={onBrowseGames}
-          type="button"
-        >
-          Browse Games
-        </button>
-
-        {/* Online presence list */}
-        <div className="flex-1 overflow-y-auto">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
-            Online ({presence.length})
-          </p>
-          <ul className="space-y-1">
-            {presence.map((u) => (
-              <li
-                key={u.userId}
-                className="flex items-center gap-2 rounded px-2 py-1 text-sm text-gray-300"
-              >
-                <span className="h-2 w-2 rounded-full bg-green-400" />
-                {u.username}
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {/* Connection status */}
-        <div className="mt-4 flex items-center gap-2 text-xs">
-          <span
-            className={`h-2 w-2 rounded-full ${connected ? "bg-green-400" : "bg-red-500"}`}
-          />
-          <span className={connected ? "text-gray-400" : "text-red-400"}>
-            {connected ? "Connected" : "Connecting…"}
-          </span>
-        </div>
-      </aside>
-
-      {/* Main chat area */}
-      <main className="flex flex-1 flex-col">
-        {/* Header */}
-        <header className="border-b border-gray-700 bg-gray-800 px-6 py-4">
-          <h2 className="text-lg font-semibold text-white">Global Chat</h2>
-          <p className="text-xs text-gray-500">
-            Chat with other wizards while waiting for a match
-          </p>
-        </header>
-
-        {/* Error banner */}
-        {error && (
-          <div className="mx-6 mt-4 rounded border border-red-500 bg-red-900/30 px-4 py-2 text-sm text-red-300">
-            {error}
-          </div>
-        )}
-
-        {/* Message list */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">
-          {messages.length === 0 && !error && (
-            <p className="text-sm text-gray-600 italic">No messages yet. Say hello!</p>
-          )}
-          <ul className="space-y-1">
-            {messages.map((msg) => (
-              <li key={msg.id} className="text-sm leading-relaxed">
-                <span className="font-semibold text-purple-400">{msg.username}</span>
-                <span className="text-gray-500">: </span>
-                <span className="text-gray-200">{msg.text}</span>
-              </li>
-            ))}
-          </ul>
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* Input bar */}
-        <footer className="border-t border-gray-700 bg-gray-800 px-6 py-4">
-          <div className="flex items-center gap-3">
-            <input
-              ref={inputRef}
-              className="flex-1 rounded-md border border-gray-600 bg-gray-900 px-4 py-2 text-sm text-white placeholder-gray-500 focus:border-purple-500 focus:outline-none"
-              type="text"
-              placeholder="Type a message… (Enter to send, Esc to blur)"
-              maxLength={MAX_CHARS}
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              onKeyDown={onKeyDown}
-              disabled={!connected}
-            />
+        <div className={gridThreeCols}>
+          {/* Left column: nav + online presence */}
+          <div className="flex flex-col gap-4">
             <button
-              className="rounded-md bg-purple-600 px-4 py-2 text-sm font-semibold hover:bg-purple-700 disabled:opacity-50"
-              onClick={sendMessage}
-              disabled={!connected || !inputText.trim()}
+              className={btnPrimaryBlock}
+              onClick={onBrowseGames}
               type="button"
             >
-              Send
+              Browse Games
             </button>
+
+            {/* Online presence card */}
+            <div className={cardPanel}>
+              <p className={`mb-3 ${sectionTitleCaps}`}>
+                Online ({presence.length})
+              </p>
+              {presence.length === 0 ? (
+                <p className="text-xs text-gray-600 italic">No one else online.</p>
+              ) : (
+                <ul className="space-y-1">
+                  {presence.map((u) => (
+                    <li
+                      key={u.userId}
+                      className="flex items-center gap-2 text-sm text-gray-300"
+                    >
+                      <span className="h-2 w-2 rounded-full bg-green-400" />
+                      {u.username}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {/* Connection status */}
+              <div className="mt-4 flex items-center gap-2 text-xs">
+                <span
+                  className={`h-2 w-2 rounded-full ${connected ? "bg-green-400" : "bg-red-500"}`}
+                />
+                <span className={connected ? "text-gray-400" : "text-red-400"}>
+                  {connected ? "Connected" : "Connecting…"}
+                </span>
+              </div>
+            </div>
           </div>
-          {inputText.length > MAX_CHARS * 0.85 && (
-            <p className="mt-1 text-right text-xs text-gray-500">
-              {inputText.length}/{MAX_CHARS}
+
+          {/* Right 2 columns: chat panel */}
+          <div className={`${cardPanel} ${gridChatSpan}`}>
+            <h2 className={`mb-1 ${sectionTitle}`}>Global Chat</h2>
+            <p className="mb-3 text-xs text-gray-500">
+              Chat with other wizards while waiting for a match
             </p>
-          )}
-        </footer>
-      </main>
+
+            {error && (
+              <div className={`mb-3 ${errorBanner}`}>{error}</div>
+            )}
+
+            {/* Message list */}
+            <div className="mb-3 flex-1 overflow-y-auto" style={{ maxHeight: "360px" }}>
+              {messages.length === 0 && !error && (
+                <p className="text-sm italic text-gray-600">No messages yet. Say hello!</p>
+              )}
+              <ul className="space-y-1">
+                {messages.map((msg) => (
+                  <li key={msg.id} className="text-sm leading-relaxed">
+                    <span className={messageName}>{msg.username}</span>
+                    <span className={messageSep}>: </span>
+                    <span className={messageBody}>{msg.text}</span>
+                  </li>
+                ))}
+              </ul>
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Input row */}
+            <div className="flex items-center gap-2">
+              <input
+                ref={inputRef}
+                className={inputChat}
+                type="text"
+                placeholder="Type a message… (Enter to send, Esc to blur)"
+                maxLength={MAX_CHARS}
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                onKeyDown={onKeyDown}
+                disabled={!connected}
+              />
+              <button
+                className={btnPrimary}
+                onClick={sendMessage}
+                disabled={!connected || !inputText.trim()}
+                type="button"
+              >
+                Send
+              </button>
+            </div>
+
+            {inputText.length > MAX_CHARS * 0.85 && (
+              <p className="mt-1 text-right text-xs text-gray-500">
+                {inputText.length}/{MAX_CHARS}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
