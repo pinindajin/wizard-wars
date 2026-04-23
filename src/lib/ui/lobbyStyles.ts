@@ -24,7 +24,7 @@ export const lobbySurface =
   "relative overflow-hidden rounded-[28px] border border-white/[0.07] bg-[rgba(8,11,26,0.7)] px-4 py-5 shadow-[0_30px_80px_rgba(0,0,0,0.5)] backdrop-blur-[10px] sm:px-6 sm:py-6 lg:px-8 lg:py-8"
 
 /** Reusable 2-column shell with a sidebar and main content area. */
-export const lobbyMainGrid = "grid gap-6 xl:grid-cols-[minmax(280px,340px)_minmax(0,1fr)]"
+export const lobbyMainGrid = "grid gap-6 lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)]"
 
 /** Standard vertical stack for sidebar cards. */
 export const lobbySidebarStack = "flex flex-col gap-6"
@@ -34,8 +34,8 @@ export const lobbySidebarStack = "flex flex-col gap-6"
 /** Legacy responsive grid kept for existing callers. */
 export const gridThreeCols = "grid grid-cols-1 gap-6 md:grid-cols-3"
 
-/** Chat panel spanning 2 of 3 columns. */
-export const gridChatSpan = "flex min-h-[32rem] flex-col md:col-span-2"
+/** Main chat column in `lobbyMainGrid` (fills the flexible second track). */
+export const gridChatSpan = "flex min-h-[32rem] min-w-0 flex-col"
 
 // ── Card panels ──────────────────────────────────────────────────────────────
 
