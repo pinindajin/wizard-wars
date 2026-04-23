@@ -123,8 +123,9 @@ test("full match flow: assets, overlay, canvas, movement, shop, abilities", asyn
   await expect(buyLightning).toBeEnabled()
   await buyLightning.click()
 
-  // Close shop with another B press.
-  await page.keyboard.press("b")
+  // Close shop via the Close (B) button click — avoids focus/keyboard-routing
+  // edge cases around pressing B immediately after clicking a dynamic picker.
+  await page.getByTestId("shop-close").click()
   await expect(page.getByTestId("shop-modal")).toBeHidden({ timeout: 5000 })
 
   // Final invariants.

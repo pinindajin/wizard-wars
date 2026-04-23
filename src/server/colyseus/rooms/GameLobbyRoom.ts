@@ -935,6 +935,10 @@ export class GameLobbyRoom extends Room {
       this.economies.set(pd.playerId, economy)
       const idx = spawnIndices[spawnIdx++ % spawnIndices.length]
       this.simulation.addPlayer(pd.playerId, pd.username, pd.heroId, idx)
+      // Seed each client with its starting shop state so the shop modal shows
+      // correct gold + default ability-0 assignment immediately on MatchGo,
+      // without requiring a request_resync or a first purchase.
+      client.send(RoomEvent.ShopState, buildShopStatePayload(economy))
     }
 
     const gameStateSync = parseGameStateSyncPayload(this.simulation.buildGameStateSyncPayload())

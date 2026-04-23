@@ -25,11 +25,11 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
   audio: {
     disableWebAudio: false,
   },
-  // Absolute site-root base URL so relative "assets/..." paths still resolve
-  // correctly when the page is at /lobby/<id>/game/ (otherwise the browser
-  // would fetch /lobby/<id>/assets/... and 404). Pack URLs are also absolute
-  // for defense in depth.
-  loader: {
-    baseURL: "/",
-  },
+  // Note: we intentionally do NOT set `loader.baseURL`. Phaser concatenates
+  // `baseURL + url`, so `baseURL="/"` + `url="/assets/..."` produces
+  // `//assets/...` which the browser interprets as a protocol-relative URL
+  // with hostname "assets" → ERR_NAME_NOT_RESOLVED. Every pack URL is already
+  // absolute (leading `/`) — both in the 3 pack JSONs and the `load.pack(...)`
+  // calls in Boot/Preload/Arena — which is the real fix for the asset path
+  // bug on /lobby/<id>/game/.
 }

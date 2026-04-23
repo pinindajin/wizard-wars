@@ -118,7 +118,7 @@ describe("ShopModal", () => {
     expect(onClose).toHaveBeenCalled()
   })
 
-  it("closes on B", () => {
+  it("does NOT close on B (B is owned by LobbyGameHost toggle)", () => {
     const onClose = vi.fn()
     render(
       <ShopModal
@@ -128,7 +128,7 @@ describe("ShopModal", () => {
       />,
     )
     fireEvent.keyDown(window, { key: "b" })
-    expect(onClose).toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
   })
 
   it("marks already-owned non-stackable augments as Equipped", () => {

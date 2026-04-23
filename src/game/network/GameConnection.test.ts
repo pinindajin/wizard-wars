@@ -44,7 +44,16 @@ describe("GameConnection send helpers + warning silence", () => {
     ;(conn as unknown as { wireRoomListeners: () => void }).wireRoomListeners()
   })
 
-  it("registers explicit no-op handlers for silenced message types", () => {
+  it("registers a wildcard handler for all server broadcasts", () => {
+    expect(room.handlers.get("*")).toBeDefined()
+    expect((room.handlers.get("*")?.size ?? 0) > 0).toBe(true)
+  })
+
+  it("does NOT register specific handlers for server-only broadcasts (wildcard only)", () => {
+    // If GameConnection registered specific handlers for these types, the
+    // Colyseus SDK's `dispatchMessage` would route ONLY to that handler and
+    // skip the wildcard — dropping the payloads that LobbyConnectionProvider
+    // needs to forward to React via WsEvent.LobbyState etc.
     for (const type of [
       RoomEvent.PlayerJoin,
       RoomEvent.LobbyState,
@@ -52,14 +61,9 @@ describe("GameConnection send helpers + warning silence", () => {
     ]) {
       expect(
         room.handlers.get(type),
-        `expected handler registered for ${type}`,
-      ).toBeDefined()
-      expect((room.handlers.get(type)?.size ?? 0) > 0).toBe(true)
+        `expected NO specific handler for ${type} (must flow through wildcard)`,
+      ).toBeUndefined()
     }
-  })
-
-  it("wildcard handler is still registered alongside explicit silencers", () => {
-    expect(room.handlers.get("*")).toBeDefined()
   })
 
   it("sendShopPurchase sends with correct RoomEvent key", () => {

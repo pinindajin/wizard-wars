@@ -47,6 +47,8 @@ export default function ShopModal({ shopState, connection, onClose }: ShopModalP
   const [assigning, setAssigning] = useState<string | null>(null)
 
   useEffect(() => {
+    // Only `Escape` is owned by the modal itself. The `b` toggle is handled
+    // by `LobbyGameHost` (single listener) so both open and close stay atomic.
     const onKey = (e: KeyboardEvent) => {
       const active = document.activeElement
       if (
@@ -55,7 +57,7 @@ export default function ShopModal({ shopState, connection, onClose }: ShopModalP
       ) {
         return
       }
-      if (e.key === "Escape" || e.key === "b" || e.key === "B") {
+      if (e.key === "Escape") {
         e.preventDefault()
         onClose()
       }
@@ -85,7 +87,6 @@ export default function ShopModal({ shopState, connection, onClose }: ShopModalP
       aria-modal="true"
       aria-label="Shop"
       data-testid="shop-modal"
-      onKeyDown={(e) => e.stopPropagation()}
     >
       <div className="w-full max-w-3xl rounded-2xl border border-white/[0.08] bg-[rgba(9,12,30,0.96)] p-6 shadow-[0_30px_80px_rgba(0,0,0,0.7)]">
         <div className="mb-4 flex items-center justify-between">

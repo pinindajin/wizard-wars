@@ -14,17 +14,6 @@ import { logger } from "@/server/logger"
 const RECONNECT_WINDOW_MS = 60_000
 
 /**
- * Server-broadcast message types that the client only cares about via the
- * wildcard listener. Registering explicit no-op handlers prevents the Colyseus
- * SDK from emitting `"onMessage for '<type>' not registered"` warnings.
- */
-const EXPLICIT_SILENT_MESSAGES: readonly string[] = [
-  RoomEvent.PlayerJoin,
-  RoomEvent.LobbyState,
-  RoomEvent.LobbyChatHistory,
-]
-
-/**
  * Options accepted when joining a Colyseus room.
  */
 export interface GameConnectionArgs {
@@ -251,15 +240,6 @@ export class GameConnection {
       const message: AnyWsMessage = { type: wsKey, payload }
       this.messageHandlers.forEach((handler) => handler(message))
     })
-
-    // Explicit no-op handlers silence Colyseus SDK `dispatchMessage` warnings
-    // for server-broadcast types that are only consumed by the wildcard
-    // listener above. The SDK warns when it dispatches a type that has no
-    // registered handler, even if a wildcard handler exists — registering
-    // these explicit (no-op) handlers is the canonical fix.
-    for (const roomKey of EXPLICIT_SILENT_MESSAGES) {
-      this._room.onMessage(roomKey, () => {})
-    }
 
     this._room.onLeave(async (code) => {
       if (code === 1000) {
