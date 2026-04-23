@@ -48,6 +48,15 @@ const INACTIVE_PLAYER_INPUT = {
 } as const
 
 /**
+ * Wall-clock fields injected into the outgoing payload at send time. Keeping
+ * this stamp at the scene-level (not inside controllers) preserves
+ * controller testability.
+ */
+function stampClientSendTime(): { clientSendTimeMs: number } {
+  return { clientSendTimeMs: Date.now() }
+}
+
+/**
  * Main arena gameplay scene.
  * Wires together the tilemap, ECS render systems, network connection, and input controllers.
  * Compatible with Phaser Editor 2D via the editorCreate() pattern.
@@ -143,6 +152,19 @@ export class Arena extends Phaser.Scene {
       onAuthoritativePosition: (id, x, y, reason) => {
         this.playerRenderSystem.onAuthoritativePosition(id, x, y, reason)
       },
+      onRemoteSnapshot: (sample) => {
+        this.playerRenderSystem.onRemoteSnapshot(sample.id, sample)
+      },
+      onLocalAck: (sample) => {
+        this.playerRenderSystem.onLocalAck(sample.id, {
+          x: sample.x,
+          y: sample.y,
+          lastProcessedInputSeq: sample.lastProcessedInputSeq,
+        })
+      },
+      onServerTime: (serverTimeMs) => {
+        this.playerRenderSystem.updateServerTimeOffset(serverTimeMs)
+      },
     })
     this.projectileRenderSystem = new ProjectileRenderSystem(this)
     this.lightningBoltRenderSystem = new LightningBoltRenderSystem(this)
@@ -185,6 +207,7 @@ export class Arena extends Phaser.Scene {
         | string
         | undefined
       this.playerRenderSystem.localPlayerId = sub ?? null
+      this.networkSyncSystem.localPlayerId = sub ?? null
       this._subscribeRoomEvents()
       this.connection.sendClientSceneReady()
       return
@@ -195,6 +218,7 @@ export class Arena extends Phaser.Scene {
       | string
       | undefined
     this.playerRenderSystem.localPlayerId = sub ?? null
+    this.networkSyncSystem.localPlayerId = sub ?? null
     void this.connection.connect().then(() => {
       this._subscribeRoomEvents()
       this.connection.sendClientSceneReady()
@@ -285,7 +309,13 @@ export class Arena extends Phaser.Scene {
 
     if (this.connection.isConnected()) {
       const mouseInput = this.mouseController.collectInput()
-      this.connection.sendPlayerInput({ ...keyboardInput, ...mouseInput })
+      const fullInput = {
+        ...keyboardInput,
+        ...mouseInput,
+        ...stampClientSendTime(),
+      }
+      this.playerRenderSystem.localInputHistory.append(fullInput)
+      this.connection.sendPlayerInput(fullInput)
     }
   }
 

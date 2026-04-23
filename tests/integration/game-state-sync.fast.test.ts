@@ -69,5 +69,12 @@ describe("game_state_sync on match start", { timeout: 30_000 }, () => {
     expect(typeof gameSync.players[0]!.id).toBe("number")
     expect(gameSync.players[0]!.invulnerable).toBeTypeOf("boolean")
     expect(gameSync.players[0]!.animState).toBe("idle")
+
+    // New fields added in the smooth-movement overhaul.
+    expect(gameSync.serverTimeMs).toBeGreaterThan(0)
+    expect(gameSync.players[0]!.vx).toBe(0)
+    expect(gameSync.players[0]!.vy).toBe(0)
+    expect(gameSync.players[0]!.moveState).toBe("idle")
+    expect(typeof gameSync.players[0]!.lastProcessedInputSeq).toBe("number")
   })
 })

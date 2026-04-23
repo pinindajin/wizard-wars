@@ -1,14 +1,18 @@
 /**
- * movementSystem – translates PlayerInput WASD into Velocity and updates
- * Position and Facing each tick.
+ * movementSystem – translates PlayerInput WASD into Velocity (px/s) and
+ * advances Position each tick. Also updates Facing toward the weapon cursor.
+ *
+ * Velocity semantics: `Velocity.vx/vy` store the player's velocity in
+ * **pixels per second** (aligned with fireball velocity). Position is then
+ * integrated by `v * TICK_DT_SEC` per tick. This matches the client's
+ * rewind-and-replay math and keeps snapshot `vx/vy` directly usable for
+ * remote extrapolation.
  *
  * Movement rules (in priority order):
  *  1. DyingTag / DeadTag / SpectatorTag → velocity = 0
- *  2. Casting → WASD step × `castMoveSpeedMultiplier` (0 = root)
+ *  2. Casting → WASD speed × `castMoveSpeedMultiplier` (0 = root)
  *  3. SwingingWeapon                    → speed × SWING_MOVE_SPEED_MULTIPLIER
  *  4. Otherwise                         → speed × 1.0 (+ Swift Boots bonus)
- *
- * Facing angle is updated to point toward the weapon-target cursor position.
  */
 import { query, hasComponent } from "bitecs"
 
@@ -34,7 +38,7 @@ import {
   TICK_DT_SEC,
 } from "../../../shared/balance-config"
 import { ABILITY_CONFIGS } from "../../../shared/balance-config/abilities"
-import { normalizedMoveFromWASD, worldStepFromIntent } from "../../../shared/movementIntent"
+import { normalizedMoveFromWASD } from "../../../shared/movementIntent"
 
 /**
  * Runs the movement system for one tick.
@@ -53,8 +57,6 @@ export function movementSystem(ctx: SimCtx): void {
     ) {
       Velocity.vx[eid] = 0
       Velocity.vy[eid] = 0
-      Position.x[eid] += 0
-      Position.y[eid] += 0
       continue
     }
 
@@ -90,11 +92,11 @@ export function movementSystem(ctx: SimCtx): void {
       left: left === 1,
       right: right === 1,
     })
-    const step = worldStepFromIntent(dx, dy, BASE_MOVE_SPEED_PX_PER_SEC, TICK_DT_SEC, speedMultiplier)
-    Velocity.vx[eid] = step.x
-    Velocity.vy[eid] = step.y
-    Position.x[eid] += Velocity.vx[eid]
-    Position.y[eid] += Velocity.vy[eid]
+    const speedPxPerSec = BASE_MOVE_SPEED_PX_PER_SEC * speedMultiplier
+    Velocity.vx[eid] = dx * speedPxPerSec
+    Velocity.vy[eid] = dy * speedPxPerSec
+    Position.x[eid] += Velocity.vx[eid] * TICK_DT_SEC
+    Position.y[eid] += Velocity.vy[eid] * TICK_DT_SEC
 
     // Update facing toward weapon-target (mouse position)
     const wtx = PlayerInput.weaponTargetX[eid]

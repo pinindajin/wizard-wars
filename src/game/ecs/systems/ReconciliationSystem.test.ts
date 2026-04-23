@@ -1,0 +1,91 @@
+import { describe, expect, it } from "vitest"
+
+import { LocalInputHistory } from "../../network/LocalInputHistory"
+import { reconcileLocal } from "./ReconciliationSystem"
+import type { PlayerInputPayload } from "@/shared/types"
+
+function input(over: Partial<PlayerInputPayload> & { seq: number }): PlayerInputPayload {
+  return {
+    up: false,
+    down: false,
+    left: false,
+    right: false,
+    abilitySlot: null,
+    abilityTargetX: 0,
+    abilityTargetY: 0,
+    weaponPrimary: false,
+    weaponSecondary: false,
+    weaponTargetX: 0,
+    weaponTargetY: 0,
+    useQuickItemSlot: null,
+    clientSendTimeMs: 0,
+    ...over,
+  }
+}
+
+const noopCtx = {
+  isSwinging: false,
+  hasSwiftBoots: false,
+  castingAbilityId: null,
+} as const
+
+describe("reconcileLocal", () => {
+  it("reports no visible correction when prediction matches ack", () => {
+    const history = new LocalInputHistory()
+    const ack = { x: 500, y: 500, lastProcessedInputSeq: 0 }
+    const currentRender = { x: 500, y: 500 }
+
+    const r = reconcileLocal(ack, history, currentRender, noopCtx)
+    expect(r.correction).toBe("none")
+    expect(r.renderX).toBe(500)
+    expect(r.renderY).toBe(500)
+  })
+
+  it("classifies a medium error as 'smooth'", () => {
+    const history = new LocalInputHistory()
+    const ack = { x: 500, y: 500, lastProcessedInputSeq: 0 }
+    const currentRender = { x: 510, y: 500 }
+
+    const r = reconcileLocal(ack, history, currentRender, noopCtx)
+    expect(r.correction).toBe("smooth")
+    expect(r.targetX).toBe(500)
+  })
+
+  it("snaps when the error exceeds the snap threshold", () => {
+    const history = new LocalInputHistory()
+    const ack = { x: 500, y: 500, lastProcessedInputSeq: 0 }
+    const currentRender = { x: 700, y: 500 }
+
+    const r = reconcileLocal(ack, history, currentRender, noopCtx)
+    expect(r.correction).toBe("snap")
+    expect(r.renderX).toBe(500)
+  })
+
+  it("discards inputs with seq <= ack.lastProcessedInputSeq", () => {
+    const history = new LocalInputHistory()
+    history.append(input({ seq: 5, right: true }))
+    history.append(input({ seq: 6, right: true }))
+
+    const ack = { x: 500, y: 500, lastProcessedInputSeq: 6 }
+    reconcileLocal(ack, history, { x: 500, y: 500 }, noopCtx)
+    expect(history.size()).toBe(0)
+  })
+
+  it("replays pending inputs through movement + collision to produce the target", () => {
+    const history = new LocalInputHistory()
+    // Three "right" inputs after the ack.
+    history.append(input({ seq: 10, right: true }))
+    history.append(input({ seq: 11, right: true }))
+    history.append(input({ seq: 12, right: true }))
+
+    const ack = { x: 500, y: 500, lastProcessedInputSeq: 9 }
+    // Current render reflects the same pending path (predicted correctly).
+    const r = reconcileLocal(ack, history, { x: 500, y: 500 }, noopCtx)
+
+    // Expected: moved right by 3 ticks at BASE_MOVE_SPEED_PX_PER_SEC * TICK_DT_SEC.
+    expect(r.targetX).toBeGreaterThan(500)
+    expect(r.targetY).toBeCloseTo(500, 5)
+    // Render should have moved to match the replay target.
+    expect(r.renderX).toBeCloseTo(r.targetX, 5)
+  })
+})

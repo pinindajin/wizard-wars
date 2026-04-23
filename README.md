@@ -42,7 +42,7 @@ Repository: `github.com/pinindajin/wizard-wars` (private)
 
 - **Frontend**: Next.js 16 App Router, Phaser 4, React 19, Tailwind CSS 4
 - **Backend**: Bun, Express 5, Colyseus 0.17, tRPC v11, Prisma 6
-- **Game Logic**: bitECS 0.4, server-authoritative 20 Hz simulation
+- **Game Logic**: bitECS 0.4, server-authoritative 60 Hz simulation with per-player input queue (seq + clientSendTimeMs), enriched snapshots (velocity + move state + `lastProcessedInputSeq` + `serverTimeMs`), client rewind-and-replay reconciliation with shared world-collision math, and a per-remote interpolation buffer with bounded velocity extrapolation
 - **Database**: PostgreSQL 16
 - **CI**: GitHub Actions (unit + integration)
 - **Hosting**: Render

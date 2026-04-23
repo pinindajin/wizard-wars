@@ -106,6 +106,18 @@ export type HeroSelectPayload = {
 
 // --- Game state types ---
 
+/**
+ * Coarse movement state surfaced in authoritative snapshots to help the
+ * client choose an appropriate render path (predict vs interpolate vs hold).
+ */
+export type PlayerMoveState =
+  | "idle"
+  | "moving"
+  | "casting"
+  | "swinging"
+  | "knockback"
+  | "rooted"
+
 /** A snapshot of a single player's position and state (sent in batch updates). */
 export type PlayerSnapshot = {
   readonly id: number // bitECS entity id
@@ -113,15 +125,24 @@ export type PlayerSnapshot = {
   readonly username: string
   readonly x: number
   readonly y: number
+  /** World-space velocity in pixels-per-second (integration-ready). */
+  readonly vx: number
+  readonly vy: number
   readonly facingAngle: number
   readonly health: number
   readonly maxHealth: number
   readonly lives: number
   readonly heroId: string
   readonly animState: PlayerAnimState
+  readonly moveState: PlayerMoveState
   /** Active cast ability id while `Casting` is set on the server, else `null`. */
   readonly castingAbilityId: string | null
   readonly invulnerable: boolean
+  /**
+   * Highest client input `seq` the server has processed for this player.
+   * Used by the client to drive rewind-and-replay reconciliation.
+   */
+  readonly lastProcessedInputSeq: number
 }
 
 /** A partial update for a player (only changed fields). */
@@ -129,12 +150,17 @@ export type PlayerDelta = {
   readonly id: number
   readonly x?: number
   readonly y?: number
+  readonly vx?: number
+  readonly vy?: number
   readonly facingAngle?: number
   readonly health?: number
   readonly lives?: number
   readonly animState?: PlayerAnimState
+  readonly moveState?: PlayerMoveState
   readonly castingAbilityId?: string | null
   readonly invulnerable?: boolean
+  /** Highest client input `seq` the server has processed for this player. */
+  readonly lastProcessedInputSeq?: number
 }
 
 /** Animation state reported by the server for client rendering. */
@@ -152,6 +178,8 @@ export type PlayerBatchUpdatePayload = {
   readonly deltas: readonly PlayerDelta[]
   readonly removedIds: readonly number[]
   readonly seq: number
+  /** Server wall-clock time (ms) when the tick that produced this batch ran. */
+  readonly serverTimeMs: number
 }
 
 /** Full game state sync for late-joiners or reconnects. */
@@ -160,6 +188,8 @@ export type GameStateSyncPayload = {
   /** Active fireball projectiles (empty when none). */
   readonly fireballs: readonly FireballSnapshot[]
   readonly seq: number
+  /** Server wall-clock time (ms) when the snapshot was built. */
+  readonly serverTimeMs: number
 }
 
 /** A fireball projectile snapshot. */
@@ -313,6 +343,12 @@ export type PlayerInputPayload = {
   readonly weaponTargetY: number
   readonly useQuickItemSlot: number | null // 0-3
   readonly seq: number
+  /**
+   * Client wall-clock time (ms) when this input was produced. Used only as an
+   * advisory signal for latency estimation; never trusted for authoritative
+   * simulation.
+   */
+  readonly clientSendTimeMs: number
 }
 
 /** Server → all: damage number floats. */

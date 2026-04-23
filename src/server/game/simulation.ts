@@ -51,6 +51,7 @@ import type {
   GameStateSyncPayload,
   PlayerSnapshot,
   PlayerAnimState,
+  PlayerMoveState,
   FireballSnapshot,
 } from "../../shared/types"
 
@@ -70,6 +71,7 @@ import { livesRespawnSystem } from "./systems/livesRespawnSystem"
 import { economySystem } from "./systems/economySystem"
 import { matchEndSystem } from "./systems/matchEndSystem"
 import { computePlayerAnimState, getCastingAbilityId } from "./playerAnimState"
+import { computePlayerMoveState } from "./playerMoveState"
 import { playerDeltaSystem } from "./systems/playerDeltaSystem"
 import { projectileDeltaSystem } from "./systems/projectileDeltaSystem"
 
@@ -116,13 +118,17 @@ export type KillStats = {
 export type PlayerPrevState = {
   x: number
   y: number
+  vx: number
+  vy: number
   facingAngle: number
   health: number
   lives: number
   animState: PlayerAnimState
+  moveState: PlayerMoveState
   /** Mirrors server `getCastingAbilityId`; `null` when not casting. */
   castingAbilityId: string | null
   invulnerable: boolean
+  lastProcessedInputSeq: number
 }
 
 /** Snapshot of a fireball's position used to compute deltas each tick. */
@@ -155,6 +161,11 @@ export type SimCtx = {
   fireballOwnerMap: Map<number, string>
 
   inputMap: Map<string, PlayerInputPayload>
+  /**
+   * Highest client input `seq` this entity processed so far. Surfaced in
+   * deltas + snapshots so the client can drive rewind-and-replay.
+   */
+  lastProcessedInputSeqByPlayer: Map<string, number>
   commandBuffer: CommandBuffer
   matchStartedAtMs: number
 
@@ -221,14 +232,24 @@ export type GameSimulation = {
   addPlayer: (userId: string, username: string, heroId: string, spawnIndex: number) => number
   /** Removes a player entity from the simulation. Safe to call outside a tick. */
   removePlayer: (userId: string) => void
-  /** Steps the simulation one tick forward. */
-  tick: (inputMap: Map<string, PlayerInputPayload>, serverTimeMs: number) => SimOutput
+  /**
+   * Steps the simulation one tick forward. Accepts an **ordered input queue**
+   * per player; the first queued input (if any) is applied this tick and
+   * `lastProcessedInputSeqByPlayer` is updated accordingly. Extra inputs in
+   * the queue carry over to subsequent ticks, one per tick, preserving their
+   * original `seq` ordering.
+   */
+  tick: (
+    perPlayerInputs: Map<string, PlayerInputPayload[]>,
+    serverTimeMs: number,
+  ) => SimOutput
   /** Signal that the host has requested an immediate match end. */
   requestHostEnd: () => void
   /**
-   * Builds a full player snapshot for `game_state_sync` (authoritative, seq 0 in MVP).
+   * Builds a full player snapshot for `game_state_sync` including
+   * `serverTimeMs` and per-player `lastProcessedInputSeq`.
    */
-  buildGameStateSyncPayload: () => GameStateSyncPayload
+  buildGameStateSyncPayload: (serverTimeMs: number) => GameStateSyncPayload
 }
 
 // ─── Factory ─────────────────────────────────────────────────────────────
@@ -252,6 +273,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
   const prevPlayerStates = new Map<number, PlayerPrevState>()
   const prevFireballStates = new Map<number, FireballPrevState>()
   const killStats = new Map<string, KillStats>()
+  const lastProcessedInputSeqByPlayer = new Map<string, number>()
 
   let currentTick = 0
   let hostEndSignal = false
@@ -343,13 +365,18 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     prevPlayerStates.set(eid, {
       x: spawn.x,
       y: spawn.y,
+      vx: 0,
+      vy: 0,
       facingAngle,
       health: DEFAULT_PLAYER_HEALTH,
       lives: STARTING_LIVES,
       animState: "idle",
+      moveState: "idle",
       castingAbilityId: null,
       invulnerable: false,
+      lastProcessedInputSeq: 0,
     })
+    lastProcessedInputSeqByPlayer.set(userId, 0)
 
     return eid
   }
@@ -372,6 +399,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     entityUsernameMap.delete(eid)
     playerHeroIdMap.delete(userId)
     prevPlayerStates.delete(eid)
+    lastProcessedInputSeqByPlayer.delete(userId)
   }
 
   // ── requestHostEnd ───────────────────────────────────────────────────
@@ -387,9 +415,13 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
   // ── buildGameStateSyncPayload ───────────────────────────────────────
 
   /**
-   * Collects all live player entities and active fireballs into a `GameStateSyncPayload` (seq 0 for MVP).
+   * Collects all live player entities and active fireballs into a
+   * `GameStateSyncPayload` enriched with `serverTimeMs`, per-player
+   * velocity, move state, and `lastProcessedInputSeq`.
+   *
+   * @param serverTimeMs - Wall-clock time (ms) to embed in the payload.
    */
-  function buildGameStateSyncPayload(): GameStateSyncPayload {
+  function buildGameStateSyncPayload(serverTimeMs: number): GameStateSyncPayload {
     const players: PlayerSnapshot[] = []
     for (const eid of query(world, [PlayerTag])) {
       const userId = entityPlayerMap.get(eid)
@@ -398,27 +430,35 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       const heroId = playerHeroIdMap.get(userId) ?? DEFAULT_HERO_ID
       const x = Position.x[eid]
       const y = Position.y[eid]
+      const vx = Velocity.vx[eid]
+      const vy = Velocity.vy[eid]
       const facingAngle = Facing.angle[eid]
       const health = Health.current[eid]
       const maxHealth = Health.max[eid]
       const lives = Lives.count[eid]
       const animState = computePlayerAnimState(world, eid)
+      const moveState = computePlayerMoveState(world, eid)
       const invulnerable = hasComponent(world, eid, InvulnerableTag)
       const castingAbilityId = getCastingAbilityId(world, eid)
+      const lastProcessedInputSeq = lastProcessedInputSeqByPlayer.get(userId) ?? 0
       players.push({
         id: eid,
         playerId: userId,
         username,
         x,
         y,
+        vx,
+        vy,
         facingAngle,
         health,
         maxHealth,
         lives,
         heroId,
         animState,
+        moveState,
         castingAbilityId,
         invulnerable,
+        lastProcessedInputSeq,
       })
     }
 
@@ -436,23 +476,44 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       })
     }
 
-    return { players, fireballs, seq: 0 }
+    return { players, fireballs, seq: 0, serverTimeMs }
   }
 
   // ── tick ─────────────────────────────────────────────────────────────
 
   /**
-   * Advances the simulation by one tick, running the full system pipeline.
+   * Advances the simulation by one tick.
    *
-   * @param inputMap     - Map of userId → PlayerInputPayload for this tick.
+   * Takes the next queued input per player (in `seq` order) and applies it
+   * through the system pipeline. Inputs with `seq <= lastProcessedInputSeq`
+   * for that player are dropped. `lastProcessedInputSeqByPlayer` is advanced
+   * to the highest consumed `seq`.
+   *
+   * @param perPlayerInputs - Map of userId → ordered `PlayerInputPayload[]`.
+   *   The map is **mutated**: consumed inputs are shifted off the front.
    * @param serverTimeMs - Current wall-clock time in milliseconds.
    * @returns Aggregated output events for this tick.
    */
   function tick(
-    inputMap: Map<string, PlayerInputPayload>,
+    perPlayerInputs: Map<string, PlayerInputPayload[]>,
     serverTimeMs: number,
   ): SimOutput {
     currentTick++
+
+    const inputMap = new Map<string, PlayerInputPayload>()
+    for (const [userId, queue] of perPlayerInputs) {
+      const lastSeq = lastProcessedInputSeqByPlayer.get(userId) ?? 0
+      // Drop already-processed inputs at the head of the queue.
+      while (queue.length > 0 && queue[0].seq <= lastSeq) {
+        queue.shift()
+      }
+      const next = queue[0]
+      if (next !== undefined) {
+        inputMap.set(userId, next)
+        queue.shift()
+        lastProcessedInputSeqByPlayer.set(userId, next.seq)
+      }
+    }
 
     const ctx: SimCtx = {
       world,
@@ -465,6 +526,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       playerHeroIdMap,
       fireballOwnerMap,
       inputMap,
+      lastProcessedInputSeqByPlayer,
       commandBuffer,
       matchStartedAtMs,
       damageRequests: [],
