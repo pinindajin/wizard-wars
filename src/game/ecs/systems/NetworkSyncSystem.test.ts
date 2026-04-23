@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest"
+import { describe, it, expect, beforeEach, vi } from "vitest"
 import { NetworkSyncSystem } from "./NetworkSyncSystem"
 import { ClientPosition, ClientPlayerState } from "../components"
 import { addEntity, clientEntities, hasEntity, removeEntity } from "../world"
@@ -98,5 +98,61 @@ describe("NetworkSyncSystem.applyFullSync (payload from GameStateSync)", () => {
     system.applyFullSync(payload)
     expect(clientEntities.has(0)).toBe(true)
     expect(ClientPlayerState[0]!.playerId).toBe("u0")
+  })
+})
+
+describe("NetworkSyncSystem.applyBatchUpdate", () => {
+  beforeEach(() => {
+    clearClientEcs()
+  })
+
+  it("applies x-only position deltas using the existing y position", () => {
+    const onAuthoritativePosition = vi.fn()
+    const system = new NetworkSyncSystem({ onAuthoritativePosition })
+
+    system.applyFullSync({
+      players: [baseSnapshot({ id: 1, playerId: "p1", x: 10, y: 20 })],
+      fireballs: [],
+      seq: 0,
+    })
+
+    system.applyBatchUpdate({
+      deltas: [{ id: 1, x: 15 }],
+      removedIds: [],
+      seq: 0,
+    })
+
+    expect(ClientPosition[1]).toEqual({ x: 15, y: 20 })
+    expect(onAuthoritativePosition).toHaveBeenLastCalledWith(
+      1,
+      15,
+      20,
+      "batch_update",
+    )
+  })
+
+  it("applies y-only position deltas using the existing x position", () => {
+    const onAuthoritativePosition = vi.fn()
+    const system = new NetworkSyncSystem({ onAuthoritativePosition })
+
+    system.applyFullSync({
+      players: [baseSnapshot({ id: 1, playerId: "p1", x: 10, y: 20 })],
+      fireballs: [],
+      seq: 0,
+    })
+
+    system.applyBatchUpdate({
+      deltas: [{ id: 1, y: 25 }],
+      removedIds: [],
+      seq: 0,
+    })
+
+    expect(ClientPosition[1]).toEqual({ x: 10, y: 25 })
+    expect(onAuthoritativePosition).toHaveBeenLastCalledWith(
+      1,
+      10,
+      25,
+      "batch_update",
+    )
   })
 })

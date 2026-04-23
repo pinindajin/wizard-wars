@@ -79,14 +79,24 @@ export class NetworkSyncSystem {
       const pos = ClientPosition[delta.id]
       const state = ClientPlayerState[delta.id]
 
-      if (delta.x !== undefined && delta.y !== undefined) {
-        if (pos) {
-          pos.x = delta.x
-          pos.y = delta.y
-        } else {
-          ClientPosition[delta.id] = { x: delta.x, y: delta.y }
+      if (delta.x !== undefined || delta.y !== undefined) {
+        const nextX = delta.x ?? pos?.x
+        const nextY = delta.y ?? pos?.y
+
+        if (nextX !== undefined && nextY !== undefined) {
+          if (pos) {
+            pos.x = nextX
+            pos.y = nextY
+          } else {
+            ClientPosition[delta.id] = { x: nextX, y: nextY }
+          }
+          this.onAuthoritativePositionHook?.(
+            delta.id,
+            nextX,
+            nextY,
+            "batch_update",
+          )
         }
-        this.onAuthoritativePositionHook?.(delta.id, delta.x, delta.y, "batch_update")
       }
 
       if (state) {
