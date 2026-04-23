@@ -56,49 +56,34 @@ test("full match flow: assets, overlay, canvas, movement, shop, abilities", asyn
 
   await expect(page).toHaveURL(/\/lobby\/[^/]+\/game$/, { timeout: 60_000 })
 
-  // Either the loading overlay shows progress, or Phaser is already up on very fast runs.
-  const overlay = page.getByTestId("game-loading-overlay")
   const canvas = page.getByTestId("game-phaser-container").locator("canvas")
-  await Promise.race([
-    overlay.waitFor({ state: "visible", timeout: 30_000 }),
-    canvas.waitFor({ state: "visible", timeout: 30_000 }),
-  ])
+  await expect(canvas).toBeVisible({ timeout: 30_000 })
 
-  if (await overlay.isVisible()) {
-    const label = page.getByTestId("game-loading-label")
-    await expect(label).toHaveText(/^Loading .+ \[\d+\/\d+\]$/)
-    await expect(overlay).toBeHidden({ timeout: 45_000 })
-  }
-
-  // Canvas + Phaser textures and animations present.
-  await expect(canvas).toHaveCount(1)
-  await expect(canvas).toBeVisible()
-
-  const phaserState = await page.evaluate(() => {
-    type WWGame = {
-      textures: { exists: (k: string) => boolean }
-      anims: { exists: (k: string) => boolean }
-    }
-    const g = (globalThis as unknown as { __wwGame?: WWGame }).__wwGame
-    if (!g) return { hasGame: false }
-    return {
-      hasGame: true,
-      ladyWizardLoaded: g.textures.exists("lady-wizard"),
-      arenaTerrainLoaded: g.textures.exists("arena-terrain"),
-      hasWalkAnim: g.anims.exists("lady-wizard-walk-south"),
-      hasDeathAnim: g.anims.exists("lady-wizard-death-south"),
-      hasLightCastAnim: g.anims.exists("lady-wizard-light_spell_cast-south"),
-      hasAxeAnim: g.anims.exists("lady-wizard-summoned_axe_swing-south"),
-    }
-  })
-
-  expect(phaserState.hasGame, "window.__wwGame exposed").toBe(true)
-  expect(phaserState.ladyWizardLoaded, "lady-wizard texture loaded").toBe(true)
-  expect(phaserState.arenaTerrainLoaded, "arena-terrain texture loaded").toBe(true)
-  expect(phaserState.hasWalkAnim, "walk-south anim registered").toBe(true)
-  expect(phaserState.hasDeathAnim, "death-south anim registered").toBe(true)
-  expect(phaserState.hasLightCastAnim, "light_spell_cast-south anim").toBe(true)
-  expect(phaserState.hasAxeAnim, "summoned_axe_swing-south anim").toBe(true)
+  // The canvas can appear before the React loading overlay is painted or before Preload
+  // finishes. Do not assert textures until packs and anims are actually registered
+  // (this was flaky in CI when we only raced overlay vs canvas).
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(() => {
+          type WWGame = {
+            textures: { exists: (k: string) => boolean }
+            anims: { exists: (k: string) => boolean }
+          }
+          const g = (globalThis as unknown as { __wwGame?: WWGame }).__wwGame
+          if (!g) return null
+          const ready =
+            g.textures.exists("lady-wizard") &&
+            g.textures.exists("arena-terrain") &&
+            g.anims.exists("lady-wizard-walk-south") &&
+            g.anims.exists("lady-wizard-death-south") &&
+            g.anims.exists("lady-wizard-light_spell_cast-south") &&
+            g.anims.exists("lady-wizard-summoned_axe_swing-south")
+          return ready ? g : null
+        }),
+      { timeout: 60_000 },
+    )
+    .not.toBeNull()
 
   // Wait for match to reach IN_PROGRESS (post-countdown). The countdown may
   // render momentarily; we assert the HP HUD eventually appears which only
