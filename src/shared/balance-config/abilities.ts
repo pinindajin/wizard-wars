@@ -15,6 +15,11 @@ export type AbilityConfig = {
   readonly damageProperties: number
   /** SFX key for the cast sound. */
   readonly castSfxKey: string
+  /**
+   * Movement during cast: `0` = root, `1` = full speed, fractional = reduced
+   * (multiplies the normal WASD step from movementSystem).
+   */
+  readonly castMoveSpeedMultiplier: number
 }
 
 export const ABILITY_CONFIGS: Record<string, AbilityConfig> = {
@@ -26,6 +31,7 @@ export const ABILITY_CONFIGS: Record<string, AbilityConfig> = {
     cooldownMs: FIREBALL_COOLDOWN_MS,
     damageProperties: combineDamageProperties(DamageProperty.Magic, DamageProperty.Fire),
     castSfxKey: "sfx-fireball-cast",
+    castMoveSpeedMultiplier: 1.0,
   },
   lightning_bolt: {
     id: "lightning_bolt",
@@ -35,6 +41,7 @@ export const ABILITY_CONFIGS: Record<string, AbilityConfig> = {
     cooldownMs: LIGHTNING_COOLDOWN_MS,
     damageProperties: combineDamageProperties(DamageProperty.Magic, DamageProperty.Electric),
     castSfxKey: "sfx-lightning-cast",
+    castMoveSpeedMultiplier: 1.0,
   },
 }
 

@@ -15,6 +15,17 @@ import {
 import type { PlayerAnimState } from "../../shared/types"
 
 /**
+ * Returns the current cast ability id when the entity has `Casting`, else `null`.
+ *
+ * @param world - bitECS world.
+ * @param eid - Player entity id.
+ */
+export function getCastingAbilityId(world: World, eid: number): string | null {
+  if (!hasComponent(world, eid, Casting)) return null
+  return ABILITY_INDEX_TO_ID[Casting.abilityIndex[eid]] ?? null
+}
+
+/**
  * Returns the `PlayerAnimState` string for a player entity, matching
  * `playerDeltaSystem` semantics.
  *

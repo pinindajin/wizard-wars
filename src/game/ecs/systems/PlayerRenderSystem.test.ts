@@ -60,6 +60,7 @@ function snap(over: Partial<PlayerSnapshot> & Pick<PlayerSnapshot, "id" | "playe
     lives: over.lives ?? 3,
     heroId: over.heroId ?? "red_wizard",
     animState: over.animState ?? "idle",
+    castingAbilityId: over.castingAbilityId ?? null,
     invulnerable: over.invulnerable ?? false,
   }
 }

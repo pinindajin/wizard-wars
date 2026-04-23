@@ -23,6 +23,8 @@ export const ClientPlayerState: Record<
     maxHealth: number
     lives: number
     animState: PlayerAnimState
+    /** Active cast ability id from server, or `null`. */
+    castingAbilityId: string | null
     facingAngle: number
     invulnerable: boolean
   }

@@ -4,7 +4,7 @@
  *
  * Movement rules (in priority order):
  *  1. DyingTag / DeadTag / SpectatorTag → velocity = 0
- *  2. Casting component with quick=0    → velocity = 0
+ *  2. Casting → WASD step × `castMoveSpeedMultiplier` (0 = root)
  *  3. SwingingWeapon                    → speed × SWING_MOVE_SPEED_MULTIPLIER
  *  4. Otherwise                         → speed × 1.0 (+ Swift Boots bonus)
  *
@@ -24,6 +24,7 @@ import {
   SpectatorTag,
   SwingingWeapon,
   PlayerTag,
+  ABILITY_INDEX_TO_ID,
 } from "../components"
 import type { SimCtx } from "../simulation"
 import {
@@ -32,6 +33,7 @@ import {
   SWIFT_BOOTS_SPEED_BONUS,
   TICK_DT_SEC,
 } from "../../../shared/balance-config"
+import { ABILITY_CONFIGS } from "../../../shared/balance-config/abilities"
 import { normalizedMoveFromWASD, worldStepFromIntent } from "../../../shared/movementIntent"
 
 /**
@@ -56,19 +58,25 @@ export function movementSystem(ctx: SimCtx): void {
       continue
     }
 
-    // Casting a non-quick ability locks movement
-    if (hasComponent(world, eid, Casting) && Casting.quick[eid] === 0) {
-      Velocity.vx[eid] = 0
-      Velocity.vy[eid] = 0
-      continue
-    }
-
     // Speed multiplier
     let speedMultiplier = 1.0
     if (hasComponent(world, eid, SwingingWeapon)) {
       speedMultiplier = SWING_MOVE_SPEED_MULTIPLIER
     } else if (Equipment.hasSwiftBoots[eid] === 1) {
       speedMultiplier = 1.0 + SWIFT_BOOTS_SPEED_BONUS
+    }
+
+    // When casting, scale movement by per-ability castMoveSpeedMultiplier (0 = root)
+    if (hasComponent(world, eid, Casting)) {
+      const abilityId = ABILITY_INDEX_TO_ID[Casting.abilityIndex[eid]] ?? ""
+      const cfg = abilityId ? ABILITY_CONFIGS[abilityId] : undefined
+      const castMoveMult = cfg?.castMoveSpeedMultiplier ?? 0
+      if (castMoveMult === 0) {
+        Velocity.vx[eid] = 0
+        Velocity.vy[eid] = 0
+        continue
+      }
+      speedMultiplier *= castMoveMult
     }
 
     const up = PlayerInput.up[eid]

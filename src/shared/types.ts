@@ -119,6 +119,8 @@ export type PlayerSnapshot = {
   readonly lives: number
   readonly heroId: string
   readonly animState: PlayerAnimState
+  /** Active cast ability id while `Casting` is set on the server, else `null`. */
+  readonly castingAbilityId: string | null
   readonly invulnerable: boolean
 }
 
@@ -131,6 +133,7 @@ export type PlayerDelta = {
   readonly health?: number
   readonly lives?: number
   readonly animState?: PlayerAnimState
+  readonly castingAbilityId?: string | null
   readonly invulnerable?: boolean
 }
 
