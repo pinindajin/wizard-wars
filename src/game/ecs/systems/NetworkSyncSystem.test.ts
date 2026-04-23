@@ -45,13 +45,13 @@ describe("NetworkSyncSystem.applyFullSync (r5 despawn)", () => {
   it("removes client ECS records for player ids not present in the new snapshot (T5)", () => {
     const a = baseSnapshot({ id: 1, playerId: "p1" })
     const b = baseSnapshot({ id: 2, playerId: "p2" })
-    system.applyFullSync({ players: [a, b], seq: 0 })
+    system.applyFullSync({ players: [a, b], fireballs: [], seq: 0 })
     expect(clientEntities.has(1)).toBe(true)
     expect(clientEntities.has(2)).toBe(true)
     expect(ClientPosition[1]).toBeDefined()
     expect(ClientPosition[2]).toBeDefined()
 
-    system.applyFullSync({ players: [a], seq: 0 })
+    system.applyFullSync({ players: [a], fireballs: [], seq: 0 })
     expect(clientEntities.has(1)).toBe(true)
     expect(clientEntities.has(2)).toBe(false)
     expect(hasEntity(2)).toBe(false)
@@ -74,7 +74,7 @@ describe("NetworkSyncSystem.applyFullSync (r5 despawn)", () => {
       invulnerable: false,
     }
     const snap = baseSnapshot({ id: 3, playerId: "only" })
-    system.applyFullSync({ players: [snap], seq: 0 })
+    system.applyFullSync({ players: [snap], fireballs: [], seq: 0 })
     expect([...clientEntities].sort((x, y) => x - y)).toEqual([3])
     expect(ClientPosition[99]).toBeUndefined()
   })
@@ -90,6 +90,7 @@ describe("NetworkSyncSystem.applyFullSync (payload from GameStateSync)", () => {
   it("accepts a full valid GameStateSyncPayload shape", () => {
     const payload: GameStateSyncPayload = {
       players: [baseSnapshot({ id: 0, playerId: "u0" })],
+      fireballs: [],
       seq: 0,
     }
     system.applyFullSync(payload)

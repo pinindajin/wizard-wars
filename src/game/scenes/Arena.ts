@@ -183,6 +183,7 @@ export class Arena extends Phaser.Scene {
           const payload = message.payload as GameStateSyncPayload
           this.networkSyncSystem.applyFullSync(payload)
           this.playerRenderSystem.applyFullSync(payload)
+          this.projectileRenderSystem.applyFullSyncFireballs(payload.fireballs)
           break
         }
         case WsEvent.PlayerBatchUpdate:

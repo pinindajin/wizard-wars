@@ -1,6 +1,10 @@
 import Phaser from "phaser"
 
-import type { FireballLaunchPayload, FireballBatchUpdatePayload } from "@/shared/types"
+import type {
+  FireballLaunchPayload,
+  FireballBatchUpdatePayload,
+  FireballSnapshot,
+} from "@/shared/types"
 import { ClientFireball } from "../components"
 
 /** Depth for fireball sprites — renders above tilemap, below name tags. */
@@ -29,6 +33,10 @@ export class ProjectileRenderSystem {
    * @param payload - FireballLaunch event data from the server.
    */
   spawnFireball(payload: FireballLaunchPayload): void {
+    if (this.sprites.has(payload.id)) {
+      this.destroyFireball(payload.id)
+    }
+
     ClientFireball[payload.id] = {
       x: payload.x,
       y: payload.y,
@@ -49,6 +57,27 @@ export class ProjectileRenderSystem {
     sprite.setRotation(angle)
 
     this.sprites.set(payload.id, sprite)
+  }
+
+  /**
+   * Replaces all client fireballs from a full `GameStateSync` snapshot (reconnect / resync).
+   *
+   * @param fireballs - Authoritative fireball rows from the server.
+   */
+  applyFullSyncFireballs(fireballs: readonly FireballSnapshot[]): void {
+    for (const id of [...this.sprites.keys()]) {
+      this.destroyFireball(id)
+    }
+    for (const s of fireballs) {
+      this.spawnFireball({
+        id: s.id,
+        ownerId: s.ownerId,
+        x: s.x,
+        y: s.y,
+        vx: s.vx,
+        vy: s.vy,
+      })
+    }
   }
 
   /**

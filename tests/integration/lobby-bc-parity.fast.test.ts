@@ -184,6 +184,7 @@ describe("Lobby BC feature parity integration", { timeout: 30_000 }, () => {
 
     expect(resyncGameState).not.toBeNull()
     expect(resyncGameState!.seq).toBe(0)
+    expect(resyncGameState!.fireballs).toEqual([])
     expect(resyncGameState!.players.length).toBe(1)
     expect(resyncGameState!.players[0]!.playerId).toBe("user-host")
     expect(resyncLobbyState).toBeGreaterThan(0)

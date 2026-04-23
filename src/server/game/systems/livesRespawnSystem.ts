@@ -202,27 +202,37 @@ export function livesRespawnSystem(ctx: SimCtx): void {
       RespawnTimer.facingAngle[eid] = facingAngle
 
       // Emit death payload (killerInfo comes from deathEvents queued by healthSystem)
-      const deathEvent = ctx.deathEvents.find(e => e.playerEid === eid)
+      const deathEvent = ctx.deathEvents.find((e) => e.playerEid === eid)
+      const killerUid = deathEvent?.killerUserId ?? null
       playerDeaths.push({
         playerId: userId,
-        killerPlayerId: deathEvent?.killerUserId ?? null,
+        killerPlayerId: killerUid,
         killerAbilityId: deathEvent?.killerAbilityId ?? null,
         livesRemaining: Lives.count[eid],
         x: Position.x[eid],
         y: Position.y[eid],
+        victimUsername: ctx.entityUsernameMap.get(eid) ?? "",
+        ...(killerUid != null
+          ? { killerUsername: ctx.playerUsernameMap.get(killerUid) ?? "" }
+          : {}),
       })
     } else {
       // No lives left → spectator
       addComponent(world, eid, SpectatorTag)
 
-      const deathEvent = ctx.deathEvents.find(e => e.playerEid === eid)
+      const deathEvent = ctx.deathEvents.find((e) => e.playerEid === eid)
+      const killerUid = deathEvent?.killerUserId ?? null
       playerDeaths.push({
         playerId: userId,
-        killerPlayerId: deathEvent?.killerUserId ?? null,
+        killerPlayerId: killerUid,
         killerAbilityId: deathEvent?.killerAbilityId ?? null,
         livesRemaining: 0,
         x: Position.x[eid],
         y: Position.y[eid],
+        victimUsername: ctx.entityUsernameMap.get(eid) ?? "",
+        ...(killerUid != null
+          ? { killerUsername: ctx.playerUsernameMap.get(killerUid) ?? "" }
+          : {}),
       })
     }
   }

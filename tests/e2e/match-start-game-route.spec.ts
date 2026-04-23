@@ -42,4 +42,11 @@ test("match start keeps user on game route with Phaser mount", async ({ page }) 
   await expect(page).not.toHaveURL(/\/browse$/)
 
   await expect(page.getByTestId("game-connect-error")).not.toBeVisible()
+
+  const canvas = page.getByTestId("game-phaser-container").locator("canvas")
+  await expect(canvas).toBeVisible({ timeout: 15_000 })
+  const box = await canvas.boundingBox()
+  expect(box).not.toBeNull()
+  expect(box!.width).toBeGreaterThan(0)
+  expect(box!.height).toBeGreaterThan(0)
 })

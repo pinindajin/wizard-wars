@@ -14,7 +14,7 @@ Prerequisites:
 Then:
 
 ```bash
-DATABASE_URL=postgresql://ww_user:ww_pass@localhost:5433/wizardwars \
+DATABASE_URL=postgresql://ww_user:ww_pass@127.0.0.1:5436/wizardwars \
 AUTH_SECRET=test-secret-32-chars-minimum-required \
 bun run test:e2e
 ```

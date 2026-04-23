@@ -27,7 +27,7 @@ export default defineConfig({
         process.env.AUTH_SECRET ?? "test-secret-32-chars-minimum-required",
       DATABASE_URL:
         process.env.DATABASE_URL ??
-        "postgresql://ww_user:ww_pass@localhost:5433/wizardwars",
+        "postgresql://ww_user:ww_pass@127.0.0.1:5436/wizardwars",
       WIZARD_WARS_E2E: "1",
       E2E_CLIENT_READY_TIMEOUT_MS: "800",
     },

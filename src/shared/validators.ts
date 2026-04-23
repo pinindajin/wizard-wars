@@ -5,7 +5,7 @@ import {
   QUICK_ITEM_SLOT_COUNT,
 } from "./balance-config/economy"
 import { MAX_PLAYERS_PER_MATCH } from "./balance-config/lobby"
-import type { GameStateSyncPayload } from "./types"
+import type { GameStateSyncPayload, PlayerDeathPayload } from "./types"
 
 /** Username: alphanumeric + underscore, 3-20 chars, must be trimmed before comparison. */
 const USERNAME_REGEX = /^[a-zA-Z0-9_]+$/
@@ -110,11 +110,47 @@ export const playerSnapshotSchema = z.object({
   invulnerable: z.boolean(),
 })
 
+/** Max simultaneous fireballs included in a full sync (safety cap for Zod). */
+const MAX_FIREBALLS_IN_SYNC = 128
+
+/** Single fireball row in `GameStateSync`. */
+export const fireballSnapshotSchema = z.object({
+  id: z.number().int().nonnegative(),
+  ownerId: z.string().min(1).max(256),
+  x: z.number().finite(),
+  y: z.number().finite(),
+  vx: z.number().finite(),
+  vy: z.number().finite(),
+})
+
 /** Full `game_state_sync` payload (server + client). */
 export const gameStateSyncPayloadSchema = z.object({
   players: z.array(playerSnapshotSchema).max(MAX_PLAYERS_PER_MATCH),
+  fireballs: z.array(fireballSnapshotSchema).max(MAX_FIREBALLS_IN_SYNC),
   seq: z.number().int().nonnegative(),
 })
+
+/** Server → clients: player eliminated (validated before broadcast). */
+export const playerDeathPayloadSchema = z.object({
+  playerId: z.string().min(1).max(256),
+  killerPlayerId: z.string().min(1).max(256).nullable(),
+  killerAbilityId: z.string().min(1).max(64).nullable(),
+  livesRemaining: z.number().int().nonnegative(),
+  x: z.number().finite(),
+  y: z.number().finite(),
+  victimUsername: z.string().max(64).optional(),
+  killerUsername: z.string().max(64).optional(),
+})
+
+/**
+ * Parses and returns a `PlayerDeathPayload` (throws if invalid).
+ * Call on the server before every `broadcast` of this message.
+ */
+export function parsePlayerDeathPayload(
+  input: Readonly<unknown> | PlayerDeathPayload,
+): PlayerDeathPayload {
+  return playerDeathPayloadSchema.parse(input) as PlayerDeathPayload
+}
 
 /**
  * Parses and returns a `GameStateSyncPayload` (throws if invalid).

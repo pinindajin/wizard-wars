@@ -7,7 +7,8 @@ services:
       POSTGRES_PASSWORD: ww_pass
       POSTGRES_DB: wizardwars
     ports:
-      - "5433:5432"
+      # Host port: avoid clashes with other local Postgres containers (5433 is common).
+      - "5436:5432"
     volumes:
       - ww_pgdata:/var/lib/postgresql/data
     healthcheck:
