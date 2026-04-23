@@ -1,53 +1,143 @@
 @import "tailwindcss";
 
+/* ── Design tokens ──────────────────────────────────────────────────────────── */
 :root {
-  --background: #1a1a2e;
-  --foreground: #e0e0e0;
-  --accent: #c084fc;
-  --accent-glow: #a855f7;
-  --panel-border: #374151; /* gray-700 */
-  --panel-bg: rgba(31, 41, 55, 0.5); /* gray-800/50 */
+  --background:    #050813;
+  --foreground:    #e2e8f0;
+  --accent:        #a78bfa;
+  --accent-glow:   #7c3aed;
+  --gold:          #d97706;
+  --gold-light:    #fbbf24;
+  --panel-border:  rgba(255, 255, 255, 0.09);
+  --panel-bg:      rgba(9, 12, 30, 0.88);
+  --surface-glow:  rgba(124, 58, 237, 0.14);
 }
 
-* {
-  box-sizing: border-box;
-}
+/* ── Base ───────────────────────────────────────────────────────────────────── */
+* { box-sizing: border-box; }
 
 body {
   background-color: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), Arial, sans-serif;
+  font-family: var(--font-geist-sans), 'Helvetica Neue', Arial, sans-serif;
   margin: 0;
   padding: 0;
+  -webkit-font-smoothing: antialiased;
 }
 
+/* ── Scrollbar ──────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar        { width: 4px; height: 4px; }
+::-webkit-scrollbar-track  { background: transparent; }
+::-webkit-scrollbar-thumb  { background: rgba(124, 58, 237, 0.35); border-radius: 2px; }
+
+/* ── Form elements ──────────────────────────────────────────────────────────── */
 input,
 textarea,
 select {
-  background-color: #2d2d4e;
+  background-color: rgba(4, 6, 18, 0.95);
   color: var(--foreground);
-  border: 1px solid #4a4a6a;
-  border-radius: 0.375rem;
-  padding: 0.5rem 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.625rem;   /* 10px */
+  padding: 0.75rem 1rem;
   font-size: 0.875rem;
+  font-family: inherit;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 input:focus,
 textarea:focus {
   outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(192, 132, 252, 0.25);
+  border-color: rgba(139, 92, 246, 0.65);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.14);
 }
 
-button {
-  cursor: pointer;
-}
+button { cursor: pointer; font-family: inherit; }
 
 a {
   color: var(--accent);
   text-decoration: none;
 }
+a:hover { text-decoration: underline; }
 
-a:hover {
-  text-decoration: underline;
+/* ── Sprite animations: scale 3× (124 × 3 = 372 px per frame) ─────────────── */
+@keyframes ww-idle-3x {
+  from { background-position: 0 0; }
+  to   { background-position: -1488px 0; }   /* 4 frames × 372 px */
+}
+@keyframes ww-cast-3x {
+  from { background-position: 0 0; }
+  to   { background-position: -6324px 0; }   /* 17 frames × 372 px */
+}
+
+/* ── Sprite animations: scale 2× (124 × 2 = 248 px per frame) ─────────────── */
+@keyframes ww-idle-2x {
+  from { background-position: 0 0; }
+  to   { background-position: -992px 0; }    /* 4 frames × 248 px */
+}
+@keyframes ww-cast-2x {
+  from { background-position: 0 0; }
+  to   { background-position: -4216px 0; }   /* 17 frames × 248 px */
+}
+
+/* ── Particle float ─────────────────────────────────────────────────────────── */
+@keyframes ww-float {
+  0%   { opacity: 0;    transform: translateY(0)      translateX(0); }
+  10%  { opacity: 0.7; }
+  90%  { opacity: 0.25; }
+  100% { opacity: 0;    transform: translateY(-110px) translateX(var(--drift, 0px)); }
+}
+
+/* ── Entrance animations ────────────────────────────────────────────────────── */
+@keyframes ww-fadein {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ww-screen-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ww-msg-in {
+  from { opacity: 0; transform: translateX(-6px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ── Glow pulse (wizard pedestal + status orbs) ─────────────────────────────── */
+@keyframes ww-pulse-glow {
+  0%, 100% { opacity: 0.32; }
+  50%       { opacity: 0.72; }
+}
+
+/* ── Match countdown ────────────────────────────────────────────────────────── */
+@keyframes ww-count-pulse {
+  0%, 100% { transform: scale(1);    text-shadow: 0 0 40px rgba(167, 139, 250, 0.5); }
+  50%       { transform: scale(1.06); text-shadow: 0 0 70px rgba(167, 139, 250, 0.9); }
+}
+
+/* ── Utility classes ────────────────────────────────────────────────────────── */
+.ww-screen-enter { animation: ww-screen-enter 0.3s ease-out; }
+.ww-fadein       { animation: ww-fadein       0.9s ease-out; }
+.ww-msg-in       { animation: ww-msg-in       0.22s ease-out; }
+
+/* ── Sprite classes (used by WizardSprite component) ───────────────────────── */
+.ww-sprite {
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+}
+.ww-sprite-idle-3x {
+  background-image: url('/assets/sprites/heroes/lady-wizard/sheets/idle-south.png');
+  animation: ww-idle-3x 0.65s steps(4) infinite;
+}
+.ww-sprite-cast-3x {
+  background-image: url('/assets/sprites/heroes/lady-wizard/sheets/heavy-spell-cast-south.png');
+  animation: ww-cast-3x 1.7s steps(17) forwards;
+}
+.ww-sprite-idle-2x {
+  background-image: url('/assets/sprites/heroes/lady-wizard/sheets/idle-south.png');
+  animation: ww-idle-2x 0.65s steps(4) infinite;
+}
+.ww-sprite-cast-2x {
+  background-image: url('/assets/sprites/heroes/lady-wizard/sheets/heavy-spell-cast-south.png');
+  animation: ww-cast-2x 1.7s steps(17) forwards;
 }

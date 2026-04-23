@@ -10,6 +10,7 @@ import {
   LobbyShell,
   LobbyStatusPill,
 } from "@/components/lobby/LobbyChrome"
+import { HeroCard, HERO_CARD_CONFIGS } from "@/components/lobby/HeroCard"
 import { HERO_CONFIGS } from "@/shared/balance-config/heroes"
 import { MATCH_COUNTDOWN_DURATION_MS } from "@/shared/balance-config/lobby"
 import {
@@ -50,13 +51,6 @@ const MAX_CHARS = 200
  * Hero card display configuration for the hero select UI.
  */
 const HERO_CARDS = Object.values(HERO_CONFIGS)
-
-/** Tint integer → Tailwind border/accent class */
-const HERO_ACCENT: Record<string, string> = {
-  red_wizard: "border-red-500 hover:bg-red-900/30",
-  barbarian: "border-orange-500 hover:bg-orange-900/30",
-  ranger: "border-green-500 hover:bg-green-900/30",
-}
 
 /** Hero → display icon */
 const HERO_ICON: Record<string, string> = {
@@ -356,33 +350,15 @@ export default function LobbyClient() {
             }
           >
             <div className="space-y-3">
-              {HERO_CARDS.map((hero) => {
-                const selected = myPlayer?.heroId === hero.id
-                return (
-                  <button
-                    key={hero.id}
-                    className={`flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left text-sm transition ${
-                      selected
-                        ? `${HERO_ACCENT[hero.id]} bg-white/8 font-semibold text-white`
-                        : `border-white/10 bg-white/3 text-slate-200 ${HERO_ACCENT[hero.id]}`
-                    } ${!isConnected ? "cursor-not-allowed opacity-50" : ""}`}
-                    onClick={() => selectHero(hero.id)}
-                    type="button"
-                    disabled={!isConnected}
-                  >
-                    <span className="text-lg">{HERO_ICON[hero.id]}</span>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-white">{hero.displayName}</p>
-                      <p className="mt-1 text-xs text-slate-400">Ready for arena combat</p>
-                    </div>
-                    {selected ? (
-                      <LobbyStatusPill tone="accent" className="shrink-0">
-                        Selected
-                      </LobbyStatusPill>
-                    ) : null}
-                  </button>
-                )
-              })}
+              {HERO_CARDS.map((hero) => (
+                <HeroCard
+                  key={hero.id}
+                  config={HERO_CARD_CONFIGS[hero.id]}
+                  selected={myPlayer?.heroId === hero.id}
+                  onSelect={selectHero}
+                  disabled={!isConnected}
+                />
+              ))}
             </div>
           </LobbyPanel>
 
