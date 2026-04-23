@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback } from "react"
-import type { ScoreboardEntry } from "@/shared/types"
+import type { LobbyScoreboardPayload, ScoreboardEntry } from "@/shared/types"
 import { HERO_CONFIGS } from "@/shared/balance-config/heroes"
 
 /** Props for the Scoreboard component. */
@@ -15,6 +15,8 @@ type ScoreboardProps = {
    * (Tab-held in-game variant). When false it is the full end-of-match scoreboard.
    */
   readonly isLive?: boolean
+  /** Why the match ended (end-of-match only). */
+  readonly endReason?: LobbyScoreboardPayload["endReason"] | null
 }
 
 /**
@@ -38,12 +40,24 @@ function sortEntries(entries: readonly ScoreboardEntry[]): ScoreboardEntry[] {
  *
  * @param props - ScoreboardProps.
  */
+function endReasonLine(
+  r: LobbyScoreboardPayload["endReason"] | null | undefined,
+): string | null {
+  if (r == null) return null
+  if (r === "host_ended") return "Match ended by host"
+  if (r === "lives_depleted") return "A player ran out of lives"
+  if (r === "time_cap") return "Time limit reached"
+  return null
+}
+
 export default function Scoreboard({
   entries,
   onReturnToLobby,
   isLive = false,
+  endReason = null,
 }: ScoreboardProps) {
   const sorted = sortEntries(entries)
+  const reasonText = !isLive ? endReasonLine(endReason) : null
 
   const containerClass = isLive
     ? "absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-none"
@@ -71,6 +85,9 @@ export default function Scoreboard({
               <h2 className="mt-1 text-3xl font-extrabold text-white">
                 Final Scores
               </h2>
+              {reasonText && (
+                <p className="mt-2 text-sm text-gray-400">{reasonText}</p>
+              )}
             </>
           )}
         </div>

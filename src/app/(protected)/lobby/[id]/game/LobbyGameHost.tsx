@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import type { Room } from "@colyseus/sdk"
 
 import { fetchWsAuthToken } from "@/lib/fetch-ws-auth-token"
 import { WsEvent } from "@/shared/events"
@@ -22,6 +21,7 @@ import WaitingForPlayersOverlay from "./WaitingForPlayersOverlay"
 import LoadingOverlay from "./LoadingOverlay"
 import CountdownOverlay from "./CountdownOverlay"
 import { useLoaderStatus } from "./useLoaderStatus"
+import { WW_KEYBIND_CONFIG_REGISTRY_KEY } from "@/game/constants"
 import type { LoaderStatusHost } from "@/game/loaderStatus"
 import { hudTopPanel } from "@/lib/ui/lobbyStyles"
 import Scoreboard from "./Scoreboard"
@@ -29,7 +29,7 @@ import AbilityBar from "./AbilityBar"
 import QuickItemBar from "./QuickItemBar"
 import GameSettingsModal from "./GameSettingsModal"
 import ShopModal from "./ShopModal"
-import { GameKeybindProvider } from "./GameKeybindContext"
+import { GameKeybindProvider, useGameKeybinds } from "./GameKeybindContext"
 import { useLobbyConnection } from "../LobbyConnectionProvider"
 import { MATCH_COUNTDOWN_DURATION_MS } from "@/shared/balance-config/lobby"
 import type { ShopStatePayload } from "@/shared/types"
@@ -53,9 +53,59 @@ type LobbyGameHostProps = {
  * @param props.lobbyId - The Colyseus room ID.
  */
 export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
+  const { connection, error: providerError } = useLobbyConnection()
+
+  if (providerError) {
+    return (
+      <div
+        className="flex h-screen w-screen flex-col items-center justify-center gap-4 bg-black px-6 text-center text-gray-200"
+        data-testid="game-connect-error"
+      >
+        <p className="max-w-md text-sm">{providerError}</p>
+        <Link
+          href="/browse"
+          className="rounded border border-gray-600 px-4 py-2 text-sm hover:bg-gray-900"
+        >
+          Back to browse
+        </Link>
+      </div>
+    )
+  }
+
+  if (!connection) {
+    return (
+      <div
+        className="flex h-screen w-screen items-center justify-center bg-black text-gray-400"
+        data-testid="game-connect-loading"
+      >
+        Connecting to lobby…
+      </div>
+    )
+  }
+
+  return (
+    <GameKeybindProvider>
+      <LobbyGameHostWithKeybinds lobbyId={lobbyId} />
+    </GameKeybindProvider>
+  )
+}
+
+type LobbyGameHostWithKeybindsProps = {
+  readonly lobbyId: string
+}
+
+/**
+ * In-game UI and Phaser mount; must sit under `GameKeybindProvider` so keybinds
+ * are passed into Phaser on mount and when the user saves new binds.
+ */
+function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) {
   const router = useRouter()
-  const { connection, lobbyState, error: providerError, localPlayerId } =
-    useLobbyConnection()
+  const keybinds = useGameKeybinds()
+  const keybindsRef = useRef(keybinds)
+  keybindsRef.current = keybinds
+  const { connection, lobbyState, localPlayerId } = useLobbyConnection()
+  const isHost =
+    localPlayerId != null && localPlayerId === lobbyState?.hostPlayerId
 
   const [phase, setPhase] = useState<LobbyPhase>(
     () => lobbyState?.phase ?? "WAITING_FOR_CLIENTS",
@@ -70,6 +120,9 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
   } | null>(null)
   const [scoreboardEntries, setScoreboardEntries] = useState<
     ScoreboardEntry[] | null
+  >(null)
+  const [scoreboardEndReason, setScoreboardEndReason] = useState<
+    LobbyScoreboardPayload["endReason"] | null
   >(null)
   const [shopState, setShopState] = useState<ShopStatePayload | null>(null)
   /** HUD placeholders until wired to game sync messages. */
@@ -90,7 +143,6 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
 
   const containerRef = useRef<HTMLDivElement>(null)
 
-  const colyseusRoom: Room | null = connection?.room ?? null
   const loaderStatus = useLoaderStatus(gameHost)
   const phaserLoaded = loaderStatus?.phase === "complete"
 
@@ -174,6 +226,7 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
         case WsEvent.LobbyScoreboard: {
           const payload = message.payload as LobbyScoreboardPayload
           setScoreboardEntries([...payload.entries])
+          setScoreboardEndReason(payload.endReason)
           setPhase("SCOREBOARD")
           setKillFeedRows([])
           break
@@ -219,17 +272,12 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
           token,
           gameConnection: connection,
           localPlayerId,
+          keybinds: keybindsRef.current,
         })
         destroyGame = mounted.destroy
         setGameHost(mounted.game as unknown as LoaderStatusHost)
         if (typeof window !== "undefined") {
-          const w = window as Window & {
-            __wwRoomId?: string
-            __wwLobbyId?: string
-            __wwGame?: unknown
-          }
-          w.__wwRoomId = connection.room?.roomId
-          w.__wwLobbyId = lobbyId
+          const w = window as Window & { __wwGame?: object }
           w.__wwGame = mounted.game
         }
       } catch (err) {
@@ -247,6 +295,16 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
       destroyGame?.()
     }
   }, [connection, localPlayerId, lobbyId, mountGeneration])
+
+  /**
+   * Keeps the Phaser registry aligned when the provider applies async keybind
+   * updates (e.g. open_settings from the server). Avoid listing `keybinds` on
+   * the mount effect so we do not destroy/rebuild Phaser on every change.
+   */
+  useEffect(() => {
+    if (!gameHost) return
+    gameHost.registry.set(WW_KEYBIND_CONFIG_REGISTRY_KEY, keybinds)
+  }, [gameHost, keybinds])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -280,153 +338,127 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
     { itemId: null, charges: 0 },
   ]
 
-  if (providerError) {
-    return (
-      <div
-        className="flex h-screen w-screen flex-col items-center justify-center gap-4 bg-black px-6 text-center text-gray-200"
-        data-testid="game-connect-error"
-      >
-        <p className="max-w-md text-sm">{providerError}</p>
-        <Link
-          href="/browse"
-          className="rounded border border-gray-600 px-4 py-2 text-sm hover:bg-gray-900"
-        >
-          Back to browse
-        </Link>
-      </div>
-    )
-  }
-
-  if (!connection) {
-    return (
-      <div
-        className="flex h-screen w-screen items-center justify-center bg-black text-gray-400"
-        data-testid="game-connect-loading"
-      >
-        Connecting to lobby…
-      </div>
-    )
-  }
-
   return (
-    <GameKeybindProvider>
-      <div className="relative h-screen w-screen overflow-hidden bg-black">
+    <div className="relative h-screen w-screen overflow-hidden bg-black">
+      <div
+        id="phaser-container"
+        data-testid="game-phaser-container"
+        ref={containerRef}
+        className="absolute inset-0"
+      />
+
+      {phaserError && (
         <div
-          id="phaser-container"
-          data-testid="game-phaser-container"
-          ref={containerRef}
-          className="absolute inset-0"
-        />
-
-        {phaserError && (
-          <div
-            className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-black/90 px-6 text-center"
-            data-testid="game-connect-error"
-          >
-            <p className="max-w-md text-sm text-red-300">{phaserError}</p>
-            <div className="flex flex-wrap justify-center gap-2">
-              <button
-                type="button"
-                data-testid="game-retry"
-                className="rounded bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-500"
-                onClick={onRetryPhaser}
-              >
-                Retry
-              </button>
-              <button
-                type="button"
-                className="rounded border border-gray-600 px-4 py-2 text-sm text-gray-200 hover:bg-gray-900"
-                onClick={() => router.replace(`/lobby/${lobbyId}`)}
-              >
-                Reconnect to lobby
-              </button>
-            </div>
+          className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-black/90 px-6 text-center"
+          data-testid="game-connect-error"
+        >
+          <p className="max-w-md text-sm text-red-300">{phaserError}</p>
+          <div className="flex flex-wrap justify-center gap-2">
+            <button
+              type="button"
+              data-testid="game-retry"
+              className="rounded bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-500"
+              onClick={onRetryPhaser}
+            >
+              Retry
+            </button>
+            <button
+              type="button"
+              className="rounded border border-gray-600 px-4 py-2 text-sm text-gray-200 hover:bg-gray-900"
+              onClick={() => router.replace(`/lobby/${lobbyId}`)}
+            >
+              Reconnect to lobby
+            </button>
           </div>
-        )}
+        </div>
+      )}
 
-        {!phaserLoaded && <LoadingOverlay status={loaderStatus} />}
+      {!phaserLoaded && <LoadingOverlay status={loaderStatus} />}
 
-        {phaserLoaded && !allPlayersLoaded && <WaitingForPlayersOverlay />}
+      {phaserLoaded && !allPlayersLoaded && <WaitingForPlayersOverlay />}
 
-        {countdownStart && (
-          <CountdownOverlay
-            startAtServerTimeMs={countdownStart.startAtServerTimeMs}
-            durationMs={countdownStart.durationMs}
-            onDone={() => setCountdownStart(null)}
+      {countdownStart && (
+        <CountdownOverlay
+          startAtServerTimeMs={countdownStart.startAtServerTimeMs}
+          durationMs={countdownStart.durationMs}
+          onDone={() => setCountdownStart(null)}
+        />
+      )}
+
+      {phase === "SCOREBOARD" && scoreboardEntries && (
+        <Scoreboard
+          entries={scoreboardEntries}
+          onReturnToLobby={onReturnToLobby}
+          isLive={false}
+          endReason={scoreboardEndReason}
+        />
+      )}
+
+      {settingsOpen && (
+        <GameSettingsModal
+          onClose={() => setSettingsOpen(false)}
+          isHost={isHost}
+          onEndMatch={() => {
+            connection?.sendLobbyEndGame()
+            setSettingsOpen(false)
+          }}
+        />
+      )}
+
+      {shopOpen && phase === "IN_PROGRESS" && !isSpectating && connection && (
+        <ShopModal
+          shopState={shopState}
+          connection={connection}
+          onClose={() => setShopOpen(false)}
+        />
+      )}
+
+      {phase === "IN_PROGRESS" && (
+        <>
+          <KillFeed
+            entries={killFeedRows.map((r) => ({ key: r.key, text: r.text }))}
           />
-        )}
 
-        {phase === "SCOREBOARD" && scoreboardEntries && (
-          <Scoreboard
-            entries={scoreboardEntries}
-            onReturnToLobby={onReturnToLobby}
-            isLive={false}
-          />
-        )}
-
-        {settingsOpen && (
-          <GameSettingsModal onClose={() => setSettingsOpen(false)} />
-        )}
-
-        {shopOpen && phase === "IN_PROGRESS" && !isSpectating && (
-          <ShopModal
-            shopState={shopState}
-            connection={connection}
-            onClose={() => setShopOpen(false)}
-          />
-        )}
-
-        {phase === "IN_PROGRESS" && (
-          <>
-            <KillFeed
-              entries={killFeedRows.map((r) => ({ key: r.key, text: r.text }))}
-            />
-
-            {isSpectating && (
-              <div
-                className="absolute left-1/2 top-4 z-40 -translate-x-1/2 rounded border border-amber-600/60 bg-amber-950/85 px-4 py-1.5 font-mono text-sm font-semibold text-amber-200 shadow-lg backdrop-blur-sm"
-                data-testid="spectating-banner"
-              >
-                Spectating
-              </div>
-            )}
-
-            <div className={hudTopPanel}>
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-red-400">HP</span>
-                <div className="h-3 w-32 rounded bg-gray-700">
-                  <div
-                    className="h-3 rounded bg-red-500 transition-all"
-                    style={{ width: `${(health / maxHealth) * 100}%` }}
-                  />
-                </div>
-                <span className="tabular-nums text-gray-300">
-                  {health}/{maxHealth}
-                </span>
-              </div>
-              <div className="flex gap-4 text-xs text-gray-300">
-                <span>❤️ {lives} lives</span>
-                <span>🪙 {gold} gold</span>
-              </div>
+          {isSpectating && (
+            <div
+              className="absolute left-1/2 top-4 z-40 -translate-x-1/2 rounded border border-amber-600/60 bg-amber-950/85 px-4 py-1.5 font-mono text-sm font-semibold text-amber-200 shadow-lg backdrop-blur-sm"
+              data-testid="spectating-banner"
+            >
+              Spectating
             </div>
+          )}
 
-            {!isSpectating && (
-              <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 flex-col items-center gap-2">
-                <AbilityBar slots={abilitySlots} room={colyseusRoom} />
-                <QuickItemBar
-                  slots={quickItems}
-                  room={colyseusRoom}
-                  connection={connection}
+          <div className={hudTopPanel}>
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-red-400">HP</span>
+              <div className="h-3 w-32 rounded bg-gray-700">
+                <div
+                  className="h-3 rounded bg-red-500 transition-all"
+                  style={{ width: `${(health / maxHealth) * 100}%` }}
                 />
               </div>
-            )}
-
-            <div className="absolute bottom-4 right-4 rounded border border-gray-700/50 bg-black/40 px-2 py-1 text-xs text-gray-500 backdrop-blur-sm">
-              \ Settings
+              <span className="tabular-nums text-gray-300">
+                {health}/{maxHealth}
+              </span>
             </div>
-          </>
-        )}
-      </div>
-    </GameKeybindProvider>
+            <div className="flex gap-4 text-xs text-gray-300">
+              <span>❤️ {lives} lives</span>
+              <span>🪙 {gold} gold</span>
+            </div>
+          </div>
+
+          {!isSpectating && (
+            <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 flex-col items-center gap-2">
+              <AbilityBar slots={abilitySlots} />
+              <QuickItemBar slots={quickItems} />
+            </div>
+          )}
+
+          <div className="absolute bottom-4 right-4 rounded border border-gray-700/50 bg-black/40 px-2 py-1 text-xs text-gray-500 backdrop-blur-sm">
+            \ Settings
+          </div>
+        </>
+      )}
+    </div>
   )
 }

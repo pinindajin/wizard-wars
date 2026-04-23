@@ -15,7 +15,7 @@
 import { query, hasComponent } from "bitecs"
 
 import { Position, Velocity, Facing, Health, Lives, PlayerTag, InvulnerableTag } from "../components"
-import { computePlayerAnimState } from "../playerAnimState"
+import { computePlayerAnimState, getCastingAbilityId } from "../playerAnimState"
 import type { SimCtx, PlayerPrevState } from "../simulation"
 import type { PlayerDelta } from "../../../shared/types"
 
@@ -36,10 +36,30 @@ export function playerDeltaSystem(ctx: SimCtx): void {
     const lives = Lives.count[eid]
     const animState = computePlayerAnimState(world, eid)
     const invulnerable = hasComponent(world, eid, InvulnerableTag)
+    const castingAbilityId = getCastingAbilityId(world, eid)
 
     if (!prev) {
-      ctx.playerDeltas.push({ id: eid, x, y, facingAngle, health, lives, animState, invulnerable })
-      prevPlayerStates.set(eid, { x, y, facingAngle, health, lives, animState, invulnerable })
+      ctx.playerDeltas.push({
+        id: eid,
+        x,
+        y,
+        facingAngle,
+        health,
+        lives,
+        animState,
+        castingAbilityId,
+        invulnerable,
+      })
+      prevPlayerStates.set(eid, {
+        x,
+        y,
+        facingAngle,
+        health,
+        lives,
+        animState,
+        castingAbilityId,
+        invulnerable,
+      })
       continue
     }
 
@@ -52,6 +72,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
       ...(health !== prev.health ? { health } : {}),
       ...(lives !== prev.lives ? { lives } : {}),
       ...(animState !== prev.animState ? { animState } : {}),
+      ...(castingAbilityId !== prev.castingAbilityId ? { castingAbilityId } : {}),
       ...(invulnerable !== prev.invulnerable ? { invulnerable } : {}),
     }
 
@@ -62,6 +83,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
       delta.health !== undefined ||
       delta.lives !== undefined ||
       delta.animState !== undefined ||
+      delta.castingAbilityId !== undefined ||
       delta.invulnerable !== undefined
 
     if (changed) {
@@ -72,6 +94,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
       prev.health = health
       prev.lives = lives
       prev.animState = animState
+      prev.castingAbilityId = castingAbilityId
       prev.invulnerable = invulnerable
     }
   }

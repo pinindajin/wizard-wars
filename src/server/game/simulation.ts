@@ -69,7 +69,7 @@ import { deathSystem } from "./systems/deathSystem"
 import { livesRespawnSystem } from "./systems/livesRespawnSystem"
 import { economySystem } from "./systems/economySystem"
 import { matchEndSystem } from "./systems/matchEndSystem"
-import { computePlayerAnimState } from "./playerAnimState"
+import { computePlayerAnimState, getCastingAbilityId } from "./playerAnimState"
 import { playerDeltaSystem } from "./systems/playerDeltaSystem"
 import { projectileDeltaSystem } from "./systems/projectileDeltaSystem"
 
@@ -120,6 +120,8 @@ export type PlayerPrevState = {
   health: number
   lives: number
   animState: PlayerAnimState
+  /** Mirrors server `getCastingAbilityId`; `null` when not casting. */
+  castingAbilityId: string | null
   invulnerable: boolean
 }
 
@@ -345,6 +347,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       health: DEFAULT_PLAYER_HEALTH,
       lives: STARTING_LIVES,
       animState: "idle",
+      castingAbilityId: null,
       invulnerable: false,
     })
 
@@ -401,6 +404,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       const lives = Lives.count[eid]
       const animState = computePlayerAnimState(world, eid)
       const invulnerable = hasComponent(world, eid, InvulnerableTag)
+      const castingAbilityId = getCastingAbilityId(world, eid)
       players.push({
         id: eid,
         playerId: userId,
@@ -413,6 +417,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
         lives,
         heroId,
         animState,
+        castingAbilityId,
         invulnerable,
       })
     }

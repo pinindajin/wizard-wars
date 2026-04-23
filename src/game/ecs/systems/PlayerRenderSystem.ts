@@ -1,6 +1,7 @@
 import Phaser from "phaser"
 
 import { HERO_CONFIGS } from "@/shared/balance-config/heroes"
+import { ABILITY_CONFIGS } from "@/shared/balance-config/abilities"
 import {
   INTERPOLATION_WINDOW_MS,
   PREDICTION_RECONCILE_ALPHA,
@@ -106,6 +107,7 @@ export class PlayerRenderSystem {
         maxHealth: snap.maxHealth,
         lives: snap.lives,
         animState: snap.animState,
+        castingAbilityId: snap.castingAbilityId,
         facingAngle: snap.facingAngle,
         invulnerable: snap.invulnerable,
       }
@@ -312,9 +314,17 @@ export class PlayerRenderSystem {
 
       const interpolatedPos = this._getInterpolatedPosition(entry, now)
       const isLocal = state.playerId === this.localPlayerId
+      const castMoveMult = this._clientCastMoveMultiplier(state)
 
       if (isLocal) {
-        const predictedPos = this._getPredictedLocalPosition(renderPos, interpolatedPos, state.animState, localMoveIntent, delta)
+        const predictedPos = this._getPredictedLocalPosition(
+          renderPos,
+          interpolatedPos,
+          state.animState,
+          localMoveIntent,
+          delta,
+          castMoveMult,
+        )
         renderPos.x = predictedPos.x
         renderPos.y = predictedPos.y
       } else {
@@ -439,19 +449,38 @@ export class PlayerRenderSystem {
    * @param delta - Frame delta time in ms.
    * @returns Predicted and reconciled render position for this frame.
    */
+  /**
+   * Resolves per-tick move scale for local prediction to match server
+   * `castMoveSpeedMultiplier` (with animState fallbacks for older payloads).
+   */
+  private _clientCastMoveMultiplier(state: (typeof ClientPlayerState)[number]): number {
+    if (state.castingAbilityId) {
+      const cfg = ABILITY_CONFIGS[state.castingAbilityId]
+      if (cfg) return cfg.castMoveSpeedMultiplier
+    }
+    if (state.animState === "heavy_cast") {
+      return ABILITY_CONFIGS.lightning_bolt?.castMoveSpeedMultiplier ?? 0
+    }
+    if (state.animState === "light_cast") {
+      return ABILITY_CONFIGS.fireball?.castMoveSpeedMultiplier ?? 0
+    }
+    return 1
+  }
+
   private _getPredictedLocalPosition(
     currentRenderPos: { x: number; y: number },
     interpolatedPos: { x: number; y: number },
     animState: PlayerAnimState,
     moveIntent: MoveIntent,
     delta: number,
+    castMoveMult: number,
   ): { x: number; y: number } {
-    if (!this._canPredictMovement(animState, moveIntent)) {
+    if (!this._canPredictMovement(animState, moveIntent, castMoveMult)) {
       return interpolatedPos
     }
 
     const { dx, dy } = normalizedMoveFromWASD(moveIntent)
-    const step = worldStepFromIntent(dx, dy, BASE_MOVE_SPEED_PX_PER_SEC, delta / 1000)
+    const step = worldStepFromIntent(dx, dy, BASE_MOVE_SPEED_PX_PER_SEC, delta / 1000, castMoveMult)
     const predictedX = currentRenderPos.x + step.x
     const predictedY = currentRenderPos.y + step.y
     const errorX = interpolatedPos.x - predictedX
@@ -475,17 +504,19 @@ export class PlayerRenderSystem {
    * @param moveIntent - Current local movement intent.
    * @returns True when local prediction is safe and useful.
    */
-  private _canPredictMovement(animState: PlayerAnimState, moveIntent: MoveIntent): boolean {
+  private _canPredictMovement(animState: PlayerAnimState, moveIntent: MoveIntent, castMoveMult: number): boolean {
     const { dx, dy } = normalizedMoveFromWASD(moveIntent)
     if (dx === 0 && dy === 0) {
       return false
     }
 
-    return animState !== "dying" &&
-      animState !== "dead" &&
-      animState !== "light_cast" &&
-      animState !== "heavy_cast" &&
-      animState !== "axe_swing"
+    if (animState === "dying" || animState === "dead" || animState === "axe_swing") {
+      return false
+    }
+    if (animState === "light_cast" || animState === "heavy_cast") {
+      return castMoveMult > 0
+    }
+    return true
   }
 
   /**

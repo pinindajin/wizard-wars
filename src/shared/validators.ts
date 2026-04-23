@@ -107,6 +107,7 @@ export const playerSnapshotSchema = z.object({
   lives: z.number().int().nonnegative(),
   heroId: z.string().min(1).max(64),
   animState: playerAnimStateSchema,
+  castingAbilityId: z.string().min(1).max(64).nullable(),
   invulnerable: z.boolean(),
 })
 

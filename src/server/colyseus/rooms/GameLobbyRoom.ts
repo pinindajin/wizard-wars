@@ -39,6 +39,7 @@ import {
 import { DEFAULT_HERO_ID } from "../../../shared/balance-config/heroes"
 import { logger } from "../../logger"
 import { Equipment } from "../../game/components"
+import { mergePlayerInputForTick } from "../mergePlayerInputForTick"
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -207,6 +208,12 @@ export class GameLobbyRoom extends Room {
 
   /** Buffered inputs from clients for the current tick (userId → latest input). */
   private readonly inputBuffer = new Map<string, import("../../../shared/types").PlayerInputPayload>()
+
+  /**
+   * Pending ability slot (0–4) to merge on the next tick. Set when a validated
+   * `PlayerInput` has `abilitySlot != null` — **last non-null wins** before the tick.
+   */
+  private readonly pendingAbilitySlotByPlayer = new Map<string, number>()
 
   // ---------------------------------------------------------------------------
   // Colyseus lifecycle
@@ -568,6 +575,9 @@ export class GameLobbyRoom extends Room {
     const result = playerInputPayloadSchema.safeParse(payload)
     if (!result.success) return
     this.inputBuffer.set(pd.playerId, result.data)
+    if (result.data.abilitySlot != null) {
+      this.pendingAbilitySlotByPlayer.set(pd.playerId, result.data.abilitySlot)
+    }
   }
 
   /**
@@ -974,6 +984,7 @@ export class GameLobbyRoom extends Room {
     this.gameLoopTimer = null
     this.simulation = null
     this.inputBuffer.clear()
+    this.pendingAbilitySlotByPlayer.clear()
 
     this.lobbyPhase = "SCOREBOARD"
     this.returnedToLobbySet.clear()
@@ -1150,7 +1161,15 @@ export class GameLobbyRoom extends Room {
     }
 
     const serverTimeMs = Date.now()
-    const inputMap = new Map(this.inputBuffer)
+    const inputMap = new Map<string, import("../../../shared/types").PlayerInputPayload>()
+    for (const [userId, latest] of this.inputBuffer) {
+      const pending = this.pendingAbilitySlotByPlayer.get(userId)
+      const merged = mergePlayerInputForTick(latest, pending)
+      inputMap.set(userId, merged)
+      if (pending !== undefined) {
+        this.pendingAbilitySlotByPlayer.delete(userId)
+      }
+    }
     const output = this.simulation.tick(inputMap, serverTimeMs)
 
     if (output.playerDeltas.length > 0 || output.fireballDeltas.length > 0 || output.fireballRemovedIds.length > 0) {

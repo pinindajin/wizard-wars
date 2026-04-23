@@ -17,6 +17,7 @@ function baseSnapshot(over: Partial<PlayerSnapshot> & { id: number; playerId: st
     lives: over.lives ?? 3,
     heroId: over.heroId ?? "red_wizard",
     animState: over.animState ?? "idle",
+    castingAbilityId: over.castingAbilityId ?? null,
     invulnerable: over.invulnerable ?? false,
   }
 }
@@ -70,6 +71,7 @@ describe("NetworkSyncSystem.applyFullSync (r5 despawn)", () => {
       maxHealth: 1,
       lives: 1,
       animState: "idle",
+      castingAbilityId: null,
       facingAngle: 0,
       invulnerable: false,
     }

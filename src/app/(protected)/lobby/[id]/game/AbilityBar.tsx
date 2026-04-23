@@ -1,13 +1,27 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import type { Room } from "@colyseus/sdk"
 import { ABILITY_CONFIGS } from "@/shared/balance-config/abilities"
-import { RoomEvent } from "@/shared/roomEvents"
-import { useGameKeybinds } from "./GameKeybindContext"
+import {
+  useGameKeybinds,
+  type GameKeybindActionId,
+} from "./GameKeybindContext"
 
-/** Hotkey labels for ability slots 0-4. */
-const HOTKEYS = ["1", "2", "3", "4", "5"] as const
+const ABILITY_KEYBINDS: GameKeybindActionId[] = [
+  "ability_1",
+  "ability_2",
+  "ability_3",
+  "ability_4",
+  "ability_5",
+]
+
+/**
+ * Formats a key string for a small hotkey label under each slot.
+ */
+function formatHotkeyLabel(key: string): string {
+  if (!key) return "—"
+  if (key.length === 1) return key.toUpperCase()
+  return key
+}
 
 /** Props for AbilityBar. */
 type AbilityBarProps = {
@@ -16,82 +30,28 @@ type AbilityBarProps = {
    * or null if the slot is empty.
    */
   readonly slots: readonly (string | null)[]
-  /** Active Colyseus room used to send ability cast messages. */
-  readonly room: Room | null
 }
 
 /**
- * Tracks per-slot cooldown end timestamps.
- */
-type CooldownState = Record<number, number>
-
-/**
- * Ability bar displaying 5 ability slots (hotkeys 1-5).
- * Shows ability icons, empty-slot placeholders, and cooldown radial sweeps.
- * Binds hotkeys 1-5 to fire the corresponding slot (respects Input Focus Lock).
+ * Ability bar: five slots, hotkey labels from the lobby keybind config.
+ * Ability casts are sent via Phaser `PlayerInput` only (no React key handlers).
  *
  * @param props - AbilityBarProps.
  */
-export default function AbilityBar({ slots, room }: AbilityBarProps) {
-  const [cooldowns, setCooldowns] = useState<CooldownState>({})
-  const [now, setNow] = useState(() => Date.now())
+export default function AbilityBar({ slots }: AbilityBarProps) {
   const keybinds = useGameKeybinds()
-
-  // Keep 'now' updated for cooldown displays
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 100)
-    return () => clearInterval(id)
-  }, [])
-
-  // Register hotkey listeners 1-5
-  useEffect(() => {
-    /** Fires the ability in the given slot index via the room. */
-    function fire(slotIndex: number) {
-      if (!room) return
-      room.send(RoomEvent.PlayerInput, { abilitySlot: slotIndex })
-      const abilityId = slots[slotIndex]
-      if (!abilityId) return
-      const config = ABILITY_CONFIGS[abilityId]
-      if (!config) return
-      const endMs = Date.now() + config.cooldownMs + config.castMs
-      setCooldowns((prev) => ({ ...prev, [slotIndex]: endMs }))
-    }
-
-    /**
-     * Handles global keydown events for ability hotkeys 1-5.
-     * Respects Input Focus Lock: disabled when any input/textarea is focused.
-     *
-     * @param e - The keyboard event.
-     */
-    function onKey(e: KeyboardEvent) {
-      const active = document.activeElement
-      if (
-        active instanceof HTMLInputElement ||
-        active instanceof HTMLTextAreaElement
-      )
-        return
-      const idx = parseInt(e.key, 10) - 1
-      if (idx >= 0 && idx <= 4) fire(idx)
-    }
-
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [room, slots, keybinds])
 
   return (
     <div className="flex items-end gap-2">
       {slots.map((abilityId, idx) => {
         const config = abilityId ? ABILITY_CONFIGS[abilityId] : null
-        const cooldownEnd = cooldowns[idx] ?? 0
-        const remainingMs = Math.max(0, cooldownEnd - now)
-        const config2 = config
-        const totalMs = config2 ? config2.cooldownMs + config2.castMs : 1
-        const fraction = remainingMs / totalMs
+        const fraction = 0
+        const hotkey = formatHotkeyLabel(keybinds[ABILITY_KEYBINDS[idx]!] ?? "")
 
         return (
           <AbilitySlot
             key={idx}
-            hotkey={HOTKEYS[idx]}
+            hotkey={hotkey}
             abilityName={config?.displayName ?? null}
             cooldownFraction={fraction}
             isEmpty={!abilityId}
@@ -137,12 +97,10 @@ function AbilitySlot({
             : "border-purple-600 bg-gray-900/80 text-white"
         }`}
       >
-        {/* Ability icon (text placeholder) */}
         <span className="text-center text-xs leading-tight px-1">
           {isEmpty ? "—" : abilityName?.slice(0, 4) ?? "?"}
         </span>
 
-        {/* Cooldown radial sweep SVG */}
         {cooldownFraction > 0 && (
           <svg
             className="absolute inset-0 -rotate-90"
@@ -166,7 +124,6 @@ function AbilitySlot({
         )}
       </div>
 
-      {/* Hotkey label */}
       <span className="rounded bg-gray-800 px-1.5 py-0.5 text-xs text-gray-400">
         {hotkey}
       </span>

@@ -57,6 +57,7 @@ export class NetworkSyncSystem {
         maxHealth: snap.maxHealth,
         lives: snap.lives,
         animState: snap.animState,
+        castingAbilityId: snap.castingAbilityId,
         facingAngle: snap.facingAngle,
         invulnerable: snap.invulnerable,
       }
@@ -93,6 +94,7 @@ export class NetworkSyncSystem {
         if (delta.health !== undefined) state.health = delta.health
         if (delta.lives !== undefined) state.lives = delta.lives
         if (delta.animState !== undefined) state.animState = delta.animState
+        if (delta.castingAbilityId !== undefined) state.castingAbilityId = delta.castingAbilityId
         if (delta.invulnerable !== undefined) state.invulnerable = delta.invulnerable
       }
     }

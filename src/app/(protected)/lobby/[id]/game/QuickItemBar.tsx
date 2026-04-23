@@ -1,88 +1,45 @@
 "use client"
 
-import { useEffect } from "react"
-import type { Room } from "@colyseus/sdk"
 import type { QuickItemSlot } from "@/shared/types"
-import { RoomEvent } from "@/shared/roomEvents"
-import { useGameKeybinds } from "./GameKeybindContext"
+import {
+  useGameKeybinds,
+  type GameKeybindActionId,
+} from "./GameKeybindContext"
 
-/**
- * Tiny subset of `GameConnection` accepted for test injection. The production
- * caller passes the full `GameConnection`; only `sendUseQuickItem` is needed.
- */
-export type QuickItemSender = {
-  sendUseQuickItem: (slotIndex: number) => void
+const QUICK_KEYBINDS: GameKeybindActionId[] = [
+  "quick_item_1",
+  "quick_item_2",
+  "quick_item_3",
+  "quick_item_4",
+]
+
+function formatHotkeyLabel(key: string): string {
+  if (!key) return "—"
+  if (key.length === 1) return key.toUpperCase()
+  return key
 }
-
-/** Display hotkey labels for quick-item slots 0-3. */
-const QUICK_HOTKEYS = ["Q", "6", "7", "8"] as const
 
 /** Props for QuickItemBar. */
 type QuickItemBarProps = {
   /** Array of 4 quick-item slot states. */
   readonly slots: readonly QuickItemSlot[]
-  /** Active Colyseus room used to send use-item messages. */
-  readonly room: Room | null
-  /**
-   * Optional typed sender (prefers this over raw room.send). When provided,
-   * `sendUseQuickItem(slotIndex)` is called instead of `room.send(...)`.
-   */
-  readonly connection?: QuickItemSender | null
 }
 
 /**
- * Quick-item bar displaying 4 slots with hotkeys Q, 6, 7, 8.
- * Shows item icon (text placeholder) and charge count.
- * Binds hotkeys to `UseQuickItem` room messages.
- * Respects Input Focus Lock when any input/textarea is focused.
+ * Quick-item bar: four slots with hotkey labels from the lobby keybind config.
+ * Use is sent via Phaser `PlayerInput.useQuickItemSlot` (no React key handlers).
  *
  * @param props - QuickItemBarProps.
  */
-export default function QuickItemBar({ slots, room, connection }: QuickItemBarProps) {
+export default function QuickItemBar({ slots }: QuickItemBarProps) {
   const keybinds = useGameKeybinds()
-
-  useEffect(() => {
-    /**
-     * Handles keydown events for quick-item hotkeys.
-     * Input Focus Lock: disabled when any input/textarea is focused.
-     *
-     * @param e - The keyboard event.
-     */
-    function onKey(e: KeyboardEvent) {
-      const active = document.activeElement
-      if (
-        active instanceof HTMLInputElement ||
-        active instanceof HTMLTextAreaElement
-      )
-        return
-
-      let slotIndex = -1
-      const key = e.key.toLowerCase()
-      if (key === "q") slotIndex = 0
-      else if (key === "6") slotIndex = 1
-      else if (key === "7") slotIndex = 2
-      else if (key === "8") slotIndex = 3
-
-      if (slotIndex < 0) return
-      const slot = slots[slotIndex]
-      if (!slot?.itemId || slot.charges <= 0) return
-      if (connection) {
-        connection.sendUseQuickItem(slotIndex)
-      } else if (room) {
-        room.send(RoomEvent.UseQuickItem, { slotIndex })
-      }
-    }
-
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [room, slots, keybinds, connection])
 
   return (
     <div className="flex items-end gap-2">
       {slots.map((slot, idx) => (
         <QuickItemSlotCell
           key={idx}
-          hotkey={QUICK_HOTKEYS[idx]}
+          hotkey={formatHotkeyLabel(keybinds[QUICK_KEYBINDS[idx]!] ?? "")}
           itemId={slot.itemId}
           charges={slot.charges}
         />
@@ -123,7 +80,6 @@ function QuickItemSlotCell({ hotkey, itemId, charges }: QuickItemSlotCellProps) 
           {isEmpty ? "—" : itemId.slice(0, 4)}
         </span>
 
-        {/* Charge count badge */}
         {!isEmpty && (
           <span className="absolute -right-1 -top-1 min-w-[18px] rounded-full bg-yellow-600 px-1 text-center text-xs font-bold leading-tight text-black">
             {charges}
@@ -131,7 +87,6 @@ function QuickItemSlotCell({ hotkey, itemId, charges }: QuickItemSlotCellProps) 
         )}
       </div>
 
-      {/* Hotkey label */}
       <span className="rounded bg-gray-800 px-1.5 py-0.5 text-xs text-gray-400">
         {hotkey}
       </span>
