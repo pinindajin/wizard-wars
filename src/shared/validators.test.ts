@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest"
-import { signupUsernameSchema, loginUsernameSchema, chatMessagePayloadSchema, playerInputPayloadSchema } from "@/shared/validators"
+import {
+  signupUsernameSchema,
+  loginUsernameSchema,
+  chatMessagePayloadSchema,
+  playerInputPayloadSchema,
+  parseGameStateSyncPayload,
+} from "@/shared/validators"
+import type { GameStateSyncPayload } from "@/shared/types"
 
 describe("signupUsernameSchema", () => {
   it("accepts valid usernames", () => {
@@ -76,5 +83,55 @@ describe("playerInputPayloadSchema", () => {
 
   it("requires seq to be non-negative", () => {
     expect(playerInputPayloadSchema.safeParse({ ...validInput, seq: -1 }).success).toBe(false)
+  })
+})
+
+describe("parseGameStateSyncPayload", () => {
+  it("accepts a minimal valid GameStateSync payload (T4)", () => {
+    const raw: GameStateSyncPayload = {
+      players: [
+        {
+          id: 1,
+          playerId: "user-a",
+          username: "A",
+          x: 0,
+          y: 0,
+          facingAngle: 0,
+          health: 10,
+          maxHealth: 10,
+          lives: 3,
+          heroId: "red_wizard",
+          animState: "idle",
+          invulnerable: false,
+        },
+      ],
+      seq: 0,
+    }
+    const parsed = parseGameStateSyncPayload(raw)
+    expect(parsed).toEqual(raw)
+  })
+
+  it("rejects an invalid animState", () => {
+    expect(() =>
+      parseGameStateSyncPayload({
+        players: [
+          {
+            id: 1,
+            playerId: "u",
+            username: "x",
+            x: 0,
+            y: 0,
+            facingAngle: 0,
+            health: 1,
+            maxHealth: 1,
+            lives: 1,
+            heroId: "red_wizard",
+            animState: "invalid",
+            invulnerable: false,
+          },
+        ],
+        seq: 0,
+      } as never),
+    ).toThrow()
   })
 })

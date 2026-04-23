@@ -16,6 +16,15 @@
                 "url": "assets/tilesets/arena-terrain.png"
             },
             {
+                "type": "spritesheet",
+                "key": "lady-wizard",
+                "url": "assets/sprites/heroes/lady-wizard/sheets/lady-wizard-megasheet.png",
+                "frameConfig": {
+                    "frameWidth": 124,
+                    "frameHeight": 124
+                }
+            },
+            {
                 "type": "audio",
                 "key": "music-lobby-01",
                 "url": ["assets/music/lobby/wizard-wars-lobby-01-ost.mp3"]
