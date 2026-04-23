@@ -1,0 +1,91 @@
+/**
+ * Shared world-collision math used by both the server `worldCollisionSystem`
+ * and the client's rewind-and-replay path. Kept dependency-free so it can be
+ * imported from any environment (node, browser, tests).
+ *
+ * Players are treated as circles (center `(x, y)`, radius `r`). The arena is
+ * an axis-aligned bounding box and props are axis-aligned rectangles.
+ */
+
+/** Axis-aligned bounds (inclusive min, exclusive max). */
+export type ArenaBounds = {
+  readonly width: number
+  readonly height: number
+}
+
+/** A single static prop footprint in world pixels. */
+export type ArenaPropColliderRect = {
+  readonly x: number
+  readonly y: number
+  readonly width: number
+  readonly height: number
+}
+
+/**
+ * Computes the minimum-translation vector that pushes a circle out of an
+ * axis-aligned rectangle. Returns `null` when the circle does not overlap.
+ */
+function circleRectMTV(
+  cx: number,
+  cy: number,
+  cr: number,
+  rx: number,
+  ry: number,
+  rw: number,
+  rh: number,
+): { dx: number; dy: number } | null {
+  const nearX = Math.max(rx, Math.min(cx, rx + rw))
+  const nearY = Math.max(ry, Math.min(cy, ry + rh))
+  const dx = cx - nearX
+  const dy = cy - nearY
+  const distSq = dx * dx + dy * dy
+  if (distSq >= cr * cr) return null
+
+  const dist = Math.sqrt(distSq) || 0.001
+  const pen = cr - dist
+  return { dx: (dx / dist) * pen, dy: (dy / dist) * pen }
+}
+
+/**
+ * Clamps a circle's center against arena bounds (respecting radius) and pushes
+ * it out of any overlapping prop rectangles. Pure function — caller passes in
+ * the resulting `(x, y)` to wherever it's stored (ECS Position, client
+ * ClientPosition, etc.).
+ *
+ * @param x - Circle center x in world pixels.
+ * @param y - Circle center y in world pixels.
+ * @param radius - Circle radius in world pixels.
+ * @param bounds - Arena bounds `{ width, height }`.
+ * @param propColliders - Static prop rectangles.
+ * @returns Resolved `{ x, y }` position after all clamps / MTVs are applied.
+ */
+export function resolveAgainstWorld(
+  x: number,
+  y: number,
+  radius: number,
+  bounds: ArenaBounds,
+  propColliders: readonly ArenaPropColliderRect[],
+): { x: number; y: number } {
+  let cx = x
+  let cy = y
+
+  const minX = radius
+  const minY = radius
+  const maxX = bounds.width - radius
+  const maxY = bounds.height - radius
+
+  if (cx < minX) cx = minX
+  if (cx > maxX) cx = maxX
+  if (cy < minY) cy = minY
+  if (cy > maxY) cy = maxY
+
+  for (const col of propColliders) {
+    const mtv = circleRectMTV(cx, cy, radius, col.x, col.y, col.width, col.height)
+    if (mtv) {
+      cx += mtv.dx
+      cy += mtv.dy
+    }
+  }
+
+  return { x: cx, y: cy }
+}

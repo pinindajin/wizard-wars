@@ -3,9 +3,8 @@ import Phaser from "phaser"
 import { HERO_CONFIGS } from "@/shared/balance-config/heroes"
 import { ABILITY_CONFIGS } from "@/shared/balance-config/abilities"
 import {
-  INTERPOLATION_WINDOW_MS,
-  PREDICTION_RECONCILE_ALPHA,
-  PREDICTION_SNAP_THRESHOLD_PX,
+  REMOTE_RENDER_DELAY_MS,
+  REPLAY_SMOOTHING_MS,
   TELEPORT_THRESHOLD_PX,
 } from "@/shared/balance-config/rendering"
 import { BASE_MOVE_SPEED_PX_PER_SEC, DAMAGE_FLASH_MS } from "@/shared/balance-config/combat"
@@ -15,10 +14,21 @@ import type {
   PlayerDeathPayload,
   PlayerRespawnPayload,
 } from "@/shared/types"
-import { normalizedMoveFromWASD, type MoveIntent, worldStepFromIntent } from "@/shared/movementIntent"
+import {
+  normalizedMoveFromWASD,
+  type MoveIntent,
+  worldStepFromIntent,
+} from "@/shared/movementIntent"
 import { ClientPosition, ClientPlayerState, ClientRenderPos } from "../components"
 import { addEntity, removeEntity } from "../world"
 import { getDirectionFromAngle, getAnimKey } from "../../animation/LadyWizardAnimDefs"
+import {
+  reconcileLocal,
+  type LocalAckState,
+  type LocalReplayContext,
+} from "./ReconciliationSystem"
+import { LocalInputHistory } from "../../network/LocalInputHistory"
+import { RemoteInterpolationBuffer } from "./RemoteInterpolationBuffer"
 
 /** Oscillation frequency for invulnerability alpha pulse (Hz). */
 const INVULN_PULSE_HZ = 4
@@ -38,18 +48,6 @@ interface PlayerRenderEntry {
   sprite: Phaser.GameObjects.Sprite
   nameTag: Phaser.GameObjects.Text
   hpBar: Phaser.GameObjects.Graphics
-  /** Previous visual x position used for time-based interpolation. */
-  prevX: number
-  /** Previous visual y position used for time-based interpolation. */
-  prevY: number
-  /** Next authoritative x target for interpolation. */
-  nextX: number
-  /** Next authoritative y target for interpolation. */
-  nextY: number
-  /** Wall-clock ms when the current interpolation window started. */
-  prevTime: number
-  /** Wall-clock ms when the current interpolation window should end. */
-  nextTime: number
   /** Accumulated time for invulnerability pulse (ms). */
   invulnTime: number
   /** Remaining damage flash time (ms). 0 = no flash active. */
@@ -58,20 +56,47 @@ interface PlayerRenderEntry {
   heroTint: number
   /** Last known animState + direction key to avoid redundant anim calls. */
   lastAnimKey: string
+  /**
+   * Remaining ms in the current "smooth replay correction" window. When > 0
+   * the local player's rendered position is blended linearly from its value
+   * at the start of the window (`smoothFromX/Y`) toward `smoothTargetX/Y`.
+   */
+  smoothRemainingMs: number
+  smoothFromX: number
+  smoothFromY: number
+  smoothTargetX: number
+  smoothTargetY: number
 }
 
 /**
  * Manages Phaser sprites, name tags, and HP bars for all player entities.
- * Called each frame from Arena.update().
+ *
+ * The local player uses prediction (extrapolate from the latest authoritative
+ * state using held WASD + speed multipliers) plus rewind-and-replay
+ * reconciliation via {@link reconcileLocal}. Remote players use an
+ * interpolation-buffer render path sampled at `now - REMOTE_RENDER_DELAY_MS`
+ * with velocity-aware extrapolation when the buffer underflows.
  */
 export class PlayerRenderSystem {
   private scene: Phaser.Scene
   private group: Phaser.GameObjects.Group
   private entries: Map<number, PlayerRenderEntry> = new Map()
-  private lastBatchTime = 0
-  private measuredIntervalMs = INTERPOLATION_WINDOW_MS
+
   /** Set by Arena after connection is established. */
   localPlayerId: string | null = null
+
+  /** Local player's pending inputs (used for rewind-and-replay). */
+  readonly localInputHistory: LocalInputHistory = new LocalInputHistory()
+
+  /** Per-remote snapshot buffer used by the remote render path. */
+  readonly remoteBuffer: RemoteInterpolationBuffer = new RemoteInterpolationBuffer()
+
+  /**
+   * Offset from server clock to local clock, roughly `serverTime - Date.now()`.
+   * Updated on every authoritative batch so remote interpolation can map
+   * `now - REMOTE_RENDER_DELAY_MS` into server-time for sampling.
+   */
+  private serverTimeOffsetMs = 0
 
   /**
    * @param scene - The Arena scene instance.
@@ -88,6 +113,7 @@ export class PlayerRenderSystem {
    * @param payload - Full game state snapshot from the server.
    */
   applyFullSync(payload: GameStateSyncPayload): void {
+    this.updateServerTimeOffset(payload.serverTimeMs)
     const keep = new Set(payload.players.map((p) => p.id))
     for (const id of [...this.entries.keys()]) {
       if (!keep.has(id)) {
@@ -112,34 +138,60 @@ export class PlayerRenderSystem {
         invulnerable: snap.invulnerable,
       }
       this.onAuthoritativePosition(snap.id, snap.x, snap.y, "full_sync")
+
+      // Seed the remote buffer for non-local players from the full sync.
+      if (snap.playerId !== this.localPlayerId) {
+        this.remoteBuffer.push(snap.id, {
+          serverTimeMs: payload.serverTimeMs,
+          x: snap.x,
+          y: snap.y,
+          vx: snap.vx,
+          vy: snap.vy,
+          facingAngle: snap.facingAngle,
+        })
+      }
     }
   }
 
   /**
-   * Records that a fresh authoritative player batch arrived so interpolation can
-   * adapt to the observed network cadence.
+   * Records that a fresh authoritative player batch arrived. Kept as a no-op
+   * hook for backwards compatibility with existing call sites; the actual
+   * interpolation-cadence math now lives in {@link RemoteInterpolationBuffer}.
    */
   markBatchReceived(): void {
-    const now = Date.now()
-    if (this.lastBatchTime > 0) {
-      const gap = now - this.lastBatchTime
-      this.measuredIntervalMs = Math.min(500, Math.max(INTERPOLATION_WINDOW_MS, this.measuredIntervalMs * 0.7 + gap * 0.3))
-    }
-    this.lastBatchTime = now
+    // Intentional no-op — left for call-site compatibility.
   }
 
   /**
-   * Resets interpolation endpoints after any authoritative position write.
-   * Call this after `ClientPosition` changes from network sync, full sync, respawn,
-   * or any future teleport-style correction path.
+   * Updates the server-time-to-local-time offset from an authoritative
+   * `serverTimeMs`. Uses an EMA to smooth out clock jitter.
+   */
+  updateServerTimeOffset(serverTimeMs: number): void {
+    const sample = serverTimeMs - Date.now()
+    if (this.serverTimeOffsetMs === 0) {
+      this.serverTimeOffsetMs = sample
+    } else {
+      this.serverTimeOffsetMs = this.serverTimeOffsetMs * 0.8 + sample * 0.2
+    }
+  }
+
+  /**
+   * Resets per-entity render bookkeeping after any authoritative position
+   * write. For the local player this seeds `ClientRenderPos`; for remote
+   * players the actual position is sampled each frame from the
+   * interpolation buffer.
    *
    * @param id - Entity id being updated.
    * @param x - Authoritative x position.
    * @param y - Authoritative y position.
    * @param reason - Why the authoritative position changed.
    */
-  onAuthoritativePosition(id: number, x: number, y: number, reason: "spawn" | "full_sync" | "batch_update" | "respawn"): void {
-    const now = Date.now()
+  onAuthoritativePosition(
+    id: number,
+    x: number,
+    y: number,
+    reason: "spawn" | "full_sync" | "batch_update" | "respawn",
+  ): void {
     const entry = this.entries.get(id)
     const renderPos = ClientRenderPos[id] ?? { x, y }
     ClientRenderPos[id] = renderPos
@@ -150,36 +202,68 @@ export class PlayerRenderSystem {
       return
     }
 
-    if (reason === "batch_update") {
-      entry.prevX = renderPos.x
-      entry.prevY = renderPos.y
-      entry.nextX = x
-      entry.nextY = y
-      entry.prevTime = now
-      entry.nextTime = now + this.measuredIntervalMs
-      return
+    // Non-batch reasons always snap visually (spawn / respawn / full sync).
+    if (reason !== "batch_update") {
+      renderPos.x = x
+      renderPos.y = y
+      entry.sprite.setPosition(x, y)
+      entry.smoothRemainingMs = 0
     }
+  }
 
-    entry.prevX = x
-    entry.prevY = y
-    entry.nextX = x
-    entry.nextY = y
-    entry.prevTime = now
-    entry.nextTime = now
-    renderPos.x = x
-    renderPos.y = y
-    entry.sprite.setPosition(x, y)
+  /**
+   * Pushes an authoritative snapshot for a remote player into the
+   * interpolation buffer. Called by the network sync layer after every batch.
+   */
+  onRemoteSnapshot(
+    id: number,
+    sample: {
+      serverTimeMs: number
+      x: number
+      y: number
+      vx: number
+      vy: number
+      facingAngle: number
+    },
+  ): void {
+    this.remoteBuffer.push(id, sample)
+  }
+
+  /**
+   * Applies an authoritative ACK for the local player, running
+   * rewind-and-replay reconciliation and arming a smooth / snap correction
+   * as needed.
+   */
+  onLocalAck(id: number, ack: LocalAckState): void {
+    const entry = this.entries.get(id)
+    if (!entry) return
+    const state = ClientPlayerState[id]
+    const renderPos = ClientRenderPos[id]
+    if (!state || !renderPos) return
+
+    const ctx: LocalReplayContext = {
+      isSwinging: state.animState === "axe_swing",
+      hasSwiftBoots: false,
+      castingAbilityId: state.castingAbilityId,
+    }
+    const result = reconcileLocal(ack, this.localInputHistory, renderPos, ctx)
+
+    if (result.correction === "snap") {
+      renderPos.x = result.renderX
+      renderPos.y = result.renderY
+      entry.smoothRemainingMs = 0
+    } else if (result.correction === "smooth") {
+      entry.smoothFromX = renderPos.x
+      entry.smoothFromY = renderPos.y
+      entry.smoothTargetX = result.targetX
+      entry.smoothTargetY = result.targetY
+      entry.smoothRemainingMs = REPLAY_SMOOTHING_MS
+    }
+    // "none": keep render as-is.
   }
 
   /**
    * Spawns a new player sprite with name tag and HP bar.
-   *
-   * @param id - Entity id.
-   * @param playerId - Server player id (userId / sessionId).
-   * @param username - Display name.
-   * @param heroId - Hero configuration key.
-   * @param x - Initial world x.
-   * @param y - Initial world y.
    */
   private _spawnPlayer(
     id: number,
@@ -219,26 +303,21 @@ export class PlayerRenderSystem {
       sprite,
       nameTag,
       hpBar,
-      prevX: x,
-      prevY: y,
-      nextX: x,
-      nextY: y,
-      prevTime: 0,
-      nextTime: 0,
       invulnTime: 0,
       flashRemaining: 0,
       heroTint,
       lastAnimKey: "",
+      smoothRemainingMs: 0,
+      smoothFromX: x,
+      smoothFromY: y,
+      smoothTargetX: x,
+      smoothTargetY: y,
     })
     ClientRenderPos[id] = { x, y }
     this.onAuthoritativePosition(id, x, y, "spawn")
   }
 
-  /**
-   * Removes a player sprite and its UI elements.
-   *
-   * @param id - Entity id to remove.
-   */
+  /** Removes a player sprite and its UI elements. */
   private _despawnPlayer(id: number): void {
     const entry = this.entries.get(id)
     if (!entry) return
@@ -247,16 +326,13 @@ export class PlayerRenderSystem {
     entry.hpBar.destroy()
     this.entries.delete(id)
     removeEntity(id)
+    this.remoteBuffer.remove(id)
     delete ClientPosition[id]
     delete ClientRenderPos[id]
     delete ClientPlayerState[id]
   }
 
-  /**
-   * Triggers a red damage flash on a player sprite.
-   *
-   * @param id - Entity id of the player that was hit.
-   */
+  /** Triggers a red damage flash on a player sprite. */
   triggerDamageFlash(id: number): void {
     const entry = this.entries.get(id)
     if (!entry) return
@@ -264,11 +340,7 @@ export class PlayerRenderSystem {
     entry.sprite.setTint(0xff0000)
   }
 
-  /**
-   * Handles a PlayerDeath event: hides name tag + HP bar, plays death state.
-   *
-   * @param payload - Death event data from the server.
-   */
+  /** Handles a PlayerDeath event: hides name tag + HP bar, plays death state. */
   onPlayerDeath(payload: PlayerDeathPayload): void {
     for (const [, state] of Object.entries(ClientPlayerState)) {
       if (state.playerId === payload.playerId) {
@@ -278,11 +350,7 @@ export class PlayerRenderSystem {
     }
   }
 
-  /**
-   * Handles a PlayerRespawn event: snaps sprite to spawn position.
-   *
-   * @param payload - Respawn event data from the server.
-   */
+  /** Handles a PlayerRespawn event: snaps sprite to spawn position. */
   onPlayerRespawn(payload: PlayerRespawnPayload): void {
     for (const [idStr, state] of Object.entries(ClientPlayerState)) {
       if (state.playerId === payload.playerId) {
@@ -296,45 +364,34 @@ export class PlayerRenderSystem {
   }
 
   /**
-   * Main per-frame update. Interpolates positions, updates animations, damage flashes,
-   * invulnerability pulse, name tags, and HP bars.
+   * Main per-frame update. Interpolates positions, updates animations,
+   * damage flashes, invulnerability pulse, name tags, and HP bars.
+   *
+   * Local players run pure prediction + smoothing. Remote players are
+   * sampled from the interpolation buffer at `now - REMOTE_RENDER_DELAY_MS`.
    *
    * @param delta - Frame delta time in ms.
    * @param localMoveIntent - Local player's current movement intent for prediction.
    */
   update(delta: number, localMoveIntent: MoveIntent): void {
-    const now = Date.now()
+    const nowLocal = Date.now()
+    const nowServer = nowLocal + this.serverTimeOffsetMs
+    const renderTimeServer = nowServer - REMOTE_RENDER_DELAY_MS
 
     for (const [id, entry] of this.entries) {
       const state = ClientPlayerState[id]
       const authPos = ClientPosition[id]
       const renderPos = ClientRenderPos[id]
-
       if (!state || !authPos || !renderPos) continue
 
-      const interpolatedPos = this._getInterpolatedPosition(entry, now)
       const isLocal = state.playerId === this.localPlayerId
-      const castMoveMult = this._clientCastMoveMultiplier(state)
-
       if (isLocal) {
-        const predictedPos = this._getPredictedLocalPosition(
-          renderPos,
-          interpolatedPos,
-          state.animState,
-          localMoveIntent,
-          delta,
-          castMoveMult,
-        )
-        renderPos.x = predictedPos.x
-        renderPos.y = predictedPos.y
+        this._updateLocal(entry, renderPos, state, localMoveIntent, delta)
       } else {
-        renderPos.x = interpolatedPos.x
-        renderPos.y = interpolatedPos.y
+        this._updateRemote(id, entry, renderPos, state, authPos, renderTimeServer)
       }
 
       entry.sprite.setPosition(renderPos.x, renderPos.y)
-
-      // --- Y-sort depth ---
       entry.sprite.setDepth(renderPos.y)
 
       // --- Animation ---
@@ -383,19 +440,85 @@ export class PlayerRenderSystem {
   }
 
   /**
+   * Local-player render path: extrapolate from current render by current
+   * WASD input each frame (pure prediction), then apply any active smoothing
+   * correction from the last reconciliation ack.
+   */
+  private _updateLocal(
+    entry: PlayerRenderEntry,
+    renderPos: { x: number; y: number },
+    state: (typeof ClientPlayerState)[number],
+    moveIntent: MoveIntent,
+    delta: number,
+  ): void {
+    const castMoveMult = this._clientCastMoveMultiplier(state)
+    if (this._canPredictMovement(state.animState, moveIntent, castMoveMult)) {
+      const { dx, dy } = normalizedMoveFromWASD(moveIntent)
+      const step = worldStepFromIntent(
+        dx,
+        dy,
+        BASE_MOVE_SPEED_PX_PER_SEC,
+        delta / 1000,
+        castMoveMult,
+      )
+      renderPos.x += step.x
+      renderPos.y += step.y
+    }
+
+    if (entry.smoothRemainingMs > 0) {
+      entry.smoothRemainingMs = Math.max(0, entry.smoothRemainingMs - delta)
+      const t = 1 - entry.smoothRemainingMs / REPLAY_SMOOTHING_MS
+      renderPos.x =
+        entry.smoothFromX + (entry.smoothTargetX - entry.smoothFromX) * t
+      renderPos.y =
+        entry.smoothFromY + (entry.smoothTargetY - entry.smoothFromY) * t
+    }
+  }
+
+  /**
+   * Remote render path: sample the interpolation buffer at the delayed
+   * server render time, with velocity-aware extrapolation when the buffer
+   * underflows. Falls back to the latest authoritative position if the
+   * buffer has nothing yet.
+   */
+  private _updateRemote(
+    id: number,
+    _entry: PlayerRenderEntry,
+    renderPos: { x: number; y: number },
+    state: (typeof ClientPlayerState)[number],
+    authPos: { x: number; y: number },
+    renderTimeServer: number,
+  ): void {
+    const s = this.remoteBuffer.sampleAt(id, renderTimeServer)
+    if (!s) {
+      // No buffer yet — use latest authoritative (same as the old path).
+      renderPos.x = authPos.x
+      renderPos.y = authPos.y
+      return
+    }
+
+    // Large jumps (e.g. respawn): snap to avoid stretching the sprite across
+    // the arena through two-point interpolation.
+    const dx = s.x - renderPos.x
+    const dy = s.y - renderPos.y
+    if (Math.sqrt(dx * dx + dy * dy) > TELEPORT_THRESHOLD_PX) {
+      renderPos.x = s.x
+      renderPos.y = s.y
+    } else {
+      renderPos.x = s.x
+      renderPos.y = s.y
+    }
+    // Prefer the facing from the sampled snapshot when available.
+    state.facingAngle = s.facingAngle
+  }
+
+  /**
    * Redraws the HP bar graphics for a player.
-   *
-   * @param gfx - Graphics object to redraw.
-   * @param cx - World x center.
-   * @param y - World y position.
-   * @param fraction - HP fraction 0–1.
    */
   private _drawHpBar(gfx: Phaser.GameObjects.Graphics, cx: number, y: number, fraction: number): void {
     gfx.clear()
-    // Background
     gfx.fillStyle(0x000000, 0.7)
     gfx.fillRect(cx - HP_BAR_WIDTH / 2, y, HP_BAR_WIDTH, HP_BAR_HEIGHT)
-    // Fill — gradient green → yellow → red
     const fillColor = fraction > 0.5
       ? Phaser.Display.Color.Interpolate.ColorWithColor(
           Phaser.Display.Color.ValueToColor(0xffff00),
@@ -415,41 +538,6 @@ export class PlayerRenderSystem {
   }
 
   /**
-   * Computes the current time-based interpolated position for one player.
-   *
-   * @param entry - Per-player render entry.
-   * @param now - Current wall-clock timestamp in ms.
-   * @returns Interpolated world position for this frame.
-   */
-  private _getInterpolatedPosition(entry: PlayerRenderEntry, now: number): { x: number; y: number } {
-    const dx = entry.nextX - entry.prevX
-    const dy = entry.nextY - entry.prevY
-    const dist = Math.sqrt(dx * dx + dy * dy)
-
-    if (dist > TELEPORT_THRESHOLD_PX) {
-      return { x: entry.nextX, y: entry.nextY }
-    }
-
-    const dt = entry.nextTime - entry.prevTime || 1
-    const alpha = Math.min(1, Math.max(0, (now - entry.prevTime) / dt))
-    return {
-      x: entry.prevX + dx * alpha,
-      y: entry.prevY + dy * alpha,
-    }
-  }
-
-  /**
-   * Applies local-only client prediction and gently reconciles back to the
-   * authoritative interpolation path.
-   *
-   * @param currentRenderPos - Current rendered position from the previous frame.
-   * @param interpolatedPos - Current authoritative interpolation target.
-   * @param animState - Server-reported animation state for prediction gating.
-   * @param moveIntent - Current local movement intent.
-   * @param delta - Frame delta time in ms.
-   * @returns Predicted and reconciled render position for this frame.
-   */
-  /**
    * Resolves per-tick move scale for local prediction to match server
    * `castMoveSpeedMultiplier` (with animState fallbacks for older payloads).
    */
@@ -467,49 +555,14 @@ export class PlayerRenderSystem {
     return 1
   }
 
-  private _getPredictedLocalPosition(
-    currentRenderPos: { x: number; y: number },
-    interpolatedPos: { x: number; y: number },
+  /** Returns whether local client prediction should run for this frame. */
+  private _canPredictMovement(
     animState: PlayerAnimState,
     moveIntent: MoveIntent,
-    delta: number,
     castMoveMult: number,
-  ): { x: number; y: number } {
-    if (!this._canPredictMovement(animState, moveIntent, castMoveMult)) {
-      return interpolatedPos
-    }
-
+  ): boolean {
     const { dx, dy } = normalizedMoveFromWASD(moveIntent)
-    const step = worldStepFromIntent(dx, dy, BASE_MOVE_SPEED_PX_PER_SEC, delta / 1000, castMoveMult)
-    const predictedX = currentRenderPos.x + step.x
-    const predictedY = currentRenderPos.y + step.y
-    const errorX = interpolatedPos.x - predictedX
-    const errorY = interpolatedPos.y - predictedY
-    const errorDist = Math.sqrt(errorX * errorX + errorY * errorY)
-
-    if (errorDist > PREDICTION_SNAP_THRESHOLD_PX) {
-      return interpolatedPos
-    }
-
-    return {
-      x: predictedX + errorX * PREDICTION_RECONCILE_ALPHA,
-      y: predictedY + errorY * PREDICTION_RECONCILE_ALPHA,
-    }
-  }
-
-  /**
-   * Returns whether local client prediction should run for this frame.
-   *
-   * @param animState - Current authoritative animation state.
-   * @param moveIntent - Current local movement intent.
-   * @returns True when local prediction is safe and useful.
-   */
-  private _canPredictMovement(animState: PlayerAnimState, moveIntent: MoveIntent, castMoveMult: number): boolean {
-    const { dx, dy } = normalizedMoveFromWASD(moveIntent)
-    if (dx === 0 && dy === 0) {
-      return false
-    }
-
+    if (dx === 0 && dy === 0) return false
     if (animState === "dying" || animState === "dead" || animState === "axe_swing") {
       return false
     }
@@ -519,12 +572,12 @@ export class PlayerRenderSystem {
     return true
   }
 
-  /**
-   * Removes all player sprites and entries. Call on scene shutdown.
-   */
+  /** Removes all player sprites and entries. Call on scene shutdown. */
   destroy(): void {
     for (const [id] of this.entries) {
       this._despawnPlayer(id)
     }
+    this.localInputHistory.clear()
+    this.remoteBuffer.clear()
   }
 }

@@ -102,7 +102,9 @@ function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) 
   const router = useRouter()
   const keybinds = useGameKeybinds()
   const keybindsRef = useRef(keybinds)
-  keybindsRef.current = keybinds
+  useEffect(() => {
+    keybindsRef.current = keybinds
+  }, [keybinds])
   const { connection, lobbyState, localPlayerId } = useLobbyConnection()
   const isHost =
     localPlayerId != null && localPlayerId === lobbyState?.hostPlayerId

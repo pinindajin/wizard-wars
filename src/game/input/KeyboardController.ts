@@ -101,18 +101,29 @@ export class KeyboardController {
 
   /**
    * Collects the current keyboard state and returns the movement + ability portion
-   * of a PlayerInputPayload. Mouse-driven fields are filled in by MouseController.
+   * of a PlayerInputPayload. Mouse-driven fields are filled in by MouseController
+   * and `clientSendTimeMs` is stamped by `Arena.update` right before send to
+   * keep this controller oblivious to wall-clock time (testability).
    *
    * @param seq - The outbound sequence number for this tick.
-   * @returns Partial PlayerInputPayload (movement + abilities; weapon fields defaulted to false/0).
+   * @returns Partial PlayerInputPayload (movement + abilities; weapon fields +
+   *   clientSendTimeMs are filled by callers).
    */
   collectInput(seq: number): Omit<
     PlayerInputPayload,
-    "weaponPrimary" | "weaponSecondary" | "weaponTargetX" | "weaponTargetY"
+    | "weaponPrimary"
+    | "weaponSecondary"
+    | "weaponTargetX"
+    | "weaponTargetY"
+    | "clientSendTimeMs"
   > {
     const inactive: Omit<
       PlayerInputPayload,
-      "weaponPrimary" | "weaponSecondary" | "weaponTargetX" | "weaponTargetY"
+      | "weaponPrimary"
+      | "weaponSecondary"
+      | "weaponTargetX"
+      | "weaponTargetY"
+      | "clientSendTimeMs"
     > = {
       up: false,
       down: false,

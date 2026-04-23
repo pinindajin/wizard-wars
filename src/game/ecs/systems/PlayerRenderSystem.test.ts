@@ -54,15 +54,28 @@ function snap(over: Partial<PlayerSnapshot> & Pick<PlayerSnapshot, "id" | "playe
     username: over.username ?? "u",
     x: over.x ?? 0,
     y: over.y ?? 0,
+    vx: over.vx ?? 0,
+    vy: over.vy ?? 0,
     facingAngle: over.facingAngle ?? 0,
     health: over.health ?? 10,
     maxHealth: over.maxHealth ?? 10,
     lives: over.lives ?? 3,
     heroId: over.heroId ?? "red_wizard",
     animState: over.animState ?? "idle",
+    moveState: over.moveState ?? "idle",
     castingAbilityId: over.castingAbilityId ?? null,
     invulnerable: over.invulnerable ?? false,
+    lastProcessedInputSeq: over.lastProcessedInputSeq ?? 0,
   }
+}
+
+function sync(players: PlayerSnapshot[]): {
+  players: PlayerSnapshot[]
+  fireballs: never[]
+  seq: number
+  serverTimeMs: number
+} {
+  return { players, fireballs: [], seq: 0, serverTimeMs: Date.now() }
 }
 
 function mockSceneAndGroup() {
@@ -144,8 +157,8 @@ describe("PlayerRenderSystem.applyFullSync", () => {
 
     const a = snap({ id: 1, playerId: "p1" })
     const b = snap({ id: 2, playerId: "p2" })
-    sys.applyFullSync({ players: [a, b], fireballs: [], seq: 0 })
-    sys.applyFullSync({ players: [a], fireballs: [], seq: 0 })
+    sys.applyFullSync(sync([a, b]))
+    sys.applyFullSync(sync([a]))
 
     expect(destroyed).toContain("sprite")
     expect(destroyed).toContain("text")
@@ -154,51 +167,50 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     expect(ClientPlayerState[2]).toBeUndefined()
   })
 
-  it("interpolates to the midpoint between batch updates", () => {
+  it("renders remote players from the interpolation buffer after a snapshot", () => {
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    sys.localPlayerId = "local-player"
+
+    const now = Date.now()
+    sys.applyFullSync({
+      players: [snap({ id: 1, playerId: "remote", x: 0, y: 0 })],
+      fireballs: [],
+      seq: 0,
+      serverTimeMs: now,
+    })
+
+    // Two remote snapshots straddling the render time; the buffer should
+    // interpolate between them and land near the midpoint.
+    sys.onRemoteSnapshot(1, { serverTimeMs: now, x: 0, y: 0, vx: 0, vy: 0, facingAngle: 0 })
+    sys.onRemoteSnapshot(1, {
+      serverTimeMs: now + 100,
+      x: 100,
+      y: 0,
+      vx: 0,
+      vy: 0,
+      facingAngle: 0,
+    })
+
+    vi.setSystemTime(new Date(now + 83))
+    sys.update(0, { up: false, down: false, left: false, right: false })
+
+    expect(ClientRenderPos[1].x).toBeGreaterThan(0)
+    expect(ClientRenderPos[1].x).toBeLessThan(100)
+  })
+
+  it("snaps the local player to the replayed target on large ack errors", () => {
     const { scene, group } = mockSceneAndGroup()
     const sys = new PlayerRenderSystem(scene as never, group as never)
     sys.localPlayerId = "p1"
 
-    sys.applyFullSync({ players: [snap({ id: 1, playerId: "p1", x: 0, y: 0 })], fireballs: [], seq: 0 })
+    sys.applyFullSync(sync([snap({ id: 1, playerId: "p1", x: 0, y: 0 })]))
+    ClientRenderPos[1] = { x: 500, y: 0 }
 
-    vi.setSystemTime(new Date("2026-04-23T12:00:01.000Z"))
-    sys.markBatchReceived()
-    ClientPosition[1] = { x: 10, y: 0 }
-    sys.onAuthoritativePosition(1, 10, 0, "batch_update")
+    sys.onLocalAck(1, { x: 0, y: 0, lastProcessedInputSeq: 0 })
 
-    vi.setSystemTime(new Date("2026-04-23T12:00:01.025Z"))
-    sys.update(0, { up: false, down: false, left: false, right: false })
-
-    expect(ClientRenderPos[1]).toEqual({ x: 5, y: 0 })
-  })
-
-  it("snaps immediately when the authoritative jump exceeds the teleport threshold", () => {
-    const { scene, group } = mockSceneAndGroup()
-    const sys = new PlayerRenderSystem(scene as never, group as never)
-
-    sys.applyFullSync({ players: [snap({ id: 1, playerId: "p1", x: 0, y: 0 })], fireballs: [], seq: 0 })
-
-    vi.setSystemTime(new Date("2026-04-23T12:00:01.000Z"))
-    sys.markBatchReceived()
-    ClientPosition[1] = { x: 500, y: 0 }
-    sys.onAuthoritativePosition(1, 500, 0, "batch_update")
-
-    vi.setSystemTime(new Date("2026-04-23T12:00:01.025Z"))
-    sys.update(0, { up: false, down: false, left: false, right: false })
-
-    expect(ClientRenderPos[1]).toEqual({ x: 500, y: 0 })
-  })
-
-  it("reconciles local prediction back toward authority when the error grows too large", () => {
-    const { scene, group } = mockSceneAndGroup()
-    const sys = new PlayerRenderSystem(scene as never, group as never)
-    sys.localPlayerId = "p1"
-
-    sys.applyFullSync({ players: [snap({ id: 1, playerId: "p1", x: 0, y: 0 })], fireballs: [], seq: 0 })
-    ClientRenderPos[1] = { x: 100, y: 0 }
-
-    sys.update(16, { up: false, down: false, left: false, right: true })
-
+    // With no pending replay inputs, replay target = ack position; distance
+    // from render (500) to ack (0) is well above snap threshold.
     expect(ClientRenderPos[1]).toEqual({ x: 0, y: 0 })
   })
 })

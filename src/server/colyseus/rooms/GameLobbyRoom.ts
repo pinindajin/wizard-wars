@@ -39,7 +39,6 @@ import {
 import { DEFAULT_HERO_ID } from "../../../shared/balance-config/heroes"
 import { logger } from "../../logger"
 import { Equipment } from "../../game/components"
-import { mergePlayerInputForTick } from "../mergePlayerInputForTick"
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -73,6 +72,13 @@ const CHAT_RATE_LIMIT = 3
 const CHAT_RATE_WINDOW_MS = 5_000
 /** Max lobby chat message length in characters. */
 const CHAT_MAX_LEN = 200
+
+/**
+ * Max queued `PlayerInput` payloads per player. Bound this so a misbehaving
+ * client cannot consume unbounded memory by flooding the input channel; when
+ * the cap is reached, the oldest entries are dropped first.
+ */
+const INPUT_QUEUE_CAP_PER_PLAYER = 32
 
 // ---------------------------------------------------------------------------
 // Per-player state stored on `client.userData`
@@ -206,14 +212,22 @@ export class GameLobbyRoom extends Room {
   /** Per-player session economies (userId → SessionEconomy). */
   private readonly economies = new Map<string, SessionEconomy>()
 
-  /** Buffered inputs from clients for the current tick (userId → latest input). */
-  private readonly inputBuffer = new Map<string, import("../../../shared/types").PlayerInputPayload>()
+  /**
+   * Ordered per-player input queue. Each `handlePlayerInput` pushes the
+   * validated payload sorted by `seq`; `runGameTick` pops exactly one input
+   * per player per tick (see `simulation.tick` semantics). Capped per
+   * {@link INPUT_QUEUE_CAP_PER_PLAYER} to bound memory if a client floods.
+   */
+  private readonly inputQueue = new Map<
+    string,
+    import("../../../shared/types").PlayerInputPayload[]
+  >()
 
   /**
-   * Pending ability slot (0–4) to merge on the next tick. Set when a validated
-   * `PlayerInput` has `abilitySlot != null` — **last non-null wins** before the tick.
+   * Highest `seq` accepted from each player across the queue lifetime, used
+   * to ignore duplicate / re-ordered inputs on arrival.
    */
-  private readonly pendingAbilitySlotByPlayer = new Map<string, number>()
+  private readonly highestAcceptedSeqByPlayer = new Map<string, number>()
 
   // ---------------------------------------------------------------------------
   // Colyseus lifecycle
@@ -564,7 +578,10 @@ export class GameLobbyRoom extends Room {
   }
 
   /**
-   * Buffers player input for the next simulation tick.
+   * Enqueues player input for the simulation in `seq` order. Drops inputs
+   * whose `seq` is less than or equal to the highest already accepted for
+   * this player (handles re-order / duplicates). Caps the per-player queue
+   * at {@link INPUT_QUEUE_CAP_PER_PLAYER} to bound memory.
    *
    * @param client - The sending client.
    * @param payload - Raw inbound payload; validated with playerInputPayloadSchema.
@@ -574,9 +591,21 @@ export class GameLobbyRoom extends Room {
     const pd = client.userData as PlayerData
     const result = playerInputPayloadSchema.safeParse(payload)
     if (!result.success) return
-    this.inputBuffer.set(pd.playerId, result.data)
-    if (result.data.abilitySlot != null) {
-      this.pendingAbilitySlotByPlayer.set(pd.playerId, result.data.abilitySlot)
+
+    const highest = this.highestAcceptedSeqByPlayer.get(pd.playerId) ?? -1
+    if (result.data.seq <= highest) return
+
+    let queue = this.inputQueue.get(pd.playerId)
+    if (!queue) {
+      queue = []
+      this.inputQueue.set(pd.playerId, queue)
+    }
+    queue.push(result.data)
+    this.highestAcceptedSeqByPlayer.set(pd.playerId, result.data.seq)
+
+    // Cap queue: drop from the front if it grows unbounded.
+    while (queue.length > INPUT_QUEUE_CAP_PER_PLAYER) {
+      queue.shift()
     }
   }
 
@@ -797,7 +826,7 @@ export class GameLobbyRoom extends Room {
     }
     if (this.simulation) {
       const gameStateSync = parseGameStateSyncPayload(
-        this.simulation.buildGameStateSyncPayload(),
+        this.simulation.buildGameStateSyncPayload(Date.now()),
       )
       client.send(RoomEvent.GameStateSync, gameStateSync)
     }
@@ -951,11 +980,13 @@ export class GameLobbyRoom extends Room {
       client.send(RoomEvent.ShopState, buildShopStatePayload(economy))
     }
 
-    const gameStateSync = parseGameStateSyncPayload(this.simulation.buildGameStateSyncPayload())
+    const gameStateSync = parseGameStateSyncPayload(
+      this.simulation.buildGameStateSyncPayload(Date.now()),
+    )
     this.broadcast(RoomEvent.MatchGo, {})
     this.broadcast(RoomEvent.GameStateSync, gameStateSync)
 
-    // Start the 20 Hz game loop
+    // Start the fixed-rate game loop (see TICK_MS; 60 Hz by default).
     this.gameLoopTimer = nativeSetInterval(() => {
       this.runGameTick()
     }, TICK_MS)
@@ -983,8 +1014,8 @@ export class GameLobbyRoom extends Room {
     this.gameLoopTimer?.clear()
     this.gameLoopTimer = null
     this.simulation = null
-    this.inputBuffer.clear()
-    this.pendingAbilitySlotByPlayer.clear()
+    this.inputQueue.clear()
+    this.highestAcceptedSeqByPlayer.clear()
 
     this.lobbyPhase = "SCOREBOARD"
     this.returnedToLobbySet.clear()
@@ -1153,7 +1184,10 @@ export class GameLobbyRoom extends Room {
 
   /**
    * Runs one game simulation tick, broadcasts deltas and events to all clients.
-   * Called at TICK_MS (50ms) intervals during IN_PROGRESS phase.
+   * Called at `TICK_MS` intervals during `IN_PROGRESS` phase.
+   *
+   * Per-player input queues are mutated in-place by `simulation.tick`, which
+   * pops exactly one queued input per player per tick.
    */
   private runGameTick(): void {
     if (!this.simulation || this.lobbyPhase !== "IN_PROGRESS") {
@@ -1161,23 +1195,21 @@ export class GameLobbyRoom extends Room {
     }
 
     const serverTimeMs = Date.now()
-    const inputMap = new Map<string, import("../../../shared/types").PlayerInputPayload>()
-    for (const [userId, latest] of this.inputBuffer) {
-      const pending = this.pendingAbilitySlotByPlayer.get(userId)
-      const merged = mergePlayerInputForTick(latest, pending)
-      inputMap.set(userId, merged)
-      if (pending !== undefined) {
-        this.pendingAbilitySlotByPlayer.delete(userId)
-      }
-    }
-    const output = this.simulation.tick(inputMap, serverTimeMs)
+    const output = this.simulation.tick(this.inputQueue, serverTimeMs)
 
-    if (output.playerDeltas.length > 0 || output.fireballDeltas.length > 0 || output.fireballRemovedIds.length > 0) {
-      this.broadcast(RoomEvent.PlayerBatchUpdate, {
-        deltas: output.playerDeltas,
-        removedIds: [],
-        seq: 0,
-      })
+    if (
+      output.playerDeltas.length > 0 ||
+      output.fireballDeltas.length > 0 ||
+      output.fireballRemovedIds.length > 0
+    ) {
+      if (output.playerDeltas.length > 0) {
+        this.broadcast(RoomEvent.PlayerBatchUpdate, {
+          deltas: output.playerDeltas,
+          removedIds: [],
+          seq: 0,
+          serverTimeMs,
+        })
+      }
       if (output.fireballDeltas.length > 0 || output.fireballRemovedIds.length > 0) {
         this.broadcast(RoomEvent.FireballBatchUpdate, {
           deltas: output.fireballDeltas,
