@@ -11,14 +11,17 @@ import {
   LobbyStatusPill,
 } from "@/components/lobby/LobbyChrome"
 import { HERO_CONFIGS } from "@/shared/balance-config/heroes"
+import { MATCH_COUNTDOWN_DURATION_MS } from "@/shared/balance-config/lobby"
 import {
   LobbyChatPayload,
   LobbyHostTransferPayload,
   LobbyKickedPayload,
   LobbyErrorPayload,
+  MatchCountdownStartPayload,
   type LobbyPhase,
 } from "@/shared/types"
 import { WsEvent } from "@/shared/events"
+import CountdownOverlay from "./game/CountdownOverlay"
 import { useLobbyConnection } from "./LobbyConnectionProvider"
 import { useLobbyMusic } from "./LobbyMusicContext"
 import {
@@ -98,7 +101,10 @@ export default function LobbyClient() {
 
   const [chatMessages, setChatMessages] = useState<LobbyChatPayload[]>([])
   const [chatInput, setChatInput] = useState("")
-  const [countdown, setCountdown] = useState<number | null>(null)
+  const [countdownStart, setCountdownStart] = useState<{
+    startAtServerTimeMs: number
+    durationMs: number
+  } | null>(null)
   const [kicked, setKicked] = useState<string | null>(null)
   const [lobbyError, setLobbyError] = useState<string | null>(null)
   const [hostTransferBanner, setHostTransferBanner] = useState<string | null>(null)
@@ -127,8 +133,17 @@ export default function LobbyClient() {
           setChatMessages([...(message.payload as { messages: LobbyChatPayload[] }).messages])
           break
 
-        case WsEvent.LobbyCountdown:
-          setCountdown((message.payload as { remaining: number }).remaining)
+        case WsEvent.MatchCountdownStart: {
+          const p = message.payload as MatchCountdownStartPayload
+          setCountdownStart({
+            startAtServerTimeMs: p.startAtServerTimeMs,
+            durationMs: p.durationMs ?? MATCH_COUNTDOWN_DURATION_MS,
+          })
+          break
+        }
+
+        case WsEvent.MatchGo:
+          setCountdownStart(null)
           break
 
         case WsEvent.LobbyHostTransfer: {
@@ -149,10 +164,10 @@ export default function LobbyClient() {
         case WsEvent.LobbyState: {
           const payload = message.payload as import("@/shared/types").LobbyStatePayload
           if (payload.phase === "LOBBY") {
-            setCountdown(null)
+            setCountdownStart(null)
           }
           if (payload.phase === "IN_PROGRESS") {
-            setCountdown(null)
+            setCountdownStart(null)
           }
           // Game route mounts Phaser so Arena can send `client_scene_ready` during WAITING_FOR_CLIENTS.
           if (
@@ -222,6 +237,10 @@ export default function LobbyClient() {
     router.push("/browse")
   }, [router])
 
+  const clearCountdown = useCallback(() => {
+    setCountdownStart(null)
+  }, [])
+
   const players = lobbyState?.players ?? []
   const phase: LobbyPhase = (lobbyState?.phase ?? "LOBBY") as LobbyPhase
   const hostPlayerId = lobbyState?.hostPlayerId
@@ -270,15 +289,15 @@ export default function LobbyClient() {
 
   return (
     <LobbyShell>
-      {countdown !== null && countdown > 0 && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-          <div className="rounded-[32px] border border-violet-400/25 bg-slate-950/90 px-10 py-9 text-center shadow-[0_30px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl">
-            <p className={metaText}>Match Countdown</p>
-            <p className="mt-4 text-8xl font-bold tabular-nums text-violet-300">{countdown}</p>
-            <p className="mt-4 text-xl text-slate-200">Match starting…</p>
-          </div>
+      {countdownStart ? (
+        <div className="pointer-events-none fixed inset-0 z-50">
+          <CountdownOverlay
+            startAtServerTimeMs={countdownStart.startAtServerTimeMs}
+            durationMs={countdownStart.durationMs}
+            onDone={clearCountdown}
+          />
         </div>
-      )}
+      ) : null}
 
       <LobbyHeader
         eyebrow="Wizard Wars"
