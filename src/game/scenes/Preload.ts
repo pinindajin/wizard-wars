@@ -1,5 +1,7 @@
 import Phaser from "phaser"
 
+import { wireSceneLoaderProgress } from "../loaderStatus"
+
 const BAR_WIDTH = 320
 const BAR_HEIGHT = 32
 const BAR_COLOR_BG = 0x222244
@@ -21,7 +23,11 @@ export class Preload extends Phaser.Scene {
 
   preload(): void {
     this.editorCreate()
-    this.load.pack("preload-assets", "assets/preload-asset-pack.json")
+    this.load.pack("preload-assets", "/assets/preload-asset-pack.json")
+    wireSceneLoaderProgress(this, {
+      scene: "Preload",
+      description: "Preload assets",
+    })
 
     this.load.on("progress", (value: number) => {
       this.progressBar.clear()

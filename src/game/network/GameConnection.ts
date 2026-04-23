@@ -176,6 +176,45 @@ export class GameConnection {
     this._room?.send(RoomEvent.PlayerInput, input)
   }
 
+  // ─── Send Helpers (Shop / Inventory) ──────────────────────────────────────
+
+  /**
+   * Purchase a shop item. Server validates gold, stackability, slot rules.
+   *
+   * @param itemId - The `SHOP_ITEMS` id to buy.
+   */
+  sendShopPurchase(itemId: string): void {
+    this._room?.send(RoomEvent.ShopPurchase, { itemId })
+  }
+
+  /**
+   * Equip a weapon or augment the player already owns.
+   *
+   * @param itemId - The `SHOP_ITEMS` id to equip.
+   */
+  sendEquipItem(itemId: string): void {
+    this._room?.send(RoomEvent.EquipItem, { itemId })
+  }
+
+  /**
+   * Assign an owned ability to a slot (0-4) on the ability bar.
+   *
+   * @param itemId - The ability id to assign.
+   * @param slotIndex - Slot index in range 0..ABILITY_BAR_SLOT_COUNT-1.
+   */
+  sendAssignAbility(itemId: string, slotIndex: number): void {
+    this._room?.send(RoomEvent.AssignAbility, { itemId, slotIndex })
+  }
+
+  /**
+   * Consume a charge from a quick-item slot (Q/6/7/8 → slotIndex 0..3).
+   *
+   * @param slotIndex - Quick item slot index.
+   */
+  sendUseQuickItem(slotIndex: number): void {
+    this._room?.send(RoomEvent.UseQuickItem, { slotIndex })
+  }
+
   /** Returns and increments the local sequence counter for PlayerInput. */
   nextSeq(): number {
     return this._seq++

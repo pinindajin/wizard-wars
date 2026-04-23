@@ -109,6 +109,12 @@ export default function ServerBrowser() {
       if (!token) throw new Error("Not authenticated")
       const client = new Client(getColyseusUrl())
       const room = await client.create<unknown>("game_lobby", { token })
+      // Install a wildcard handler so the initial `lobby_state` / `player_join`
+      // / `lobby_chat_history` broadcasts the server fires inside `onJoin`
+      // don't trip Colyseus SDK `"onMessage not registered"` warnings during
+      // the brief window this temp room exists. Real handling is done by the
+      // new `GameConnection` that the lobby route opens after `leave()`.
+      room.onMessage("*", () => {})
       const roomId = room.roomId
       // Release create-time seat before the lobby route opens its own connection.
       await room.leave()

@@ -9,3 +9,11 @@ export const WW_GAME_CONNECTION_REGISTRY_KEY = "wwGameConnection"
  * local player for input / camera. Set from React via `mountGame` / `createGame`.
  */
 export const WW_LOCAL_PLAYER_ID_REGISTRY_KEY = "wwLocalPlayerId"
+
+/**
+ * Phaser registry key for the loader status bridge. React components subscribe
+ * via {@link subscribeLoaderStatus} to render a progress overlay outside the
+ * Phaser canvas. Scenes publish via {@link publishLoaderStatus} in their
+ * preload hooks and on completion.
+ */
+export const WW_LOADER_STATUS_REGISTRY_KEY = "wwLoaderStatus"

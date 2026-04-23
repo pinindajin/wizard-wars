@@ -8,7 +8,7 @@
             {
                 "type": "image",
                 "key": "logo",
-                "url": "assets/favicon.png"
+                "url": "/favicon.png"
             }
         ]
     }

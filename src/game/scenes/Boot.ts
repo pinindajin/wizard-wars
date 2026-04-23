@@ -1,5 +1,7 @@
 import Phaser from "phaser"
 
+import { wireSceneLoaderProgress } from "../loaderStatus"
+
 /**
  * Boot scene: first scene to run.
  * Loads the boot asset pack (minimal loading screen assets) then hands off to Preload.
@@ -11,7 +13,11 @@ export class Boot extends Phaser.Scene {
   }
 
   preload(): void {
-    this.load.pack("boot-assets", "assets/boot-asset-pack.json")
+    this.load.pack("boot-assets", "/assets/boot-asset-pack.json")
+    wireSceneLoaderProgress(this, {
+      scene: "Boot",
+      description: "Boot assets",
+    })
   }
 
   create(): void {
