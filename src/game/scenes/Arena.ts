@@ -35,6 +35,18 @@ import {
   wireSceneLoaderProgress,
 } from "../loaderStatus"
 
+const INACTIVE_PLAYER_INPUT = {
+  up: false,
+  down: false,
+  left: false,
+  right: false,
+  abilitySlot: null,
+  abilityTargetX: 0,
+  abilityTargetY: 0,
+  useQuickItemSlot: null,
+  seq: 0,
+} as const
+
 /**
  * Main arena gameplay scene.
  * Wires together the tilemap, ECS render systems, network connection, and input controllers.
@@ -123,8 +135,15 @@ export class Arena extends Phaser.Scene {
    * Instantiates all ECS render and input systems.
    */
   private _createSystems(): void {
-    this.networkSyncSystem = new NetworkSyncSystem()
     this.playerRenderSystem = new PlayerRenderSystem(this, this.playerGroup)
+    this.networkSyncSystem = new NetworkSyncSystem({
+      onBatchReceived: () => {
+        this.playerRenderSystem.markBatchReceived()
+      },
+      onAuthoritativePosition: (id, x, y, reason) => {
+        this.playerRenderSystem.onAuthoritativePosition(id, x, y, reason)
+      },
+    })
     this.projectileRenderSystem = new ProjectileRenderSystem(this)
     this.lightningBoltRenderSystem = new LightningBoltRenderSystem(this)
     this.axeSwingRenderSystem = new AxeSwingRenderSystem(this)
@@ -254,16 +273,19 @@ export class Arena extends Phaser.Scene {
   update(_time: number, delta: number): void {
     if (!this.matchStarted) return
 
-    this.playerRenderSystem.update(delta)
+    const keyboardInput = this.connection.isConnected()
+      ? this.keyboardController.collectInput(this.connection.nextSeq())
+      : INACTIVE_PLAYER_INPUT
+
+    this.playerRenderSystem.update(delta, keyboardInput)
     this.projectileRenderSystem.update(delta)
     this.lightningBoltRenderSystem.update(delta)
     this.axeSwingRenderSystem.update(delta)
     this.damageFloatersSystem.update(delta)
 
     if (this.connection.isConnected()) {
-      const input = this.keyboardController.collectInput(this.connection.nextSeq())
       const mouseInput = this.mouseController.collectInput()
-      this.connection.sendPlayerInput({ ...input, ...mouseInput })
+      this.connection.sendPlayerInput({ ...keyboardInput, ...mouseInput })
     }
   }
 

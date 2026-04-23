@@ -1,3 +1,5 @@
+import type { PlayerAnimState } from "@/shared/types"
+
 /**
  * Client ECS component records.
  * Each record maps entity id (number) → component data object.
@@ -20,7 +22,7 @@ export const ClientPlayerState: Record<
     health: number
     maxHealth: number
     lives: number
-    animState: string
+    animState: PlayerAnimState
     facingAngle: number
     invulnerable: boolean
   }
