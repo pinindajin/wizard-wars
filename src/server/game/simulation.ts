@@ -24,6 +24,7 @@ import {
   InvulnerableTag,
   HERO_INDEX,
   ABILITY_INDEX,
+  FireballTag,
 } from "./components"
 import { createCommandBuffer, CommandBuffer } from "./commandBuffer"
 import {
@@ -50,6 +51,7 @@ import type {
   GameStateSyncPayload,
   PlayerSnapshot,
   PlayerAnimState,
+  FireballSnapshot,
 } from "../../shared/types"
 
 import { inputSystem } from "./systems/inputSystem"
@@ -382,7 +384,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
   // ── buildGameStateSyncPayload ───────────────────────────────────────
 
   /**
-   * Collects all live player entities into a `GameStateSyncPayload` (seq 0 for MVP).
+   * Collects all live player entities and active fireballs into a `GameStateSyncPayload` (seq 0 for MVP).
    */
   function buildGameStateSyncPayload(): GameStateSyncPayload {
     const players: PlayerSnapshot[] = []
@@ -414,7 +416,22 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
         invulnerable,
       })
     }
-    return { players, seq: 0 }
+
+    const fireballs: FireballSnapshot[] = []
+    for (const fbEid of query(world, [FireballTag])) {
+      const ownerId = fireballOwnerMap.get(fbEid)
+      if (ownerId === undefined) continue
+      fireballs.push({
+        id: fbEid,
+        ownerId,
+        x: Position.x[fbEid],
+        y: Position.y[fbEid],
+        vx: Velocity.vx[fbEid],
+        vy: Velocity.vy[fbEid],
+      })
+    }
+
+    return { players, fireballs, seq: 0 }
   }
 
   // ── tick ─────────────────────────────────────────────────────────────

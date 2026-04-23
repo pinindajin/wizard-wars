@@ -5,8 +5,9 @@ import {
   chatMessagePayloadSchema,
   playerInputPayloadSchema,
   parseGameStateSyncPayload,
+  parsePlayerDeathPayload,
 } from "@/shared/validators"
-import type { GameStateSyncPayload } from "@/shared/types"
+import type { GameStateSyncPayload, PlayerDeathPayload } from "@/shared/types"
 
 describe("signupUsernameSchema", () => {
   it("accepts valid usernames", () => {
@@ -105,10 +106,32 @@ describe("parseGameStateSyncPayload", () => {
           invulnerable: false,
         },
       ],
+      fireballs: [],
       seq: 0,
     }
     const parsed = parseGameStateSyncPayload(raw)
     expect(parsed).toEqual(raw)
+  })
+
+  it("accepts fireballs in sync payload", () => {
+    const raw: GameStateSyncPayload = {
+      players: [],
+      fireballs: [
+        { id: 42, ownerId: "u1", x: 1, y: 2, vx: 100, vy: 0 },
+      ],
+      seq: 0,
+    }
+    expect(parseGameStateSyncPayload(raw)).toEqual(raw)
+  })
+
+  it("rejects fireball with empty ownerId", () => {
+    expect(() =>
+      parseGameStateSyncPayload({
+        players: [],
+        fireballs: [{ id: 1, ownerId: "", x: 0, y: 0, vx: 1, vy: 0 }],
+        seq: 0,
+      } as never),
+    ).toThrow()
   })
 
   it("rejects an invalid animState", () => {
@@ -130,8 +153,37 @@ describe("parseGameStateSyncPayload", () => {
             invulnerable: false,
           },
         ],
+        fireballs: [],
         seq: 0,
       } as never),
     ).toThrow()
+  })
+})
+
+describe("parsePlayerDeathPayload", () => {
+  it("accepts death with usernames", () => {
+    const raw: PlayerDeathPayload = {
+      playerId: "victim",
+      killerPlayerId: "killer",
+      killerAbilityId: "fireball",
+      livesRemaining: 2,
+      x: 10,
+      y: 20,
+      victimUsername: "Vic",
+      killerUsername: "Kil",
+    }
+    expect(parsePlayerDeathPayload(raw)).toEqual(raw)
+  })
+
+  it("accepts null killer and ability", () => {
+    const raw: PlayerDeathPayload = {
+      playerId: "victim",
+      killerPlayerId: null,
+      killerAbilityId: null,
+      livesRemaining: 0,
+      x: 0,
+      y: 0,
+    }
+    expect(parsePlayerDeathPayload(raw)).toEqual(raw)
   })
 })

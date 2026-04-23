@@ -23,6 +23,7 @@ import {
   heroSelectPayloadSchema,
   playerInputPayloadSchema,
   parseGameStateSyncPayload,
+  parsePlayerDeathPayload,
 } from "../../../shared/validators"
 import {
   MAX_PLAYERS_PER_MATCH,
@@ -1176,7 +1177,7 @@ export class GameLobbyRoom extends Room {
       this.broadcast(RoomEvent.AxeSwing, swing)
     }
     for (const death of output.playerDeaths) {
-      this.broadcast(RoomEvent.PlayerDeath, death)
+      this.broadcast(RoomEvent.PlayerDeath, parsePlayerDeathPayload(death))
     }
     for (const respawn of output.playerRespawns) {
       this.broadcast(RoomEvent.PlayerRespawn, respawn)

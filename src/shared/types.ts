@@ -154,6 +154,8 @@ export type PlayerBatchUpdatePayload = {
 /** Full game state sync for late-joiners or reconnects. */
 export type GameStateSyncPayload = {
   readonly players: readonly PlayerSnapshot[]
+  /** Active fireball projectiles (empty when none). */
+  readonly fireballs: readonly FireballSnapshot[]
   readonly seq: number
 }
 
@@ -226,6 +228,10 @@ export type PlayerDeathPayload = {
   readonly livesRemaining: number
   readonly x: number
   readonly y: number
+  /** Display name of the victim (from server maps). */
+  readonly victimUsername?: string
+  /** Display name of the killer when `killerPlayerId` is set. */
+  readonly killerUsername?: string
 }
 
 /** Player respawn event. */

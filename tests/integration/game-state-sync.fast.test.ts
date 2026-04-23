@@ -63,6 +63,7 @@ describe("game_state_sync on match start", { timeout: 30_000 }, () => {
     expect(gameSync).not.toBeNull()
     if (!gameSync) return
     expect(gameSync.seq).toBe(0)
+    expect(gameSync.fireballs).toEqual([])
     expect(gameSync.players.length).toBe(1)
     expect(gameSync.players[0]!.playerId).toBe("user-host")
     expect(typeof gameSync.players[0]!.id).toBe("number")

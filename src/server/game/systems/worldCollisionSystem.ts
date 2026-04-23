@@ -48,6 +48,40 @@ function circleRectMTV(
   return { dx: (dx / dist) * pen, dy: (dy / dist) * pen }
 }
 
+export type ArenaPropColliderRect = {
+  readonly x: number
+  readonly y: number
+  readonly width: number
+  readonly height: number
+}
+
+/**
+ * Pushes one player circle out of static axis-aligned rectangles (shared with sim tests).
+ *
+ * @param eid - Player entity id with valid `Position`.
+ * @param colliders - Footprint rectangles in world pixels.
+ */
+export function resolvePlayerAgainstPropColliders(
+  eid: number,
+  colliders: readonly ArenaPropColliderRect[],
+): void {
+  for (const col of colliders) {
+    const mtv = circleRectMTV(
+      Position.x[eid],
+      Position.y[eid],
+      R,
+      col.x,
+      col.y,
+      col.width,
+      col.height,
+    )
+    if (mtv) {
+      Position.x[eid] += mtv.dx
+      Position.y[eid] += mtv.dy
+    }
+  }
+}
+
 /**
  * Runs the world collision system for one tick.
  *
@@ -63,21 +97,6 @@ export function worldCollisionSystem(ctx: SimCtx): void {
     if (Position.y[eid] < MIN_Y) Position.y[eid] = MIN_Y
     if (Position.y[eid] > MAX_Y) Position.y[eid] = MAX_Y
 
-    // Prop collider resolution
-    for (const col of ARENA_PROP_COLLIDERS) {
-      const mtv = circleRectMTV(
-        Position.x[eid],
-        Position.y[eid],
-        R,
-        col.x,
-        col.y,
-        col.width,
-        col.height,
-      )
-      if (mtv) {
-        Position.x[eid] += mtv.dx
-        Position.y[eid] += mtv.dy
-      }
-    }
+    resolvePlayerAgainstPropColliders(eid, ARENA_PROP_COLLIDERS)
   }
 }
