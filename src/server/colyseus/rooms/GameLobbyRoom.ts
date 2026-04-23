@@ -45,6 +45,25 @@ import { Equipment } from "../../game/components"
 /** WebSocket close code passed to `Client.leave` when the host dissolves the lobby. */
 export const CLOSE_CODE_LOBBY_DISSOLVED = 4012
 
+/**
+ * Client-scene-ready deadline. When `WIZARD_WARS_E2E=1`, `E2E_CLIENT_READY_TIMEOUT_MS`
+ * may shorten the wait (clamped 100–15000 ms). Ignored in production unless the opt-in is set.
+ */
+function resolveClientReadyTimeoutMs(): number {
+  if (process.env.WIZARD_WARS_E2E !== "1") {
+    return CLIENT_READY_TIMEOUT_MS
+  }
+  const raw = process.env.E2E_CLIENT_READY_TIMEOUT_MS
+  if (raw === undefined || raw === "") {
+    return CLIENT_READY_TIMEOUT_MS
+  }
+  const parsed = Number.parseInt(raw, 10)
+  if (!Number.isFinite(parsed)) {
+    return CLIENT_READY_TIMEOUT_MS
+  }
+  return Math.min(15_000, Math.max(100, parsed))
+}
+
 /** Max lobby chat messages per player per rate-limit window. */
 const CHAT_RATE_LIMIT = 3
 /** Duration of the chat rate-limit window in ms. */
@@ -824,7 +843,7 @@ export class GameLobbyRoom extends Room {
         "[GameLobbyRoom] client_scene_ready timeout — proceeding with available clients",
       )
       this.beginCountdown()
-    }, CLIENT_READY_TIMEOUT_MS)
+    }, resolveClientReadyTimeoutMs())
 
     logger.info(
       { event: "room.waiting_for_clients", roomId: this.roomId },

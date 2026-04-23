@@ -8,7 +8,11 @@ import {
   type TestServer,
 } from "./helpers/colyseus-test-server"
 import type { Room } from "@colyseus/sdk"
-import type { LobbyStatePayload, LobbyHostTransferPayload } from "@/shared/types"
+import type {
+  LobbyStatePayload,
+  LobbyHostTransferPayload,
+  MatchCountdownStartPayload,
+} from "@/shared/types"
 import { playerLobbyIndex } from "@/server/colyseus/rooms/GameLobbyRoom"
 
 /** Simple polling wait helper for integration messages. */
@@ -88,6 +92,37 @@ describe("Lobby BC feature parity integration", { timeout: 30_000 }, () => {
     expect(latestPhase).toBe("LOBBY")
     
     // Clean up
+    await hostRoom.leave().catch(() => {})
+    await guestRoom.leave().catch(() => {})
+  })
+
+  it("MatchCountdownStart: broadcast after all clients scene-ready", async () => {
+    hostRoom = await server.sdk.create("game_lobby", { token: hostToken })
+
+    let latestPhase = ""
+    hostRoom.onMessage(RoomEvent.LobbyState, (state: LobbyStatePayload) => {
+      latestPhase = state.phase
+    })
+
+    let matchCountdown: MatchCountdownStartPayload | null = null
+    hostRoom.onMessage(RoomEvent.MatchCountdownStart, (p: MatchCountdownStartPayload) => {
+      matchCountdown = p
+    })
+
+    guestRoom = await server.sdk.joinById(hostRoom.roomId, { token: guestToken })
+    await delay(200)
+
+    hostRoom.send(RoomEvent.LobbyStartGame, {})
+    await waitFor(() => latestPhase === "WAITING_FOR_CLIENTS", { timeout: 5000 })
+
+    hostRoom.send(RoomEvent.ClientSceneReady, {})
+    guestRoom.send(RoomEvent.ClientSceneReady, {})
+    await waitFor(() => matchCountdown !== null, { timeout: 5000 })
+
+    expect(matchCountdown).not.toBeNull()
+    expect(matchCountdown!.startAtServerTimeMs).toBeGreaterThan(0)
+    expect(matchCountdown!.durationMs).toBeGreaterThan(0)
+
     await hostRoom.leave().catch(() => {})
     await guestRoom.leave().catch(() => {})
   })

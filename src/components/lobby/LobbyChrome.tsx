@@ -1,6 +1,7 @@
 "use client"
 
 import type { ReactNode } from "react"
+import { useState, useEffect, useRef } from "react"
 
 import {
   brandTitle,
@@ -11,7 +12,6 @@ import {
   lobbyPage,
   lobbySurface,
   metaText,
-  pageShell,
   sectionSubtitle,
   sectionTitle,
   sectionTitleCaps,
@@ -26,33 +26,180 @@ import {
 type LobbyPanelTone = "default" | "solid"
 type LobbyStatusTone = "neutral" | "accent" | "success" | "warning" | "danger"
 
-/**
- * Joins an ordered list of class names into a single string.
- *
- * @param values - Class-name segments that may be nullish.
- * @returns The combined class-name string.
- */
 function joinClasses(...values: Array<string | false | null | undefined>): string {
   return values.filter(Boolean).join(" ")
 }
 
+// ── Avatar colours (one per letter bucket) ──────────────────────────────────
+const AVATAR_GRADIENTS = [
+  ["#6d28d9", "#c4b5fd"],
+  ["#065f46", "#6ee7b7"],
+  ["#991b1b", "#fca5a5"],
+  ["#92400e", "#fcd34d"],
+  ["#1e40af", "#93c5fd"],
+  ["#9d174d", "#f9a8d4"],
+] as const
+
+/**
+ * Circular avatar with a colour derived from the first letter of `name`.
+ */
+export function LobbyAvatar({ name, size = 32 }: { name: string; size?: number }) {
+  const idx = Math.abs((name.charCodeAt(0) || 65) - 65) % AVATAR_GRADIENTS.length
+  const [bg, fg] = AVATAR_GRADIENTS[idx]
+  return (
+    <div
+      aria-label={name}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: "50%",
+        background: `radial-gradient(circle at 35% 35%, ${fg}, ${bg})`,
+        boxShadow: `0 0 8px ${bg}55`,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: size * 0.38,
+        fontWeight: 700,
+        color: "#fff",
+        flexShrink: 0,
+        fontFamily: "var(--font-cinzel), serif",
+      }}
+    >
+      {name[0].toUpperCase()}
+    </div>
+  )
+}
+
+/**
+ * Styled chat message bubble with sender avatar.
+ */
+export function LobbyChatBubble({
+  username,
+  text,
+  time,
+  fresh = false,
+}: {
+  username: string
+  text: string
+  time?: string
+  fresh?: boolean
+}) {
+  return (
+    <div
+      className={joinClasses("flex gap-2.5 items-start", fresh ? "ww-msg-in" : undefined)}
+    >
+      <LobbyAvatar name={username} size={26} />
+      <div className="flex-1 min-w-0 rounded-[3px_12px_12px_12px] border border-white/[0.07] bg-white/[0.04] px-3 py-2">
+        <span className="text-[11px] font-semibold text-violet-300">{username}</span>
+        {time && (
+          <>
+            <span className="mx-1.5 text-[11px] text-slate-700">·</span>
+            <span className="text-[10px] text-slate-700">{time}</span>
+          </>
+        )}
+        <p className="mt-1 text-[13px] leading-relaxed text-slate-300 break-words">{text}</p>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Animated lady-wizard sprite. Cycles idle → cast → idle on a timer.
+ * Requires CSS keyframes from globals.css: ww-idle-{scale}x, ww-cast-{scale}x.
+ */
+export function LobbyWizardSprite({
+  scale = 3,
+  glowColor = "#7c3aed",
+}: {
+  scale?: 2 | 3
+  glowColor?: string
+}) {
+  const [anim, setAnim] = useState<"idle" | "cast">("idle")
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    const cycle = () => {
+      timerRef.current = setTimeout(
+        () => {
+          setAnim("cast")
+          timerRef.current = setTimeout(() => {
+            setAnim("idle")
+            cycle()
+          }, 1700)
+        },
+        3500 + Math.random() * 1200,
+      )
+    }
+    cycle()
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+    }
+  }, [])
+
+  const size = 124 * scale
+  const isIdle = anim === "idle"
+  const animClass = isIdle ? `ww-sprite-idle-${scale}x` : `ww-sprite-cast-${scale}x`
+
+  return (
+    <div className="relative inline-block">
+      {/* glow pedestal */}
+      <div
+        className="absolute left-1/2 -translate-x-1/2 rounded-full"
+        style={{
+          bottom: -16,
+          width: size * 0.65,
+          height: 28,
+          background: glowColor,
+          filter: "blur(22px)",
+          opacity: isIdle ? 0.32 : 0.75,
+          transition: "opacity 0.4s",
+          animation: "ww-pulse-glow 2.8s ease-in-out infinite",
+        }}
+      />
+      <div
+        className={joinClasses("ww-sprite", animClass)}
+        style={{
+          width: size,
+          height: size,
+          backgroundSize: isIdle ? `${496 * scale}px ${size}px` : `${2108 * scale}px ${size}px`,
+          filter: isIdle ? "none" : `drop-shadow(0 0 14px ${glowColor})`,
+          transition: "filter 0.3s",
+        }}
+      />
+    </div>
+  )
+}
+
 /**
  * Wraps lobby pages in a shared centered shell with decorative background glows.
- *
- * @param props - Component props.
- * @param props.children - Page content rendered inside the lobby shell.
- * @returns Shared lobby page shell markup.
  */
 export function LobbyShell({ children }: { children: ReactNode }) {
   return (
-    <div className={joinClasses(pageShell, lobbyFrame)}>
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -left-48 -top-40 h-104 w-104 rounded-full bg-violet-500/14 blur-3xl" />
-        <div className="absolute -right-40 top-32 h-88 w-88 rounded-full bg-cyan-400/10 blur-3xl" />
-        <div className="absolute -bottom-48 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-fuchsia-500/10 blur-3xl" />
+    <div className={joinClasses(lobbyFrame)}>
+      {/* background radial glows */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden>
+        <div className="absolute -left-[8%] -top-[15%] h-[700px] w-[700px] rounded-full bg-[radial-gradient(circle,rgba(109,40,217,0.16)_0%,transparent_65%)]" />
+        <div className="absolute -bottom-[12%] -right-[6%] h-[550px] w-[550px] rounded-full bg-[radial-gradient(circle,rgba(217,119,6,0.09)_0%,transparent_65%)]" />
+        <div className="absolute left-1/2 top-1/2 h-[400px] w-[400px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(79,70,229,0.07)_0%,transparent_65%)]" />
       </div>
-      <div className={lobbyPage}>
-        <div className={lobbySurface}>{children}</div>
+
+      {/* hex grid texture */}
+      <div
+        className="pointer-events-none fixed inset-0 opacity-[0.025]"
+        aria-hidden
+        style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='52'%3E%3Cpolygon points='30,2 58,17 58,37 30,50 2,37 2,17' fill='none' stroke='%23a78bfa' stroke-width='1'/%3E%3C/svg%3E")`,
+          backgroundSize: "60px 52px",
+        }}
+      />
+
+      <div
+        className="min-h-screen"
+        style={{ background: "#050813" }}
+      >
+        <div className={lobbyPage}>
+          <div className={lobbySurface}>{children}</div>
+        </div>
       </div>
     </div>
   )
@@ -60,13 +207,6 @@ export function LobbyShell({ children }: { children: ReactNode }) {
 
 /**
  * Renders the shared page header used across lobby surfaces.
- *
- * @param props - Component props.
- * @param props.eyebrow - Optional uppercase eyebrow label above the title.
- * @param props.title - Main page title text.
- * @param props.subtitle - Supporting subtitle text.
- * @param props.aside - Optional actions or metadata rendered on the right.
- * @returns Shared lobby page header markup.
  */
 export function LobbyHeader({
   eyebrow,
@@ -80,30 +220,28 @@ export function LobbyHeader({
   aside?: ReactNode
 }) {
   return (
-    <header className="mb-8 flex flex-col gap-5 border-b border-white/8 pb-6 lg:flex-row lg:items-end lg:justify-between">
+    <header className="mb-8 flex flex-col gap-5 border-b border-white/[0.07] pb-6 lg:flex-row lg:items-end lg:justify-between">
       <div className="max-w-3xl">
-        {eyebrow ? <p className={sectionTitleCaps}>{eyebrow}</p> : null}
-        <h1 className={joinClasses("mt-3", brandTitle)}>{title}</h1>
-        {subtitle ? <p className={sectionSubtitle}>{subtitle}</p> : null}
+        {eyebrow ? (
+          <p className={sectionTitleCaps}>{eyebrow}</p>
+        ) : null}
+        <h1
+          className={joinClasses("mt-2", brandTitle)}
+          style={{ fontFamily: "var(--font-cinzel), serif" }}
+        >
+          {title}
+        </h1>
+        {subtitle ? <p className={joinClasses("mt-2", sectionSubtitle)}>{subtitle}</p> : null}
       </div>
-      {aside ? <div className="flex flex-wrap items-center gap-3">{aside}</div> : null}
+      {aside ? (
+        <div className="flex flex-wrap items-center gap-3">{aside}</div>
+      ) : null}
     </header>
   )
 }
 
 /**
- * Renders a reusable content panel with optional title, subtitle, and header actions.
- *
- * @param props - Component props.
- * @param props.eyebrow - Optional small uppercase label.
- * @param props.title - Optional panel title.
- * @param props.subtitle - Optional helper copy under the title.
- * @param props.aside - Optional actions or metadata rendered in the header.
- * @param props.children - Panel body content.
- * @param props.className - Optional extra classes for the outer panel.
- * @param props.contentClassName - Optional extra classes for the body wrapper.
- * @param props.tone - Visual treatment for the panel background.
- * @returns Shared lobby panel markup.
+ * Renders a reusable content panel.
  */
 export function LobbyPanel({
   eyebrow,
@@ -133,10 +271,14 @@ export function LobbyPanel({
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             {eyebrow ? <p className={sectionTitleCaps}>{eyebrow}</p> : null}
-            {title ? <h2 className={joinClasses(eyebrow ? "mt-2" : "", sectionTitle)}>{title}</h2> : null}
+            {title ? (
+              <h2 className={joinClasses(eyebrow ? "mt-2" : "", sectionTitle)}>{title}</h2>
+            ) : null}
             {subtitle ? <p className={sectionSubtitle}>{subtitle}</p> : null}
           </div>
-          {aside ? <div className="flex shrink-0 flex-wrap items-center gap-2">{aside}</div> : null}
+          {aside ? (
+            <div className="flex shrink-0 flex-wrap items-center gap-2">{aside}</div>
+          ) : null}
         </div>
       ) : null}
       <div className={contentClassName}>{children}</div>
@@ -145,13 +287,7 @@ export function LobbyPanel({
 }
 
 /**
- * Renders a semantic status pill with shared chrome.
- *
- * @param props - Component props.
- * @param props.tone - Visual tone for the pill.
- * @param props.children - Status content.
- * @param props.className - Optional extra classes.
- * @returns Shared status-pill markup.
+ * Renders a semantic status pill.
  */
 export function LobbyStatusPill({
   tone,
@@ -173,18 +309,13 @@ export function LobbyStatusPill({
             ? statusPillDanger
             : statusPillNeutral
 
-  return <span className={joinClasses(statusPill, toneClass, className)}>{children}</span>
+  return (
+    <span className={joinClasses(statusPill, toneClass, className)}>{children}</span>
+  )
 }
 
 /**
- * Renders a reusable empty state with optional action content.
- *
- * @param props - Component props.
- * @param props.eyebrow - Optional small label above the title.
- * @param props.title - Empty-state headline.
- * @param props.description - Supporting explanatory text.
- * @param props.action - Optional action element rendered below the copy.
- * @returns Shared empty-state markup.
+ * Renders a reusable empty state.
  */
 export function LobbyEmptyState({
   eyebrow,
@@ -201,7 +332,7 @@ export function LobbyEmptyState({
     <div className={emptyStateCard}>
       {eyebrow ? <p className={metaText}>{eyebrow}</p> : null}
       <h3 className="mt-3 text-xl font-semibold tracking-tight text-white">{title}</h3>
-      <p className="mt-3 max-w-md text-sm leading-6 text-slate-300">{description}</p>
+      <p className="mt-3 max-w-md text-sm leading-6 text-slate-400">{description}</p>
       {action ? <div className="mt-6">{action}</div> : null}
     </div>
   )

@@ -14,6 +14,7 @@ import type {
   PlayerRespawnPayload,
   DamageFloatPayload,
 } from "@/shared/types"
+import { WW_GAME_CONNECTION_REGISTRY_KEY } from "../constants"
 import { GameConnection } from "../network/GameConnection"
 import { PlayerRenderSystem } from "../ecs/systems/PlayerRenderSystem"
 import { ProjectileRenderSystem } from "../ecs/systems/ProjectileRenderSystem"
@@ -135,8 +136,21 @@ export class Arena extends Phaser.Scene {
 
   /**
    * Opens the Colyseus game room connection and subscribes to all room events.
+   * Prefers the React-injected `GameConnection` from the game registry (single session).
+   * Falls back to `connect()` only when no injection exists (e.g. isolated tests / non-Next boot).
    */
   private _openConnection(): void {
+    const injected = this.game.registry.get(WW_GAME_CONNECTION_REGISTRY_KEY) as
+      | GameConnection
+      | undefined
+
+    if (injected?.room) {
+      this.connection = injected
+      this._subscribeRoomEvents()
+      this.connection.sendClientSceneReady()
+      return
+    }
+
     this.connection = new GameConnection()
     void this.connection.connect().then(() => {
       this._subscribeRoomEvents()

@@ -10,15 +10,19 @@ import {
   LobbyShell,
   LobbyStatusPill,
 } from "@/components/lobby/LobbyChrome"
+import { HeroCard, HERO_CARD_CONFIGS } from "@/components/lobby/HeroCard"
 import { HERO_CONFIGS } from "@/shared/balance-config/heroes"
+import { MATCH_COUNTDOWN_DURATION_MS } from "@/shared/balance-config/lobby"
 import {
   LobbyChatPayload,
   LobbyHostTransferPayload,
   LobbyKickedPayload,
   LobbyErrorPayload,
+  MatchCountdownStartPayload,
   type LobbyPhase,
 } from "@/shared/types"
 import { WsEvent } from "@/shared/events"
+import CountdownOverlay from "./game/CountdownOverlay"
 import { useLobbyConnection } from "./LobbyConnectionProvider"
 import { useLobbyMusic } from "./LobbyMusicContext"
 import {
@@ -47,13 +51,6 @@ const MAX_CHARS = 200
  * Hero card display configuration for the hero select UI.
  */
 const HERO_CARDS = Object.values(HERO_CONFIGS)
-
-/** Tint integer → Tailwind border/accent class */
-const HERO_ACCENT: Record<string, string> = {
-  red_wizard: "border-red-500 hover:bg-red-900/30",
-  barbarian: "border-orange-500 hover:bg-orange-900/30",
-  ranger: "border-green-500 hover:bg-green-900/30",
-}
 
 /** Hero → display icon */
 const HERO_ICON: Record<string, string> = {
@@ -98,7 +95,10 @@ export default function LobbyClient() {
 
   const [chatMessages, setChatMessages] = useState<LobbyChatPayload[]>([])
   const [chatInput, setChatInput] = useState("")
-  const [countdown, setCountdown] = useState<number | null>(null)
+  const [countdownStart, setCountdownStart] = useState<{
+    startAtServerTimeMs: number
+    durationMs: number
+  } | null>(null)
   const [kicked, setKicked] = useState<string | null>(null)
   const [lobbyError, setLobbyError] = useState<string | null>(null)
   const [hostTransferBanner, setHostTransferBanner] = useState<string | null>(null)
@@ -127,8 +127,17 @@ export default function LobbyClient() {
           setChatMessages([...(message.payload as { messages: LobbyChatPayload[] }).messages])
           break
 
-        case WsEvent.LobbyCountdown:
-          setCountdown((message.payload as { remaining: number }).remaining)
+        case WsEvent.MatchCountdownStart: {
+          const p = message.payload as MatchCountdownStartPayload
+          setCountdownStart({
+            startAtServerTimeMs: p.startAtServerTimeMs,
+            durationMs: p.durationMs ?? MATCH_COUNTDOWN_DURATION_MS,
+          })
+          break
+        }
+
+        case WsEvent.MatchGo:
+          setCountdownStart(null)
           break
 
         case WsEvent.LobbyHostTransfer: {
@@ -149,9 +158,18 @@ export default function LobbyClient() {
         case WsEvent.LobbyState: {
           const payload = message.payload as import("@/shared/types").LobbyStatePayload
           if (payload.phase === "LOBBY") {
-            setCountdown(null)
+            setCountdownStart(null)
           }
           if (payload.phase === "IN_PROGRESS") {
+            setCountdownStart(null)
+          }
+          // Game route mounts Phaser so Arena can send `client_scene_ready` during WAITING_FOR_CLIENTS.
+          if (
+            payload.phase === "WAITING_FOR_CLIENTS" ||
+            payload.phase === "COUNTDOWN" ||
+            payload.phase === "IN_PROGRESS" ||
+            payload.phase === "SCOREBOARD"
+          ) {
             router.push(`/lobby/${roomId}/game`)
           }
           break
@@ -213,6 +231,10 @@ export default function LobbyClient() {
     router.push("/browse")
   }, [router])
 
+  const clearCountdown = useCallback(() => {
+    setCountdownStart(null)
+  }, [])
+
   const players = lobbyState?.players ?? []
   const phase: LobbyPhase = (lobbyState?.phase ?? "LOBBY") as LobbyPhase
   const hostPlayerId = lobbyState?.hostPlayerId
@@ -261,15 +283,15 @@ export default function LobbyClient() {
 
   return (
     <LobbyShell>
-      {countdown !== null && countdown > 0 && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-          <div className="rounded-[32px] border border-violet-400/25 bg-slate-950/90 px-10 py-9 text-center shadow-[0_30px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl">
-            <p className={metaText}>Match Countdown</p>
-            <p className="mt-4 text-8xl font-bold tabular-nums text-violet-300">{countdown}</p>
-            <p className="mt-4 text-xl text-slate-200">Match starting…</p>
-          </div>
+      {countdownStart ? (
+        <div className="pointer-events-none fixed inset-0 z-50">
+          <CountdownOverlay
+            startAtServerTimeMs={countdownStart.startAtServerTimeMs}
+            durationMs={countdownStart.durationMs}
+            onDone={clearCountdown}
+          />
         </div>
-      )}
+      ) : null}
 
       <LobbyHeader
         eyebrow="Wizard Wars"
@@ -328,33 +350,15 @@ export default function LobbyClient() {
             }
           >
             <div className="space-y-3">
-              {HERO_CARDS.map((hero) => {
-                const selected = myPlayer?.heroId === hero.id
-                return (
-                  <button
-                    key={hero.id}
-                    className={`flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left text-sm transition ${
-                      selected
-                        ? `${HERO_ACCENT[hero.id]} bg-white/8 font-semibold text-white`
-                        : `border-white/10 bg-white/3 text-slate-200 ${HERO_ACCENT[hero.id]}`
-                    } ${!isConnected ? "cursor-not-allowed opacity-50" : ""}`}
-                    onClick={() => selectHero(hero.id)}
-                    type="button"
-                    disabled={!isConnected}
-                  >
-                    <span className="text-lg">{HERO_ICON[hero.id]}</span>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-white">{hero.displayName}</p>
-                      <p className="mt-1 text-xs text-slate-400">Ready for arena combat</p>
-                    </div>
-                    {selected ? (
-                      <LobbyStatusPill tone="accent" className="shrink-0">
-                        Selected
-                      </LobbyStatusPill>
-                    ) : null}
-                  </button>
-                )
-              })}
+              {HERO_CARDS.map((hero) => (
+                <HeroCard
+                  key={hero.id}
+                  config={HERO_CARD_CONFIGS[hero.id]}
+                  selected={myPlayer?.heroId === hero.id}
+                  onSelect={selectHero}
+                  disabled={!isConnected}
+                />
+              ))}
             </div>
           </LobbyPanel>
 
