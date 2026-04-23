@@ -168,6 +168,14 @@ export default function LobbyClient() {
           }
           if (payload.phase === "IN_PROGRESS") {
             setCountdownStart(null)
+          }
+          // Game route mounts Phaser so Arena can send `client_scene_ready` during WAITING_FOR_CLIENTS.
+          if (
+            payload.phase === "WAITING_FOR_CLIENTS" ||
+            payload.phase === "COUNTDOWN" ||
+            payload.phase === "IN_PROGRESS" ||
+            payload.phase === "SCOREBOARD"
+          ) {
             router.push(`/lobby/${roomId}/game`)
           }
           break

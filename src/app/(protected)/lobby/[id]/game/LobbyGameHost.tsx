@@ -1,12 +1,12 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Client, type Room } from "@colyseus/sdk"
+import type { Room } from "@colyseus/sdk"
 
 import { fetchWsAuthToken } from "@/lib/fetch-ws-auth-token"
-import { getColyseusUrl } from "@/lib/endpoints"
-import { RoomEvent } from "@/shared/roomEvents"
+import { WsEvent } from "@/shared/events"
 import type {
   LobbyPhase,
   LobbyStatePayload,
@@ -22,6 +22,8 @@ import Scoreboard from "./Scoreboard"
 import AbilityBar from "./AbilityBar"
 import QuickItemBar from "./QuickItemBar"
 import GameSettingsModal from "./GameSettingsModal"
+import { GameKeybindProvider } from "./GameKeybindContext"
+import { useLobbyConnection } from "../LobbyConnectionProvider"
 import { MATCH_COUNTDOWN_DURATION_MS } from "@/shared/balance-config/lobby"
 import type { ShopStatePayload } from "@/shared/types"
 
@@ -33,16 +35,22 @@ type LobbyGameHostProps = {
 
 /**
  * Host component for the in-match game screen.
- * Mounts the Phaser canvas, manages the WS connection to the game_lobby room,
- * and renders HUD overlays (LoadingGate, CountdownOverlay, Scoreboard, etc.).
+ * Reuses `LobbyConnectionProvider`'s Colyseus session, mounts Phaser with an injected
+ * `GameConnection`, and renders HUD overlays.
  *
  * @param props.lobbyId - The Colyseus room ID.
  */
 export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
   const router = useRouter()
+  const { connection, lobbyState, error: providerError } = useLobbyConnection()
 
-  const [phase, setPhase] = useState<LobbyPhase>("WAITING_FOR_CLIENTS")
-  const [allPlayersLoaded, setAllPlayersLoaded] = useState(false)
+  const [phase, setPhase] = useState<LobbyPhase>(
+    () => lobbyState?.phase ?? "WAITING_FOR_CLIENTS",
+  )
+  const [allPlayersLoaded, setAllPlayersLoaded] = useState(
+    () =>
+      lobbyState?.phase != null && lobbyState.phase !== "WAITING_FOR_CLIENTS",
+  )
   const [countdownStart, setCountdownStart] = useState<{
     startAtServerTimeMs: number
     durationMs: number
@@ -51,127 +59,114 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
     ScoreboardEntry[] | null
   >(null)
   const [shopState, setShopState] = useState<ShopStatePayload | null>(null)
-  const [health, setHealth] = useState(100)
-  const [maxHealth, setMaxHealth] = useState(100)
-  const [lives, setLives] = useState(3)
+  /** HUD placeholders until wired to game sync messages. */
+  const health = 100
+  const maxHealth = 100
+  const lives = 3
   const [gold, setGold] = useState(0)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [room, setRoom] = useState<Room | null>(null)
+  const [phaserError, setPhaserError] = useState<string | null>(null)
+  const [mountGeneration, setMountGeneration] = useState(0)
 
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // Connect to the Colyseus room and wire up game events
+  const colyseusRoom: Room | null = connection?.room ?? null
+
   useEffect(() => {
-    let cancelled = false
-
-    async function connect() {
-      const token = await fetchWsAuthToken()
-      if (!token) return
-
-      try {
-        const client = new Client(getColyseusUrl())
-        const joinedRoom = await client.joinById<unknown>(lobbyId, { token })
-        if (cancelled) { joinedRoom.leave(); return }
-
-        setRoom(joinedRoom)
-
-        // Expose globals for the Phaser game instance
-        ;(window as Window & { __wwRoomId?: string; __wwLobbyId?: string }).__wwRoomId =
-          joinedRoom.roomId
-        ;(window as Window & { __wwRoomId?: string; __wwLobbyId?: string }).__wwLobbyId =
-          lobbyId
-
-        /** Full lobby state updates (phase transitions). */
-        joinedRoom.onMessage(RoomEvent.LobbyState, (payload: LobbyStatePayload) => {
+    if (!connection) return
+    const unsub = connection.onMessage((message) => {
+      switch (message.type) {
+        case WsEvent.LobbyState: {
+          const payload = message.payload as LobbyStatePayload
           setPhase(payload.phase)
+          if (payload.phase !== "WAITING_FOR_CLIENTS") {
+            setAllPlayersLoaded(true)
+          }
           if (payload.phase === "SCOREBOARD") {
             setCountdownStart(null)
           }
-        })
-
-        /** Loading gate cleared: all clients have signalled ready. */
-        joinedRoom.onMessage(RoomEvent.MatchCountdownStart, (payload: MatchCountdownStartPayload) => {
+          break
+        }
+        case WsEvent.MatchCountdownStart: {
+          const payload = message.payload as MatchCountdownStartPayload
           setAllPlayersLoaded(true)
           setCountdownStart({
             startAtServerTimeMs: payload.startAtServerTimeMs,
             durationMs: payload.durationMs ?? MATCH_COUNTDOWN_DURATION_MS,
           })
-        })
-
-        /** Match GO — clear countdown overlay. */
-        joinedRoom.onMessage(RoomEvent.MatchGo, () => {
+          break
+        }
+        case WsEvent.MatchGo:
           setCountdownStart(null)
-        })
-
-        /** End-of-match scoreboard. */
-        joinedRoom.onMessage(RoomEvent.LobbyScoreboard, (payload: LobbyScoreboardPayload) => {
+          break
+        case WsEvent.LobbyScoreboard: {
+          const payload = message.payload as LobbyScoreboardPayload
           setScoreboardEntries([...payload.entries])
           setPhase("SCOREBOARD")
-        })
-
-        /** Shop/economy state for HUD. */
-        joinedRoom.onMessage(RoomEvent.ShopState, (payload: ShopStatePayload) => {
+          break
+        }
+        case WsEvent.ShopState: {
+          const payload = message.payload as ShopStatePayload
           setShopState(payload)
           setGold(payload.gold)
-        })
-
-        /** Gold balance update. */
-        joinedRoom.onMessage(RoomEvent.GoldBalance, (payload: { gold: number }) => {
+          break
+        }
+        case WsEvent.GoldBalance: {
+          const payload = message.payload as { gold: number }
           setGold(payload.gold)
-        })
-
-        // Signal to server that the client scene is ready
-        joinedRoom.send(RoomEvent.ClientSceneReady, {})
-      } catch {
-        // Connection error — redirect back to lobby list
-        if (!cancelled) router.push("/browse")
+          break
+        }
+        default:
+          break
       }
-    }
+    })
+    return unsub
+  }, [connection])
 
-    void connect()
-
-    return () => {
-      cancelled = true
-      setRoom((prev) => {
-        prev?.leave()
-        return null
-      })
-    }
-  }, [lobbyId, router])
-
-  // Dynamically load and mount the Phaser game after the container is ready
   useEffect(() => {
-    if (!containerRef.current) return
-    let destroyGame: (() => void) | undefined
+    if (!connection) return
 
-    async function mountPhaser() {
+    let destroyGame: (() => void) | undefined
+    let cancelled = false
+
+    void (async () => {
       try {
         const token = await fetchWsAuthToken()
-        if (!token) return
-
+        if (cancelled) return
+        if (!token) {
+          setPhaserError("Could not get session token")
+          return
+        }
+        setPhaserError(null)
         const { mountGame } = await import("@/game/main")
+        if (cancelled) return
         destroyGame = mountGame({
           containerId: "phaser-container",
           lobbyId,
           token,
-          room: room,
+          gameConnection: connection,
         })
-      } catch {
-        // Phaser not yet available in this build — silently degrade
+        if (typeof window !== "undefined") {
+          const w = window as Window & { __wwRoomId?: string; __wwLobbyId?: string }
+          w.__wwRoomId = connection.room?.roomId
+          w.__wwLobbyId = lobbyId
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setPhaserError(
+            err instanceof Error ? err.message : "Failed to start game client",
+          )
+        }
       }
-    }
-
-    void mountPhaser()
+    })()
 
     return () => {
+      cancelled = true
       destroyGame?.()
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [connection, lobbyId, mountGeneration])
 
-  // Open/close settings modal on Backslash key
   useEffect(() => {
-    /** Handles the Backslash key to toggle the settings modal. */
     const onKey = (e: KeyboardEvent) => {
       const active = document.activeElement
       const isInput =
@@ -184,13 +179,15 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
     return () => window.removeEventListener("keydown", onKey)
   }, [])
 
-  /**
-   * Sends the `lobby_return_to_lobby` message and navigates back.
-   */
   const onReturnToLobby = useCallback(() => {
-    room?.send(RoomEvent.LobbyReturnToLobby ?? "lobby_return_to_lobby", {})
+    connection?.sendLobbyReturnToLobby()
     router.push(`/lobby/${lobbyId}`)
-  }, [lobbyId, router, room])
+  }, [lobbyId, router, connection])
+
+  const onRetryPhaser = useCallback(() => {
+    setPhaserError(null)
+    setMountGeneration((g) => g + 1)
+  }, [])
 
   const abilitySlots = shopState?.abilitySlots ?? [null, null, null, null, null]
   const quickItems = shopState?.quickItemSlots ?? [
@@ -200,74 +197,124 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
     { itemId: null, charges: 0 },
   ]
 
-  return (
-    <div className="relative h-screen w-screen overflow-hidden bg-black">
-      {/* Phaser canvas container */}
+  if (providerError) {
+    return (
       <div
-        id="phaser-container"
-        ref={containerRef}
-        className="absolute inset-0"
-      />
+        className="flex h-screen w-screen flex-col items-center justify-center gap-4 bg-black px-6 text-center text-gray-200"
+        data-testid="game-connect-error"
+      >
+        <p className="max-w-md text-sm">{providerError}</p>
+        <Link
+          href="/browse"
+          className="rounded border border-gray-600 px-4 py-2 text-sm hover:bg-gray-900"
+        >
+          Back to browse
+        </Link>
+      </div>
+    )
+  }
 
-      {/* Loading gate overlay */}
-      {!allPlayersLoaded && <LoadingGate />}
+  if (!connection) {
+    return (
+      <div
+        className="flex h-screen w-screen items-center justify-center bg-black text-gray-400"
+        data-testid="game-connect-loading"
+      >
+        Connecting to lobby…
+      </div>
+    )
+  }
 
-      {/* Countdown overlay */}
-      {countdownStart && (
-        <CountdownOverlay
-          startAtServerTimeMs={countdownStart.startAtServerTimeMs}
-          durationMs={countdownStart.durationMs}
-          onDone={() => setCountdownStart(null)}
+  return (
+    <GameKeybindProvider>
+      <div className="relative h-screen w-screen overflow-hidden bg-black">
+        <div
+          id="phaser-container"
+          data-testid="game-phaser-container"
+          ref={containerRef}
+          className="absolute inset-0"
         />
-      )}
 
-      {/* Scoreboard (end of match) */}
-      {phase === "SCOREBOARD" && scoreboardEntries && (
-        <Scoreboard
-          entries={scoreboardEntries}
-          onReturnToLobby={onReturnToLobby}
-          isLive={false}
-        />
-      )}
+        {phaserError && (
+          <div
+            className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-black/90 px-6 text-center"
+            data-testid="game-connect-error"
+          >
+            <p className="max-w-md text-sm text-red-300">{phaserError}</p>
+            <div className="flex flex-wrap justify-center gap-2">
+              <button
+                type="button"
+                data-testid="game-retry"
+                className="rounded bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-500"
+                onClick={onRetryPhaser}
+              >
+                Retry
+              </button>
+              <button
+                type="button"
+                className="rounded border border-gray-600 px-4 py-2 text-sm text-gray-200 hover:bg-gray-900"
+                onClick={() => router.replace(`/lobby/${lobbyId}`)}
+              >
+                Reconnect to lobby
+              </button>
+            </div>
+          </div>
+        )}
 
-      {/* Settings modal */}
-      {settingsOpen && (
-        <GameSettingsModal onClose={() => setSettingsOpen(false)} />
-      )}
+        {!allPlayersLoaded && <LoadingGate />}
 
-      {/* HUD */}
-      {phase === "IN_PROGRESS" && (
-        <>
-          {/* Top-left: HP / lives / gold */}
-          <div className={hudTopPanel}>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-red-400">HP</span>
-              <div className="h-3 w-32 rounded bg-gray-700">
-                <div
-                  className="h-3 rounded bg-red-500 transition-all"
-                  style={{ width: `${(health / maxHealth) * 100}%` }}
-                />
+        {countdownStart && (
+          <CountdownOverlay
+            startAtServerTimeMs={countdownStart.startAtServerTimeMs}
+            durationMs={countdownStart.durationMs}
+            onDone={() => setCountdownStart(null)}
+          />
+        )}
+
+        {phase === "SCOREBOARD" && scoreboardEntries && (
+          <Scoreboard
+            entries={scoreboardEntries}
+            onReturnToLobby={onReturnToLobby}
+            isLive={false}
+          />
+        )}
+
+        {settingsOpen && (
+          <GameSettingsModal onClose={() => setSettingsOpen(false)} />
+        )}
+
+        {phase === "IN_PROGRESS" && (
+          <>
+            <div className={hudTopPanel}>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-red-400">HP</span>
+                <div className="h-3 w-32 rounded bg-gray-700">
+                  <div
+                    className="h-3 rounded bg-red-500 transition-all"
+                    style={{ width: `${(health / maxHealth) * 100}%` }}
+                  />
+                </div>
+                <span className="tabular-nums text-gray-300">
+                  {health}/{maxHealth}
+                </span>
               </div>
-              <span className="tabular-nums text-gray-300">{health}/{maxHealth}</span>
+              <div className="flex gap-4 text-xs text-gray-300">
+                <span>❤️ {lives} lives</span>
+                <span>🪙 {gold} gold</span>
+              </div>
             </div>
-            <div className="flex gap-4 text-xs text-gray-300">
-              <span>❤️ {lives} lives</span>
-              <span>🪙 {gold} gold</span>
+
+            <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 flex-col items-center gap-2">
+              <AbilityBar slots={abilitySlots} room={colyseusRoom} />
+              <QuickItemBar slots={quickItems} room={colyseusRoom} />
             </div>
-          </div>
 
-          {/* Bottom: ability bar + quick items */}
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2">
-            <AbilityBar slots={abilitySlots} room={room} />
-            <QuickItemBar slots={quickItems} room={room} />
-          </div>
-
-          {/* Backslash hint */}
-          <div className="absolute bottom-4 right-4 rounded border border-gray-700/50 bg-black/40 px-2 py-1 text-xs text-gray-500 backdrop-blur-sm">
-            \ Settings
-          </div>
-        </>
-      )}
-    </div>
+            <div className="absolute bottom-4 right-4 rounded border border-gray-700/50 bg-black/40 px-2 py-1 text-xs text-gray-500 backdrop-blur-sm">
+              \ Settings
+            </div>
+          </>
+        )}
+      </div>
+    </GameKeybindProvider>
   )
 }

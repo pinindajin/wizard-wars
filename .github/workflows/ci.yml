@@ -77,7 +77,7 @@ jobs:
 
   e2e:
     name: E2E Tests
-    if: github.event_name == 'pull_request' && github.base_ref == 'prod'
+    if: github.event_name == 'pull_request' && (github.base_ref == 'prod' || github.base_ref == 'main')
     runs-on: ubuntu-latest
     services:
       postgres:

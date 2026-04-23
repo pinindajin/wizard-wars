@@ -16,7 +16,7 @@
     "test:integration:slow": "vitest run --config vitest.integration.slow.config.ts",
     "test:integration": "bun run test:integration:fast && bun run test:integration:slow",
     "test:e2e": "playwright test",
-    "test:all": "bun run test && bun run test:integration",
+    "test:all": "bun run test && bun run test:integration && bun run test:e2e",
     "docker:build": "docker build -t wizard-wars .",
     "docker:up": "docker compose up --build",
     "docker:down": "docker compose down",
