@@ -66,8 +66,8 @@ export default function CountdownOverlay({
         prevLabelRef.current = next
         const sfxPath =
           next === "GO!"
-            ? "/assets/sfx/sfx-countdown-go.mp3"
-            : "/assets/sfx/sfx-countdown-beep.mp3"
+            ? "/assets/sounds/sfx-countdown-go.mp3"
+            : "/assets/sounds/sfx-countdown-beep.mp3"
         const audio = new Audio(sfxPath)
         audio.play().catch(() => undefined)
       }

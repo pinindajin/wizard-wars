@@ -30,6 +30,10 @@ import { MouseController } from "../input/MouseController"
 import { registerLadyWizardAnims } from "../animation/LadyWizardAnimDefs"
 import { BgmPlayer } from "../audio/BgmPlayer"
 import { SoundManager } from "../audio/SoundManager"
+import {
+  publishLoaderComplete,
+  wireSceneLoaderProgress,
+} from "../loaderStatus"
 
 /**
  * Main arena gameplay scene.
@@ -64,11 +68,16 @@ export class Arena extends Phaser.Scene {
   }
 
   preload(): void {
-    this.load.pack("arena-assets", "assets/arena-asset-pack.json")
+    this.load.pack("arena-assets", "/assets/arena-asset-pack.json")
+    wireSceneLoaderProgress(this, {
+      scene: "Arena",
+      description: "Arena assets",
+    })
   }
 
   create(): void {
     this.editorCreate()
+    publishLoaderComplete(this.game as unknown as Parameters<typeof publishLoaderComplete>[0])
   }
 
   /**

@@ -18,13 +18,17 @@ import type {
   PlayerBatchUpdatePayload,
 } from "@/shared/types"
 
-import LoadingGate from "./LoadingGate"
+import WaitingForPlayersOverlay from "./WaitingForPlayersOverlay"
+import LoadingOverlay from "./LoadingOverlay"
 import CountdownOverlay from "./CountdownOverlay"
+import { useLoaderStatus } from "./useLoaderStatus"
+import type { LoaderStatusHost } from "@/game/loaderStatus"
 import { hudTopPanel } from "@/lib/ui/lobbyStyles"
 import Scoreboard from "./Scoreboard"
 import AbilityBar from "./AbilityBar"
 import QuickItemBar from "./QuickItemBar"
 import GameSettingsModal from "./GameSettingsModal"
+import ShopModal from "./ShopModal"
 import { GameKeybindProvider } from "./GameKeybindContext"
 import { useLobbyConnection } from "../LobbyConnectionProvider"
 import { MATCH_COUNTDOWN_DURATION_MS } from "@/shared/balance-config/lobby"
@@ -74,17 +78,21 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
   const lives = 3
   const [gold, setGold] = useState(0)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [shopOpen, setShopOpen] = useState(false)
   const [phaserError, setPhaserError] = useState<string | null>(null)
   const [mountGeneration, setMountGeneration] = useState(0)
   const [killFeedRows, setKillFeedRows] = useState<
     Array<{ key: string; text: string; at: number }>
   >([])
   const [isSpectating, setIsSpectating] = useState(false)
+  const [gameHost, setGameHost] = useState<LoaderStatusHost | null>(null)
   const entityToPlayerRef = useRef<Map<number, string>>(new Map())
 
   const containerRef = useRef<HTMLDivElement>(null)
 
   const colyseusRoom: Room | null = connection?.room ?? null
+  const loaderStatus = useLoaderStatus(gameHost)
+  const phaserLoaded = loaderStatus?.phase === "complete"
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -205,17 +213,24 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
         setPhaserError(null)
         const { mountGame } = await import("@/game/main")
         if (cancelled) return
-        destroyGame = mountGame({
+        const mounted = mountGame({
           containerId: "phaser-container",
           lobbyId,
           token,
           gameConnection: connection,
           localPlayerId,
         })
+        destroyGame = mounted.destroy
+        setGameHost(mounted.game as unknown as LoaderStatusHost)
         if (typeof window !== "undefined") {
-          const w = window as Window & { __wwRoomId?: string; __wwLobbyId?: string }
+          const w = window as Window & {
+            __wwRoomId?: string
+            __wwLobbyId?: string
+            __wwGame?: unknown
+          }
           w.__wwRoomId = connection.room?.roomId
           w.__wwLobbyId = lobbyId
+          w.__wwGame = mounted.game
         }
       } catch (err) {
         if (!cancelled) {
@@ -228,6 +243,7 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
 
     return () => {
       cancelled = true
+      setGameHost(null)
       destroyGame?.()
     }
   }, [connection, localPlayerId, lobbyId, mountGeneration])
@@ -240,6 +256,7 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
         active instanceof HTMLTextAreaElement
       if (isInput) return
       if (e.key === "\\") setSettingsOpen((prev) => !prev)
+      if (e.key === "b" || e.key === "B") setShopOpen((prev) => !prev)
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
@@ -327,7 +344,9 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
           </div>
         )}
 
-        {!allPlayersLoaded && <LoadingGate />}
+        {!phaserLoaded && <LoadingOverlay status={loaderStatus} />}
+
+        {phaserLoaded && !allPlayersLoaded && <WaitingForPlayersOverlay />}
 
         {countdownStart && (
           <CountdownOverlay
@@ -347,6 +366,14 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
 
         {settingsOpen && (
           <GameSettingsModal onClose={() => setSettingsOpen(false)} />
+        )}
+
+        {shopOpen && phase === "IN_PROGRESS" && !isSpectating && (
+          <ShopModal
+            shopState={shopState}
+            connection={connection}
+            onClose={() => setShopOpen(false)}
+          />
         )}
 
         {phase === "IN_PROGRESS" && (
@@ -386,7 +413,11 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
             {!isSpectating && (
               <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 flex-col items-center gap-2">
                 <AbilityBar slots={abilitySlots} room={colyseusRoom} />
-                <QuickItemBar slots={quickItems} room={colyseusRoom} />
+                <QuickItemBar
+                  slots={quickItems}
+                  room={colyseusRoom}
+                  connection={connection}
+                />
               </div>
             )}
 

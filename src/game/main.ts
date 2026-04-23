@@ -1,3 +1,5 @@
+import type Phaser from "phaser"
+
 import type { GameConnection } from "./network/GameConnection"
 
 import { createGame } from "./index"
@@ -24,15 +26,23 @@ export interface MountGameOptions {
   localPlayerId: string | null
 }
 
+/** Handle returned from {@link mountGame}. */
+export type MountedGame = {
+  /** The running Phaser game instance — exposed for loader-status subscriptions. */
+  readonly game: Phaser.Game
+  /** Destroys the Phaser game and cleans up sessionStorage. */
+  readonly destroy: () => void
+}
+
 /**
  * Mounts the Phaser game into the specified container and stores join metadata
  * in sessionStorage so Arena can fall back to `connect()` in non-React entrypoints.
- * Returns a teardown function that destroys the game instance.
+ * Returns the `Phaser.Game` handle plus a teardown function.
  *
  * @param options - Mount configuration from the React host component.
- * @returns A function that destroys the Phaser game and cleans up.
+ * @returns An object containing the `game` handle and a `destroy` teardown fn.
  */
-export const mountGame = (options: MountGameOptions): (() => void) => {
+export const mountGame = (options: MountGameOptions): MountedGame => {
   const { containerId, lobbyId, token, gameConnection, localPlayerId } = options
 
   sessionStorage.setItem(
@@ -42,8 +52,11 @@ export const mountGame = (options: MountGameOptions): (() => void) => {
 
   const game = createGame(containerId, { gameConnection, localPlayerId })
 
-  return () => {
-    game.destroy(true)
-    sessionStorage.removeItem("ww_join_options")
+  return {
+    game,
+    destroy: () => {
+      game.destroy(true)
+      sessionStorage.removeItem("ww_join_options")
+    },
   }
 }

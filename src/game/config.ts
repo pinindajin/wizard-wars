@@ -25,4 +25,11 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
   audio: {
     disableWebAudio: false,
   },
+  // Absolute site-root base URL so relative "assets/..." paths still resolve
+  // correctly when the page is at /lobby/<id>/game/ (otherwise the browser
+  // would fetch /lobby/<id>/assets/... and 404). Pack URLs are also absolute
+  // for defense in depth.
+  loader: {
+    baseURL: "/",
+  },
 }
