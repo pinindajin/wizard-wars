@@ -38,10 +38,19 @@ const HP_BAR_TAG = "hp-bar"
 const HP_BAR_WIDTH = 48
 /** Height of the HP bar in pixels. */
 const HP_BAR_HEIGHT = 4
-/** Y offset of name tag above sprite origin. */
-const NAMETAG_OFFSET_Y = -72
-/** Y offset of HP bar above sprite origin. */
-const HP_BAR_OFFSET_Y = -58
+
+/**
+ * Vertical layout for nametag + HP bar relative to the foot anchor (`renderPos.y`).
+ * Sprite uses bottom-center origin; lady-wizard frames are 124×124 (`frameSize` in
+ * `public/assets/sprites/heroes/lady-wizard/sheets/atlas.json`). Stack must sit above
+ * the sprite top (~`y - 124`) with margin for stroke on the nametag.
+ */
+/** Pixels between nametag bottom (`setOrigin(0.5, 1)`) and HP bar top (`_drawHpBar` y). */
+export const NAME_TO_HP_BAR_GAP_PX = 3
+/** Y offset of nametag bottom above the foot anchor (smaller y = higher on screen). */
+export const NAMETAG_OFFSET_Y = -136
+/** Y offset of HP bar top above the foot anchor; derived so the bar stays under the name. */
+export const HP_BAR_OFFSET_Y = NAMETAG_OFFSET_Y + NAME_TO_HP_BAR_GAP_PX
 
 /** Per-entity rendering state that lives outside the shared ECS records. */
 interface PlayerRenderEntry {
