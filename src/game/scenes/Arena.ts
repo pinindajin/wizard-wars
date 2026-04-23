@@ -61,7 +61,7 @@ export class Arena extends Phaser.Scene {
   }
 
   preload(): void {
-    this.load.pack("arena-assets", "assets/packs/arena-asset-pack.json")
+    this.load.pack("arena-assets", "assets/arena-asset-pack.json")
   }
 
   create(): void {
