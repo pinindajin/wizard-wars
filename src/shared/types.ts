@@ -129,6 +129,8 @@ export type PlayerSnapshot = {
   readonly vx: number
   readonly vy: number
   readonly facingAngle: number
+  /** Body / last-move facing (radians); idle-walk sprites use this. */
+  readonly moveFacingAngle: number
   readonly health: number
   readonly maxHealth: number
   readonly lives: number
@@ -153,6 +155,7 @@ export type PlayerDelta = {
   readonly vx?: number
   readonly vy?: number
   readonly facingAngle?: number
+  readonly moveFacingAngle?: number
   readonly health?: number
   readonly lives?: number
   readonly animState?: PlayerAnimState

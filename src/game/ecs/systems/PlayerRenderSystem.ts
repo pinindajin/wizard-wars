@@ -21,6 +21,7 @@ import {
 } from "@/shared/movementIntent"
 import { ClientPosition, ClientPlayerState, ClientRenderPos } from "../components"
 import { addEntity, removeEntity } from "../world"
+import { animUsesMouseAim } from "@/shared/playerAnimAim"
 import { getDirectionFromAngle, getAnimKey } from "../../animation/LadyWizardAnimDefs"
 import {
   reconcileLocal,
@@ -135,6 +136,7 @@ export class PlayerRenderSystem {
         animState: snap.animState,
         castingAbilityId: snap.castingAbilityId,
         facingAngle: snap.facingAngle,
+        moveFacingAngle: snap.moveFacingAngle,
         invulnerable: snap.invulnerable,
       }
       this.onAuthoritativePosition(snap.id, snap.x, snap.y, "full_sync")
@@ -148,6 +150,7 @@ export class PlayerRenderSystem {
           vx: snap.vx,
           vy: snap.vy,
           facingAngle: snap.facingAngle,
+          moveFacingAngle: snap.moveFacingAngle,
         })
       }
     }
@@ -224,6 +227,7 @@ export class PlayerRenderSystem {
       vx: number
       vy: number
       facingAngle: number
+      moveFacingAngle: number
     },
   ): void {
     this.remoteBuffer.push(id, sample)
@@ -396,7 +400,10 @@ export class PlayerRenderSystem {
 
       // --- Animation ---
       const isDying = state.animState === "dying" || state.animState === "dead"
-      const direction = getDirectionFromAngle(state.facingAngle)
+      const angleForSprite = animUsesMouseAim(state.animState)
+        ? state.facingAngle
+        : this._bodyAngleForSprite(isLocal, state.animState, localMoveIntent, state.moveFacingAngle)
+      const direction = getDirectionFromAngle(angleForSprite)
       const animKey = getAnimKey(state.animState, direction)
       if (animKey !== entry.lastAnimKey) {
         entry.sprite.play(animKey, true)
@@ -510,6 +517,32 @@ export class PlayerRenderSystem {
     }
     // Prefer the facing from the sampled snapshot when available.
     state.facingAngle = s.facingAngle
+    state.moveFacingAngle = s.moveFacingAngle
+  }
+
+  /**
+   * Body-facing radians for idle/walk sprites: local WASD prediction while moving,
+   * otherwise authoritative `moveFacingAngle`.
+   *
+   * @param isLocal - Whether this entity is the local player.
+   * @param animState - Current animation state from the server.
+   * @param moveIntent - Current held movement keys for the local player.
+   * @param authoritativeMoveFacing - Last authoritative body angle from the server.
+   * @returns Angle in radians for `getDirectionFromAngle`.
+   */
+  private _bodyAngleForSprite(
+    isLocal: boolean,
+    animState: PlayerAnimState,
+    moveIntent: MoveIntent,
+    authoritativeMoveFacing: number,
+  ): number {
+    if (isLocal && (animState === "idle" || animState === "walk")) {
+      const { dx, dy } = normalizedMoveFromWASD(moveIntent)
+      if (dx !== 0 || dy !== 0) {
+        return Math.atan2(dy, dx)
+      }
+    }
+    return authoritativeMoveFacing
   }
 
   /**

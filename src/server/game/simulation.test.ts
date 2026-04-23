@@ -150,6 +150,44 @@ describe("movement system", () => {
     const delta = out.playerDeltas.find((d) => d.id === sim.playerEntityMap.get("user1"))
     expect(delta?.lastProcessedInputSeq).toBe(11)
   })
+
+  it("updates moveFacingAngle from non-zero WASD intent", () => {
+    const sim = createGameSimulation(Date.now())
+    sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    for (let i = 0; i < 25; i++) {
+      sim.tick(
+        queueMap([["user1", { ...emptyInput({ up: true }), seq: 700 + i }]]),
+        Date.now() + i * 17,
+      )
+    }
+    const sync = sim.buildGameStateSyncPayload(Date.now())
+    expect(sync.players[0]!.moveFacingAngle).toBeCloseTo(-Math.PI / 2, 5)
+  })
+
+  it("does not change moveFacingAngle when only aim (weapon target) moves", () => {
+    const sim = createGameSimulation(Date.now())
+    sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    sim.tick(new Map(), Date.now())
+    const move0 = sim.buildGameStateSyncPayload(Date.now()).players[0]!.moveFacingAngle
+    const sp = ARENA_SPAWN_POINTS[0]!
+    sim.tick(
+      queueMap([
+        [
+          "user1",
+          emptyInput({
+            weaponTargetX: sp.x + 400,
+            weaponTargetY: sp.y,
+            seq: 800,
+          }),
+        ],
+      ]),
+      Date.now() + 17,
+    )
+    const syncAfter = sim.buildGameStateSyncPayload(Date.now())
+    const p = syncAfter.players[0]!
+    expect(p.moveFacingAngle).toBeCloseTo(move0, 5)
+    expect(p.facingAngle).toBeCloseTo(Math.atan2(0, 400), 5)
+  })
 })
 
 describe("buildGameStateSyncPayload", () => {

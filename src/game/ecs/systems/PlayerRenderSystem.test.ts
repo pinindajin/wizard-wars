@@ -57,6 +57,7 @@ function snap(over: Partial<PlayerSnapshot> & Pick<PlayerSnapshot, "id" | "playe
     vx: over.vx ?? 0,
     vy: over.vy ?? 0,
     facingAngle: over.facingAngle ?? 0,
+    moveFacingAngle: over.moveFacingAngle ?? 0,
     health: over.health ?? 10,
     maxHealth: over.maxHealth ?? 10,
     lives: over.lives ?? 3,
@@ -182,7 +183,15 @@ describe("PlayerRenderSystem.applyFullSync", () => {
 
     // Two remote snapshots straddling the render time; the buffer should
     // interpolate between them and land near the midpoint.
-    sys.onRemoteSnapshot(1, { serverTimeMs: now, x: 0, y: 0, vx: 0, vy: 0, facingAngle: 0 })
+    sys.onRemoteSnapshot(1, {
+      serverTimeMs: now,
+      x: 0,
+      y: 0,
+      vx: 0,
+      vy: 0,
+      facingAngle: 0,
+      moveFacingAngle: 0,
+    })
     sys.onRemoteSnapshot(1, {
       serverTimeMs: now + 100,
       x: 100,
@@ -190,6 +199,7 @@ describe("PlayerRenderSystem.applyFullSync", () => {
       vx: 0,
       vy: 0,
       facingAngle: 0,
+      moveFacingAngle: 0,
     })
 
     vi.setSystemTime(new Date(now + 83))

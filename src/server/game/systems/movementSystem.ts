@@ -1,6 +1,7 @@
 /**
  * movementSystem – translates PlayerInput WASD into Velocity (px/s) and
- * advances Position each tick. Also updates Facing toward the weapon cursor.
+ * advances Position each tick. Updates {@link Facing} toward the weapon cursor
+ * (aim) and {@link MoveFacing} from non-zero WASD intent (body / idle-walk).
  *
  * Velocity semantics: `Velocity.vx/vy` store the player's velocity in
  * **pixels per second** (aligned with fireball velocity). Position is then
@@ -20,6 +21,7 @@ import {
   Position,
   Velocity,
   Facing,
+  MoveFacing,
   Equipment,
   PlayerInput,
   Casting,
@@ -98,7 +100,11 @@ export function movementSystem(ctx: SimCtx): void {
     Position.x[eid] += Velocity.vx[eid] * TICK_DT_SEC
     Position.y[eid] += Velocity.vy[eid] * TICK_DT_SEC
 
-    // Update facing toward weapon-target (mouse position)
+    if (dx !== 0 || dy !== 0) {
+      MoveFacing.angle[eid] = Math.atan2(dy, dx)
+    }
+
+    // Update aim facing toward weapon-target (mouse position)
     const wtx = PlayerInput.weaponTargetX[eid]
     const wty = PlayerInput.weaponTargetY[eid]
     const fdx = wtx - Position.x[eid]
