@@ -62,6 +62,12 @@ export class PlayerRenderSystem {
    * @param payload - Full game state snapshot from the server.
    */
   applyFullSync(payload: GameStateSyncPayload): void {
+    const keep = new Set(payload.players.map((p) => p.id))
+    for (const id of [...this.entries.keys()]) {
+      if (!keep.has(id)) {
+        this._despawnPlayer(id)
+      }
+    }
     for (const snap of payload.players) {
       if (!this.entries.has(snap.id)) {
         this._spawnPlayer(snap.id, snap.playerId, snap.username, snap.heroId, snap.x, snap.y)

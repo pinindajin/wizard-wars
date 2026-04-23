@@ -42,7 +42,8 @@ type LobbyGameHostProps = {
  */
 export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
   const router = useRouter()
-  const { connection, lobbyState, error: providerError } = useLobbyConnection()
+  const { connection, lobbyState, error: providerError, localPlayerId } =
+    useLobbyConnection()
 
   const [phase, setPhase] = useState<LobbyPhase>(
     () => lobbyState?.phase ?? "WAITING_FOR_CLIENTS",
@@ -145,6 +146,7 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
           lobbyId,
           token,
           gameConnection: connection,
+          localPlayerId,
         })
         if (typeof window !== "undefined") {
           const w = window as Window & { __wwRoomId?: string; __wwLobbyId?: string }
@@ -164,7 +166,7 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
       cancelled = true
       destroyGame?.()
     }
-  }, [connection, lobbyId, mountGeneration])
+  }, [connection, localPlayerId, lobbyId, mountGeneration])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

@@ -5,6 +5,7 @@ import {
   QUICK_ITEM_SLOT_COUNT,
 } from "./balance-config/economy"
 import { MAX_PLAYERS_PER_MATCH } from "./balance-config/lobby"
+import type { GameStateSyncPayload } from "./types"
 
 /** Username: alphanumeric + underscore, 3-20 chars, must be trimmed before comparison. */
 const USERNAME_REGEX = /^[a-zA-Z0-9_]+$/
@@ -81,3 +82,46 @@ export const lobbyPlayerCountSchema = z
   .int()
   .min(0)
   .max(MAX_PLAYERS_PER_MATCH)
+
+/** `PlayerAnimState` values used in snapshots and batch updates. */
+export const playerAnimStateSchema = z.enum([
+  "idle",
+  "walk",
+  "dying",
+  "light_cast",
+  "heavy_cast",
+  "axe_swing",
+  "dead",
+])
+
+/** Single player row in `GameStateSync`. */
+export const playerSnapshotSchema = z.object({
+  id: z.number().int().nonnegative(),
+  playerId: z.string().min(1).max(256),
+  username: z.string().max(64),
+  x: z.number().finite(),
+  y: z.number().finite(),
+  facingAngle: z.number().finite(),
+  health: z.number().finite(),
+  maxHealth: z.number().finite(),
+  lives: z.number().int().nonnegative(),
+  heroId: z.string().min(1).max(64),
+  animState: playerAnimStateSchema,
+  invulnerable: z.boolean(),
+})
+
+/** Full `game_state_sync` payload (server + client). */
+export const gameStateSyncPayloadSchema = z.object({
+  players: z.array(playerSnapshotSchema).max(MAX_PLAYERS_PER_MATCH),
+  seq: z.number().int().nonnegative(),
+})
+
+/**
+ * Parses and returns a `GameStateSyncPayload` (throws if invalid).
+ * Call on the server before every `broadcast` / `client.send` of this message.
+ */
+export function parseGameStateSyncPayload(
+  input: Readonly<unknown> | GameStateSyncPayload,
+): GameStateSyncPayload {
+  return gameStateSyncPayloadSchema.parse(input) as GameStateSyncPayload
+}

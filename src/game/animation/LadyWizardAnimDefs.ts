@@ -88,27 +88,31 @@ export const getDirectionFromAngle = (angle: number): Direction => {
 export const registerLadyWizardAnims = (animManager: Phaser.Animations.AnimationManager): void => {
   const TEXTURE = "lady-wizard"
 
-  /** Frame counts per clip (adjust to actual sprite sheet). */
+  /**
+   * Frame counts per clip — must match `public/.../sheets/atlas.json` and the
+   * `scripts/build-lady-wizard-megasheet.ts` layout.
+   */
   const CLIP_FRAMES: Record<string, number> = {
-    breathing_idle: 6,
-    walk: 8,
-    death: 10,
-    light_spell_cast: 8,
-    heavy_spell_cast: 10,
-    summoned_axe_swing: 8,
+    breathing_idle: 4,
+    walk: 15,
+    death: 17,
+    light_spell_cast: 17,
+    heavy_spell_cast: 17,
+    summoned_axe_swing: 17,
   }
 
-  /** Base frame offsets per clip on the sprite sheet (row-major layout). */
+  /** Base frame offsets per clip (row-major, one strip per direction row). */
   const CLIP_BASE_FRAME: Record<string, number> = {
     breathing_idle: 0,
-    walk: 6,
-    death: 14,
-    light_spell_cast: 24,
-    heavy_spell_cast: 32,
-    summoned_axe_swing: 42,
+    walk: 4,
+    death: 19,
+    light_spell_cast: 36,
+    heavy_spell_cast: 53,
+    summoned_axe_swing: 70,
   }
 
-  const FRAMES_PER_DIRECTION_ROW = 50
+  /** Width in frames of one direction row in `lady-wizard-megasheet.png`. */
+  const FRAMES_PER_DIRECTION_ROW = 87
 
   const CLIP_FPS: Record<string, number> = {
     breathing_idle: 6,

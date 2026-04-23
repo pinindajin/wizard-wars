@@ -21,7 +21,7 @@ export class Preload extends Phaser.Scene {
 
   preload(): void {
     this.editorCreate()
-    this.load.pack("preload-assets", "assets/packs/preload-asset-pack.json")
+    this.load.pack("preload-assets", "assets/preload-asset-pack.json")
 
     this.load.on("progress", (value: number) => {
       this.progressBar.clear()

@@ -3,7 +3,7 @@ import {
   ClientPosition,
   ClientPlayerState,
 } from "../components"
-import { addEntity, hasEntity } from "../world"
+import { addEntity, hasEntity, clientEntities, removeEntity } from "../world"
 
 /**
  * Applies authoritative server state updates to the client ECS component records.
@@ -17,6 +17,14 @@ export class NetworkSyncSystem {
    * @param payload - Full game state from the server.
    */
   applyFullSync(payload: GameStateSyncPayload): void {
+    const keep = new Set(payload.players.map((p) => p.id))
+    for (const id of [...clientEntities]) {
+      if (!keep.has(id)) {
+        removeEntity(id)
+        delete ClientPosition[id]
+        delete ClientPlayerState[id]
+      }
+    }
     for (const snap of payload.players) {
       if (!hasEntity(snap.id)) {
         addEntity(snap.id)

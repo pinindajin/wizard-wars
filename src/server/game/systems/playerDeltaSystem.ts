@@ -14,45 +14,10 @@
  */
 import { query, hasComponent } from "bitecs"
 
-import {
-  Position,
-  Velocity,
-  Facing,
-  Health,
-  Lives,
-  Casting,
-  PlayerTag,
-  DeadTag,
-  DyingTag,
-  SpectatorTag,
-  SwingingWeapon,
-  InvulnerableTag,
-  ABILITY_INDEX_TO_ID,
-} from "../components"
+import { Position, Velocity, Facing, Health, Lives, PlayerTag, InvulnerableTag } from "../components"
+import { computePlayerAnimState } from "../playerAnimState"
 import type { SimCtx, PlayerPrevState } from "../simulation"
-import type { PlayerAnimState, PlayerDelta } from "../../../shared/types"
-
-/** Derives the current animation state from an entity's component composition. */
-function computeAnimState(
-  world: import("bitecs").World,
-  eid: number,
-): PlayerAnimState {
-  if (hasComponent(world, eid, DeadTag)) return "dead"
-  if (hasComponent(world, eid, DyingTag)) return "dying"
-  if (hasComponent(world, eid, SwingingWeapon)) return "axe_swing"
-
-  if (hasComponent(world, eid, Casting)) {
-    const abilityId = ABILITY_INDEX_TO_ID[Casting.abilityIndex[eid]] ?? ""
-    if (abilityId === "lightning_bolt") return "heavy_cast"
-    return "light_cast"
-  }
-
-  const vx = Velocity.vx[eid]
-  const vy = Velocity.vy[eid]
-  if (vx !== 0 || vy !== 0) return "walk"
-
-  return "idle"
-}
+import type { PlayerDelta } from "../../../shared/types"
 
 /**
  * Runs the player delta system for one tick.
@@ -69,7 +34,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
     const facingAngle = Facing.angle[eid]
     const health = Health.current[eid]
     const lives = Lives.count[eid]
-    const animState = computeAnimState(world, eid)
+    const animState = computePlayerAnimState(world, eid)
     const invulnerable = hasComponent(world, eid, InvulnerableTag)
 
     if (!prev) {
