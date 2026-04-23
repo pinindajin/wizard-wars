@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react"
+import { usePathname } from "next/navigation"
 
 import { DEFAULT_BGM_VOLUME, LOBBY_MUSIC_PATH } from "@/shared/balance-config/audio"
 
@@ -60,9 +61,24 @@ function writeMuted(value: boolean): void {
  *
  * @param props.children - React children to render inside the provider.
  */
+/**
+ * Returns true when the current path is inside the in-match game view
+ * (any `/lobby/:id/game` child route). Lobby music must stay silent there;
+ * Phaser's own battle BGM takes over.
+ *
+ * @param pathname - The current Next.js pathname (nullable during SSR).
+ * @returns True if the user is on the in-match game route.
+ */
+function isGameRoute(pathname: string | null): boolean {
+  if (!pathname) return false
+  return pathname === "/game" || pathname.endsWith("/game")
+}
+
 export function LobbyMusicProvider({ children }: { children: React.ReactNode }) {
   const [muted, setMuted] = useState<boolean>(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const pathname = usePathname()
+  const onGameRoute = isGameRoute(pathname)
 
   // Hydrate muted state from sessionStorage after mount (avoid SSR mismatch)
   useEffect(() => {
@@ -82,8 +98,11 @@ export function LobbyMusicProvider({ children }: { children: React.ReactNode }) 
 
   /**
    * Ensures the lobby audio element exists and attempts playback (retry after autoplay blocks).
+   * No-ops when the user is currently on the in-match `/game` route so lobby music
+   * stays silent during gameplay even if an autoplay-unlock gesture fires.
    */
   const tryStartLobbyMusic = useCallback(() => {
+    if (isGameRoute(window.location.pathname)) return
     let el = audioRef.current
     if (!el) {
       el = new Audio(LOBBY_MUSIC_PATH)
@@ -108,8 +127,12 @@ export function LobbyMusicProvider({ children }: { children: React.ReactNode }) 
     })
   }, [])
 
-  // Autoplay on mount + unlock on first user activation if needed
+  // Pause or (re)start the lobby track based on whether we're in the game route.
   useEffect(() => {
+    if (onGameRoute) {
+      audioRef.current?.pause()
+      return
+    }
     tryStartLobbyMusic()
 
     const onActivation = () => {
@@ -124,7 +147,7 @@ export function LobbyMusicProvider({ children }: { children: React.ReactNode }) 
       window.removeEventListener("pointerdown", onActivation)
       window.removeEventListener("keydown", onActivation)
     }
-  }, [tryStartLobbyMusic])
+  }, [tryStartLobbyMusic, onGameRoute])
 
   // Tear down audio on unmount
   useEffect(() => {

@@ -13,6 +13,18 @@ function uniqueUsername(): string {
 test("match start keeps user on game route with Phaser mount", async ({ page }) => {
   test.setTimeout(120_000)
 
+  // Track every request that targets the legacy (wrong) `/assets/packs/` path.
+  // Phaser scenes must load pack JSONs from `/assets/*-asset-pack.json`, not
+  // `/assets/packs/*`. If any such request is made the rendering pipeline
+  // is broken (canvas stays empty).
+  const legacyPackRequests: string[] = []
+  page.on("request", (req) => {
+    const url = req.url()
+    if (url.includes("/assets/packs/")) {
+      legacyPackRequests.push(url)
+    }
+  })
+
   const username = uniqueUsername()
   const password = "e2e-password-123"
 
@@ -44,9 +56,12 @@ test("match start keeps user on game route with Phaser mount", async ({ page }) 
   await expect(page.getByTestId("game-connect-error")).not.toBeVisible()
 
   const canvas = page.getByTestId("game-phaser-container").locator("canvas")
+  await expect(canvas).toHaveCount(1, { timeout: 30_000 })
   await expect(canvas).toBeVisible({ timeout: 15_000 })
   const box = await canvas.boundingBox()
   expect(box).not.toBeNull()
   expect(box!.width).toBeGreaterThan(0)
   expect(box!.height).toBeGreaterThan(0)
+
+  expect(legacyPackRequests, `unexpected /assets/packs/ requests: ${legacyPackRequests.join(", ")}`).toEqual([])
 })
