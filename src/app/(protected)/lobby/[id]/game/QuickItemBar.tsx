@@ -6,6 +6,14 @@ import type { QuickItemSlot } from "@/shared/types"
 import { RoomEvent } from "@/shared/roomEvents"
 import { useGameKeybinds } from "./GameKeybindContext"
 
+/**
+ * Tiny subset of `GameConnection` accepted for test injection. The production
+ * caller passes the full `GameConnection`; only `sendUseQuickItem` is needed.
+ */
+export type QuickItemSender = {
+  sendUseQuickItem: (slotIndex: number) => void
+}
+
 /** Display hotkey labels for quick-item slots 0-3. */
 const QUICK_HOTKEYS = ["Q", "6", "7", "8"] as const
 
@@ -15,6 +23,11 @@ type QuickItemBarProps = {
   readonly slots: readonly QuickItemSlot[]
   /** Active Colyseus room used to send use-item messages. */
   readonly room: Room | null
+  /**
+   * Optional typed sender (prefers this over raw room.send). When provided,
+   * `sendUseQuickItem(slotIndex)` is called instead of `room.send(...)`.
+   */
+  readonly connection?: QuickItemSender | null
 }
 
 /**
@@ -25,7 +38,7 @@ type QuickItemBarProps = {
  *
  * @param props - QuickItemBarProps.
  */
-export default function QuickItemBar({ slots, room }: QuickItemBarProps) {
+export default function QuickItemBar({ slots, room, connection }: QuickItemBarProps) {
   const keybinds = useGameKeybinds()
 
   useEffect(() => {
@@ -50,15 +63,19 @@ export default function QuickItemBar({ slots, room }: QuickItemBarProps) {
       else if (key === "7") slotIndex = 2
       else if (key === "8") slotIndex = 3
 
-      if (slotIndex < 0 || !room) return
+      if (slotIndex < 0) return
       const slot = slots[slotIndex]
       if (!slot?.itemId || slot.charges <= 0) return
-      room.send(RoomEvent.UseQuickItem, { slotIndex })
+      if (connection) {
+        connection.sendUseQuickItem(slotIndex)
+      } else if (room) {
+        room.send(RoomEvent.UseQuickItem, { slotIndex })
+      }
     }
 
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [room, slots, keybinds])
+  }, [room, slots, keybinds, connection])
 
   return (
     <div className="flex items-end gap-2">

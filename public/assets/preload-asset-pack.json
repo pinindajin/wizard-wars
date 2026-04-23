@@ -4,22 +4,6 @@
         "version": "1.0"
     },
     "preload": {
-        "files": [
-            {
-                "type": "image",
-                "key": "hero-red-wizard-portrait",
-                "url": "assets/sprites/heroes/portraits/red-wizard.png"
-            },
-            {
-                "type": "image",
-                "key": "hero-barbarian-portrait",
-                "url": "assets/sprites/heroes/portraits/barbarian.png"
-            },
-            {
-                "type": "image",
-                "key": "hero-ranger-portrait",
-                "url": "assets/sprites/heroes/portraits/ranger.png"
-            }
-        ]
+        "files": []
     }
 }

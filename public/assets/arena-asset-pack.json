@@ -8,17 +8,17 @@
             {
                 "type": "tilemapTiledJSON",
                 "key": "arena",
-                "url": "assets/tilemaps/arena.json"
+                "url": "/assets/tilemaps/arena.json"
             },
             {
                 "type": "image",
                 "key": "arena-terrain",
-                "url": "assets/tilesets/arena-terrain.png"
+                "url": "/assets/tilesets/arena-terrain.png"
             },
             {
                 "type": "spritesheet",
                 "key": "lady-wizard",
-                "url": "assets/sprites/heroes/lady-wizard/sheets/lady-wizard-megasheet.png",
+                "url": "/assets/sprites/heroes/lady-wizard/sheets/lady-wizard-megasheet.png",
                 "frameConfig": {
                     "frameWidth": 124,
                     "frameHeight": 124
@@ -27,72 +27,72 @@
             {
                 "type": "audio",
                 "key": "music-lobby-01",
-                "url": ["assets/music/lobby/wizard-wars-lobby-01-ost.mp3"]
+                "url": ["/assets/music/lobby/wizard-wars-lobby-01-ost.mp3"]
             },
             {
                 "type": "audio",
                 "key": "music-battle-01",
-                "url": ["assets/music/battle/wizard-war-battle-ost-01.mp3"]
+                "url": ["/assets/music/battle/wizard-war-battle-ost-01.mp3"]
             },
             {
                 "type": "audio",
                 "key": "music-battle-02",
-                "url": ["assets/music/battle/wizard-wars-battle-02-ost.mp3"]
+                "url": ["/assets/music/battle/wizard-wars-battle-02-ost.mp3"]
             },
             {
                 "type": "audio",
                 "key": "sfx-fireball-cast",
-                "url": ["assets/sounds/sfx-fireball-cast.mp3"]
+                "url": ["/assets/sounds/sfx-fireball-cast.mp3"]
             },
             {
                 "type": "audio",
                 "key": "sfx-fireball-impact",
-                "url": ["assets/sounds/sfx-fireball-impact.mp3"]
+                "url": ["/assets/sounds/sfx-fireball-impact.mp3"]
             },
             {
                 "type": "audio",
                 "key": "sfx-lightning-cast",
-                "url": ["assets/sounds/sfx-lightning-cast.mp3"]
+                "url": ["/assets/sounds/sfx-lightning-cast.mp3"]
             },
             {
                 "type": "audio",
                 "key": "sfx-lightning-impact",
-                "url": ["assets/sounds/sfx-lightning-impact.mp3"]
+                "url": ["/assets/sounds/sfx-lightning-impact.mp3"]
             },
             {
                 "type": "audio",
                 "key": "sfx-axe-swing",
-                "url": ["assets/sounds/sfx-axe-swing.mp3"]
+                "url": ["/assets/sounds/sfx-axe-swing.mp3"]
             },
             {
                 "type": "audio",
                 "key": "sfx-axe-hit",
-                "url": ["assets/sounds/sfx-axe-hit.mp3"]
+                "url": ["/assets/sounds/sfx-axe-hit.mp3"]
             },
             {
                 "type": "audio",
                 "key": "sfx-walk-step",
-                "url": ["assets/sounds/sfx-walk-step.mp3"]
+                "url": ["/assets/sounds/sfx-walk-step.mp3"]
             },
             {
                 "type": "audio",
                 "key": "sfx-player-death",
-                "url": ["assets/sounds/sfx-player-death.mp3"]
+                "url": ["/assets/sounds/sfx-player-death.mp3"]
             },
             {
                 "type": "audio",
                 "key": "sfx-player-hit",
-                "url": ["assets/sounds/sfx-player-hit.mp3"]
+                "url": ["/assets/sounds/sfx-player-hit.mp3"]
             },
             {
                 "type": "audio",
                 "key": "sfx-countdown-beep",
-                "url": ["assets/sounds/sfx-countdown-beep.mp3"]
+                "url": ["/assets/sounds/sfx-countdown-beep.mp3"]
             },
             {
                 "type": "audio",
                 "key": "sfx-countdown-go",
-                "url": ["assets/sounds/sfx-countdown-go.mp3"]
+                "url": ["/assets/sounds/sfx-countdown-go.mp3"]
             }
         ]
     }
