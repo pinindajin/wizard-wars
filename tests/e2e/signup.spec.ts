@@ -21,7 +21,7 @@ test("user can create an account and land on /home", async ({ page, context }) =
 
   await Promise.all([
     page.waitForURL("**/home", { timeout: 15_000 }),
-    page.getByRole("button", { name: /create account/i }).click(),
+    page.getByRole("button", { name: /join the arena/i }).click(),
   ])
 
   await expect(page).toHaveURL(/\/home$/)

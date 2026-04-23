@@ -22,7 +22,7 @@ test("host sees match countdown overlay on story lobby after start game", async 
 
   await Promise.all([
     page.waitForURL("**/home", { timeout: 15_000 }),
-    page.getByRole("button", { name: /create account/i }).click(),
+    page.getByRole("button", { name: /join the arena/i }).click(),
   ])
 
   await page.getByRole("button", { name: /browse games/i }).click()
@@ -31,7 +31,7 @@ test("host sees match countdown overlay on story lobby after start game", async 
   await page.getByRole("button", { name: /create lobby/i }).click()
   await page.waitForURL(/\/lobby\/[^/]+$/, { timeout: 30_000 })
 
-  const startBtn = page.getByRole("button", { name: /^start game$/i })
+  const startBtn = page.getByRole("button", { name: /start game/i })
   await expect(startBtn).toBeEnabled({ timeout: 30_000 })
   await startBtn.click()
 
