@@ -1,4 +1,4 @@
-import { combineDamageProperties, DamageProperty } from "./damage"
+import { GENERATED_ARENA_PROP_COLLIDERS } from "./generated/arena-prop-colliders"
 
 /**
  * Arena geometry constants.
@@ -41,15 +41,14 @@ export const ARENA_SPAWN_POINTS: readonly { x: number; y: number }[] = Array.fro
 
 /**
  * Static prop collider records: { x, y, width, height } rectangles (base footprint only).
- * Populated by the compile-arena-colliders.ts script reading arena.json.
- * Fallback to empty array before generation.
+ * Regenerate from Tiled via `bun run build:arena-colliders` (layer **PropColliders**).
  */
 export const ARENA_PROP_COLLIDERS: readonly {
   x: number
   y: number
   width: number
   height: number
-}[] = []
+}[] = GENERATED_ARENA_PROP_COLLIDERS
 
 /** Fireball despawns this many pixels past any arena edge. */
 export const FIREBALL_DESPAWN_OVERSHOOT_PX = 400

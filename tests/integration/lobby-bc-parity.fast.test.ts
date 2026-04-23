@@ -12,6 +12,7 @@ import type {
   LobbyStatePayload,
   LobbyHostTransferPayload,
   MatchCountdownStartPayload,
+  GameStateSyncPayload,
 } from "@/shared/types"
 import { playerLobbyIndex } from "@/server/colyseus/rooms/GameLobbyRoom"
 
@@ -148,7 +149,7 @@ describe("Lobby BC feature parity integration", { timeout: 30_000 }, () => {
     await guestRoom.leave().catch(() => {})
   })
 
-  it("RequestResync: returns LobbyState in IN_PROGRESS", async () => {
+  it("RequestResync: unicast LobbyState + game_state_sync in IN_PROGRESS", async () => {
     hostRoom = await server.sdk.create("game_lobby", { token: hostToken })
     
     let latestPhase = ""
@@ -166,14 +167,27 @@ describe("Lobby BC feature parity integration", { timeout: 30_000 }, () => {
     await delay(4500) 
     expect(latestPhase).toBe("IN_PROGRESS")
 
-    let resyncReceived = false
+    let resyncLobbyState = 0
+    let resyncGameState: GameStateSyncPayload | null = null
     hostRoom.onMessage(RoomEvent.LobbyState, () => {
-      resyncReceived = true
+      resyncLobbyState += 1
+    })
+    hostRoom.onMessage(RoomEvent.GameStateSync, (p: GameStateSyncPayload) => {
+      resyncGameState = p
     })
 
     hostRoom.send(RoomEvent.RequestResync, {})
-    await delay(200)
-    expect(resyncReceived).toBe(true)
+    await waitFor(
+      () => resyncGameState != null && resyncLobbyState > 0,
+      { timeout: 3000 },
+    )
+
+    expect(resyncGameState).not.toBeNull()
+    expect(resyncGameState!.seq).toBe(0)
+    expect(resyncGameState!.fireballs).toEqual([])
+    expect(resyncGameState!.players.length).toBe(1)
+    expect(resyncGameState!.players[0]!.playerId).toBe("user-host")
+    expect(resyncLobbyState).toBeGreaterThan(0)
 
     await hostRoom.leave().catch(() => {})
   })

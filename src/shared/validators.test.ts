@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest"
-import { signupUsernameSchema, loginUsernameSchema, chatMessagePayloadSchema, playerInputPayloadSchema } from "@/shared/validators"
+import {
+  signupUsernameSchema,
+  loginUsernameSchema,
+  chatMessagePayloadSchema,
+  playerInputPayloadSchema,
+  parseGameStateSyncPayload,
+  parsePlayerDeathPayload,
+} from "@/shared/validators"
+import type { GameStateSyncPayload, PlayerDeathPayload } from "@/shared/types"
 
 describe("signupUsernameSchema", () => {
   it("accepts valid usernames", () => {
@@ -76,5 +84,106 @@ describe("playerInputPayloadSchema", () => {
 
   it("requires seq to be non-negative", () => {
     expect(playerInputPayloadSchema.safeParse({ ...validInput, seq: -1 }).success).toBe(false)
+  })
+})
+
+describe("parseGameStateSyncPayload", () => {
+  it("accepts a minimal valid GameStateSync payload (T4)", () => {
+    const raw: GameStateSyncPayload = {
+      players: [
+        {
+          id: 1,
+          playerId: "user-a",
+          username: "A",
+          x: 0,
+          y: 0,
+          facingAngle: 0,
+          health: 10,
+          maxHealth: 10,
+          lives: 3,
+          heroId: "red_wizard",
+          animState: "idle",
+          invulnerable: false,
+        },
+      ],
+      fireballs: [],
+      seq: 0,
+    }
+    const parsed = parseGameStateSyncPayload(raw)
+    expect(parsed).toEqual(raw)
+  })
+
+  it("accepts fireballs in sync payload", () => {
+    const raw: GameStateSyncPayload = {
+      players: [],
+      fireballs: [
+        { id: 42, ownerId: "u1", x: 1, y: 2, vx: 100, vy: 0 },
+      ],
+      seq: 0,
+    }
+    expect(parseGameStateSyncPayload(raw)).toEqual(raw)
+  })
+
+  it("rejects fireball with empty ownerId", () => {
+    expect(() =>
+      parseGameStateSyncPayload({
+        players: [],
+        fireballs: [{ id: 1, ownerId: "", x: 0, y: 0, vx: 1, vy: 0 }],
+        seq: 0,
+      } as never),
+    ).toThrow()
+  })
+
+  it("rejects an invalid animState", () => {
+    expect(() =>
+      parseGameStateSyncPayload({
+        players: [
+          {
+            id: 1,
+            playerId: "u",
+            username: "x",
+            x: 0,
+            y: 0,
+            facingAngle: 0,
+            health: 1,
+            maxHealth: 1,
+            lives: 1,
+            heroId: "red_wizard",
+            animState: "invalid",
+            invulnerable: false,
+          },
+        ],
+        fireballs: [],
+        seq: 0,
+      } as never),
+    ).toThrow()
+  })
+})
+
+describe("parsePlayerDeathPayload", () => {
+  it("accepts death with usernames", () => {
+    const raw: PlayerDeathPayload = {
+      playerId: "victim",
+      killerPlayerId: "killer",
+      killerAbilityId: "fireball",
+      livesRemaining: 2,
+      x: 10,
+      y: 20,
+      victimUsername: "Vic",
+      killerUsername: "Kil",
+    }
+    expect(parsePlayerDeathPayload(raw)).toEqual(raw)
+  })
+
+  it("accepts null killer and ability", () => {
+    const raw: PlayerDeathPayload = {
+      playerId: "victim",
+      killerPlayerId: null,
+      killerAbilityId: null,
+      livesRemaining: 0,
+      x: 0,
+      y: 0,
+    }
+    expect(parsePlayerDeathPayload(raw)).toEqual(raw)
   })
 })

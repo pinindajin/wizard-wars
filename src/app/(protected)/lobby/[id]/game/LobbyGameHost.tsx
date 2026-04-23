@@ -13,6 +13,9 @@ import type {
   MatchCountdownStartPayload,
   LobbyScoreboardPayload,
   ScoreboardEntry,
+  PlayerDeathPayload,
+  GameStateSyncPayload,
+  PlayerBatchUpdatePayload,
 } from "@/shared/types"
 
 import LoadingGate from "./LoadingGate"
@@ -26,6 +29,11 @@ import { GameKeybindProvider } from "./GameKeybindContext"
 import { useLobbyConnection } from "../LobbyConnectionProvider"
 import { MATCH_COUNTDOWN_DURATION_MS } from "@/shared/balance-config/lobby"
 import type { ShopStatePayload } from "@/shared/types"
+import KillFeed from "./KillFeed"
+import { formatKillFeedLine } from "@/lib/kill-feed-format"
+
+const KILL_FEED_MAX = 5
+const KILL_FEED_TTL_MS = 8000
 
 /** Props for LobbyGameHost. */
 type LobbyGameHostProps = {
@@ -42,7 +50,8 @@ type LobbyGameHostProps = {
  */
 export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
   const router = useRouter()
-  const { connection, lobbyState, error: providerError } = useLobbyConnection()
+  const { connection, lobbyState, error: providerError, localPlayerId } =
+    useLobbyConnection()
 
   const [phase, setPhase] = useState<LobbyPhase>(
     () => lobbyState?.phase ?? "WAITING_FOR_CLIENTS",
@@ -67,10 +76,23 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [phaserError, setPhaserError] = useState<string | null>(null)
   const [mountGeneration, setMountGeneration] = useState(0)
+  const [killFeedRows, setKillFeedRows] = useState<
+    Array<{ key: string; text: string; at: number }>
+  >([])
+  const [isSpectating, setIsSpectating] = useState(false)
+  const entityToPlayerRef = useRef<Map<number, string>>(new Map())
 
   const containerRef = useRef<HTMLDivElement>(null)
 
   const colyseusRoom: Room | null = connection?.room ?? null
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const now = Date.now()
+      setKillFeedRows((rows) => rows.filter((r) => now - r.at < KILL_FEED_TTL_MS))
+    }, 400)
+    return () => window.clearInterval(id)
+  }, [])
 
   useEffect(() => {
     if (!connection) return
@@ -84,6 +106,7 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
           }
           if (payload.phase === "SCOREBOARD") {
             setCountdownStart(null)
+            setKillFeedRows([])
           }
           break
         }
@@ -98,11 +121,53 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
         }
         case WsEvent.MatchGo:
           setCountdownStart(null)
+          setIsSpectating(false)
+          entityToPlayerRef.current = new Map()
           break
+        case WsEvent.GameStateSync: {
+          const payload = message.payload as GameStateSyncPayload
+          const m = new Map<number, string>()
+          for (const pl of payload.players) {
+            m.set(pl.id, pl.playerId)
+          }
+          entityToPlayerRef.current = m
+          if (localPlayerId) {
+            const me = payload.players.find((p) => p.playerId === localPlayerId)
+            if (me && me.lives === 0) setIsSpectating(true)
+            else if (me) setIsSpectating(false)
+          }
+          break
+        }
+        case WsEvent.PlayerBatchUpdate: {
+          const payload = message.payload as PlayerBatchUpdatePayload
+          if (!localPlayerId) break
+          const map = entityToPlayerRef.current
+          for (const d of payload.deltas) {
+            if (map.get(d.id) !== localPlayerId) continue
+            if (d.lives === undefined) continue
+            if (d.lives === 0) setIsSpectating(true)
+            else setIsSpectating(false)
+          }
+          break
+        }
+        case WsEvent.PlayerDeath: {
+          const death = message.payload as PlayerDeathPayload
+          const key = crypto.randomUUID()
+          const text = formatKillFeedLine(death)
+          setKillFeedRows((rows) => [
+            ...rows.filter((r) => Date.now() - r.at < KILL_FEED_TTL_MS).slice(-(KILL_FEED_MAX - 1)),
+            { key, text, at: Date.now() },
+          ])
+          if (localPlayerId && death.playerId === localPlayerId && death.livesRemaining === 0) {
+            setIsSpectating(true)
+          }
+          break
+        }
         case WsEvent.LobbyScoreboard: {
           const payload = message.payload as LobbyScoreboardPayload
           setScoreboardEntries([...payload.entries])
           setPhase("SCOREBOARD")
+          setKillFeedRows([])
           break
         }
         case WsEvent.ShopState: {
@@ -121,7 +186,7 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
       }
     })
     return unsub
-  }, [connection])
+  }, [connection, localPlayerId])
 
   useEffect(() => {
     if (!connection) return
@@ -145,6 +210,7 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
           lobbyId,
           token,
           gameConnection: connection,
+          localPlayerId,
         })
         if (typeof window !== "undefined") {
           const w = window as Window & { __wwRoomId?: string; __wwLobbyId?: string }
@@ -164,7 +230,7 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
       cancelled = true
       destroyGame?.()
     }
-  }, [connection, lobbyId, mountGeneration])
+  }, [connection, localPlayerId, lobbyId, mountGeneration])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -285,6 +351,19 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
 
         {phase === "IN_PROGRESS" && (
           <>
+            <KillFeed
+              entries={killFeedRows.map((r) => ({ key: r.key, text: r.text }))}
+            />
+
+            {isSpectating && (
+              <div
+                className="absolute left-1/2 top-4 z-40 -translate-x-1/2 rounded border border-amber-600/60 bg-amber-950/85 px-4 py-1.5 font-mono text-sm font-semibold text-amber-200 shadow-lg backdrop-blur-sm"
+                data-testid="spectating-banner"
+              >
+                Spectating
+              </div>
+            )}
+
             <div className={hudTopPanel}>
               <div className="flex items-center gap-2">
                 <span className="font-bold text-red-400">HP</span>
@@ -304,10 +383,12 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
               </div>
             </div>
 
-            <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 flex-col items-center gap-2">
-              <AbilityBar slots={abilitySlots} room={colyseusRoom} />
-              <QuickItemBar slots={quickItems} room={colyseusRoom} />
-            </div>
+            {!isSpectating && (
+              <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 flex-col items-center gap-2">
+                <AbilityBar slots={abilitySlots} room={colyseusRoom} />
+                <QuickItemBar slots={quickItems} room={colyseusRoom} />
+              </div>
+            )}
 
             <div className="absolute bottom-4 right-4 rounded border border-gray-700/50 bg-black/40 px-2 py-1 text-xs text-gray-500 backdrop-blur-sm">
               \ Settings

@@ -26,7 +26,10 @@
     "dev:hybrid": "docker compose up db -d && bun dev",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "build:lady-wizard-sheets": "tsx scripts/build-lady-wizard-sheets.ts",
+    "build:lady-wizard-megasheet": "tsx scripts/build-lady-wizard-megasheet.ts",
+    "build:arena-colliders": "tsx scripts/compile-arena-colliders.ts"
   },
   "dependencies": {
     "@colyseus/schema": "^4.0.19",

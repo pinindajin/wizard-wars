@@ -14,7 +14,10 @@ import type {
   PlayerRespawnPayload,
   DamageFloatPayload,
 } from "@/shared/types"
-import { WW_GAME_CONNECTION_REGISTRY_KEY } from "../constants"
+import {
+  WW_GAME_CONNECTION_REGISTRY_KEY,
+  WW_LOCAL_PLAYER_ID_REGISTRY_KEY,
+} from "../constants"
 import { GameConnection } from "../network/GameConnection"
 import { PlayerRenderSystem } from "../ecs/systems/PlayerRenderSystem"
 import { ProjectileRenderSystem } from "../ecs/systems/ProjectileRenderSystem"
@@ -88,12 +91,16 @@ export class Arena extends Phaser.Scene {
   private _buildTilemap(): void {
     const map = this.make.tilemap({ key: "arena" })
     const tileset = map.addTilesetImage("arena-terrain", "arena-terrain")
-    if (tileset) {
-      const groundLayer = map.createLayer("Ground", tileset, 0, 0)
-      const decoLayer = map.createLayer("Decoration", tileset, 0, 0)
-      groundLayer?.setDepth(TILEMAP_DEPTH)
-      decoLayer?.setDepth(TILEMAP_DEPTH + 1)
+    if (!tileset) {
+      console.warn(
+        "[Arena] Tileset `arena-terrain` not loaded — check asset pack and public/assets path (Ground/Decoration layers skipped).",
+      )
+      return
     }
+    const groundLayer = map.createLayer("Ground", tileset, 0, 0)
+    const decoLayer = map.createLayer("Decoration", tileset, 0, 0)
+    groundLayer?.setDepth(TILEMAP_DEPTH)
+    decoLayer?.setDepth(TILEMAP_DEPTH + 1)
   }
 
   /**
@@ -146,12 +153,20 @@ export class Arena extends Phaser.Scene {
 
     if (injected?.room) {
       this.connection = injected
+      const sub = this.game.registry.get(WW_LOCAL_PLAYER_ID_REGISTRY_KEY) as
+        | string
+        | undefined
+      this.playerRenderSystem.localPlayerId = sub ?? null
       this._subscribeRoomEvents()
       this.connection.sendClientSceneReady()
       return
     }
 
     this.connection = new GameConnection()
+    const sub = this.game.registry.get(WW_LOCAL_PLAYER_ID_REGISTRY_KEY) as
+      | string
+      | undefined
+    this.playerRenderSystem.localPlayerId = sub ?? null
     void this.connection.connect().then(() => {
       this._subscribeRoomEvents()
       this.connection.sendClientSceneReady()
@@ -168,6 +183,7 @@ export class Arena extends Phaser.Scene {
           const payload = message.payload as GameStateSyncPayload
           this.networkSyncSystem.applyFullSync(payload)
           this.playerRenderSystem.applyFullSync(payload)
+          this.projectileRenderSystem.applyFullSyncFireballs(payload.fireballs)
           break
         }
         case WsEvent.PlayerBatchUpdate:
@@ -252,11 +268,14 @@ export class Arena extends Phaser.Scene {
   }
 
   /**
-   * Exposes the local player id (Colyseus sessionId) for systems that need it.
+   * Exposes the local user's auth id (JWT `sub`); matches `playerId` in sync payloads.
    *
-   * @returns The session id string or null if not yet connected.
+   * @returns The player id from registry, or null if not set.
    */
   getLocalPlayerId(): string | null {
-    return this.connection.sessionId ?? null
+    const sub = this.game.registry.get(WW_LOCAL_PLAYER_ID_REGISTRY_KEY) as
+      | string
+      | undefined
+    return sub ?? null
   }
 }

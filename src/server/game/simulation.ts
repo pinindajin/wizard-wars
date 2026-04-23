@@ -4,7 +4,7 @@
  * Owns the bitECS world, all entity maps, inter-system shared state, and runs
  * the full deterministic system pipeline on every 20 Hz tick.
  */
-import { createWorld, addEntity, addComponent, removeEntity, World } from "bitecs"
+import { createWorld, addEntity, addComponent, removeEntity, query, hasComponent, World } from "bitecs"
 
 import {
   Position,
@@ -21,8 +21,10 @@ import {
   QuickItemSlots,
   PlayerInput,
   PlayerTag,
+  InvulnerableTag,
   HERO_INDEX,
   ABILITY_INDEX,
+  FireballTag,
 } from "./components"
 import { createCommandBuffer, CommandBuffer } from "./commandBuffer"
 import {
@@ -34,6 +36,7 @@ import {
   STARTING_GOLD,
   PLAYER_RADIUS_PX,
 } from "../../shared/balance-config"
+import { DEFAULT_HERO_ID } from "../../shared/balance-config/heroes"
 import type {
   PlayerInputPayload,
   PlayerDelta,
@@ -45,7 +48,10 @@ import type {
   PlayerRespawnPayload,
   DamageFloatPayload,
   ScoreboardEntry,
+  GameStateSyncPayload,
+  PlayerSnapshot,
   PlayerAnimState,
+  FireballSnapshot,
 } from "../../shared/types"
 
 import { inputSystem } from "./systems/inputSystem"
@@ -63,6 +69,7 @@ import { deathSystem } from "./systems/deathSystem"
 import { livesRespawnSystem } from "./systems/livesRespawnSystem"
 import { economySystem } from "./systems/economySystem"
 import { matchEndSystem } from "./systems/matchEndSystem"
+import { computePlayerAnimState } from "./playerAnimState"
 import { playerDeltaSystem } from "./systems/playerDeltaSystem"
 import { projectileDeltaSystem } from "./systems/projectileDeltaSystem"
 
@@ -216,6 +223,10 @@ export type GameSimulation = {
   tick: (inputMap: Map<string, PlayerInputPayload>, serverTimeMs: number) => SimOutput
   /** Signal that the host has requested an immediate match end. */
   requestHostEnd: () => void
+  /**
+   * Builds a full player snapshot for `game_state_sync` (authoritative, seq 0 in MVP).
+   */
+  buildGameStateSyncPayload: () => GameStateSyncPayload
 }
 
 // ─── Factory ─────────────────────────────────────────────────────────────
@@ -370,6 +381,59 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     hostEndSignal = true
   }
 
+  // ── buildGameStateSyncPayload ───────────────────────────────────────
+
+  /**
+   * Collects all live player entities and active fireballs into a `GameStateSyncPayload` (seq 0 for MVP).
+   */
+  function buildGameStateSyncPayload(): GameStateSyncPayload {
+    const players: PlayerSnapshot[] = []
+    for (const eid of query(world, [PlayerTag])) {
+      const userId = entityPlayerMap.get(eid)
+      if (userId === undefined) continue
+      const username = entityUsernameMap.get(eid) ?? ""
+      const heroId = playerHeroIdMap.get(userId) ?? DEFAULT_HERO_ID
+      const x = Position.x[eid]
+      const y = Position.y[eid]
+      const facingAngle = Facing.angle[eid]
+      const health = Health.current[eid]
+      const maxHealth = Health.max[eid]
+      const lives = Lives.count[eid]
+      const animState = computePlayerAnimState(world, eid)
+      const invulnerable = hasComponent(world, eid, InvulnerableTag)
+      players.push({
+        id: eid,
+        playerId: userId,
+        username,
+        x,
+        y,
+        facingAngle,
+        health,
+        maxHealth,
+        lives,
+        heroId,
+        animState,
+        invulnerable,
+      })
+    }
+
+    const fireballs: FireballSnapshot[] = []
+    for (const fbEid of query(world, [FireballTag])) {
+      const ownerId = fireballOwnerMap.get(fbEid)
+      if (ownerId === undefined) continue
+      fireballs.push({
+        id: fbEid,
+        ownerId,
+        x: Position.x[fbEid],
+        y: Position.y[fbEid],
+        vx: Velocity.vx[fbEid],
+        vy: Velocity.vy[fbEid],
+      })
+    }
+
+    return { players, fireballs, seq: 0 }
+  }
+
   // ── tick ─────────────────────────────────────────────────────────────
 
   /**
@@ -468,5 +532,6 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     removePlayer,
     tick,
     requestHostEnd,
+    buildGameStateSyncPayload,
   }
 }

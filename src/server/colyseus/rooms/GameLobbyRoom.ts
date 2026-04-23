@@ -22,6 +22,8 @@ import {
   lobbyChatPayloadSchema,
   heroSelectPayloadSchema,
   playerInputPayloadSchema,
+  parseGameStateSyncPayload,
+  parsePlayerDeathPayload,
 } from "../../../shared/validators"
 import {
   MAX_PLAYERS_PER_MATCH,
@@ -783,6 +785,12 @@ export class GameLobbyRoom extends Room {
     if (economy) {
       client.send(RoomEvent.ShopState, buildShopStatePayload(economy))
     }
+    if (this.simulation) {
+      const gameStateSync = parseGameStateSyncPayload(
+        this.simulation.buildGameStateSyncPayload(),
+      )
+      client.send(RoomEvent.GameStateSync, gameStateSync)
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -915,7 +923,6 @@ export class GameLobbyRoom extends Room {
     this.lobbyPhase = "IN_PROGRESS"
     this.updateMetadataPhase()
     this.broadcast(RoomEvent.LobbyState, this.buildLobbyState())
-    this.broadcast(RoomEvent.MatchGo, {})
 
     // Create the game simulation and session economies for all players
     const nowMs = Date.now()
@@ -929,6 +936,10 @@ export class GameLobbyRoom extends Room {
       const idx = spawnIndices[spawnIdx++ % spawnIndices.length]
       this.simulation.addPlayer(pd.playerId, pd.username, pd.heroId, idx)
     }
+
+    const gameStateSync = parseGameStateSyncPayload(this.simulation.buildGameStateSyncPayload())
+    this.broadcast(RoomEvent.MatchGo, {})
+    this.broadcast(RoomEvent.GameStateSync, gameStateSync)
 
     // Start the 20 Hz game loop
     this.gameLoopTimer = nativeSetInterval(() => {
@@ -1166,7 +1177,7 @@ export class GameLobbyRoom extends Room {
       this.broadcast(RoomEvent.AxeSwing, swing)
     }
     for (const death of output.playerDeaths) {
-      this.broadcast(RoomEvent.PlayerDeath, death)
+      this.broadcast(RoomEvent.PlayerDeath, parsePlayerDeathPayload(death))
     }
     for (const respawn of output.playerRespawns) {
       this.broadcast(RoomEvent.PlayerRespawn, respawn)

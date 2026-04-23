@@ -55,12 +55,13 @@ test("match start keeps user on game route with Phaser mount", async ({ page }) 
 
   await expect(page.getByTestId("game-connect-error")).not.toBeVisible()
 
-  // Phaser should have mounted a canvas inside the container.
-  const canvas = page.locator('[data-testid="game-phaser-container"] canvas')
+  const canvas = page.getByTestId("game-phaser-container").locator("canvas")
   await expect(canvas).toHaveCount(1, { timeout: 30_000 })
-  const canvasBox = await canvas.boundingBox()
-  expect(canvasBox?.width ?? 0).toBeGreaterThan(0)
-  expect(canvasBox?.height ?? 0).toBeGreaterThan(0)
+  await expect(canvas).toBeVisible({ timeout: 15_000 })
+  const box = await canvas.boundingBox()
+  expect(box).not.toBeNull()
+  expect(box!.width).toBeGreaterThan(0)
+  expect(box!.height).toBeGreaterThan(0)
 
   expect(legacyPackRequests, `unexpected /assets/packs/ requests: ${legacyPackRequests.join(", ")}`).toEqual([])
 })

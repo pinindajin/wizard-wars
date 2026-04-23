@@ -1,11 +1,27 @@
 import { describe, it, expect } from "vitest"
 import {
-  ARENA_WIDTH, ARENA_HEIGHT, ARENA_CENTER_X, ARENA_CENTER_Y,
-  ARENA_SPAWN_POINTS, SPAWN_POINT_COUNT, ARENA_SPAWN_RING_RADIUS_PX,
-  TILE_SIZE_PX, ARENA_COLS, ARENA_ROWS,
+  ARENA_WIDTH,
+  ARENA_HEIGHT,
+  ARENA_CENTER_X,
+  ARENA_CENTER_Y,
+  ARENA_SPAWN_POINTS,
+  SPAWN_POINT_COUNT,
+  ARENA_SPAWN_RING_RADIUS_PX,
+  TILE_SIZE_PX,
+  ARENA_COLS,
+  ARENA_ROWS,
+  ARENA_PROP_COLLIDERS,
 } from "@/shared/balance-config/arena"
 
 describe("arena constants", () => {
+  it("exposes prop colliders from generated Tiled export (may be empty)", () => {
+    expect(Array.isArray(ARENA_PROP_COLLIDERS)).toBe(true)
+    for (const r of ARENA_PROP_COLLIDERS) {
+      expect(r.width).toBeGreaterThan(0)
+      expect(r.height).toBeGreaterThan(0)
+    }
+  })
+
   it("has correct dimensions (21x12 x 64px)", () => {
     expect(ARENA_WIDTH).toBe(1344)
     expect(ARENA_HEIGHT).toBe(768)

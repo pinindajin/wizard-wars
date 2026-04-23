@@ -1,8 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect } from "vitest"
 import { createGameSimulation } from "@/server/game/simulation"
-import { ARENA_SPAWN_POINTS, ARENA_WIDTH, ARENA_HEIGHT } from "@/shared/balance-config/arena"
-import { DEFAULT_PLAYER_HEALTH, STARTING_LIVES, BASE_MOVE_SPEED_PX_PER_SEC, PLAYER_RADIUS_PX } from "@/shared/balance-config/combat"
-import { TICK_DT_SEC } from "@/shared/balance-config/rendering"
+import { ARENA_SPAWN_POINTS, ARENA_WIDTH } from "@/shared/balance-config/arena"
+import { PLAYER_RADIUS_PX } from "@/shared/balance-config/combat"
 import type { PlayerInputPayload } from "@/shared/types"
 
 const emptyInput = (): PlayerInputPayload => ({
@@ -91,6 +90,43 @@ describe("movement system", () => {
     if (delta?.x !== undefined) {
       expect(delta.x).toBeLessThanOrEqual(ARENA_WIDTH - PLAYER_RADIUS_PX)
     }
+  })
+})
+
+describe("buildGameStateSyncPayload", () => {
+  it("includes fireballs after a cast completes", () => {
+    const sim = createGameSimulation(Date.now())
+    sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    sim.tick(
+      new Map([
+        [
+          "user1",
+          {
+            ...emptyInput(),
+            abilitySlot: 0,
+            abilityTargetX: 900,
+            abilityTargetY: 400,
+            seq: 1,
+          },
+        ],
+      ]),
+      Date.now(),
+    )
+    for (let i = 0; i < 25; i++) {
+      sim.tick(new Map([["user1", emptyInput()]]), Date.now() + (i + 2) * 50)
+    }
+    const sync = sim.buildGameStateSyncPayload()
+    expect(sync.fireballs.length).toBeGreaterThanOrEqual(1)
+    expect(sync.fireballs[0]!.ownerId).toBe("user1")
+    expect(sync.players.length).toBe(1)
+  })
+
+  it("returns empty fireballs when none exist", () => {
+    const sim = createGameSimulation(Date.now())
+    sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    sim.tick(new Map(), Date.now())
+    const sync = sim.buildGameStateSyncPayload()
+    expect(sync.fireballs).toEqual([])
   })
 })
 
