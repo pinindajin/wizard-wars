@@ -5,11 +5,29 @@ import {
 } from "../components"
 import { addEntity, hasEntity, clientEntities, removeEntity } from "../world"
 
+type AuthoritativePositionReason = "full_sync" | "batch_update"
+
+type NetworkSyncHooks = {
+  readonly onBatchReceived?: () => void
+  readonly onAuthoritativePosition?: (id: number, x: number, y: number, reason: AuthoritativePositionReason) => void
+}
+
 /**
  * Applies authoritative server state updates to the client ECS component records.
  * Position data written here is consumed by PlayerRenderSystem for interpolation.
  */
 export class NetworkSyncSystem {
+  private readonly onBatchReceived?: () => void
+  private readonly onAuthoritativePositionHook?: NetworkSyncHooks["onAuthoritativePosition"]
+
+  /**
+   * @param hooks - Optional render hooks that track authoritative position changes.
+   */
+  constructor(hooks: NetworkSyncHooks = {}) {
+    this.onBatchReceived = hooks.onBatchReceived
+    this.onAuthoritativePositionHook = hooks.onAuthoritativePosition
+  }
+
   /**
    * Replaces all client entity state with the full server snapshot.
    * Used on connect or reconnect.
@@ -30,6 +48,7 @@ export class NetworkSyncSystem {
         addEntity(snap.id)
       }
       ClientPosition[snap.id] = { x: snap.x, y: snap.y }
+      this.onAuthoritativePositionHook?.(snap.id, snap.x, snap.y, "full_sync")
       ClientPlayerState[snap.id] = {
         playerId: snap.playerId,
         username: snap.username,
@@ -51,13 +70,22 @@ export class NetworkSyncSystem {
    * @param payload - Batch delta update from the server.
    */
   applyBatchUpdate(payload: PlayerBatchUpdatePayload): void {
+    if (payload.deltas.length > 0) {
+      this.onBatchReceived?.()
+    }
+
     for (const delta of payload.deltas) {
       const pos = ClientPosition[delta.id]
       const state = ClientPlayerState[delta.id]
 
-      if (pos && delta.x !== undefined && delta.y !== undefined) {
-        pos.x = delta.x
-        pos.y = delta.y
+      if (delta.x !== undefined && delta.y !== undefined) {
+        if (pos) {
+          pos.x = delta.x
+          pos.y = delta.y
+        } else {
+          ClientPosition[delta.id] = { x: delta.x, y: delta.y }
+        }
+        this.onAuthoritativePositionHook?.(delta.id, delta.x, delta.y, "batch_update")
       }
 
       if (state) {

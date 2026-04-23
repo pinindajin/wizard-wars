@@ -32,6 +32,7 @@ import {
   SWIFT_BOOTS_SPEED_BONUS,
   TICK_DT_SEC,
 } from "../../../shared/balance-config"
+import { normalizedMoveFromWASD, worldStepFromIntent } from "../../../shared/movementIntent"
 
 /**
  * Runs the movement system for one tick.
@@ -75,23 +76,15 @@ export function movementSystem(ctx: SimCtx): void {
     const left = PlayerInput.left[eid]
     const right = PlayerInput.right[eid]
 
-    let dx = 0
-    let dy = 0
-    if (right) dx += 1
-    if (left) dx -= 1
-    if (down) dy += 1
-    if (up) dy -= 1
-
-    // Normalize diagonal movement
-    if (dx !== 0 || dy !== 0) {
-      const len = Math.sqrt(dx * dx + dy * dy)
-      dx /= len
-      dy /= len
-    }
-
-    const speed = BASE_MOVE_SPEED_PX_PER_SEC * speedMultiplier * TICK_DT_SEC
-    Velocity.vx[eid] = dx * speed
-    Velocity.vy[eid] = dy * speed
+    const { dx, dy } = normalizedMoveFromWASD({
+      up: up === 1,
+      down: down === 1,
+      left: left === 1,
+      right: right === 1,
+    })
+    const step = worldStepFromIntent(dx, dy, BASE_MOVE_SPEED_PX_PER_SEC, TICK_DT_SEC, speedMultiplier)
+    Velocity.vx[eid] = step.x
+    Velocity.vy[eid] = step.y
     Position.x[eid] += Velocity.vx[eid]
     Position.y[eid] += Velocity.vy[eid]
 
