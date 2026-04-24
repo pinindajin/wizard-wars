@@ -35,6 +35,27 @@ import {
   wireSceneLoaderProgress,
 } from "../loaderStatus"
 
+const INACTIVE_PLAYER_INPUT = {
+  up: false,
+  down: false,
+  left: false,
+  right: false,
+  abilitySlot: null,
+  abilityTargetX: 0,
+  abilityTargetY: 0,
+  useQuickItemSlot: null,
+  seq: 0,
+} as const
+
+/**
+ * Wall-clock fields injected into the outgoing payload at send time. Keeping
+ * this stamp at the scene-level (not inside controllers) preserves
+ * controller testability.
+ */
+function stampClientSendTime(): { clientSendTimeMs: number } {
+  return { clientSendTimeMs: Date.now() }
+}
+
 /**
  * Main arena gameplay scene.
  * Wires together the tilemap, ECS render systems, network connection, and input controllers.
@@ -123,8 +144,28 @@ export class Arena extends Phaser.Scene {
    * Instantiates all ECS render and input systems.
    */
   private _createSystems(): void {
-    this.networkSyncSystem = new NetworkSyncSystem()
     this.playerRenderSystem = new PlayerRenderSystem(this, this.playerGroup)
+    this.networkSyncSystem = new NetworkSyncSystem({
+      onBatchReceived: () => {
+        this.playerRenderSystem.markBatchReceived()
+      },
+      onAuthoritativePosition: (id, x, y, reason) => {
+        this.playerRenderSystem.onAuthoritativePosition(id, x, y, reason)
+      },
+      onRemoteSnapshot: (sample) => {
+        this.playerRenderSystem.onRemoteSnapshot(sample.id, sample)
+      },
+      onLocalAck: (sample) => {
+        this.playerRenderSystem.onLocalAck(sample.id, {
+          x: sample.x,
+          y: sample.y,
+          lastProcessedInputSeq: sample.lastProcessedInputSeq,
+        })
+      },
+      onServerTime: (serverTimeMs) => {
+        this.playerRenderSystem.updateServerTimeOffset(serverTimeMs)
+      },
+    })
     this.projectileRenderSystem = new ProjectileRenderSystem(this)
     this.lightningBoltRenderSystem = new LightningBoltRenderSystem(this)
     this.axeSwingRenderSystem = new AxeSwingRenderSystem(this)
@@ -166,6 +207,7 @@ export class Arena extends Phaser.Scene {
         | string
         | undefined
       this.playerRenderSystem.localPlayerId = sub ?? null
+      this.networkSyncSystem.localPlayerId = sub ?? null
       this._subscribeRoomEvents()
       this.connection.sendClientSceneReady()
       return
@@ -176,6 +218,7 @@ export class Arena extends Phaser.Scene {
       | string
       | undefined
     this.playerRenderSystem.localPlayerId = sub ?? null
+    this.networkSyncSystem.localPlayerId = sub ?? null
     void this.connection.connect().then(() => {
       this._subscribeRoomEvents()
       this.connection.sendClientSceneReady()
@@ -193,6 +236,7 @@ export class Arena extends Phaser.Scene {
           this.networkSyncSystem.applyFullSync(payload)
           this.playerRenderSystem.applyFullSync(payload)
           this.projectileRenderSystem.applyFullSyncFireballs(payload.fireballs)
+          this._ensureMatchLive()
           break
         }
         case WsEvent.PlayerBatchUpdate:
@@ -233,16 +277,27 @@ export class Arena extends Phaser.Scene {
           break
       }
     })
+
+    if (this.connection.isMatchInProgress()) {
+      this.connection.sendRequestResync()
+    }
+  }
+
+  /**
+   * Marks the arena as live and enables input. Idempotent; used after
+   * `MatchGo` and after `GameStateSync` (e.g. refresh / resync).
+   */
+  private _ensureMatchLive(): void {
+    this.matchStarted = true
+    this.keyboardController.enable()
+    this.mouseController.enable()
   }
 
   /**
    * Called when the server signals the match has started (MatchGo).
-   * Enables player input controllers.
    */
   private _onMatchGo(): void {
-    this.matchStarted = true
-    this.keyboardController.enable()
-    this.mouseController.enable()
+    this._ensureMatchLive()
   }
 
   /**
@@ -254,16 +309,25 @@ export class Arena extends Phaser.Scene {
   update(_time: number, delta: number): void {
     if (!this.matchStarted) return
 
-    this.playerRenderSystem.update(delta)
+    const keyboardInput = this.connection.isConnected()
+      ? this.keyboardController.collectInput(this.connection.nextSeq())
+      : INACTIVE_PLAYER_INPUT
+
+    this.playerRenderSystem.update(delta, keyboardInput)
     this.projectileRenderSystem.update(delta)
     this.lightningBoltRenderSystem.update(delta)
     this.axeSwingRenderSystem.update(delta)
     this.damageFloatersSystem.update(delta)
 
     if (this.connection.isConnected()) {
-      const input = this.keyboardController.collectInput(this.connection.nextSeq())
       const mouseInput = this.mouseController.collectInput()
-      this.connection.sendPlayerInput({ ...input, ...mouseInput })
+      const fullInput = {
+        ...keyboardInput,
+        ...mouseInput,
+        ...stampClientSendTime(),
+      }
+      this.playerRenderSystem.localInputHistory.append(fullInput)
+      this.connection.sendPlayerInput(fullInput)
     }
   }
 

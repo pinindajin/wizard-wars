@@ -1,14 +1,19 @@
 /**
- * movementSystem – translates PlayerInput WASD into Velocity and updates
- * Position and Facing each tick.
+ * movementSystem – translates PlayerInput WASD into Velocity (px/s) and
+ * advances Position each tick. Updates {@link Facing} toward the weapon cursor
+ * (aim) and {@link MoveFacing} from non-zero WASD intent (body / idle-walk).
+ *
+ * Velocity semantics: `Velocity.vx/vy` store the player's velocity in
+ * **pixels per second** (aligned with fireball velocity). Position is then
+ * integrated by `v * TICK_DT_SEC` per tick. This matches the client's
+ * rewind-and-replay math and keeps snapshot `vx/vy` directly usable for
+ * remote extrapolation.
  *
  * Movement rules (in priority order):
  *  1. DyingTag / DeadTag / SpectatorTag → velocity = 0
- *  2. Casting component with quick=0    → velocity = 0
+ *  2. Casting → WASD speed × `castMoveSpeedMultiplier` (0 = root)
  *  3. SwingingWeapon                    → speed × SWING_MOVE_SPEED_MULTIPLIER
  *  4. Otherwise                         → speed × 1.0 (+ Swift Boots bonus)
- *
- * Facing angle is updated to point toward the weapon-target cursor position.
  */
 import { query, hasComponent } from "bitecs"
 
@@ -16,6 +21,7 @@ import {
   Position,
   Velocity,
   Facing,
+  MoveFacing,
   Equipment,
   PlayerInput,
   Casting,
@@ -24,6 +30,7 @@ import {
   SpectatorTag,
   SwingingWeapon,
   PlayerTag,
+  ABILITY_INDEX_TO_ID,
 } from "../components"
 import type { SimCtx } from "../simulation"
 import {
@@ -32,6 +39,8 @@ import {
   SWIFT_BOOTS_SPEED_BONUS,
   TICK_DT_SEC,
 } from "../../../shared/balance-config"
+import { ABILITY_CONFIGS } from "../../../shared/balance-config/abilities"
+import { normalizedMoveFromWASD } from "../../../shared/movementIntent"
 
 /**
  * Runs the movement system for one tick.
@@ -50,15 +59,6 @@ export function movementSystem(ctx: SimCtx): void {
     ) {
       Velocity.vx[eid] = 0
       Velocity.vy[eid] = 0
-      Position.x[eid] += 0
-      Position.y[eid] += 0
-      continue
-    }
-
-    // Casting a non-quick ability locks movement
-    if (hasComponent(world, eid, Casting) && Casting.quick[eid] === 0) {
-      Velocity.vx[eid] = 0
-      Velocity.vy[eid] = 0
       continue
     }
 
@@ -70,32 +70,41 @@ export function movementSystem(ctx: SimCtx): void {
       speedMultiplier = 1.0 + SWIFT_BOOTS_SPEED_BONUS
     }
 
+    // When casting, scale movement by per-ability castMoveSpeedMultiplier (0 = root)
+    if (hasComponent(world, eid, Casting)) {
+      const abilityId = ABILITY_INDEX_TO_ID[Casting.abilityIndex[eid]] ?? ""
+      const cfg = abilityId ? ABILITY_CONFIGS[abilityId] : undefined
+      const castMoveMult = cfg?.castMoveSpeedMultiplier ?? 0
+      if (castMoveMult === 0) {
+        Velocity.vx[eid] = 0
+        Velocity.vy[eid] = 0
+        continue
+      }
+      speedMultiplier *= castMoveMult
+    }
+
     const up = PlayerInput.up[eid]
     const down = PlayerInput.down[eid]
     const left = PlayerInput.left[eid]
     const right = PlayerInput.right[eid]
 
-    let dx = 0
-    let dy = 0
-    if (right) dx += 1
-    if (left) dx -= 1
-    if (down) dy += 1
-    if (up) dy -= 1
+    const { dx, dy } = normalizedMoveFromWASD({
+      up: up === 1,
+      down: down === 1,
+      left: left === 1,
+      right: right === 1,
+    })
+    const speedPxPerSec = BASE_MOVE_SPEED_PX_PER_SEC * speedMultiplier
+    Velocity.vx[eid] = dx * speedPxPerSec
+    Velocity.vy[eid] = dy * speedPxPerSec
+    Position.x[eid] += Velocity.vx[eid] * TICK_DT_SEC
+    Position.y[eid] += Velocity.vy[eid] * TICK_DT_SEC
 
-    // Normalize diagonal movement
     if (dx !== 0 || dy !== 0) {
-      const len = Math.sqrt(dx * dx + dy * dy)
-      dx /= len
-      dy /= len
+      MoveFacing.angle[eid] = Math.atan2(dy, dx)
     }
 
-    const speed = BASE_MOVE_SPEED_PX_PER_SEC * speedMultiplier * TICK_DT_SEC
-    Velocity.vx[eid] = dx * speed
-    Velocity.vy[eid] = dy * speed
-    Position.x[eid] += Velocity.vx[eid]
-    Position.y[eid] += Velocity.vy[eid]
-
-    // Update facing toward weapon-target (mouse position)
+    // Update aim facing toward weapon-target (mouse position)
     const wtx = PlayerInput.weaponTargetX[eid]
     const wty = PlayerInput.weaponTargetY[eid]
     const fdx = wtx - Position.x[eid]

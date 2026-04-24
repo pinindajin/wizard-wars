@@ -53,6 +53,7 @@ export const playerInputPayloadSchema = z.object({
   weaponTargetY: z.number().finite(),
   useQuickItemSlot: z.number().int().min(0).max(QUICK_ITEM_SLOT_COUNT - 1).nullable(),
   seq: z.number().int().nonnegative(),
+  clientSendTimeMs: z.number().finite().nonnegative(),
 })
 
 /** Schema for shop purchase. */
@@ -94,6 +95,16 @@ export const playerAnimStateSchema = z.enum([
   "dead",
 ])
 
+/** `PlayerMoveState` values used in snapshots and batch updates. */
+export const playerMoveStateSchema = z.enum([
+  "idle",
+  "moving",
+  "casting",
+  "swinging",
+  "knockback",
+  "rooted",
+])
+
 /** Single player row in `GameStateSync`. */
 export const playerSnapshotSchema = z.object({
   id: z.number().int().nonnegative(),
@@ -101,13 +112,19 @@ export const playerSnapshotSchema = z.object({
   username: z.string().max(64),
   x: z.number().finite(),
   y: z.number().finite(),
+  vx: z.number().finite(),
+  vy: z.number().finite(),
   facingAngle: z.number().finite(),
+  moveFacingAngle: z.number().finite(),
   health: z.number().finite(),
   maxHealth: z.number().finite(),
   lives: z.number().int().nonnegative(),
   heroId: z.string().min(1).max(64),
   animState: playerAnimStateSchema,
+  moveState: playerMoveStateSchema,
+  castingAbilityId: z.string().min(1).max(64).nullable(),
   invulnerable: z.boolean(),
+  lastProcessedInputSeq: z.number().int().nonnegative(),
 })
 
 /** Max simultaneous fireballs included in a full sync (safety cap for Zod). */
@@ -128,6 +145,7 @@ export const gameStateSyncPayloadSchema = z.object({
   players: z.array(playerSnapshotSchema).max(MAX_PLAYERS_PER_MATCH),
   fireballs: z.array(fireballSnapshotSchema).max(MAX_FIREBALLS_IN_SYNC),
   seq: z.number().int().nonnegative(),
+  serverTimeMs: z.number().finite().nonnegative(),
 })
 
 /** Server → clients: player eliminated (validated before broadcast). */

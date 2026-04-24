@@ -1,23 +1,47 @@
 import Phaser from "phaser"
 
+import {
+  DEFAULT_KEYBINDS,
+  type KeybindConfig,
+} from "@/shared/gameKeybinds/lobbyKeybinds"
+import { WW_KEYBIND_CONFIG_REGISTRY_KEY } from "@/game/constants"
 import type { PlayerInputPayload } from "@/shared/types"
 
-/** Key bindings mapped to game actions. Configurable in future via GameKeybindConfig. */
-const DEFAULT_BINDS = {
-  up: [Phaser.Input.Keyboard.KeyCodes.W, Phaser.Input.Keyboard.KeyCodes.UP],
-  down: [Phaser.Input.Keyboard.KeyCodes.S, Phaser.Input.Keyboard.KeyCodes.DOWN],
-  left: [Phaser.Input.Keyboard.KeyCodes.A, Phaser.Input.Keyboard.KeyCodes.LEFT],
-  right: [Phaser.Input.Keyboard.KeyCodes.D, Phaser.Input.Keyboard.KeyCodes.RIGHT],
-  ability0: [Phaser.Input.Keyboard.KeyCodes.ONE],
-  ability1: [Phaser.Input.Keyboard.KeyCodes.TWO],
-  ability2: [Phaser.Input.Keyboard.KeyCodes.THREE],
-  ability3: [Phaser.Input.Keyboard.KeyCodes.FOUR],
-  ability4: [Phaser.Input.Keyboard.KeyCodes.FIVE],
-  quickItem0: [Phaser.Input.Keyboard.KeyCodes.Q],
-  quickItem1: [Phaser.Input.Keyboard.KeyCodes.E],
-  quickItem2: [Phaser.Input.Keyboard.KeyCodes.R],
-  quickItem3: [Phaser.Input.Keyboard.KeyCodes.F],
-} as const
+import { keyStringToKeyCode } from "./keyStringToKeyCode"
+
+/** How many input sends include a non-null ability slot after a key edge. */
+const ARMED_ABILITY_FRAMES = 2
+
+type ActionId =
+  | "moveUp"
+  | "moveDown"
+  | "moveLeft"
+  | "moveRight"
+  | "ability0"
+  | "ability1"
+  | "ability2"
+  | "ability3"
+  | "ability4"
+  | "quickItem0"
+  | "quickItem1"
+  | "quickItem2"
+  | "quickItem3"
+
+const ACTION_TO_KEYBIND: Record<ActionId, keyof KeybindConfig> = {
+  moveUp: "move_up",
+  moveDown: "move_down",
+  moveLeft: "move_left",
+  moveRight: "move_right",
+  ability0: "ability_1",
+  ability1: "ability_2",
+  ability2: "ability_3",
+  ability3: "ability_4",
+  ability4: "ability_5",
+  quickItem0: "quick_item_1",
+  quickItem1: "quick_item_2",
+  quickItem2: "quick_item_3",
+  quickItem3: "quick_item_4",
+}
 
 /** Tags for interactive HTML elements that should suppress game input. */
 const INPUT_BLOCKING_TAGS = new Set(["INPUT", "TEXTAREA", "SELECT"])
@@ -29,8 +53,10 @@ const INPUT_BLOCKING_TAGS = new Set(["INPUT", "TEXTAREA", "SELECT"])
  */
 export class KeyboardController {
   private scene: Phaser.Scene
-  private keys: Map<string, Phaser.Input.Keyboard.Key[]> = new Map()
+  private keys = new Map<ActionId, Phaser.Input.Keyboard.Key[]>()
   private _enabled = false
+  private _armedAbility: { slot: number; left: number } | null = null
+  private _armedQuick: { slot: number; left: number } | null = null
 
   /**
    * @param scene - The Arena scene instance.
@@ -66,15 +92,39 @@ export class KeyboardController {
     return false
   }
 
+  private _getKeybinds(): KeybindConfig {
+    const fromRegistry = this.scene.game.registry.get(
+      WW_KEYBIND_CONFIG_REGISTRY_KEY,
+    ) as KeybindConfig | undefined
+    return fromRegistry ?? DEFAULT_KEYBINDS
+  }
+
   /**
    * Collects the current keyboard state and returns the movement + ability portion
-   * of a PlayerInputPayload. Mouse-driven fields are filled in by MouseController.
+   * of a PlayerInputPayload. Mouse-driven fields are filled in by MouseController
+   * and `clientSendTimeMs` is stamped by `Arena.update` right before send to
+   * keep this controller oblivious to wall-clock time (testability).
    *
    * @param seq - The outbound sequence number for this tick.
-   * @returns Partial PlayerInputPayload (movement + abilities; weapon fields defaulted to false/0).
+   * @returns Partial PlayerInputPayload (movement + abilities; weapon fields +
+   *   clientSendTimeMs are filled by callers).
    */
-  collectInput(seq: number): Omit<PlayerInputPayload, "weaponPrimary" | "weaponSecondary" | "weaponTargetX" | "weaponTargetY"> {
-    const inactive: Omit<PlayerInputPayload, "weaponPrimary" | "weaponSecondary" | "weaponTargetX" | "weaponTargetY"> = {
+  collectInput(seq: number): Omit<
+    PlayerInputPayload,
+    | "weaponPrimary"
+    | "weaponSecondary"
+    | "weaponTargetX"
+    | "weaponTargetY"
+    | "clientSendTimeMs"
+  > {
+    const inactive: Omit<
+      PlayerInputPayload,
+      | "weaponPrimary"
+      | "weaponSecondary"
+      | "weaponTargetX"
+      | "weaponTargetY"
+      | "clientSendTimeMs"
+    > = {
       up: false,
       down: false,
       left: false,
@@ -86,75 +136,96 @@ export class KeyboardController {
       seq,
     }
 
-    if (!this._enabled || this._isUiInputFocused()) return inactive
+    if (!this._enabled || this._isUiInputFocused()) {
+      this._armedAbility = null
+      this._armedQuick = null
+      return inactive
+    }
+
+    this._rearmFromJustDown()
 
     const worldPointer = this.scene.input.activePointer.positionToCamera(
       this.scene.cameras.main,
     ) as Phaser.Math.Vector2
 
-    const activeAbility = this._getFirstActiveAbilitySlot()
-    const activeQuickItem = this._getFirstActiveQuickItemSlot()
+    let abilitySlot: number | null = null
+    if (this._armedAbility && this._armedAbility.left > 0) {
+      abilitySlot = this._armedAbility.slot
+      this._armedAbility.left -= 1
+      if (this._armedAbility.left <= 0) {
+        this._armedAbility = null
+      }
+    }
+
+    let useQuickItemSlot: number | null = null
+    if (this._armedQuick && this._armedQuick.left > 0) {
+      useQuickItemSlot = this._armedQuick.slot
+      this._armedQuick.left -= 1
+      if (this._armedQuick.left <= 0) {
+        this._armedQuick = null
+      }
+    }
 
     return {
-      up: this._anyDown("up"),
-      down: this._anyDown("down"),
-      left: this._anyDown("left"),
-      right: this._anyDown("right"),
-      abilitySlot: activeAbility,
+      up: this._anyDown("moveUp"),
+      down: this._anyDown("moveDown"),
+      left: this._anyDown("moveLeft"),
+      right: this._anyDown("moveRight"),
+      abilitySlot,
       abilityTargetX: worldPointer.x,
       abilityTargetY: worldPointer.y,
-      useQuickItemSlot: activeQuickItem,
+      useQuickItemSlot,
       seq,
     }
   }
 
-  /**
-   * Returns true if any bound key for the given action is currently held.
-   *
-   * @param action - Action name matching a key in DEFAULT_BINDS.
-   */
-  private _anyDown(action: keyof typeof DEFAULT_BINDS): boolean {
-    const keys = this.keys.get(action)
-    if (!keys) return false
-    return keys.some((k) => k.isDown)
-  }
-
-  /**
-   * Returns the 0-based index of the first ability slot key currently just-pressed, or null.
-   */
-  private _getFirstActiveAbilitySlot(): number | null {
+  private _rearmFromJustDown(): void {
+    const abilityActions: ActionId[] = [
+      "ability0", "ability1", "ability2", "ability3", "ability4",
+    ]
     for (let i = 0; i < 5; i++) {
-      const action = `ability${i}` as keyof typeof DEFAULT_BINDS
-      const keys = this.keys.get(action)
-      if (keys?.some((k) => Phaser.Input.Keyboard.JustDown(k))) return i
+      if (this._anyJustDown(abilityActions[i]!)) {
+        this._armedAbility = { slot: i, left: ARMED_ABILITY_FRAMES }
+        break
+      }
     }
-    return null
-  }
-
-  /**
-   * Returns the 0-based index of the first quick-item slot key currently just-pressed, or null.
-   */
-  private _getFirstActiveQuickItemSlot(): number | null {
+    const quickActions: ActionId[] = [
+      "quickItem0", "quickItem1", "quickItem2", "quickItem3",
+    ]
     for (let i = 0; i < 4; i++) {
-      const action = `quickItem${i}` as keyof typeof DEFAULT_BINDS
-      const keys = this.keys.get(action)
-      if (keys?.some((k) => Phaser.Input.Keyboard.JustDown(k))) return i
+      if (this._anyJustDown(quickActions[i]!)) {
+        this._armedQuick = { slot: i, left: ARMED_ABILITY_FRAMES }
+        break
+      }
     }
-    return null
   }
 
-  /**
-   * Registers all default keybind keys with the Phaser keyboard plugin.
-   */
+  private _anyDown(action: ActionId): boolean {
+    const list = this.keys.get(action)
+    if (!list) return false
+    return list.some((k) => k.isDown)
+  }
+
+  private _anyJustDown(action: ActionId): boolean {
+    const list = this.keys.get(action)
+    if (!list) return false
+    return list.some((k) => Phaser.Input.Keyboard.JustDown(k))
+  }
+
   private _registerKeys(): void {
     const keyboard = this.scene.input.keyboard
     if (!keyboard) return
+    const cfg = this._getKeybinds()
 
-    for (const [action, codes] of Object.entries(DEFAULT_BINDS)) {
-      const mapped = (codes as readonly number[]).map((code) =>
-        keyboard.addKey(code, false),
-      )
-      this.keys.set(action, mapped)
+    for (const [action, bindId] of Object.entries(
+      ACTION_TO_KEYBIND,
+    ) as [ActionId, keyof KeybindConfig][]) {
+      const s = cfg[bindId] ?? DEFAULT_KEYBINDS[bindId]
+      const code = keyStringToKeyCode(s)
+      if (code == null) continue
+      const k = keyboard.addKey(code, false, false)
+      const prev = this.keys.get(action) ?? []
+      this.keys.set(action, [...prev, k])
     }
   }
 }

@@ -4,12 +4,35 @@ import { ARENA_SPAWN_POINTS, ARENA_WIDTH } from "@/shared/balance-config/arena"
 import { PLAYER_RADIUS_PX } from "@/shared/balance-config/combat"
 import type { PlayerInputPayload } from "@/shared/types"
 
-const emptyInput = (): PlayerInputPayload => ({
-  up: false, down: false, left: false, right: false,
-  abilitySlot: null, abilityTargetX: 0, abilityTargetY: 0,
-  weaponPrimary: false, weaponSecondary: false, weaponTargetX: 0, weaponTargetY: 0,
-  useQuickItemSlot: null, seq: 0,
+let nextSeq = 1
+const emptyInput = (overrides: Partial<PlayerInputPayload> = {}): PlayerInputPayload => ({
+  up: false,
+  down: false,
+  left: false,
+  right: false,
+  abilitySlot: null,
+  abilityTargetX: 0,
+  abilityTargetY: 0,
+  weaponPrimary: false,
+  weaponSecondary: false,
+  weaponTargetX: 0,
+  weaponTargetY: 0,
+  useQuickItemSlot: null,
+  seq: nextSeq++,
+  clientSendTimeMs: Date.now(),
+  ...overrides,
 })
+
+/** Convenience: wrap a single input per player into the new queue-style map. */
+function queueMap(
+  entries: Array<[string, PlayerInputPayload]>,
+): Map<string, PlayerInputPayload[]> {
+  const out = new Map<string, PlayerInputPayload[]>()
+  for (const [userId, input] of entries) {
+    out.set(userId, [input])
+  }
+  return out
+}
 
 describe("createGameSimulation", () => {
   it("creates a simulation with correct match start time", () => {
@@ -29,13 +52,10 @@ describe("createGameSimulation", () => {
   it("addPlayer spawns at correct spawn point location", () => {
     const sim = createGameSimulation(Date.now())
     sim.addPlayer("user1", "Alice", "red_wizard", 0)
-    const input = new Map<string, PlayerInputPayload>()
-    const output = sim.tick(input, Date.now())
-    // Player should appear in deltas
+    const output = sim.tick(new Map(), Date.now())
     const delta = output.playerDeltas.find((d) => d.id === sim.playerEntityMap.get("user1"))
     expect(delta).toBeDefined()
     if (delta?.x !== undefined && delta?.y !== undefined) {
-      // Approximate spawn point position
       const sp = ARENA_SPAWN_POINTS[0]
       expect(delta.x).toBeCloseTo(sp.x, 1)
       expect(delta.y).toBeCloseTo(sp.y, 1)
@@ -51,45 +71,122 @@ describe("createGameSimulation", () => {
 })
 
 describe("movement system", () => {
-  it("moves player up when W is pressed", () => {
+  it("moves player up when W is pressed across many ticks", () => {
     const sim = createGameSimulation(Date.now())
     sim.addPlayer("user1", "Alice", "red_wizard", 0)
     const spawnY = ARENA_SPAWN_POINTS[0].y
 
-    const input = new Map<string, PlayerInputPayload>([
-      ["user1", { ...emptyInput(), up: true }],
-    ])
-
-    // Wait for invulnerability to expire, tick several times
+    let lastY = spawnY
     for (let i = 0; i < 40; i++) {
-      sim.tick(input, Date.now() + i * 50)
+      const output = sim.tick(
+        queueMap([["user1", emptyInput({ up: true })]]),
+        Date.now() + i * 17,
+      )
+      const delta = output.playerDeltas.find((d) => d.id === sim.playerEntityMap.get("user1"))
+      if (delta?.y !== undefined) lastY = delta.y
     }
 
-    const output = sim.tick(input, Date.now() + 40 * 50)
-    const delta = output.playerDeltas.find((d) => d.id === sim.playerEntityMap.get("user1"))
-    if (delta?.y !== undefined) {
-      expect(delta.y).toBeLessThan(spawnY) // y decreases when moving up
-    }
+    expect(lastY).toBeLessThan(spawnY)
   })
 
   it("player cannot leave arena bounds", () => {
     const sim = createGameSimulation(Date.now())
-    // Use spawn point 0 which is at right edge
     sim.addPlayer("user1", "Alice", "red_wizard", 0)
 
-    const input = new Map<string, PlayerInputPayload>([
-      ["user1", { ...emptyInput(), right: true }],
+    let lastX = -Infinity
+    for (let i = 0; i < 400; i++) {
+      const output = sim.tick(
+        queueMap([["user1", emptyInput({ right: true })]]),
+        Date.now() + i * 17,
+      )
+      const delta = output.playerDeltas.find((d) => d.id === sim.playerEntityMap.get("user1"))
+      if (delta?.x !== undefined) lastX = delta.x
+    }
+
+    expect(lastX).toBeLessThanOrEqual(ARENA_WIDTH - PLAYER_RADIUS_PX)
+  })
+
+  it("consumes queued inputs one per tick in seq order", () => {
+    const sim = createGameSimulation(Date.now())
+    sim.addPlayer("user1", "Alice", "red_wizard", 0)
+
+    // Seed three queued inputs (all moving up) and verify lastProcessedInputSeq
+    // increments one per tick.
+    const queues = new Map<string, PlayerInputPayload[]>()
+    queues.set("user1", [
+      { ...emptyInput({ up: true }), seq: 100 },
+      { ...emptyInput({ up: true }), seq: 101 },
+      { ...emptyInput({ up: true }), seq: 102 },
     ])
 
-    // Move right many ticks (should be clamped at arena edge)
-    for (let i = 0; i < 200; i++) {
-      sim.tick(input, Date.now() + i * 50)
+    const out1 = sim.tick(queues, Date.now())
+    const out2 = sim.tick(queues, Date.now() + 17)
+    const out3 = sim.tick(queues, Date.now() + 34)
+
+    const acks = [out1, out2, out3].map((o) =>
+      o.playerDeltas.find((d) => d.id === sim.playerEntityMap.get("user1"))
+        ?.lastProcessedInputSeq,
+    )
+    expect(acks).toEqual([100, 101, 102])
+  })
+
+  it("drops queued inputs whose seq <= lastProcessedInputSeq", () => {
+    const sim = createGameSimulation(Date.now())
+    sim.addPlayer("user1", "Alice", "red_wizard", 0)
+
+    // Prime the last-processed seq to 10 by processing a higher-seq input first.
+    sim.tick(
+      queueMap([["user1", { ...emptyInput({ up: true }), seq: 10 }]]),
+      Date.now(),
+    )
+
+    // Now enqueue a stale input (seq 9) alongside a fresh one (seq 11);
+    // only the fresh one should advance the ack.
+    const queue: PlayerInputPayload[] = [
+      { ...emptyInput({ up: true }), seq: 9 },
+      { ...emptyInput({ up: true }), seq: 11 },
+    ]
+    const out = sim.tick(new Map([["user1", queue]]), Date.now() + 17)
+    const delta = out.playerDeltas.find((d) => d.id === sim.playerEntityMap.get("user1"))
+    expect(delta?.lastProcessedInputSeq).toBe(11)
+  })
+
+  it("updates moveFacingAngle from non-zero WASD intent", () => {
+    const sim = createGameSimulation(Date.now())
+    sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    for (let i = 0; i < 25; i++) {
+      sim.tick(
+        queueMap([["user1", { ...emptyInput({ up: true }), seq: 700 + i }]]),
+        Date.now() + i * 17,
+      )
     }
-    const output = sim.tick(input, Date.now() + 200 * 50)
-    const delta = output.playerDeltas.find((d) => d.id === sim.playerEntityMap.get("user1"))
-    if (delta?.x !== undefined) {
-      expect(delta.x).toBeLessThanOrEqual(ARENA_WIDTH - PLAYER_RADIUS_PX)
-    }
+    const sync = sim.buildGameStateSyncPayload(Date.now())
+    expect(sync.players[0]!.moveFacingAngle).toBeCloseTo(-Math.PI / 2, 5)
+  })
+
+  it("does not change moveFacingAngle when only aim (weapon target) moves", () => {
+    const sim = createGameSimulation(Date.now())
+    sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    sim.tick(new Map(), Date.now())
+    const move0 = sim.buildGameStateSyncPayload(Date.now()).players[0]!.moveFacingAngle
+    const sp = ARENA_SPAWN_POINTS[0]!
+    sim.tick(
+      queueMap([
+        [
+          "user1",
+          emptyInput({
+            weaponTargetX: sp.x + 400,
+            weaponTargetY: sp.y,
+            seq: 800,
+          }),
+        ],
+      ]),
+      Date.now() + 17,
+    )
+    const syncAfter = sim.buildGameStateSyncPayload(Date.now())
+    const p = syncAfter.players[0]!
+    expect(p.moveFacingAngle).toBeCloseTo(move0, 5)
+    expect(p.facingAngle).toBeCloseTo(Math.atan2(0, 400), 5)
   })
 })
 
@@ -98,35 +195,53 @@ describe("buildGameStateSyncPayload", () => {
     const sim = createGameSimulation(Date.now())
     sim.addPlayer("user1", "Alice", "red_wizard", 0)
     sim.tick(
-      new Map([
+      queueMap([
         [
           "user1",
-          {
-            ...emptyInput(),
+          emptyInput({
             abilitySlot: 0,
             abilityTargetX: 900,
             abilityTargetY: 400,
-            seq: 1,
-          },
+          }),
         ],
       ]),
       Date.now(),
     )
-    for (let i = 0; i < 25; i++) {
-      sim.tick(new Map([["user1", emptyInput()]]), Date.now() + (i + 2) * 50)
+    for (let i = 0; i < 50; i++) {
+      sim.tick(queueMap([["user1", emptyInput()]]), Date.now() + (i + 2) * 17)
     }
-    const sync = sim.buildGameStateSyncPayload()
+    const sync = sim.buildGameStateSyncPayload(Date.now())
     expect(sync.fireballs.length).toBeGreaterThanOrEqual(1)
     expect(sync.fireballs[0]!.ownerId).toBe("user1")
     expect(sync.players.length).toBe(1)
+    expect(sync.serverTimeMs).toBeGreaterThan(0)
   })
 
   it("returns empty fireballs when none exist", () => {
     const sim = createGameSimulation(Date.now())
     sim.addPlayer("user1", "Alice", "red_wizard", 0)
     sim.tick(new Map(), Date.now())
-    const sync = sim.buildGameStateSyncPayload()
+    const sync = sim.buildGameStateSyncPayload(Date.now())
     expect(sync.fireballs).toEqual([])
+  })
+
+  it("exposes per-player velocity, move state, and last processed input seq", () => {
+    const sim = createGameSimulation(Date.now())
+    sim.addPlayer("user1", "Alice", "red_wizard", 0)
+
+    // Hold W for enough ticks to clear invulnerability and register motion.
+    for (let i = 0; i < 30; i++) {
+      sim.tick(
+        queueMap([["user1", { ...emptyInput({ up: true }), seq: 500 + i }]]),
+        Date.now() + i * 17,
+      )
+    }
+
+    const sync = sim.buildGameStateSyncPayload(Date.now())
+    const snap = sync.players[0]!
+    expect(snap.vy).toBeLessThan(0)
+    expect(snap.moveState).toBe("moving")
+    expect(snap.lastProcessedInputSeq).toBe(529)
   })
 })
 

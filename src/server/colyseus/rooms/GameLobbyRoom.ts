@@ -73,6 +73,13 @@ const CHAT_RATE_WINDOW_MS = 5_000
 /** Max lobby chat message length in characters. */
 const CHAT_MAX_LEN = 200
 
+/**
+ * Max queued `PlayerInput` payloads per player. Bound this so a misbehaving
+ * client cannot consume unbounded memory by flooding the input channel; when
+ * the cap is reached, the oldest entries are dropped first.
+ */
+const INPUT_QUEUE_CAP_PER_PLAYER = 32
+
 // ---------------------------------------------------------------------------
 // Per-player state stored on `client.userData`
 // ---------------------------------------------------------------------------
@@ -205,8 +212,22 @@ export class GameLobbyRoom extends Room {
   /** Per-player session economies (userId → SessionEconomy). */
   private readonly economies = new Map<string, SessionEconomy>()
 
-  /** Buffered inputs from clients for the current tick (userId → latest input). */
-  private readonly inputBuffer = new Map<string, import("../../../shared/types").PlayerInputPayload>()
+  /**
+   * Ordered per-player input queue. Each `handlePlayerInput` pushes the
+   * validated payload sorted by `seq`; `runGameTick` pops exactly one input
+   * per player per tick (see `simulation.tick` semantics). Capped per
+   * {@link INPUT_QUEUE_CAP_PER_PLAYER} to bound memory if a client floods.
+   */
+  private readonly inputQueue = new Map<
+    string,
+    import("../../../shared/types").PlayerInputPayload[]
+  >()
+
+  /**
+   * Highest `seq` accepted from each player across the queue lifetime, used
+   * to ignore duplicate / re-ordered inputs on arrival.
+   */
+  private readonly highestAcceptedSeqByPlayer = new Map<string, number>()
 
   // ---------------------------------------------------------------------------
   // Colyseus lifecycle
@@ -342,6 +363,10 @@ export class GameLobbyRoom extends Room {
     this.updateMetadataPlayerCount()
     this.resetInactivityTimer()
 
+    if (this.lobbyPhase === "IN_PROGRESS") {
+      this.sendInProgressHydrationToClient(client, { includeLobbyState: false })
+    }
+
     logger.info(
       { event: "player.join", roomId: this.roomId, playerId: auth.sub },
       "[GameLobbyRoom] player joined",
@@ -408,6 +433,10 @@ export class GameLobbyRoom extends Room {
     client.send(RoomEvent.LobbyChatHistory, { messages: this.chatBuffer })
 
     this.updateMetadataPlayerCount()
+
+    if (this.lobbyPhase === "IN_PROGRESS") {
+      this.sendInProgressHydrationToClient(client, { includeLobbyState: false })
+    }
 
     logger.info(
       { event: "player.reconnect", roomId: this.roomId, playerId: pd.playerId },
@@ -557,7 +586,10 @@ export class GameLobbyRoom extends Room {
   }
 
   /**
-   * Buffers player input for the next simulation tick.
+   * Enqueues player input for the simulation in `seq` order. Drops inputs
+   * whose `seq` is less than or equal to the highest already accepted for
+   * this player (handles re-order / duplicates). Caps the per-player queue
+   * at {@link INPUT_QUEUE_CAP_PER_PLAYER} to bound memory.
    *
    * @param client - The sending client.
    * @param payload - Raw inbound payload; validated with playerInputPayloadSchema.
@@ -567,7 +599,22 @@ export class GameLobbyRoom extends Room {
     const pd = client.userData as PlayerData
     const result = playerInputPayloadSchema.safeParse(payload)
     if (!result.success) return
-    this.inputBuffer.set(pd.playerId, result.data)
+
+    const highest = this.highestAcceptedSeqByPlayer.get(pd.playerId) ?? -1
+    if (result.data.seq <= highest) return
+
+    let queue = this.inputQueue.get(pd.playerId)
+    if (!queue) {
+      queue = []
+      this.inputQueue.set(pd.playerId, queue)
+    }
+    queue.push(result.data)
+    this.highestAcceptedSeqByPlayer.set(pd.playerId, result.data.seq)
+
+    // Cap queue: drop from the front if it grows unbounded.
+    while (queue.length > INPUT_QUEUE_CAP_PER_PLAYER) {
+      queue.shift()
+    }
   }
 
   /**
@@ -770,24 +817,43 @@ export class GameLobbyRoom extends Room {
 
   /**
    * Handles an inbound `request_resync` message.
-   * Sends the full lobby state and shop state to the requesting client.
-   * Only processed during `IN_PROGRESS`.
+   * During `IN_PROGRESS`, unicasts fresh `LobbyState`, optional `ShopState`, and
+   * `GameStateSync` so clients can recover after refresh or missed messages.
    *
    * @param client - The requesting client.
    */
   private handleRequestResync(client: Client): void {
+    this.sendInProgressHydrationToClient(client, { includeLobbyState: true })
+  }
+
+  /**
+   * Unicasts match hydration (`ShopState`, `GameStateSync`) to one client while
+   * the room is `IN_PROGRESS`. Used on join/reconnect and from
+   * {@link handleRequestResync}.
+   *
+   * @param client - Target client (must carry {@link PlayerData}).
+   * @param opts - When `includeLobbyState` is true, sends `LobbyState` first
+   *   (explicit resync). Join/reconnect pass false because `onJoin` /
+   *   `onReconnect` already sent lobby state.
+   */
+  private sendInProgressHydrationToClient(
+    client: Client,
+    opts?: { readonly includeLobbyState?: boolean },
+  ): void {
     if (this.lobbyPhase !== "IN_PROGRESS") return
 
     const pd = client.userData as PlayerData
     const economy = this.economies.get(pd.playerId)
 
-    client.send(RoomEvent.LobbyState, this.buildLobbyState())
+    if (opts?.includeLobbyState) {
+      client.send(RoomEvent.LobbyState, this.buildLobbyState())
+    }
     if (economy) {
       client.send(RoomEvent.ShopState, buildShopStatePayload(economy))
     }
     if (this.simulation) {
       const gameStateSync = parseGameStateSyncPayload(
-        this.simulation.buildGameStateSyncPayload(),
+        this.simulation.buildGameStateSyncPayload(Date.now()),
       )
       client.send(RoomEvent.GameStateSync, gameStateSync)
     }
@@ -941,11 +1007,13 @@ export class GameLobbyRoom extends Room {
       client.send(RoomEvent.ShopState, buildShopStatePayload(economy))
     }
 
-    const gameStateSync = parseGameStateSyncPayload(this.simulation.buildGameStateSyncPayload())
+    const gameStateSync = parseGameStateSyncPayload(
+      this.simulation.buildGameStateSyncPayload(Date.now()),
+    )
     this.broadcast(RoomEvent.MatchGo, {})
     this.broadcast(RoomEvent.GameStateSync, gameStateSync)
 
-    // Start the 20 Hz game loop
+    // Start the fixed-rate game loop (see TICK_MS; 60 Hz by default).
     this.gameLoopTimer = nativeSetInterval(() => {
       this.runGameTick()
     }, TICK_MS)
@@ -973,7 +1041,8 @@ export class GameLobbyRoom extends Room {
     this.gameLoopTimer?.clear()
     this.gameLoopTimer = null
     this.simulation = null
-    this.inputBuffer.clear()
+    this.inputQueue.clear()
+    this.highestAcceptedSeqByPlayer.clear()
 
     this.lobbyPhase = "SCOREBOARD"
     this.returnedToLobbySet.clear()
@@ -1142,7 +1211,10 @@ export class GameLobbyRoom extends Room {
 
   /**
    * Runs one game simulation tick, broadcasts deltas and events to all clients.
-   * Called at TICK_MS (50ms) intervals during IN_PROGRESS phase.
+   * Called at `TICK_MS` intervals during `IN_PROGRESS` phase.
+   *
+   * Per-player input queues are mutated in-place by `simulation.tick`, which
+   * pops exactly one queued input per player per tick.
    */
   private runGameTick(): void {
     if (!this.simulation || this.lobbyPhase !== "IN_PROGRESS") {
@@ -1150,15 +1222,21 @@ export class GameLobbyRoom extends Room {
     }
 
     const serverTimeMs = Date.now()
-    const inputMap = new Map(this.inputBuffer)
-    const output = this.simulation.tick(inputMap, serverTimeMs)
+    const output = this.simulation.tick(this.inputQueue, serverTimeMs)
 
-    if (output.playerDeltas.length > 0 || output.fireballDeltas.length > 0 || output.fireballRemovedIds.length > 0) {
-      this.broadcast(RoomEvent.PlayerBatchUpdate, {
-        deltas: output.playerDeltas,
-        removedIds: [],
-        seq: 0,
-      })
+    if (
+      output.playerDeltas.length > 0 ||
+      output.fireballDeltas.length > 0 ||
+      output.fireballRemovedIds.length > 0
+    ) {
+      if (output.playerDeltas.length > 0) {
+        this.broadcast(RoomEvent.PlayerBatchUpdate, {
+          deltas: output.playerDeltas,
+          removedIds: [],
+          seq: 0,
+          serverTimeMs,
+        })
+      }
       if (output.fireballDeltas.length > 0 || output.fireballRemovedIds.length > 0) {
         this.broadcast(RoomEvent.FireballBatchUpdate, {
           deltas: output.fireballDeltas,

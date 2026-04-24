@@ -65,6 +65,7 @@ describe("playerInputPayloadSchema", () => {
     weaponTargetX: 100, weaponTargetY: 200,
     useQuickItemSlot: null,
     seq: 42,
+    clientSendTimeMs: 1700000000000,
   }
 
   it("accepts valid input", () => {
@@ -85,6 +86,23 @@ describe("playerInputPayloadSchema", () => {
   it("requires seq to be non-negative", () => {
     expect(playerInputPayloadSchema.safeParse({ ...validInput, seq: -1 }).success).toBe(false)
   })
+
+  it("requires clientSendTimeMs to be present", () => {
+    const { clientSendTimeMs: _drop, ...withoutTime } = validInput
+    expect(playerInputPayloadSchema.safeParse(withoutTime).success).toBe(false)
+  })
+
+  it("rejects negative clientSendTimeMs", () => {
+    expect(
+      playerInputPayloadSchema.safeParse({ ...validInput, clientSendTimeMs: -1 }).success,
+    ).toBe(false)
+  })
+
+  it("rejects NaN clientSendTimeMs", () => {
+    expect(
+      playerInputPayloadSchema.safeParse({ ...validInput, clientSendTimeMs: Number.NaN }).success,
+    ).toBe(false)
+  })
 })
 
 describe("parseGameStateSyncPayload", () => {
@@ -97,17 +115,24 @@ describe("parseGameStateSyncPayload", () => {
           username: "A",
           x: 0,
           y: 0,
+          vx: 0,
+          vy: 0,
           facingAngle: 0,
+          moveFacingAngle: 0,
           health: 10,
           maxHealth: 10,
           lives: 3,
           heroId: "red_wizard",
           animState: "idle",
+          moveState: "idle",
+          castingAbilityId: null,
           invulnerable: false,
+          lastProcessedInputSeq: 0,
         },
       ],
       fireballs: [],
       seq: 0,
+      serverTimeMs: 1700000000000,
     }
     const parsed = parseGameStateSyncPayload(raw)
     expect(parsed).toEqual(raw)
@@ -120,6 +145,7 @@ describe("parseGameStateSyncPayload", () => {
         { id: 42, ownerId: "u1", x: 1, y: 2, vx: 100, vy: 0 },
       ],
       seq: 0,
+      serverTimeMs: 1700000000000,
     }
     expect(parseGameStateSyncPayload(raw)).toEqual(raw)
   })
@@ -130,6 +156,7 @@ describe("parseGameStateSyncPayload", () => {
         players: [],
         fireballs: [{ id: 1, ownerId: "", x: 0, y: 0, vx: 1, vy: 0 }],
         seq: 0,
+        serverTimeMs: 1,
       } as never),
     ).toThrow()
   })
@@ -144,17 +171,24 @@ describe("parseGameStateSyncPayload", () => {
             username: "x",
             x: 0,
             y: 0,
+            vx: 0,
+            vy: 0,
             facingAngle: 0,
+            moveFacingAngle: 0,
             health: 1,
             maxHealth: 1,
             lives: 1,
             heroId: "red_wizard",
             animState: "invalid",
+            moveState: "idle",
+            castingAbilityId: null,
             invulnerable: false,
+            lastProcessedInputSeq: 0,
           },
         ],
         fireballs: [],
         seq: 0,
+        serverTimeMs: 1,
       } as never),
     ).toThrow()
   })

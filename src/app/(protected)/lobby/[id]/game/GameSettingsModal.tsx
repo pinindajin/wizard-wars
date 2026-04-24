@@ -27,6 +27,10 @@ const COMBAT_NUMBERS_LABELS: Record<CombatNumbersMode, string> = {
 type GameSettingsModalProps = {
   /** Called when the modal should close. */
   readonly onClose: () => void
+  /** When true, show a host-only “End match” action. */
+  readonly isHost?: boolean
+  /** Invoked when the host ends the in-progress match. */
+  readonly onEndMatch?: () => void
 }
 
 /**
@@ -52,7 +56,11 @@ function formatKey(key: string): string {
  *
  * @param props - GameSettingsModalProps.
  */
-export default function GameSettingsModal({ onClose }: GameSettingsModalProps) {
+export default function GameSettingsModal({
+  onClose,
+  isHost = false,
+  onEndMatch,
+}: GameSettingsModalProps) {
   const { keybinds, setKeybinds } = useGameKeybindContext()
 
   const [localKeybinds, setLocalKeybinds] = useState<KeybindConfig>({ ...keybinds })
@@ -285,6 +293,25 @@ export default function GameSettingsModal({ onClose }: GameSettingsModalProps) {
               </p>
             )}
           </section>
+
+          {isHost && onEndMatch && (
+            <section className="border-t border-gray-800 pt-6">
+              <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-amber-500/90">
+                Host
+              </h3>
+              <p className="mb-3 text-sm text-gray-400">
+                End the match for all players. The final scoreboard will list “Match
+                ended by host.”
+              </p>
+              <button
+                type="button"
+                className="rounded-md border border-red-700/80 bg-red-950/50 px-4 py-2 text-sm font-medium text-red-200 hover:bg-red-900/50"
+                onClick={() => onEndMatch()}
+              >
+                End match
+              </button>
+            </section>
+          )}
         </div>
 
         {/* Footer */}

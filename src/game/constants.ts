@@ -11,6 +11,12 @@ export const WW_GAME_CONNECTION_REGISTRY_KEY = "wwGameConnection"
 export const WW_LOCAL_PLAYER_ID_REGISTRY_KEY = "wwLocalPlayerId"
 
 /**
+ * Injected `KeybindConfig` from React (GameKeybindProvider). KeyboardController
+ * reads this so Phaser uses the same binds as the settings UI.
+ */
+export const WW_KEYBIND_CONFIG_REGISTRY_KEY = "wwKeybindConfig"
+
+/**
  * Phaser registry key for the loader status bridge. React components subscribe
  * via {@link subscribeLoaderStatus} to render a progress overlay outside the
  * Phaser canvas. Scenes publish via {@link publishLoaderStatus} in their

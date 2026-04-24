@@ -1,5 +1,6 @@
 import type Phaser from "phaser"
 
+import type { KeybindConfig } from "@/shared/gameKeybinds/lobbyKeybinds"
 import type { GameConnection } from "./network/GameConnection"
 
 import { createGame } from "./index"
@@ -7,6 +8,7 @@ import { createGame } from "./index"
 /** Re-export for Arena and tests. */
 export {
   WW_GAME_CONNECTION_REGISTRY_KEY,
+  WW_KEYBIND_CONFIG_REGISTRY_KEY,
   WW_LOCAL_PLAYER_ID_REGISTRY_KEY,
 } from "./constants"
 
@@ -24,6 +26,8 @@ export interface MountGameOptions {
   gameConnection: GameConnection
   /** Auth user id (JWT `sub`); same as `playerId` in network payloads. */
   localPlayerId: string | null
+  /** User keybinds (React); Phaser input matches the lobby settings modal. */
+  keybinds?: KeybindConfig
 }
 
 /** Handle returned from {@link mountGame}. */
@@ -43,18 +47,35 @@ export type MountedGame = {
  * @returns An object containing the `game` handle and a `destroy` teardown fn.
  */
 export const mountGame = (options: MountGameOptions): MountedGame => {
-  const { containerId, lobbyId, token, gameConnection, localPlayerId } = options
+  const { containerId, lobbyId, token, gameConnection, localPlayerId, keybinds } = options
 
   sessionStorage.setItem(
     "ww_join_options",
     JSON.stringify({ token, lobbyId }),
   )
 
-  const game = createGame(containerId, { gameConnection, localPlayerId })
+  const game = createGame(containerId, { gameConnection, localPlayerId, keybinds })
+
+  if (typeof window !== "undefined") {
+    const w = window as Window & {
+      __wwRoomId?: string
+      __wwLobbyId?: string
+    }
+    w.__wwRoomId = gameConnection.room?.roomId
+    w.__wwLobbyId = lobbyId
+  }
 
   return {
     game,
     destroy: () => {
+      if (typeof window !== "undefined") {
+        const w = window as Window & {
+          __wwRoomId?: string
+          __wwLobbyId?: string
+        }
+        delete w.__wwRoomId
+        delete w.__wwLobbyId
+      }
       game.destroy(true)
       sessionStorage.removeItem("ww_join_options")
     },
