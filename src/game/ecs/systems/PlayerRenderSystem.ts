@@ -38,6 +38,22 @@ const HP_BAR_TAG = "hp-bar"
 const HP_BAR_WIDTH = 48
 /** Height of the HP bar in pixels. */
 const HP_BAR_HEIGHT = 4
+
+/** Width of the hero identity foot ellipse (px). */
+const FOOT_MARKER_W = 32
+/** Height of the hero identity foot ellipse (px). */
+const FOOT_MARKER_H = 16
+/**
+ * Y-sort offset so the foot marker draws behind the sprite (lower depth than the sprite).
+ * If fractional depth misbehaves in a build, try `1` instead of `0.1`.
+ */
+const FOOT_MARKER_DEPTH_EPS = 0.1
+/**
+ * Offset from foot anchor (`renderPos.y`, sprite bottom) to the ellipse center (px downward).
+ * With default ellipse origin (0.5, 0.5), half the height places the ellipse top on the foot line.
+ */
+const FOOT_MARKER_CENTER_Y_FROM_FOOT = FOOT_MARKER_H / 2
+
 /** Y offset of name tag above sprite origin. */
 const NAMETAG_OFFSET_Y = -72
 /** Y offset of HP bar above sprite origin. */
@@ -46,14 +62,14 @@ const HP_BAR_OFFSET_Y = -58
 /** Per-entity rendering state that lives outside the shared ECS records. */
 interface PlayerRenderEntry {
   sprite: Phaser.GameObjects.Sprite
+  /** Colored ellipse under the feet; scene-owned (not in `playerGroup`). */
+  footMarker: Phaser.GameObjects.Ellipse
   nameTag: Phaser.GameObjects.Text
   hpBar: Phaser.GameObjects.Graphics
   /** Accumulated time for invulnerability pulse (ms). */
   invulnTime: number
   /** Remaining damage flash time (ms). 0 = no flash active. */
   flashRemaining: number
-  /** Tint to restore after damage flash. */
-  heroTint: number
   /** Last known animState + direction key to avoid redundant anim calls. */
   lastAnimKey: string
   /**
@@ -69,7 +85,7 @@ interface PlayerRenderEntry {
 }
 
 /**
- * Manages Phaser sprites, name tags, and HP bars for all player entities.
+ * Manages Phaser sprites, hero foot identity ellipses, name tags, and HP bars for all player entities.
  *
  * The local player uses prediction (extrapolate from the latest authoritative
  * state using held WASD + speed multipliers) plus rewind-and-replay
@@ -207,6 +223,9 @@ export class PlayerRenderSystem {
       renderPos.x = x
       renderPos.y = y
       entry.sprite.setPosition(x, y)
+      const footY = y + FOOT_MARKER_CENTER_Y_FROM_FOOT
+      entry.footMarker.setPosition(x, footY)
+      entry.footMarker.setDepth(y - FOOT_MARKER_DEPTH_EPS)
       entry.smoothRemainingMs = 0
     }
   }
@@ -263,7 +282,7 @@ export class PlayerRenderSystem {
   }
 
   /**
-   * Spawns a new player sprite with name tag and HP bar.
+   * Spawns a new player sprite, foot identity ellipse, name tag, and HP bar.
    */
   private _spawnPlayer(
     id: number,
@@ -275,14 +294,25 @@ export class PlayerRenderSystem {
   ): void {
     addEntity(id)
 
-    const heroTint = HERO_CONFIGS[heroId]?.tint ?? 0xffffff
+    const footColor = HERO_CONFIGS[heroId]?.tint ?? 0xffffff
     const isLocal = playerId === this.localPlayerId
 
     const sprite = this.scene.add.sprite(x, y, "lady-wizard")
     sprite.setOrigin(0.5, 1.0)
-    sprite.setTint(heroTint)
+    sprite.clearTint()
     sprite.setDepth(y)
     this.group.add(sprite)
+
+    const footY = y + FOOT_MARKER_CENTER_Y_FROM_FOOT
+    const footMarker = this.scene.add.ellipse(
+      x,
+      footY,
+      FOOT_MARKER_W,
+      FOOT_MARKER_H,
+      footColor,
+      1,
+    )
+    footMarker.setDepth(y - FOOT_MARKER_DEPTH_EPS)
 
     const nameTag = this.scene.add
       .text(x, y + NAMETAG_OFFSET_Y, username, {
@@ -301,11 +331,11 @@ export class PlayerRenderSystem {
 
     this.entries.set(id, {
       sprite,
+      footMarker,
       nameTag,
       hpBar,
       invulnTime: 0,
       flashRemaining: 0,
-      heroTint,
       lastAnimKey: "",
       smoothRemainingMs: 0,
       smoothFromX: x,
@@ -322,6 +352,7 @@ export class PlayerRenderSystem {
     const entry = this.entries.get(id)
     if (!entry) return
     entry.sprite.destroy()
+    entry.footMarker.destroy()
     entry.nameTag.destroy()
     entry.hpBar.destroy()
     this.entries.delete(id)
@@ -394,6 +425,10 @@ export class PlayerRenderSystem {
       entry.sprite.setPosition(renderPos.x, renderPos.y)
       entry.sprite.setDepth(renderPos.y)
 
+      const footY = renderPos.y + FOOT_MARKER_CENTER_Y_FROM_FOOT
+      entry.footMarker.setPosition(renderPos.x, footY)
+      entry.footMarker.setDepth(renderPos.y - FOOT_MARKER_DEPTH_EPS)
+
       // --- Animation ---
       const isDying = state.animState === "dying" || state.animState === "dead"
       const direction = getDirectionFromAngle(state.facingAngle)
@@ -408,7 +443,7 @@ export class PlayerRenderSystem {
         entry.flashRemaining -= delta
         if (entry.flashRemaining <= 0) {
           entry.flashRemaining = 0
-          entry.sprite.setTint(entry.heroTint)
+          entry.sprite.clearTint()
         }
       }
 
@@ -427,6 +462,7 @@ export class PlayerRenderSystem {
       const hideUi = isDying
       entry.nameTag.setVisible(!hideUi)
       entry.hpBar.setVisible(!hideUi)
+      entry.footMarker.setVisible(!hideUi)
 
       if (!hideUi) {
         entry.nameTag.setPosition(renderPos.x, renderPos.y + NAMETAG_OFFSET_Y)

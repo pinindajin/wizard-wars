@@ -46,6 +46,7 @@ import { PlayerRenderSystem } from "./PlayerRenderSystem"
 import { ClientPosition, ClientPlayerState, ClientRenderPos } from "../components"
 import { clientEntities, removeEntity } from "../world"
 import type { PlayerSnapshot } from "@/shared/types"
+import { HERO_CONFIGS } from "@/shared/balance-config/heroes"
 
 function snap(over: Partial<PlayerSnapshot> & Pick<PlayerSnapshot, "id" | "playerId">): PlayerSnapshot {
   return {
@@ -83,6 +84,7 @@ function mockSceneAndGroup() {
   const spriteDestroy = vi.fn(() => destroyed.push("sprite"))
   const textDestroy = vi.fn(() => destroyed.push("text"))
   const gfxDestroy = vi.fn(() => destroyed.push("gfx"))
+  const ellipseDestroy = vi.fn(() => destroyed.push("ellipse"))
 
   const textChain = {
     destroy: textDestroy,
@@ -105,6 +107,7 @@ function mockSceneAndGroup() {
           destroy: spriteDestroy,
           setOrigin: vi.fn(),
           setTint: vi.fn(),
+          clearTint: vi.fn(),
           setDepth: vi.fn(),
           play: vi.fn(),
           setPosition: vi.fn((nextX: number, nextY: number) => {
@@ -115,6 +118,23 @@ function mockSceneAndGroup() {
           setAlpha: vi.fn(),
         }
         return sprite
+      }),
+      ellipse: vi.fn((...args: number[]) => {
+        const x = args[0] ?? 0
+        const y = args[1] ?? 0
+        const ellipse = {
+          x,
+          y,
+          destroy: ellipseDestroy,
+          setPosition: vi.fn((nextX: number, nextY: number) => {
+            ellipse.x = nextX
+            ellipse.y = nextY
+            return ellipse
+          }),
+          setDepth: vi.fn(),
+          setVisible: vi.fn(),
+        }
+        return ellipse
       }),
       text: vi.fn(() => textChain),
       graphics: vi.fn(() => ({
@@ -131,7 +151,7 @@ function mockSceneAndGroup() {
 
   const group = { add: vi.fn() }
 
-  return { scene, group, destroyed, spriteDestroy, textDestroy, gfxDestroy }
+  return { scene, group, destroyed, spriteDestroy, textDestroy, gfxDestroy, ellipseDestroy }
 }
 
 describe("PlayerRenderSystem.applyFullSync", () => {
@@ -161,10 +181,40 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     sys.applyFullSync(sync([a]))
 
     expect(destroyed).toContain("sprite")
+    expect(destroyed).toContain("ellipse")
     expect(destroyed).toContain("text")
     expect(destroyed).toContain("gfx")
     expect(clientEntities.has(2)).toBe(false)
     expect(ClientPlayerState[2]).toBeUndefined()
+  })
+
+  it("spawns a white-tint sprite, foot ellipse 32×16 in hero color, and never hero-tints the body", () => {
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    sys.localPlayerId = "p1"
+
+    sys.applyFullSync(sync([snap({ id: 1, playerId: "p1", heroId: "red_wizard", x: 10, y: 20 })]))
+
+    const add = scene.add as {
+      sprite: ReturnType<typeof vi.fn>
+      ellipse: ReturnType<typeof vi.fn>
+    }
+
+    expect(add.ellipse).toHaveBeenCalledWith(
+      10,
+      20 + 8,
+      32,
+      16,
+      HERO_CONFIGS.red_wizard.tint,
+      1,
+    )
+
+    const sprite = add.sprite.mock.results[0]?.value as { setTint: ReturnType<typeof vi.fn> }
+    expect(sprite).toBeDefined()
+    const heroTints = [HERO_CONFIGS.red_wizard.tint, HERO_CONFIGS.barbarian.tint, HERO_CONFIGS.ranger.tint]
+    for (const c of heroTints) {
+      expect(sprite.setTint).not.toHaveBeenCalledWith(c)
+    }
   })
 
   it("renders remote players from the interpolation buffer after a snapshot", () => {
