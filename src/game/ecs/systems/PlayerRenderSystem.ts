@@ -20,6 +20,7 @@ import {
   worldStepFromIntent,
 } from "@/shared/movementIntent"
 import { ClientPosition, ClientPlayerState, ClientRenderPos } from "../components"
+import { WW_LOCAL_PLAYER_ID_REGISTRY_KEY } from "../../constants"
 import { addEntity, removeEntity } from "../world"
 import { animUsesMouseAim } from "@/shared/playerAnimAim"
 import { getDirectionFromAngle, getAnimKey } from "../../animation/LadyWizardAnimDefs"
@@ -671,9 +672,13 @@ export class PlayerRenderSystem {
    * that entity), for camera follow. Returns null if no local id or no render pos yet.
    */
   getLocalPlayerRenderPos(): { x: number; y: number } | null {
-    if (!this.localPlayerId) return null
+    const localId =
+      this.localPlayerId ??
+      (this.scene.registry.get(WW_LOCAL_PLAYER_ID_REGISTRY_KEY) as string | undefined) ??
+      null
+    if (!localId) return null
     for (const [idStr, state] of Object.entries(ClientPlayerState)) {
-      if (state.playerId === this.localPlayerId) {
+      if (state.playerId === localId) {
         const p = ClientRenderPos[Number(idStr)]
         if (p) return { x: p.x, y: p.y }
       }

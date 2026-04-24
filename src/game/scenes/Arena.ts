@@ -1,7 +1,7 @@
 import Phaser from "phaser"
 
 import { WsEvent } from "@/shared/events"
-import { TILEMAP_DEPTH } from "@/shared/balance-config/rendering"
+import { ARENA_CAMERA_FOLLOW_ZOOM, TILEMAP_DEPTH } from "@/shared/balance-config/rendering"
 import type {
   GameStateSyncPayload,
   PlayerBatchUpdatePayload,
@@ -181,12 +181,14 @@ export class Arena extends Phaser.Scene {
   }
 
   /**
-   * Configures the main camera: world bounds from the arena tilemap, zoom 1.
-   * Each frame, the scene `update` method centers on the local player’s foot when available.
+   * Configures the main camera: world bounds from the arena tilemap, follow zoom
+   * ({@link ARENA_CAMERA_FOLLOW_ZOOM}) so `centerOn` can scroll. Each frame, `update`
+   * centers on the local player’s foot when available.
    */
   private _setupCamera(): void {
     const cam = this.cameras.main
-    cam.setZoom(1)
+    cam.setZoom(ARENA_CAMERA_FOLLOW_ZOOM)
+    cam.setRoundPixels(true)
     if (this.arenaWidthPx > 0 && this.arenaHeightPx > 0) {
       cam.setBounds(0, 0, this.arenaWidthPx, this.arenaHeightPx)
     } else {

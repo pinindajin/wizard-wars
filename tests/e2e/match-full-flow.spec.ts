@@ -1,6 +1,8 @@
 import { test, expect } from "@playwright/test"
 import { randomBytes } from "node:crypto"
 
+import { ARENA_CAMERA_FOLLOW_ZOOM } from "../../src/shared/balance-config/rendering"
+
 /**
  * Generates a signup-safe username (same constraints as signup.spec).
  *
@@ -89,6 +91,26 @@ test("full match flow: assets, overlay, canvas, movement, shop, abilities", asyn
   // render momentarily; we assert the HP HUD eventually appears which only
   // mounts when phase === "IN_PROGRESS".
   await expect(page.getByText(/HP/).first()).toBeVisible({ timeout: 30_000 })
+
+  // Arena follow camera: map size equals default game size, so zoom must be >1
+  // or `centerOn` cannot scroll. See ARENA_CAMERA_FOLLOW_ZOOM in balance-config.
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(() => {
+          const g = (globalThis as { __wwGame?: { scene: { getScene: (k: string) => unknown } } })
+            .__wwGame
+          if (!g?.scene) return null
+          const arena = g.scene.getScene("Arena") as
+            | { cameras: { main: { zoom: number } } }
+            | null
+            | undefined
+          if (!arena) return null
+          return arena.cameras.main.zoom
+        }),
+      { timeout: 15_000 },
+    )
+    .toBe(ARENA_CAMERA_FOLLOW_ZOOM)
 
   // Press W; assert no crash. Character movement state on the server is
   // validated indirectly through Phaser's sprite position ticking — we just
