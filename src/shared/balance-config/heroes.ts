@@ -1,11 +1,12 @@
 /**
  * Hero configuration.
- * All three heroes share the lady-wizard sprite sheet; only the color tint differs for MVP.
+ * All three heroes share the lady-wizard sprite sheet; identity color is shown in the arena
+ * via a foot marker (ellipse), not by tinting the sprite.
  */
 export type HeroConfig = {
   readonly id: string
   readonly displayName: string
-  /** Phaser tint applied to the shared lady-wizard sprite. */
+  /** Packed RGB (0xRRGGBB) for the arena foot identity ellipse under the shared sprite. */
   readonly tint: number
   readonly spriteKey: string
 }

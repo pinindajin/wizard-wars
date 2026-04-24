@@ -12,7 +12,6 @@ export type HeroCardConfig = {
   bg: string            // e.g. "linear-gradient(145deg,#450a0a,#7f1d1d)"
   portraitBg: string    // e.g. "linear-gradient(180deg,#7f1d1d,#450a0a)"
   border: string        // e.g. "rgba(239,68,68,0.35)"
-  overlayColor: string  // blend-mode color overlay for rune/highlight tint
   icon: string          // emoji glyph
 }
 
@@ -29,7 +28,6 @@ export const HERO_CARD_CONFIGS: Record<string, HeroCardConfig> = {
     bg: "linear-gradient(145deg,#450a0a,#7f1d1d)",
     portraitBg: "linear-gradient(180deg,#7f1d1d,#450a0a)",
     border: "rgba(239,68,68,0.35)",
-    overlayColor: "rgba(220,38,38,0.55)",
     icon: "🔴",
   },
   barbarian: {
@@ -40,7 +38,6 @@ export const HERO_CARD_CONFIGS: Record<string, HeroCardConfig> = {
     bg: "linear-gradient(145deg,#431407,#7c2d12)",
     portraitBg: "linear-gradient(180deg,#7c2d12,#431407)",
     border: "rgba(249,115,22,0.35)",
-    overlayColor: "rgba(234,88,12,0.55)",
     icon: "🟠",
   },
   ranger: {
@@ -51,7 +48,6 @@ export const HERO_CARD_CONFIGS: Record<string, HeroCardConfig> = {
     bg: "linear-gradient(145deg,#022c22,#064e3b)",
     portraitBg: "linear-gradient(180deg,#064e3b,#022c22)",
     border: "rgba(16,185,129,0.35)",
-    overlayColor: "rgba(16,185,129,0.45)",
     icon: "🟢",
   },
 }
@@ -182,17 +178,6 @@ export function HeroCard({
             backgroundRepeat: "no-repeat",
             imageRendering: "pixelated",
           }}
-        />
-
-        {/* mix-blend-mode:color overlay — tints bright rune/highlight pixels only */}
-        <div
-          style={{
-            ...spriteStyle,
-            background: config.overlayColor,
-            mixBlendMode: "color",
-            pointerEvents: "none",
-          }}
-          aria-hidden
         />
       </div>
 
