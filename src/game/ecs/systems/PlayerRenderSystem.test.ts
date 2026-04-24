@@ -273,12 +273,29 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     sys.localPlayerId = "p1"
 
     sys.applyFullSync(sync([snap({ id: 1, playerId: "p1", x: 0, y: 0 })]))
-    ClientRenderPos[1] = { x: 500, y: 0 }
+    // Reconciliation operates on fixed-step sim state; drive the sim
+    // forward by seeding simCurr far ahead of the ack so the error lands
+    // well above PREDICTION_SNAP_THRESHOLD_PX.
+    sys._setLocalSimForTest(1, {
+      simPrevX: 500,
+      simPrevY: 0,
+      simCurrX: 500,
+      simCurrY: 0,
+    })
 
     sys.onLocalAck(1, { x: 0, y: 0, lastProcessedInputSeq: 0 })
 
-    // With no pending replay inputs, replay target = ack position; distance
-    // from render (500) to ack (0) is well above snap threshold.
+    const simAfter = sys._getLocalSimForTest(1)
+    expect(simAfter).not.toBeNull()
+    // Snap collapses both simPrev and simCurr onto the replay target so
+    // the next render step does not interpolate through the correction.
+    expect(simAfter).toMatchObject({
+      simPrevX: 0,
+      simPrevY: 0,
+      simCurrX: 0,
+      simCurrY: 0,
+      smoothRemainingMs: 0,
+    })
     expect(ClientRenderPos[1]).toEqual({ x: 0, y: 0 })
   })
 
@@ -288,25 +305,36 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     sys.localPlayerId = "p1"
 
     sys.applyFullSync(sync([snap({ id: 1, playerId: "p1", x: 0, y: 0 })]))
-    // Render is 10 px ahead of the server in the W (up = -y) direction —
-    // medium prediction error in the "smooth" band (above
+    // Seed simCurr 10 px ahead of the server in the W (up = -y)
+    // direction — medium prediction error in the "smooth" band (above
     // INVISIBLE_PREDICTION_ERROR_PX, below PREDICTION_SNAP_THRESHOLD_PX).
-    ClientRenderPos[1] = { x: 0, y: -10 }
+    sys._setLocalSimForTest(1, {
+      simPrevX: 0,
+      simPrevY: -10,
+      simCurrX: 0,
+      simCurrY: -10,
+    })
 
     sys.onLocalAck(1, { x: 0, y: 0, lastProcessedInputSeq: 0 })
-    // Smooth arms the correction toward (0, 0); renderPos is untouched until
-    // the next update() frame.
-    expect(ClientRenderPos[1]).toEqual({ x: 0, y: -10 })
+    // Smooth arms the correction toward (0, 0); simCurr is untouched
+    // until the next sim step runs.
+    const armed = sys._getLocalSimForTest(1)
+    expect(armed).toMatchObject({ simCurrY: -10 })
+    expect(armed?.smoothRemainingMs).toBeGreaterThan(0)
 
-    const startY = ClientRenderPos[1].y
-    sys.update(16, { up: true, down: false, left: false, right: false })
+    const startSimY = armed?.simCurrY ?? 0
+    // Drive enough real-time debt to commit exactly one sim step so the
+    // assertion runs against a freshly-committed simCurr regardless of
+    // fractional accumulator.
+    sys.update(20, { up: true, down: false, left: false, right: false })
 
-    // Prediction-first blend (lerp(pPred, smoothTarget, t)): pressing W during
-    // the smoothing window moves the render forward (more negative y), because
-    // the predicted step is blended toward the target instead of being
-    // overwritten by a static smoothFrom → smoothTarget rail that would slide
-    // the render backward toward +y while W is held.
-    expect(ClientRenderPos[1].y).toBeLessThan(startY)
+    const after = sys._getLocalSimForTest(1)
+    // Prediction-first blend (lerp(pPred, smoothTarget, t)): the
+    // predicted step decreases y (forward) and is only partially pulled
+    // back toward the target, so the committed simCurr.y must stay
+    // below startSimY. With the old absolute from→to rail this would
+    // have slid backward toward zero even under held W.
+    expect(after?.simCurrY).toBeLessThan(startSimY)
   })
 })
 
