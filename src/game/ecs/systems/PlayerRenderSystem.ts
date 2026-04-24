@@ -7,7 +7,10 @@ import {
   REPLAY_SMOOTHING_MS,
   TELEPORT_THRESHOLD_PX,
 } from "@/shared/balance-config/rendering"
-import { BASE_MOVE_SPEED_PX_PER_SEC, DAMAGE_FLASH_MS } from "@/shared/balance-config/combat"
+import {
+  BASE_MOVE_SPEED_PX_PER_SEC,
+  DAMAGE_FLASH_MS,
+} from "@/shared/balance-config/combat"
 import type {
   GameStateSyncPayload,
   PlayerAnimState,
@@ -19,11 +22,18 @@ import {
   type MoveIntent,
   worldStepFromIntent,
 } from "@/shared/movementIntent"
-import { ClientPosition, ClientPlayerState, ClientRenderPos } from "../components"
+import {
+  ClientPosition,
+  ClientPlayerState,
+  ClientRenderPos,
+} from "../components"
 import { WW_LOCAL_PLAYER_ID_REGISTRY_KEY } from "../../constants"
 import { addEntity, removeEntity } from "../world"
 import { animUsesMouseAim } from "@/shared/playerAnimAim"
-import { getDirectionFromAngle, getAnimKey } from "../../animation/LadyWizardAnimDefs"
+import {
+  getDirectionFromAngle,
+  getAnimKey,
+} from "../../animation/LadyWizardAnimDefs"
 import {
   reconcileLocal,
   type LocalAckState,
@@ -47,11 +57,26 @@ const HP_BAR_HEIGHT = 4
  */
 export const LADY_WIZARD_FRAME_HEIGHT_PX = 124
 
+/**
+ * Visual nudge of the **sprite** only, in world pixels, without moving simulation, camera
+ * follow, foot ellipse, or nametag/HP (they stay on {@link ClientRenderPos}). Positive
+ * `X` = right, positive `Y` = down. Use to align the drawn art with the logical foot.
+ */
+export const LADY_WIZARD_SPRITE_DISPLAY_OFFSET_X = 0
+export const LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y = 45
+
+function ladyWizardSpriteDisplayPos(footX: number, footY: number) {
+  return {
+    x: footX + LADY_WIZARD_SPRITE_DISPLAY_OFFSET_X,
+    y: footY + LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y,
+  }
+}
+
 /** Pixels between nametag bottom (`setOrigin(0.5, 1)`) and HP bar top (`_drawHpBar` y). */
 export const NAME_TO_HP_BAR_GAP_PX = 3
 
 /** Pixels of vertical gap from sprite texture top to the bottom edge of the HP bar. */
-export const HUD_CLEARANCE_ABOVE_SPRITE_TOP_PX = 10
+export const HUD_CLEARANCE_ABOVE_SPRITE_TOP_PX = -70
 
 /**
  * Nametag + HP Y positions for a given foot anchor (`y` = bottom of 124px frame).
@@ -63,7 +88,8 @@ export function computeHeroHudYOffsets(footY: number): {
   hpBarTopY: number
 } {
   const spriteTopY = footY - LADY_WIZARD_FRAME_HEIGHT_PX
-  const hpBarTopY = spriteTopY - HUD_CLEARANCE_ABOVE_SPRITE_TOP_PX - HP_BAR_HEIGHT
+  const hpBarTopY =
+    spriteTopY - HUD_CLEARANCE_ABOVE_SPRITE_TOP_PX - HP_BAR_HEIGHT
   const nameTagBottomY = hpBarTopY - NAME_TO_HP_BAR_GAP_PX
   return { nameTagBottomY, hpBarTopY }
 }
@@ -79,10 +105,8 @@ const FOOT_MARKER_H = 16
 const FOOT_MARKER_DEPTH_EPS = 0.1
 /**
  * Offset from foot anchor (`renderPos.y`, texture bottom) to the ellipse center.
- * The ellipse is centered in the **bottom fifth** of the 124px frame: band from
- * `y - 0.2*H` to `y` — midline at `y - 0.1*H` (upward in screen Y).
  */
-const FOOT_MARKER_CENTER_Y_OFFSET_FROM_FOOT = -Math.round(LADY_WIZARD_FRAME_HEIGHT_PX * 0.1)
+const FOOT_MARKER_CENTER_Y_OFFSET_FROM_FOOT = 11
 
 /** Per-entity rendering state that lives outside the shared ECS records. */
 interface PlayerRenderEntry {
@@ -130,7 +154,8 @@ export class PlayerRenderSystem {
   readonly localInputHistory: LocalInputHistory = new LocalInputHistory()
 
   /** Per-remote snapshot buffer used by the remote render path. */
-  readonly remoteBuffer: RemoteInterpolationBuffer = new RemoteInterpolationBuffer()
+  readonly remoteBuffer: RemoteInterpolationBuffer =
+    new RemoteInterpolationBuffer()
 
   /**
    * Offset from server clock to local clock, roughly `serverTime - Date.now()`.
@@ -163,7 +188,14 @@ export class PlayerRenderSystem {
     }
     for (const snap of payload.players) {
       if (!this.entries.has(snap.id)) {
-        this._spawnPlayer(snap.id, snap.playerId, snap.username, snap.heroId, snap.x, snap.y)
+        this._spawnPlayer(
+          snap.id,
+          snap.playerId,
+          snap.username,
+          snap.heroId,
+          snap.x,
+          snap.y,
+        )
       }
       ClientPosition[snap.id] = { x: snap.x, y: snap.y }
       ClientPlayerState[snap.id] = {
@@ -249,7 +281,9 @@ export class PlayerRenderSystem {
     if (reason !== "batch_update") {
       renderPos.x = x
       renderPos.y = y
-      entry.sprite.setPosition(x, y)
+      const sp = ladyWizardSpriteDisplayPos(x, y)
+      entry.sprite.setPosition(sp.x, sp.y)
+      entry.sprite.setDepth(y + LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y)
       const footY = y + FOOT_MARKER_CENTER_Y_OFFSET_FROM_FOOT
       entry.footMarker.setPosition(x, footY)
       entry.footMarker.setDepth(y - FOOT_MARKER_DEPTH_EPS)
@@ -325,10 +359,11 @@ export class PlayerRenderSystem {
     const footColor = HERO_CONFIGS[heroId]?.tint ?? 0xffffff
     const isLocal = playerId === this.localPlayerId
 
-    const sprite = this.scene.add.sprite(x, y, "lady-wizard")
+    const sp0 = ladyWizardSpriteDisplayPos(x, y)
+    const sprite = this.scene.add.sprite(sp0.x, sp0.y, "lady-wizard")
     sprite.setOrigin(0.5, 1.0)
     sprite.clearTint()
-    sprite.setDepth(y)
+    sprite.setDepth(y + LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y)
     this.group.add(sprite)
 
     const footY = y + FOOT_MARKER_CENTER_Y_OFFSET_FROM_FOOT
@@ -417,7 +452,12 @@ export class PlayerRenderSystem {
         const id = Number(idStr)
         ClientPosition[id] = { x: payload.spawnX, y: payload.spawnY }
         state.animState = "idle"
-        this.onAuthoritativePosition(id, payload.spawnX, payload.spawnY, "respawn")
+        this.onAuthoritativePosition(
+          id,
+          payload.spawnX,
+          payload.spawnY,
+          "respawn",
+        )
         break
       }
     }
@@ -448,11 +488,19 @@ export class PlayerRenderSystem {
       if (isLocal) {
         this._updateLocal(entry, renderPos, state, localMoveIntent, delta)
       } else {
-        this._updateRemote(id, entry, renderPos, state, authPos, renderTimeServer)
+        this._updateRemote(
+          id,
+          entry,
+          renderPos,
+          state,
+          authPos,
+          renderTimeServer,
+        )
       }
 
-      entry.sprite.setPosition(renderPos.x, renderPos.y)
-      entry.sprite.setDepth(renderPos.y)
+      const sp = ladyWizardSpriteDisplayPos(renderPos.x, renderPos.y)
+      entry.sprite.setPosition(sp.x, sp.y)
+      entry.sprite.setDepth(renderPos.y + LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y)
 
       const footY = renderPos.y + FOOT_MARKER_CENTER_Y_OFFSET_FROM_FOOT
       entry.footMarker.setPosition(renderPos.x, footY)
@@ -462,7 +510,12 @@ export class PlayerRenderSystem {
       const isDying = state.animState === "dying" || state.animState === "dead"
       const angleForSprite = animUsesMouseAim(state.animState)
         ? state.facingAngle
-        : this._bodyAngleForSprite(isLocal, state.animState, localMoveIntent, state.moveFacingAngle)
+        : this._bodyAngleForSprite(
+            isLocal,
+            state.animState,
+            localMoveIntent,
+            state.moveFacingAngle,
+          )
       const direction = getDirectionFromAngle(angleForSprite)
       const animKey = getAnimKey(state.animState, direction)
       if (animKey !== entry.lastAnimKey) {
@@ -482,7 +535,9 @@ export class PlayerRenderSystem {
       // --- Invulnerability alpha pulse ---
       if (state.invulnerable) {
         entry.invulnTime += delta
-        const pulse = Math.sin((entry.invulnTime / 1000) * INVULN_PULSE_HZ * Math.PI * 2)
+        const pulse = Math.sin(
+          (entry.invulnTime / 1000) * INVULN_PULSE_HZ * Math.PI * 2,
+        )
         const alpha = 0.625 + pulse * 0.0625
         entry.sprite.setAlpha(alpha)
       } else {
@@ -497,11 +552,14 @@ export class PlayerRenderSystem {
       entry.footMarker.setVisible(!hideUi)
 
       if (!hideUi) {
-        const { nameTagBottomY, hpBarTopY } = computeHeroHudYOffsets(renderPos.y)
+        const { nameTagBottomY, hpBarTopY } = computeHeroHudYOffsets(
+          renderPos.y,
+        )
         entry.nameTag.setPosition(renderPos.x, nameTagBottomY)
         entry.nameTag.setDepth(renderPos.y + 1)
 
-        const hpFraction = state.maxHealth > 0 ? state.health / state.maxHealth : 0
+        const hpFraction =
+          state.maxHealth > 0 ? state.health / state.maxHealth : 0
         this._drawHpBar(entry.hpBar, renderPos.x, hpBarTopY, hpFraction)
         entry.hpBar.setDepth(renderPos.y + 1)
       }
@@ -610,33 +668,50 @@ export class PlayerRenderSystem {
   /**
    * Redraws the HP bar graphics for a player.
    */
-  private _drawHpBar(gfx: Phaser.GameObjects.Graphics, cx: number, y: number, fraction: number): void {
+  private _drawHpBar(
+    gfx: Phaser.GameObjects.Graphics,
+    cx: number,
+    y: number,
+    fraction: number,
+  ): void {
     gfx.clear()
     gfx.fillStyle(0x000000, 0.7)
     gfx.fillRect(cx - HP_BAR_WIDTH / 2, y, HP_BAR_WIDTH, HP_BAR_HEIGHT)
-    const fillColor = fraction > 0.5
-      ? Phaser.Display.Color.Interpolate.ColorWithColor(
-          Phaser.Display.Color.ValueToColor(0xffff00),
-          Phaser.Display.Color.ValueToColor(0x00ff44),
-          100,
-          Math.round((fraction - 0.5) * 200),
-        )
-      : Phaser.Display.Color.Interpolate.ColorWithColor(
-          Phaser.Display.Color.ValueToColor(0xff2200),
-          Phaser.Display.Color.ValueToColor(0xffff00),
-          100,
-          Math.round(fraction * 200),
-        )
-    const color = Phaser.Display.Color.GetColor(fillColor.r, fillColor.g, fillColor.b)
+    const fillColor =
+      fraction > 0.5
+        ? Phaser.Display.Color.Interpolate.ColorWithColor(
+            Phaser.Display.Color.ValueToColor(0xffff00),
+            Phaser.Display.Color.ValueToColor(0x00ff44),
+            100,
+            Math.round((fraction - 0.5) * 200),
+          )
+        : Phaser.Display.Color.Interpolate.ColorWithColor(
+            Phaser.Display.Color.ValueToColor(0xff2200),
+            Phaser.Display.Color.ValueToColor(0xffff00),
+            100,
+            Math.round(fraction * 200),
+          )
+    const color = Phaser.Display.Color.GetColor(
+      fillColor.r,
+      fillColor.g,
+      fillColor.b,
+    )
     gfx.fillStyle(color, 1)
-    gfx.fillRect(cx - HP_BAR_WIDTH / 2, y, Math.round(HP_BAR_WIDTH * fraction), HP_BAR_HEIGHT)
+    gfx.fillRect(
+      cx - HP_BAR_WIDTH / 2,
+      y,
+      Math.round(HP_BAR_WIDTH * fraction),
+      HP_BAR_HEIGHT,
+    )
   }
 
   /**
    * Resolves per-tick move scale for local prediction to match server
    * `castMoveSpeedMultiplier` (with animState fallbacks for older payloads).
    */
-  private _clientCastMoveMultiplier(state: (typeof ClientPlayerState)[number]): number {
+  private _clientCastMoveMultiplier(
+    state: (typeof ClientPlayerState)[number],
+  ): number {
     if (state.castingAbilityId) {
       const cfg = ABILITY_CONFIGS[state.castingAbilityId]
       if (cfg) return cfg.castMoveSpeedMultiplier
@@ -658,7 +733,11 @@ export class PlayerRenderSystem {
   ): boolean {
     const { dx, dy } = normalizedMoveFromWASD(moveIntent)
     if (dx === 0 && dy === 0) return false
-    if (animState === "dying" || animState === "dead" || animState === "axe_swing") {
+    if (
+      animState === "dying" ||
+      animState === "dead" ||
+      animState === "axe_swing"
+    ) {
       return false
     }
     if (animState === "light_cast" || animState === "heavy_cast") {
@@ -674,7 +753,9 @@ export class PlayerRenderSystem {
   getLocalPlayerRenderPos(): { x: number; y: number } | null {
     const localId =
       this.localPlayerId ??
-      (this.scene.registry.get(WW_LOCAL_PLAYER_ID_REGISTRY_KEY) as string | undefined) ??
+      (this.scene.registry.get(WW_LOCAL_PLAYER_ID_REGISTRY_KEY) as
+        | string
+        | undefined) ??
       null
     if (!localId) return null
     for (const [idStr, state] of Object.entries(ClientPlayerState)) {
