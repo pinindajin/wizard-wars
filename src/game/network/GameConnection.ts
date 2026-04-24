@@ -7,6 +7,8 @@ import type {
   ClientSceneReadyPayload,
   AnyWsMessage,
   MessageHandler,
+  LobbyPhase,
+  LobbyStatePayload,
 } from "@/shared/types"
 import { logger } from "@/server/logger"
 
@@ -34,6 +36,8 @@ export class GameConnection {
   private _room: Room | null = null
   private _ready = false
   private _seq = 0
+  /** Latest `LobbyState.phase` from the server; updated before message fan-out. */
+  private _lobbyPhase: LobbyPhase | null = null
   private readonly token: string
   private readonly messageHandlers = new Set<MessageHandler>()
   private readonly readyHandlers = new Set<() => void>()
@@ -46,6 +50,21 @@ export class GameConnection {
   /** Whether the connection has received its first state sync. */
   get ready(): boolean {
     return this._ready
+  }
+
+  /**
+   * Last observed lobby FSM phase from `LobbyState`, or null before the first
+   * payload.
+   */
+  get lobbyPhase(): LobbyPhase | null {
+    return this._lobbyPhase
+  }
+
+  /**
+   * @returns True when the server reports an active match (`IN_PROGRESS`).
+   */
+  isMatchInProgress(): boolean {
+    return this._lobbyPhase === "IN_PROGRESS"
   }
 
   /**
@@ -108,6 +127,7 @@ export class GameConnection {
       this._room = null
     }
     this._ready = false
+    this._lobbyPhase = null
     this.messageHandlers.clear()
     this.readyHandlers.clear()
   }
@@ -237,6 +257,10 @@ export class GameConnection {
         this.readyHandlers.forEach((h) => h())
       }
 
+      if (roomKey === RoomEvent.LobbyState && payload && typeof payload === "object") {
+        this._lobbyPhase = (payload as LobbyStatePayload).phase
+      }
+
       const message: AnyWsMessage = { type: wsKey, payload }
       this.messageHandlers.forEach((handler) => handler(message))
     })
@@ -245,6 +269,7 @@ export class GameConnection {
       if (code === 1000) {
         this._room = null
         this._ready = false
+        this._lobbyPhase = null
         return
       }
 
@@ -258,11 +283,13 @@ export class GameConnection {
         logger.warn({ event: "gameconnection.reconnect_failed", err }, "Reconnect failed")
         this._room = null
         this._ready = false
+        this._lobbyPhase = null
       }
     })
 
     this._room.onError(() => {
       this._ready = false
+      this._lobbyPhase = null
     })
   }
 }

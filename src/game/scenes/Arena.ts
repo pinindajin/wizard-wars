@@ -236,6 +236,7 @@ export class Arena extends Phaser.Scene {
           this.networkSyncSystem.applyFullSync(payload)
           this.playerRenderSystem.applyFullSync(payload)
           this.projectileRenderSystem.applyFullSyncFireballs(payload.fireballs)
+          this._ensureMatchLive()
           break
         }
         case WsEvent.PlayerBatchUpdate:
@@ -276,16 +277,27 @@ export class Arena extends Phaser.Scene {
           break
       }
     })
+
+    if (this.connection.isMatchInProgress()) {
+      this.connection.sendRequestResync()
+    }
+  }
+
+  /**
+   * Marks the arena as live and enables input. Idempotent; used after
+   * `MatchGo` and after `GameStateSync` (e.g. refresh / resync).
+   */
+  private _ensureMatchLive(): void {
+    this.matchStarted = true
+    this.keyboardController.enable()
+    this.mouseController.enable()
   }
 
   /**
    * Called when the server signals the match has started (MatchGo).
-   * Enables player input controllers.
    */
   private _onMatchGo(): void {
-    this.matchStarted = true
-    this.keyboardController.enable()
-    this.mouseController.enable()
+    this._ensureMatchLive()
   }
 
   /**
