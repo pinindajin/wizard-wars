@@ -225,6 +225,42 @@ describe("buildGameStateSyncPayload", () => {
     expect(sync.fireballs).toEqual([])
   })
 
+  it("emits lastProcessedInputSeq 0 on wire when internal ack is -1 (pre-first-input)", () => {
+    const sim = createGameSimulation(Date.now())
+    sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    const snap = sim.buildGameStateSyncPayload(Date.now()).players[0]!
+    expect(snap.lastProcessedInputSeq).toBe(0)
+  })
+
+  it("spawns with -1 seed; seq 0 and seq 1 are both applied in order", () => {
+    const sim = createGameSimulation(Date.now())
+    sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    sim.tick(
+      queueMap([["user1", { ...emptyInput({ up: true }), seq: 0 }]]),
+      Date.now(),
+    )
+    sim.tick(
+      queueMap([["user1", { ...emptyInput({ up: true }), seq: 1 }]]),
+      Date.now() + 17,
+    )
+    expect(
+      sim.buildGameStateSyncPayload(Date.now()).players[0]!.lastProcessedInputSeq,
+    ).toBe(1)
+  })
+
+  it("resetClientInputStream allows seq 0 after a high lastProcessed watermark", () => {
+    const sim = createGameSimulation(Date.now())
+    sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    sim.tick(queueMap([["user1", { ...emptyInput({ up: true }), seq: 99 }]]), Date.now())
+    sim.resetClientInputStream("user1")
+    const out = sim.tick(
+      queueMap([["user1", { ...emptyInput({ up: true }), seq: 0 }]]),
+      Date.now() + 17,
+    )
+    const delta = out.playerDeltas.find((d) => d.id === sim.playerEntityMap.get("user1"))
+    expect(delta?.lastProcessedInputSeq).toBe(0)
+  })
+
   it("exposes per-player velocity, move state, and last processed input seq", () => {
     const sim = createGameSimulation(Date.now())
     sim.addPlayer("user1", "Alice", "red_wizard", 0)
