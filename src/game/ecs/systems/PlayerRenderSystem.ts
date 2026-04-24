@@ -40,6 +40,33 @@ const HP_BAR_WIDTH = 48
 /** Height of the HP bar in pixels. */
 const HP_BAR_HEIGHT = 4
 
+/**
+ * Lady-wizard frame height in pixels (must match `frameSize` in
+ * `public/assets/sprites/heroes/lady-wizard/sheets/atlas.json`).
+ */
+export const LADY_WIZARD_FRAME_HEIGHT_PX = 124
+
+/** Pixels between nametag bottom (`setOrigin(0.5, 1)`) and HP bar top (`_drawHpBar` y). */
+export const NAME_TO_HP_BAR_GAP_PX = 3
+
+/** Pixels of vertical gap from sprite texture top to the bottom edge of the HP bar. */
+export const HUD_CLEARANCE_ABOVE_SPRITE_TOP_PX = 10
+
+/**
+ * Nametag + HP Y positions for a given foot anchor (`y` = bottom of 124px frame).
+ * HP bar top is chosen so the bar’s bottom is `HUD_CLEARANCE_ABOVE_SPRITE_TOP_PX` above the
+ * texture top; nametag sits `NAME_TO_HP_BAR_GAP_PX` above the HP bar top.
+ */
+export function computeHeroHudYOffsets(footY: number): {
+  nameTagBottomY: number
+  hpBarTopY: number
+} {
+  const spriteTopY = footY - LADY_WIZARD_FRAME_HEIGHT_PX
+  const hpBarTopY = spriteTopY - HUD_CLEARANCE_ABOVE_SPRITE_TOP_PX - HP_BAR_HEIGHT
+  const nameTagBottomY = hpBarTopY - NAME_TO_HP_BAR_GAP_PX
+  return { nameTagBottomY, hpBarTopY }
+}
+
 /** Width of the hero identity foot ellipse (px). */
 const FOOT_MARKER_W = 32
 /** Height of the hero identity foot ellipse (px). */
@@ -50,23 +77,11 @@ const FOOT_MARKER_H = 16
  */
 const FOOT_MARKER_DEPTH_EPS = 0.1
 /**
- * Offset from foot anchor (`renderPos.y`, sprite bottom) to the ellipse center (px downward).
- * With default ellipse origin (0.5, 0.5), half the height places the ellipse top on the foot line.
+ * Offset from foot anchor (`renderPos.y`, texture bottom) to the ellipse center.
+ * The ellipse is centered in the **bottom fifth** of the 124px frame: band from
+ * `y - 0.2*H` to `y` — midline at `y - 0.1*H` (upward in screen Y).
  */
-const FOOT_MARKER_CENTER_Y_FROM_FOOT = FOOT_MARKER_H / 2
-
-/**
- * Vertical layout for nametag + HP bar relative to the foot anchor (`renderPos.y`).
- * Sprite uses bottom-center origin; lady-wizard frames are 124×124 (`frameSize` in
- * `public/assets/sprites/heroes/lady-wizard/sheets/atlas.json`). Stack must sit above
- * the sprite top (~`y - 124`) with margin for stroke on the nametag.
- */
-/** Pixels between nametag bottom (`setOrigin(0.5, 1)`) and HP bar top (`_drawHpBar` y). */
-export const NAME_TO_HP_BAR_GAP_PX = 3
-/** Y offset of nametag bottom above the foot anchor (smaller y = higher on screen). */
-export const NAMETAG_OFFSET_Y = -136
-/** Y offset of HP bar top above the foot anchor; derived so the bar stays under the name. */
-export const HP_BAR_OFFSET_Y = NAMETAG_OFFSET_Y + NAME_TO_HP_BAR_GAP_PX
+const FOOT_MARKER_CENTER_Y_OFFSET_FROM_FOOT = -Math.round(LADY_WIZARD_FRAME_HEIGHT_PX * 0.1)
 
 /** Per-entity rendering state that lives outside the shared ECS records. */
 interface PlayerRenderEntry {
@@ -234,7 +249,7 @@ export class PlayerRenderSystem {
       renderPos.x = x
       renderPos.y = y
       entry.sprite.setPosition(x, y)
-      const footY = y + FOOT_MARKER_CENTER_Y_FROM_FOOT
+      const footY = y + FOOT_MARKER_CENTER_Y_OFFSET_FROM_FOOT
       entry.footMarker.setPosition(x, footY)
       entry.footMarker.setDepth(y - FOOT_MARKER_DEPTH_EPS)
       entry.smoothRemainingMs = 0
@@ -315,7 +330,7 @@ export class PlayerRenderSystem {
     sprite.setDepth(y)
     this.group.add(sprite)
 
-    const footY = y + FOOT_MARKER_CENTER_Y_FROM_FOOT
+    const footY = y + FOOT_MARKER_CENTER_Y_OFFSET_FROM_FOOT
     const footMarker = this.scene.add.ellipse(
       x,
       footY,
@@ -326,8 +341,9 @@ export class PlayerRenderSystem {
     )
     footMarker.setDepth(y - FOOT_MARKER_DEPTH_EPS)
 
+    const { nameTagBottomY } = computeHeroHudYOffsets(y)
     const nameTag = this.scene.add
-      .text(x, y + NAMETAG_OFFSET_Y, username, {
+      .text(x, nameTagBottomY, username, {
         fontSize: "11px",
         fontFamily: "monospace",
         color: isLocal ? "#ffff00" : "#ffffff",
@@ -437,7 +453,7 @@ export class PlayerRenderSystem {
       entry.sprite.setPosition(renderPos.x, renderPos.y)
       entry.sprite.setDepth(renderPos.y)
 
-      const footY = renderPos.y + FOOT_MARKER_CENTER_Y_FROM_FOOT
+      const footY = renderPos.y + FOOT_MARKER_CENTER_Y_OFFSET_FROM_FOOT
       entry.footMarker.setPosition(renderPos.x, footY)
       entry.footMarker.setDepth(renderPos.y - FOOT_MARKER_DEPTH_EPS)
 
@@ -480,11 +496,12 @@ export class PlayerRenderSystem {
       entry.footMarker.setVisible(!hideUi)
 
       if (!hideUi) {
-        entry.nameTag.setPosition(renderPos.x, renderPos.y + NAMETAG_OFFSET_Y)
+        const { nameTagBottomY, hpBarTopY } = computeHeroHudYOffsets(renderPos.y)
+        entry.nameTag.setPosition(renderPos.x, nameTagBottomY)
         entry.nameTag.setDepth(renderPos.y + 1)
 
         const hpFraction = state.maxHealth > 0 ? state.health / state.maxHealth : 0
-        this._drawHpBar(entry.hpBar, renderPos.x, renderPos.y + HP_BAR_OFFSET_Y, hpFraction)
+        this._drawHpBar(entry.hpBar, renderPos.x, hpBarTopY, hpFraction)
         entry.hpBar.setDepth(renderPos.y + 1)
       }
     }
@@ -647,6 +664,21 @@ export class PlayerRenderSystem {
       return castMoveMult > 0
     }
     return true
+  }
+
+  /**
+   * World position of the local player's foot anchor (same as {@link ClientRenderPos} for
+   * that entity), for camera follow. Returns null if no local id or no render pos yet.
+   */
+  getLocalPlayerRenderPos(): { x: number; y: number } | null {
+    if (!this.localPlayerId) return null
+    for (const [idStr, state] of Object.entries(ClientPlayerState)) {
+      if (state.playerId === this.localPlayerId) {
+        const p = ClientRenderPos[Number(idStr)]
+        if (p) return { x: p.x, y: p.y }
+      }
+    }
+    return null
   }
 
   /** Removes all player sprites and entries. Call on scene shutdown. */

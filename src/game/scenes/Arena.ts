@@ -84,6 +84,10 @@ export class Arena extends Phaser.Scene {
   /** Whether the match has started (MatchGo received). */
   private matchStarted = false
 
+  /** Pixel size of the loaded arena tilemap (for camera bounds). */
+  private arenaWidthPx = 0
+  private arenaHeightPx = 0
+
   constructor() {
     super({ key: "Arena" })
   }
@@ -120,6 +124,8 @@ export class Arena extends Phaser.Scene {
    */
   private _buildTilemap(): void {
     const map = this.make.tilemap({ key: "arena" })
+    this.arenaWidthPx = map.widthInPixels
+    this.arenaHeightPx = map.heightInPixels
     const tileset = map.addTilesetImage("arena-terrain", "arena-terrain")
     if (!tileset) {
       console.warn(
@@ -175,11 +181,17 @@ export class Arena extends Phaser.Scene {
   }
 
   /**
-   * Configures the main camera: static (no follow), zoom 1.
+   * Configures the main camera: world bounds from the arena tilemap, zoom 1.
+   * Each frame, the scene `update` method centers on the local player’s foot when available.
    */
   private _setupCamera(): void {
-    this.cameras.main.setZoom(1)
-    this.cameras.main.setScroll(0, 0)
+    const cam = this.cameras.main
+    cam.setZoom(1)
+    if (this.arenaWidthPx > 0 && this.arenaHeightPx > 0) {
+      cam.setBounds(0, 0, this.arenaWidthPx, this.arenaHeightPx)
+    } else {
+      console.warn("[Arena] Tilemap has zero size; camera bounds not set.")
+    }
   }
 
   /**
@@ -328,6 +340,11 @@ export class Arena extends Phaser.Scene {
       }
       this.playerRenderSystem.localInputHistory.append(fullInput)
       this.connection.sendPlayerInput(fullInput)
+    }
+
+    const local = this.playerRenderSystem.getLocalPlayerRenderPos()
+    if (local) {
+      this.cameras.main.centerOn(local.x, local.y)
     }
   }
 

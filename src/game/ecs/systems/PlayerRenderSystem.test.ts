@@ -43,9 +43,10 @@ vi.mock("phaser", () => {
 })
 
 import {
-  HP_BAR_OFFSET_Y,
+  computeHeroHudYOffsets,
+  HUD_CLEARANCE_ABOVE_SPRITE_TOP_PX,
+  LADY_WIZARD_FRAME_HEIGHT_PX,
   NAME_TO_HP_BAR_GAP_PX,
-  NAMETAG_OFFSET_Y,
   PlayerRenderSystem,
 } from "./PlayerRenderSystem"
 import { ClientPosition, ClientPlayerState, ClientRenderPos } from "../components"
@@ -206,9 +207,10 @@ describe("PlayerRenderSystem.applyFullSync", () => {
       ellipse: ReturnType<typeof vi.fn>
     }
 
+    const footY = 20 - Math.round(LADY_WIZARD_FRAME_HEIGHT_PX * 0.1)
     expect(add.ellipse).toHaveBeenCalledWith(
       10,
-      20 + 8,
+      footY,
       32,
       16,
       HERO_CONFIGS.red_wizard.tint,
@@ -280,8 +282,13 @@ describe("PlayerRenderSystem.applyFullSync", () => {
   })
 })
 
-describe("PlayerRenderSystem.heroUiOffsets", () => {
-  it("places the HP bar top directly below the nametag bottom", () => {
-    expect(HP_BAR_OFFSET_Y).toBe(NAMETAG_OFFSET_Y + NAME_TO_HP_BAR_GAP_PX)
+describe("PlayerRenderSystem.computeHeroHudYOffsets", () => {
+  it("keeps 3px between nametag bottom and HP bar top, and 10px from sprite top to bar bottom", () => {
+    const footY = 200
+    const { nameTagBottomY, hpBarTopY } = computeHeroHudYOffsets(footY)
+    const spriteTopY = footY - LADY_WIZARD_FRAME_HEIGHT_PX
+    const hpBarHeight = 4
+    expect(nameTagBottomY).toBe(hpBarTopY - NAME_TO_HP_BAR_GAP_PX)
+    expect(hpBarTopY + hpBarHeight).toBe(spriteTopY - HUD_CLEARANCE_ABOVE_SPRITE_TOP_PX)
   })
 })
