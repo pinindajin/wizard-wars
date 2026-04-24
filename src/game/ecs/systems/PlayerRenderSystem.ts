@@ -21,6 +21,7 @@ import {
 } from "@/shared/movementIntent"
 import { ClientPosition, ClientPlayerState, ClientRenderPos } from "../components"
 import { addEntity, removeEntity } from "../world"
+import { animUsesMouseAim } from "@/shared/playerAnimAim"
 import { getDirectionFromAngle, getAnimKey } from "../../animation/LadyWizardAnimDefs"
 import {
   reconcileLocal,
@@ -54,10 +55,18 @@ const FOOT_MARKER_DEPTH_EPS = 0.1
  */
 const FOOT_MARKER_CENTER_Y_FROM_FOOT = FOOT_MARKER_H / 2
 
-/** Y offset of name tag above sprite origin. */
-const NAMETAG_OFFSET_Y = -72
-/** Y offset of HP bar above sprite origin. */
-const HP_BAR_OFFSET_Y = -58
+/**
+ * Vertical layout for nametag + HP bar relative to the foot anchor (`renderPos.y`).
+ * Sprite uses bottom-center origin; lady-wizard frames are 124×124 (`frameSize` in
+ * `public/assets/sprites/heroes/lady-wizard/sheets/atlas.json`). Stack must sit above
+ * the sprite top (~`y - 124`) with margin for stroke on the nametag.
+ */
+/** Pixels between nametag bottom (`setOrigin(0.5, 1)`) and HP bar top (`_drawHpBar` y). */
+export const NAME_TO_HP_BAR_GAP_PX = 3
+/** Y offset of nametag bottom above the foot anchor (smaller y = higher on screen). */
+export const NAMETAG_OFFSET_Y = -136
+/** Y offset of HP bar top above the foot anchor; derived so the bar stays under the name. */
+export const HP_BAR_OFFSET_Y = NAMETAG_OFFSET_Y + NAME_TO_HP_BAR_GAP_PX
 
 /** Per-entity rendering state that lives outside the shared ECS records. */
 interface PlayerRenderEntry {
@@ -151,6 +160,7 @@ export class PlayerRenderSystem {
         animState: snap.animState,
         castingAbilityId: snap.castingAbilityId,
         facingAngle: snap.facingAngle,
+        moveFacingAngle: snap.moveFacingAngle,
         invulnerable: snap.invulnerable,
       }
       this.onAuthoritativePosition(snap.id, snap.x, snap.y, "full_sync")
@@ -164,6 +174,7 @@ export class PlayerRenderSystem {
           vx: snap.vx,
           vy: snap.vy,
           facingAngle: snap.facingAngle,
+          moveFacingAngle: snap.moveFacingAngle,
         })
       }
     }
@@ -243,6 +254,7 @@ export class PlayerRenderSystem {
       vx: number
       vy: number
       facingAngle: number
+      moveFacingAngle: number
     },
   ): void {
     this.remoteBuffer.push(id, sample)
@@ -431,7 +443,10 @@ export class PlayerRenderSystem {
 
       // --- Animation ---
       const isDying = state.animState === "dying" || state.animState === "dead"
-      const direction = getDirectionFromAngle(state.facingAngle)
+      const angleForSprite = animUsesMouseAim(state.animState)
+        ? state.facingAngle
+        : this._bodyAngleForSprite(isLocal, state.animState, localMoveIntent, state.moveFacingAngle)
+      const direction = getDirectionFromAngle(angleForSprite)
       const animKey = getAnimKey(state.animState, direction)
       if (animKey !== entry.lastAnimKey) {
         entry.sprite.play(animKey, true)
@@ -546,6 +561,32 @@ export class PlayerRenderSystem {
     }
     // Prefer the facing from the sampled snapshot when available.
     state.facingAngle = s.facingAngle
+    state.moveFacingAngle = s.moveFacingAngle
+  }
+
+  /**
+   * Body-facing radians for idle/walk sprites: local WASD prediction while moving,
+   * otherwise authoritative `moveFacingAngle`.
+   *
+   * @param isLocal - Whether this entity is the local player.
+   * @param animState - Current animation state from the server.
+   * @param moveIntent - Current held movement keys for the local player.
+   * @param authoritativeMoveFacing - Last authoritative body angle from the server.
+   * @returns Angle in radians for `getDirectionFromAngle`.
+   */
+  private _bodyAngleForSprite(
+    isLocal: boolean,
+    animState: PlayerAnimState,
+    moveIntent: MoveIntent,
+    authoritativeMoveFacing: number,
+  ): number {
+    if (isLocal && (animState === "idle" || animState === "walk")) {
+      const { dx, dy } = normalizedMoveFromWASD(moveIntent)
+      if (dx !== 0 || dy !== 0) {
+        return Math.atan2(dy, dx)
+      }
+    }
+    return authoritativeMoveFacing
   }
 
   /**

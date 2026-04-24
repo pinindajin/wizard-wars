@@ -42,7 +42,12 @@ vi.mock("phaser", () => {
   }
 })
 
-import { PlayerRenderSystem } from "./PlayerRenderSystem"
+import {
+  HP_BAR_OFFSET_Y,
+  NAME_TO_HP_BAR_GAP_PX,
+  NAMETAG_OFFSET_Y,
+  PlayerRenderSystem,
+} from "./PlayerRenderSystem"
 import { ClientPosition, ClientPlayerState, ClientRenderPos } from "../components"
 import { clientEntities, removeEntity } from "../world"
 import type { PlayerSnapshot } from "@/shared/types"
@@ -58,6 +63,7 @@ function snap(over: Partial<PlayerSnapshot> & Pick<PlayerSnapshot, "id" | "playe
     vx: over.vx ?? 0,
     vy: over.vy ?? 0,
     facingAngle: over.facingAngle ?? 0,
+    moveFacingAngle: over.moveFacingAngle ?? 0,
     health: over.health ?? 10,
     maxHealth: over.maxHealth ?? 10,
     lives: over.lives ?? 3,
@@ -232,7 +238,15 @@ describe("PlayerRenderSystem.applyFullSync", () => {
 
     // Two remote snapshots straddling the render time; the buffer should
     // interpolate between them and land near the midpoint.
-    sys.onRemoteSnapshot(1, { serverTimeMs: now, x: 0, y: 0, vx: 0, vy: 0, facingAngle: 0 })
+    sys.onRemoteSnapshot(1, {
+      serverTimeMs: now,
+      x: 0,
+      y: 0,
+      vx: 0,
+      vy: 0,
+      facingAngle: 0,
+      moveFacingAngle: 0,
+    })
     sys.onRemoteSnapshot(1, {
       serverTimeMs: now + 100,
       x: 100,
@@ -240,6 +254,7 @@ describe("PlayerRenderSystem.applyFullSync", () => {
       vx: 0,
       vy: 0,
       facingAngle: 0,
+      moveFacingAngle: 0,
     })
 
     vi.setSystemTime(new Date(now + 83))
@@ -262,5 +277,11 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     // With no pending replay inputs, replay target = ack position; distance
     // from render (500) to ack (0) is well above snap threshold.
     expect(ClientRenderPos[1]).toEqual({ x: 0, y: 0 })
+  })
+})
+
+describe("PlayerRenderSystem.heroUiOffsets", () => {
+  it("places the HP bar top directly below the nametag bottom", () => {
+    expect(HP_BAR_OFFSET_Y).toBe(NAMETAG_OFFSET_Y + NAME_TO_HP_BAR_GAP_PX)
   })
 })

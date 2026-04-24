@@ -26,6 +26,7 @@ export const ClientPlayerState: Record<
     /** Active cast ability id from server, or `null`. */
     castingAbilityId: string | null
     facingAngle: number
+    moveFacingAngle: number
     invulnerable: boolean
   }
 > = {}

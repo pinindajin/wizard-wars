@@ -31,6 +31,14 @@ export const Facing = {
   angle: new Float32Array(MAX_ENTITIES),
 }
 
+/**
+ * Body / locomotion facing in radians (last non-zero WASD intent).
+ * Updated only when move intent is non-zero; idle keeps the previous value.
+ */
+export const MoveFacing = {
+  angle: new Float32Array(MAX_ENTITIES),
+}
+
 /** Collision circle radius in pixels. */
 export const Radius = {
   r: new Float32Array(MAX_ENTITIES),

@@ -10,7 +10,7 @@ type AuthoritativePositionReason = "full_sync" | "batch_update"
 /**
  * Opaque sample passed to {@link NetworkSyncHooks.onRemoteSnapshot} when a
  * batch update contains fields useful for remote interpolation
- * (position + velocity + facing).
+ * (position + velocity + facing angles).
  */
 export type RemoteSnapshotSample = {
   readonly id: number
@@ -20,6 +20,7 @@ export type RemoteSnapshotSample = {
   readonly vx: number
   readonly vy: number
   readonly facingAngle: number
+  readonly moveFacingAngle: number
 }
 
 /** ACK info extracted from a batch delta for the local player. */
@@ -105,6 +106,7 @@ export class NetworkSyncSystem {
         animState: snap.animState,
         castingAbilityId: snap.castingAbilityId,
         facingAngle: snap.facingAngle,
+        moveFacingAngle: snap.moveFacingAngle,
         invulnerable: snap.invulnerable,
       }
       this.lastAckByPlayer.set(snap.playerId, snap.lastProcessedInputSeq)
@@ -153,6 +155,7 @@ export class NetworkSyncSystem {
 
       if (state) {
         if (delta.facingAngle !== undefined) state.facingAngle = delta.facingAngle
+        if (delta.moveFacingAngle !== undefined) state.moveFacingAngle = delta.moveFacingAngle
         if (delta.health !== undefined) state.health = delta.health
         if (delta.lives !== undefined) state.lives = delta.lives
         if (delta.animState !== undefined) state.animState = delta.animState
@@ -178,6 +181,7 @@ export class NetworkSyncSystem {
           vx: delta.vx ?? 0,
           vy: delta.vy ?? 0,
           facingAngle: state.facingAngle,
+          moveFacingAngle: state.moveFacingAngle,
         })
       }
 

@@ -14,6 +14,7 @@ export type RemoteSample = {
   readonly vx: number
   readonly vy: number
   readonly facingAngle: number
+  readonly moveFacingAngle: number
 }
 
 /** Result of a `sampleAt` call. */
@@ -21,6 +22,7 @@ export type SampleResult = {
   readonly x: number
   readonly y: number
   readonly facingAngle: number
+  readonly moveFacingAngle: number
 }
 
 /**
@@ -95,7 +97,12 @@ export class RemoteInterpolationBuffer {
     // Before the oldest: clamp to oldest.
     if (renderTimeMs <= bucket[0]!.serverTimeMs) {
       const s = bucket[0]!
-      return { x: s.x, y: s.y, facingAngle: s.facingAngle }
+      return {
+        x: s.x,
+        y: s.y,
+        facingAngle: s.facingAngle,
+        moveFacingAngle: s.moveFacingAngle,
+      }
     }
 
     // After the newest: extrapolate using velocity, capped.
@@ -107,6 +114,7 @@ export class RemoteInterpolationBuffer {
         x: last.x + last.vx * dtSec,
         y: last.y + last.vy * dtSec,
         facingAngle: last.facingAngle,
+        moveFacingAngle: last.moveFacingAngle,
       }
     }
 
@@ -119,7 +127,12 @@ export class RemoteInterpolationBuffer {
         const dy = next.y - prev.y
         const dist = Math.sqrt(dx * dx + dy * dy)
         if (dist > TELEPORT_THRESHOLD_PX) {
-          return { x: next.x, y: next.y, facingAngle: next.facingAngle }
+          return {
+            x: next.x,
+            y: next.y,
+            facingAngle: next.facingAngle,
+            moveFacingAngle: next.moveFacingAngle,
+          }
         }
         const span = next.serverTimeMs - prev.serverTimeMs || 1
         const alpha = (renderTimeMs - prev.serverTimeMs) / span
@@ -127,11 +140,17 @@ export class RemoteInterpolationBuffer {
           x: prev.x + dx * alpha,
           y: prev.y + dy * alpha,
           facingAngle: next.facingAngle,
+          moveFacingAngle: next.moveFacingAngle,
         }
       }
     }
 
     // Should not reach here; return newest as a safe fallback.
-    return { x: last.x, y: last.y, facingAngle: last.facingAngle }
+    return {
+      x: last.x,
+      y: last.y,
+      facingAngle: last.facingAngle,
+      moveFacingAngle: last.moveFacingAngle,
+    }
   }
 }

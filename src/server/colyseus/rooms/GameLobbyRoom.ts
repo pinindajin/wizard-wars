@@ -363,6 +363,10 @@ export class GameLobbyRoom extends Room {
     this.updateMetadataPlayerCount()
     this.resetInactivityTimer()
 
+    if (this.lobbyPhase === "IN_PROGRESS") {
+      this.sendInProgressHydrationToClient(client, { includeLobbyState: false })
+    }
+
     logger.info(
       { event: "player.join", roomId: this.roomId, playerId: auth.sub },
       "[GameLobbyRoom] player joined",
@@ -429,6 +433,10 @@ export class GameLobbyRoom extends Room {
     client.send(RoomEvent.LobbyChatHistory, { messages: this.chatBuffer })
 
     this.updateMetadataPlayerCount()
+
+    if (this.lobbyPhase === "IN_PROGRESS") {
+      this.sendInProgressHydrationToClient(client, { includeLobbyState: false })
+    }
 
     logger.info(
       { event: "player.reconnect", roomId: this.roomId, playerId: pd.playerId },
@@ -809,18 +817,37 @@ export class GameLobbyRoom extends Room {
 
   /**
    * Handles an inbound `request_resync` message.
-   * Sends the full lobby state and shop state to the requesting client.
-   * Only processed during `IN_PROGRESS`.
+   * During `IN_PROGRESS`, unicasts fresh `LobbyState`, optional `ShopState`, and
+   * `GameStateSync` so clients can recover after refresh or missed messages.
    *
    * @param client - The requesting client.
    */
   private handleRequestResync(client: Client): void {
+    this.sendInProgressHydrationToClient(client, { includeLobbyState: true })
+  }
+
+  /**
+   * Unicasts match hydration (`ShopState`, `GameStateSync`) to one client while
+   * the room is `IN_PROGRESS`. Used on join/reconnect and from
+   * {@link handleRequestResync}.
+   *
+   * @param client - Target client (must carry {@link PlayerData}).
+   * @param opts - When `includeLobbyState` is true, sends `LobbyState` first
+   *   (explicit resync). Join/reconnect pass false because `onJoin` /
+   *   `onReconnect` already sent lobby state.
+   */
+  private sendInProgressHydrationToClient(
+    client: Client,
+    opts?: { readonly includeLobbyState?: boolean },
+  ): void {
     if (this.lobbyPhase !== "IN_PROGRESS") return
 
     const pd = client.userData as PlayerData
     const economy = this.economies.get(pd.playerId)
 
-    client.send(RoomEvent.LobbyState, this.buildLobbyState())
+    if (opts?.includeLobbyState) {
+      client.send(RoomEvent.LobbyState, this.buildLobbyState())
+    }
     if (economy) {
       client.send(RoomEvent.ShopState, buildShopStatePayload(economy))
     }

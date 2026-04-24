@@ -14,6 +14,7 @@ function baseSnapshot(over: Partial<PlayerSnapshot> & { id: number; playerId: st
     vx: over.vx ?? 0,
     vy: over.vy ?? 0,
     facingAngle: over.facingAngle ?? 0,
+    moveFacingAngle: over.moveFacingAngle ?? 0,
     health: over.health ?? 10,
     maxHealth: over.maxHealth ?? 10,
     lives: over.lives ?? 3,
@@ -77,6 +78,7 @@ describe("NetworkSyncSystem.applyFullSync (r5 despawn)", () => {
       animState: "idle",
       castingAbilityId: null,
       facingAngle: 0,
+      moveFacingAngle: 0,
       invulnerable: false,
     }
     const snap = baseSnapshot({ id: 3, playerId: "only" })

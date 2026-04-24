@@ -14,6 +14,7 @@ import {
   Position,
   Velocity,
   Facing,
+  MoveFacing,
   Health,
   Lives,
   PlayerTag,
@@ -40,6 +41,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
     const vx = Velocity.vx[eid]
     const vy = Velocity.vy[eid]
     const facingAngle = Facing.angle[eid]
+    const moveFacingAngle = MoveFacing.angle[eid]
     const health = Health.current[eid]
     const lives = Lives.count[eid]
     const animState = computePlayerAnimState(world, eid)
@@ -56,6 +58,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
         vx,
         vy,
         facingAngle,
+        moveFacingAngle,
         health,
         lives,
         animState,
@@ -70,6 +73,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
         vx,
         vy,
         facingAngle,
+        moveFacingAngle,
         health,
         lives,
         animState,
@@ -88,6 +92,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
       ...(vx !== prev.vx ? { vx } : {}),
       ...(vy !== prev.vy ? { vy } : {}),
       ...(facingAngle !== prev.facingAngle ? { facingAngle } : {}),
+      ...(moveFacingAngle !== prev.moveFacingAngle ? { moveFacingAngle } : {}),
       ...(health !== prev.health ? { health } : {}),
       ...(lives !== prev.lives ? { lives } : {}),
       ...(animState !== prev.animState ? { animState } : {}),
@@ -105,6 +110,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
       delta.vx !== undefined ||
       delta.vy !== undefined ||
       delta.facingAngle !== undefined ||
+      delta.moveFacingAngle !== undefined ||
       delta.health !== undefined ||
       delta.lives !== undefined ||
       delta.animState !== undefined ||
@@ -120,6 +126,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
       prev.vx = vx
       prev.vy = vy
       prev.facingAngle = facingAngle
+      prev.moveFacingAngle = moveFacingAngle
       prev.health = health
       prev.lives = lives
       prev.animState = animState

@@ -76,5 +76,41 @@ describe("game_state_sync on match start", { timeout: 30_000 }, () => {
     expect(gameSync.players[0]!.vy).toBe(0)
     expect(gameSync.players[0]!.moveState).toBe("idle")
     expect(typeof gameSync.players[0]!.lastProcessedInputSeq).toBe("number")
+    expect(typeof gameSync.players[0]!.moveFacingAngle).toBe("number")
+  })
+
+  it("guest rejoin during IN_PROGRESS receives GameStateSync with all sim players", async () => {
+    const guestToken = await createTestToken("user-guest", "GuestPlayer")
+    const hostRoomLocal = await server.sdk.create("game_lobby", { token: hostToken })
+    const guestRoomLocal = await server.sdk.joinById(hostRoomLocal.roomId, { token: guestToken })
+
+    let latestPhase = ""
+    hostRoomLocal.onMessage(RoomEvent.LobbyState, (state: LobbyStatePayload) => {
+      latestPhase = state.phase
+    })
+
+    hostRoomLocal.send(RoomEvent.LobbyStartGame, {})
+    await waitFor(() => latestPhase === "WAITING_FOR_CLIENTS", { timeout: 5000 })
+
+    hostRoomLocal.send(RoomEvent.ClientSceneReady, {})
+    guestRoomLocal.send(RoomEvent.ClientSceneReady, {})
+    await waitFor(() => latestPhase === "IN_PROGRESS", { timeout: 12_000 })
+
+    await guestRoomLocal.leave()
+
+    let rejoinSync: GameStateSyncPayload | null = null
+    const guestAfterRejoin = await server.sdk.joinById(hostRoomLocal.roomId, { token: guestToken })
+    guestAfterRejoin.onMessage(RoomEvent.GameStateSync, (p: GameStateSyncPayload) => {
+      rejoinSync = p
+    })
+
+    await waitFor(() => rejoinSync != null, { timeout: 5000 })
+
+    expect(rejoinSync!.players.length).toBe(2)
+    expect(rejoinSync!.players.some((pl) => pl.playerId === "user-guest")).toBe(true)
+    expect(rejoinSync!.players.some((pl) => pl.playerId === "user-host")).toBe(true)
+
+    await guestAfterRejoin.leave().catch(() => {})
+    await hostRoomLocal.leave().catch(() => {})
   })
 })
