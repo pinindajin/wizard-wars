@@ -42,7 +42,12 @@ vi.mock("phaser", () => {
   }
 })
 
-import { PlayerRenderSystem } from "./PlayerRenderSystem"
+import {
+  HP_BAR_OFFSET_Y,
+  NAME_TO_HP_BAR_GAP_PX,
+  NAMETAG_OFFSET_Y,
+  PlayerRenderSystem,
+} from "./PlayerRenderSystem"
 import { ClientPosition, ClientPlayerState, ClientRenderPos } from "../components"
 import { clientEntities, removeEntity } from "../world"
 import type { PlayerSnapshot } from "@/shared/types"
@@ -222,5 +227,11 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     // With no pending replay inputs, replay target = ack position; distance
     // from render (500) to ack (0) is well above snap threshold.
     expect(ClientRenderPos[1]).toEqual({ x: 0, y: 0 })
+  })
+})
+
+describe("PlayerRenderSystem.heroUiOffsets", () => {
+  it("places the HP bar top directly below the nametag bottom", () => {
+    expect(HP_BAR_OFFSET_Y).toBe(NAMETAG_OFFSET_Y + NAME_TO_HP_BAR_GAP_PX)
   })
 })
