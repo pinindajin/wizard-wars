@@ -112,13 +112,50 @@ test("full match flow: assets, overlay, canvas, movement, shop, abilities", asyn
     )
     .toBe(ARENA_CAMERA_FOLLOW_ZOOM)
 
-  // Press W; assert no crash. Character movement state on the server is
-  // validated indirectly through Phaser's sprite position ticking — we just
-  // verify input doesn't throw and the game is still running.
+  // Press W; assert the local render moves "forward" (decreasing world-Y)
+  // during the hold. Regression guard for the smoothing-vs-prediction bug
+  // where `_updateLocal` overwrote WASD prediction with a static from→to
+  // lerp, making the player visibly slide backward under held W.
   await page.locator("body").focus()
+
+  /**
+   * Reads the local player's rendered world-space Y from the live Arena
+   * scene. Returns null if the scene or local render pos is not available.
+   */
+  const readLocalY = async (): Promise<number | null> =>
+    page.evaluate(() => {
+      type ArenaLike = {
+        playerRenderSystem?: {
+          getLocalPlayerRenderPos?: () => { x: number; y: number } | null
+        }
+      }
+      const g = (
+        globalThis as {
+          __wwGame?: { scene: { getScene: (k: string) => unknown } }
+        }
+      ).__wwGame
+      if (!g?.scene) return null
+      const arena = g.scene.getScene("Arena") as ArenaLike | null | undefined
+      const pos = arena?.playerRenderSystem?.getLocalPlayerRenderPos?.()
+      return pos ? pos.y : null
+    })
+
+  const startY = await readLocalY()
+  expect(startY, "expected local render pos available before W hold").not.toBeNull()
+
   await page.keyboard.down("w")
-  await page.waitForTimeout(400)
+  await page.waitForTimeout(500)
   await page.keyboard.up("w")
+
+  const endY = await readLocalY()
+  expect(endY, "expected local render pos available after W hold").not.toBeNull()
+  // World Y decreases moving north; any smoothing window overwriting
+  // prediction (pre-fix behavior) would leave endY >= startY while W was
+  // held. Allow a small epsilon so a sub-pixel stall does not flake.
+  expect(
+    (endY ?? 0) - (startY ?? 0),
+    `expected local Y to decrease under held W (startY=${startY}, endY=${endY})`,
+  ).toBeLessThan(-8)
 
   // Open the shop with B.
   await page.keyboard.press("b")

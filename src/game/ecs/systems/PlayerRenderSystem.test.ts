@@ -281,6 +281,33 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     // from render (500) to ack (0) is well above snap threshold.
     expect(ClientRenderPos[1]).toEqual({ x: 0, y: 0 })
   })
+
+  it("keeps forward prediction during a smooth correction window instead of sliding backward", () => {
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    sys.localPlayerId = "p1"
+
+    sys.applyFullSync(sync([snap({ id: 1, playerId: "p1", x: 0, y: 0 })]))
+    // Render is 10 px ahead of the server in the W (up = -y) direction —
+    // medium prediction error in the "smooth" band (above
+    // INVISIBLE_PREDICTION_ERROR_PX, below PREDICTION_SNAP_THRESHOLD_PX).
+    ClientRenderPos[1] = { x: 0, y: -10 }
+
+    sys.onLocalAck(1, { x: 0, y: 0, lastProcessedInputSeq: 0 })
+    // Smooth arms the correction toward (0, 0); renderPos is untouched until
+    // the next update() frame.
+    expect(ClientRenderPos[1]).toEqual({ x: 0, y: -10 })
+
+    const startY = ClientRenderPos[1].y
+    sys.update(16, { up: true, down: false, left: false, right: false })
+
+    // Prediction-first blend (lerp(pPred, smoothTarget, t)): pressing W during
+    // the smoothing window moves the render forward (more negative y), because
+    // the predicted step is blended toward the target instead of being
+    // overwritten by a static smoothFrom → smoothTarget rail that would slide
+    // the render backward toward +y while W is held.
+    expect(ClientRenderPos[1].y).toBeLessThan(startY)
+  })
 })
 
 describe("PlayerRenderSystem.computeHeroHudYOffsets", () => {

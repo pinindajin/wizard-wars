@@ -124,12 +124,11 @@ interface PlayerRenderEntry {
   lastAnimKey: string
   /**
    * Remaining ms in the current "smooth replay correction" window. When > 0
-   * the local player's rendered position is blended linearly from its value
-   * at the start of the window (`smoothFromX/Y`) toward `smoothTargetX/Y`.
+   * each rendered frame is blended from this frame's predicted position toward
+   * `smoothTargetX/Y`, so the correction decays to zero without overwriting
+   * live WASD prediction.
    */
   smoothRemainingMs: number
-  smoothFromX: number
-  smoothFromY: number
   smoothTargetX: number
   smoothTargetY: number
 }
@@ -335,8 +334,6 @@ export class PlayerRenderSystem {
       renderPos.y = result.renderY
       entry.smoothRemainingMs = 0
     } else if (result.correction === "smooth") {
-      entry.smoothFromX = renderPos.x
-      entry.smoothFromY = renderPos.y
       entry.smoothTargetX = result.targetX
       entry.smoothTargetY = result.targetY
       entry.smoothRemainingMs = REPLAY_SMOOTHING_MS
@@ -403,8 +400,6 @@ export class PlayerRenderSystem {
       flashRemaining: 0,
       lastAnimKey: "",
       smoothRemainingMs: 0,
-      smoothFromX: x,
-      smoothFromY: y,
       smoothTargetX: x,
       smoothTargetY: y,
     })
@@ -569,8 +564,9 @@ export class PlayerRenderSystem {
 
   /**
    * Local-player render path: extrapolate from current render by current
-   * WASD input each frame (pure prediction), then apply any active smoothing
-   * correction from the last reconciliation ack.
+   * WASD input each frame (pure prediction), then blend the predicted
+   * position toward the last reconciled `smoothTarget` so the correction
+   * decays to zero instead of overwriting prediction with a static rail.
    */
   private _updateLocal(
     entry: PlayerRenderEntry,
@@ -596,10 +592,10 @@ export class PlayerRenderSystem {
     if (entry.smoothRemainingMs > 0) {
       entry.smoothRemainingMs = Math.max(0, entry.smoothRemainingMs - delta)
       const t = 1 - entry.smoothRemainingMs / REPLAY_SMOOTHING_MS
-      renderPos.x =
-        entry.smoothFromX + (entry.smoothTargetX - entry.smoothFromX) * t
-      renderPos.y =
-        entry.smoothFromY + (entry.smoothTargetY - entry.smoothFromY) * t
+      const pPredX = renderPos.x
+      const pPredY = renderPos.y
+      renderPos.x = pPredX + (entry.smoothTargetX - pPredX) * t
+      renderPos.y = pPredY + (entry.smoothTargetY - pPredY) * t
     }
   }
 
