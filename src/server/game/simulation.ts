@@ -10,6 +10,7 @@ import {
   Position,
   Velocity,
   Facing,
+  MoveFacing,
   Radius,
   Health,
   Lives,
@@ -121,6 +122,7 @@ export type PlayerPrevState = {
   vx: number
   vy: number
   facingAngle: number
+  moveFacingAngle: number
   health: number
   lives: number
   animState: PlayerAnimState
@@ -308,6 +310,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     addComponent(world, eid, Position)
     addComponent(world, eid, Velocity)
     addComponent(world, eid, Facing)
+    addComponent(world, eid, MoveFacing)
     addComponent(world, eid, Radius)
     addComponent(world, eid, Health)
     addComponent(world, eid, Lives)
@@ -324,6 +327,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     Velocity.vx[eid] = 0
     Velocity.vy[eid] = 0
     Facing.angle[eid] = facingAngle
+    MoveFacing.angle[eid] = facingAngle
     Radius.r[eid] = PLAYER_RADIUS_PX
     Health.current[eid] = DEFAULT_PLAYER_HEALTH
     Health.max[eid] = DEFAULT_PLAYER_HEALTH
@@ -368,6 +372,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       vx: 0,
       vy: 0,
       facingAngle,
+      moveFacingAngle: facingAngle,
       health: DEFAULT_PLAYER_HEALTH,
       lives: STARTING_LIVES,
       animState: "idle",
@@ -433,6 +438,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       const vx = Velocity.vx[eid]
       const vy = Velocity.vy[eid]
       const facingAngle = Facing.angle[eid]
+      const moveFacingAngle = MoveFacing.angle[eid]
       const health = Health.current[eid]
       const maxHealth = Health.max[eid]
       const lives = Lives.count[eid]
@@ -450,6 +456,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
         vx,
         vy,
         facingAngle,
+        moveFacingAngle,
         health,
         maxHealth,
         lives,

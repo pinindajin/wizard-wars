@@ -115,6 +115,7 @@ export const playerSnapshotSchema = z.object({
   vx: z.number().finite(),
   vy: z.number().finite(),
   facingAngle: z.number().finite(),
+  moveFacingAngle: z.number().finite(),
   health: z.number().finite(),
   maxHealth: z.number().finite(),
   lives: z.number().int().nonnegative(),

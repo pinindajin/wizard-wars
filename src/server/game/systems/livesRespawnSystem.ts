@@ -18,6 +18,7 @@ import { query, hasComponent, addComponent, removeComponent } from "bitecs"
 import {
   Position,
   Facing,
+  MoveFacing,
   Health,
   Lives,
   Cooldown,
@@ -105,6 +106,7 @@ function respawnPlayer(
   Position.x[eid] = spawnX
   Position.y[eid] = spawnY
   Facing.angle[eid] = facingAngle
+  MoveFacing.angle[eid] = facingAngle
   Health.current[eid] = Health.max[eid] > 0 ? Health.max[eid] : DEFAULT_PLAYER_HEALTH
 
   // Clear transient combat state

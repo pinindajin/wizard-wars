@@ -76,6 +76,7 @@ describe("game_state_sync on match start", { timeout: 30_000 }, () => {
     expect(gameSync.players[0]!.vy).toBe(0)
     expect(gameSync.players[0]!.moveState).toBe("idle")
     expect(typeof gameSync.players[0]!.lastProcessedInputSeq).toBe("number")
+    expect(typeof gameSync.players[0]!.moveFacingAngle).toBe("number")
   })
 
   it("guest rejoin during IN_PROGRESS receives GameStateSync with all sim players", async () => {
