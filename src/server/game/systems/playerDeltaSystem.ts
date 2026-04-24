@@ -48,7 +48,10 @@ export function playerDeltaSystem(ctx: SimCtx): void {
     const moveState = computePlayerMoveState(world, eid)
     const invulnerable = hasComponent(world, eid, InvulnerableTag)
     const castingAbilityId = getCastingAbilityId(world, eid)
-    const lastProcessedInputSeq = lastProcessedInputSeqByPlayer.get(userId) ?? 0
+    const lastProcessedInputSeq = Math.max(
+      0,
+      lastProcessedInputSeqByPlayer.get(userId) ?? 0,
+    )
 
     if (!prev) {
       ctx.playerDeltas.push({

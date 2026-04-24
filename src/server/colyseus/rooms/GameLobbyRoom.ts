@@ -363,6 +363,7 @@ export class GameLobbyRoom extends Room {
     this.updateMetadataPlayerCount()
     this.resetInactivityTimer()
 
+    this.resetPlayerInputStreamForNewTransport(auth.sub)
     if (this.lobbyPhase === "IN_PROGRESS") {
       this.sendInProgressHydrationToClient(client, { includeLobbyState: false })
     }
@@ -434,6 +435,7 @@ export class GameLobbyRoom extends Room {
 
     this.updateMetadataPlayerCount()
 
+    this.resetPlayerInputStreamForNewTransport(pd.playerId)
     if (this.lobbyPhase === "IN_PROGRESS") {
       this.sendInProgressHydrationToClient(client, { includeLobbyState: false })
     }
@@ -482,6 +484,23 @@ export class GameLobbyRoom extends Room {
   // ---------------------------------------------------------------------------
   // Internal player lifecycle
   // ---------------------------------------------------------------------------
+
+  /**
+   * Resets per-player input stream state when a client opens a new transport
+   * (browser tab refresh) so the client can restart `seq` at 0. Clears
+   * duplicate-drop bookkeeping and, when the sim still has the entity, resets
+   * the simulation ack cursor.
+   *
+   * @param playerId - Joining or reconnecting user's id.
+   */
+  private resetPlayerInputStreamForNewTransport(playerId: string): void {
+    if (this.lobbyPhase !== "IN_PROGRESS" || !this.simulation) return
+    this.highestAcceptedSeqByPlayer.delete(playerId)
+    this.inputQueue.delete(playerId)
+    if (this.simulation.playerEntityMap.has(playerId)) {
+      this.simulation.resetClientInputStream(playerId)
+    }
+  }
 
   /**
    * Shared cleanup path for a player who has fully left the room (not

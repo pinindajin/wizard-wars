@@ -76,6 +76,20 @@ import { computePlayerMoveState } from "./playerMoveState"
 import { playerDeltaSystem } from "./systems/playerDeltaSystem"
 import { projectileDeltaSystem } from "./systems/projectileDeltaSystem"
 
+/**
+ * Maps internal last-processed input seq to wire payloads (nonnegative int).
+ * Internal `-1` means no input applied yet; emits `0`.
+ *
+ * @param m - The simulation's `lastProcessedInputSeqByPlayer` map.
+ * @param userId - Affected user id.
+ */
+export function lastProcessedSeqForNetworkPayload(
+  m: ReadonlyMap<string, number>,
+  userId: string,
+): number {
+  return Math.max(0, m.get(userId) ?? 0)
+}
+
 // ─── Inter-system event types ─────────────────────────────────────────────
 
 /**
@@ -252,6 +266,12 @@ export type GameSimulation = {
    * `serverTimeMs` and per-player `lastProcessedInputSeq`.
    */
   buildGameStateSyncPayload: (serverTimeMs: number) => GameStateSyncPayload
+  /**
+   * Resets per-tick input ack state when a client establishes a new transport
+   * (browser refresh) while the player entity still exists. Internal map may
+   * hold `-1` until the first `seq: 0` is processed; see {@link lastProcessedSeqForNetworkPayload}.
+   */
+  resetClientInputStream: (userId: string) => void
 }
 
 // ─── Factory ─────────────────────────────────────────────────────────────
@@ -381,7 +401,8 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       invulnerable: false,
       lastProcessedInputSeq: 0,
     })
-    lastProcessedInputSeqByPlayer.set(userId, 0)
+    // `-1`: no input processed yet; first client `seq: 0` is accepted in `tick`.
+    lastProcessedInputSeqByPlayer.set(userId, -1)
 
     return eid
   }
@@ -417,6 +438,15 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     hostEndSignal = true
   }
 
+  /**
+   * Clears reconnect-stale input ack state so a new `seq` stream (from 0) is accepted.
+   *
+   * @param userId - The player that reconnected; must be an in-world entity.
+   */
+  function resetClientInputStream(userId: string): void {
+    lastProcessedInputSeqByPlayer.set(userId, -1)
+  }
+
   // ── buildGameStateSyncPayload ───────────────────────────────────────
 
   /**
@@ -446,7 +476,10 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       const moveState = computePlayerMoveState(world, eid)
       const invulnerable = hasComponent(world, eid, InvulnerableTag)
       const castingAbilityId = getCastingAbilityId(world, eid)
-      const lastProcessedInputSeq = lastProcessedInputSeqByPlayer.get(userId) ?? 0
+      const lastProcessedInputSeq = lastProcessedSeqForNetworkPayload(
+        lastProcessedInputSeqByPlayer,
+        userId,
+      )
       players.push({
         id: eid,
         playerId: userId,
@@ -607,5 +640,6 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     tick,
     requestHostEnd,
     buildGameStateSyncPayload,
+    resetClientInputStream,
   }
 }
