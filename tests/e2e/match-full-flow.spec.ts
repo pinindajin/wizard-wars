@@ -157,6 +157,31 @@ test("full match flow: assets, overlay, canvas, movement, shop, abilities", asyn
     `expected local Y to decrease under held W (startY=${startY}, endY=${endY})`,
   ).toBeLessThan(-8)
 
+  // Post-release no-pull-back guard (cause B + C fix): after W is
+  // released, the render should stay essentially still. Before the
+  // fixed-step + retain-last-input fixes, any accumulated prediction
+  // error would arm a smoothing window and visibly pull the render
+  // back toward the ack target for ~80 ms. Sample twice after a short
+  // settle to allow one smoothing window to expire, then confirm the
+  // render does not drift backward (positive y delta) by more than a
+  // small epsilon.
+  await page.waitForTimeout(150)
+  const settledY = await readLocalY()
+  await page.waitForTimeout(250)
+  const afterSettleY = await readLocalY()
+  expect(
+    settledY,
+    "expected local render pos available shortly after W release",
+  ).not.toBeNull()
+  expect(
+    afterSettleY,
+    "expected local render pos available after post-release settle",
+  ).not.toBeNull()
+  expect(
+    (afterSettleY ?? 0) - (settledY ?? 0),
+    `expected local Y NOT to drift backward after W release (settledY=${settledY}, afterSettleY=${afterSettleY})`,
+  ).toBeLessThan(4)
+
   // Open the shop with B.
   await page.keyboard.press("b")
   await expect(page.getByTestId("shop-modal")).toBeVisible({ timeout: 5000 })

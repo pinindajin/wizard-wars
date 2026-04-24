@@ -299,6 +299,78 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     expect(ClientRenderPos[1]).toEqual({ x: 0, y: 0 })
   })
 
+  it("runs exactly one sim step per TICK_MS of real time and calls onSimStep once per step", () => {
+    // Regression for cause B: committed sim cadence must match the
+    // server's TICK_MS, not the client's frame delta. Under held W
+    // over 3 × TICK_MS of frame delta, exactly three sim steps must
+    // fire — each committing one TICK_DT_SEC of forward motion — and
+    // the onSimStep callback must fire once per committed step (that
+    // is how Arena sends one input per server tick regardless of FPS).
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    sys.localPlayerId = "p1"
+    sys.applyFullSync(sync([snap({ id: 1, playerId: "p1", x: 0, y: 0 })]))
+
+    const start = sys._getLocalSimForTest(1)
+    expect(start).toMatchObject({ simCurrX: 0, simCurrY: 0 })
+
+    let sends = 0
+    // Use a clean 51 ms (slightly above 3 × TICK_MS = 50) so float
+    // precision at the accumulator boundary cannot eat a step.
+    sys.update(
+      51,
+      { up: true, down: false, left: false, right: false },
+      () => {
+        sends += 1
+      },
+    )
+
+    expect(sends).toBe(3)
+    const after = sys._getLocalSimForTest(1)
+    // 3 sim steps × (BASE_MOVE_SPEED_PX_PER_SEC × TICK_DT_SEC) of
+    // forward motion = 3 × 3.333… ≈ 10 px up (y decreases).
+    expect(after?.simCurrY).toBeCloseTo(-10, 5)
+  })
+
+  it("bounds sim catch-up after a long hitch (no spiral of death)", () => {
+    // If the tab was backgrounded or the thread GC-paused for a full
+    // second, we clamp the accumulator to MAX_SIM_LAG_MS (250 ms in
+    // the system) so the render frame after the hitch commits at most
+    // ~15 sim steps, not 60+.
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    sys.localPlayerId = "p1"
+    sys.applyFullSync(sync([snap({ id: 1, playerId: "p1", x: 0, y: 0 })]))
+
+    let sends = 0
+    sys.update(
+      5000,
+      { up: false, down: false, left: false, right: false },
+      () => {
+        sends += 1
+      },
+    )
+    // Clamp to 250 ms budget → at most 250 / 16.67 ≈ 15 sim steps.
+    expect(sends).toBeLessThanOrEqual(15)
+  })
+})
+
+describe("PlayerRenderSystem smoothing + render interp", () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-04-23T12:00:00.000Z"))
+    for (const id of [...clientEntities]) {
+      removeEntity(id)
+      delete ClientPosition[id]
+      delete ClientRenderPos[id]
+      delete ClientPlayerState[id]
+    }
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it("keeps forward prediction during a smooth correction window instead of sliding backward", () => {
     const { scene, group } = mockSceneAndGroup()
     const sys = new PlayerRenderSystem(scene as never, group as never)
@@ -335,6 +407,50 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     // below startSimY. With the old absolute from→to rail this would
     // have slid backward toward zero even under held W.
     expect(after?.simCurrY).toBeLessThan(startSimY)
+  })
+
+  it("does not pull the render backward after release when prediction matches the ack (cause B + C)", () => {
+    // Regression for the video the user reported: under the full
+    // Option-3 fix, released-WASD with correct prediction must NOT
+    // produce a pull-back over the smoothing window. Arming the
+    // smoothing window only happens when reconcileLocal classifies
+    // the error as "smooth"; with prediction matching the ack the
+    // classification is "none" and no smoothing is armed, so the
+    // render stays still.
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    sys.localPlayerId = "p1"
+
+    sys.applyFullSync(sync([snap({ id: 1, playerId: "p1", x: 0, y: 0 })]))
+    // Simulate a steady 60 Hz frame: one sim step of forward motion
+    // then an ack that exactly matches the committed simCurr.
+    sys.update(
+      1000 / 60,
+      { up: true, down: false, left: false, right: false },
+    )
+    const afterStep = sys._getLocalSimForTest(1)
+    expect(afterStep).not.toBeNull()
+    const expectedY = afterStep!.simCurrY
+
+    sys.onLocalAck(1, {
+      x: 0,
+      y: expectedY,
+      lastProcessedInputSeq: 0,
+    })
+
+    // Reconciliation should classify "none" (zero error) — no
+    // smoothing armed.
+    expect(sys._getLocalSimForTest(1)?.smoothRemainingMs).toBe(0)
+
+    // Release WASD and run a few more frames.
+    const stoppedBaseline = sys._getLocalSimForTest(1)?.simCurrY
+    for (let i = 0; i < 5; i++) {
+      sys.update(1000 / 60, { up: false, down: false, left: false, right: false })
+    }
+    const afterRelease = sys._getLocalSimForTest(1)?.simCurrY
+
+    // simCurr must be unchanged after release — no pull-back.
+    expect(afterRelease).toBe(stoppedBaseline)
   })
 })
 
