@@ -44,6 +44,7 @@ vi.mock("phaser", () => {
 
 import {
   computeHeroHudYOffsets,
+  FOOT_MARKER_CENTER_Y_OFFSET_FROM_FOOT,
   HUD_CLEARANCE_ABOVE_SPRITE_TOP_PX,
   LADY_WIZARD_FRAME_HEIGHT_PX,
   NAME_TO_HP_BAR_GAP_PX,
@@ -207,7 +208,7 @@ describe("PlayerRenderSystem.applyFullSync", () => {
       ellipse: ReturnType<typeof vi.fn>
     }
 
-    const footY = 20 - Math.round(LADY_WIZARD_FRAME_HEIGHT_PX * 0.1)
+    const footY = 20 + FOOT_MARKER_CENTER_Y_OFFSET_FROM_FOOT
     expect(add.ellipse).toHaveBeenCalledWith(
       10,
       footY,

@@ -104,9 +104,10 @@ const FOOT_MARKER_H = 16
  */
 const FOOT_MARKER_DEPTH_EPS = 0.1
 /**
- * Offset from foot anchor (`renderPos.y`, texture bottom) to the ellipse center.
+ * Offset from foot anchor (`renderPos.y`, texture bottom) to the ellipse center (px).
+ * Positive = down-screen. Exported for unit tests; tune here.
  */
-const FOOT_MARKER_CENTER_Y_OFFSET_FROM_FOOT = 11
+export const FOOT_MARKER_CENTER_Y_OFFSET_FROM_FOOT = 11
 
 /** Per-entity rendering state that lives outside the shared ECS records. */
 interface PlayerRenderEntry {
