@@ -2,7 +2,21 @@
  * inputSystem – reads the tick's inputMap and writes PlayerInput component fields
  * for every live player entity.
  *
- * Entities with no entry in the inputMap receive zeroed inputs (treat as idle).
+ * Empty-queue ticks (no input received for a player this tick) are the
+ * client/server scheduling-drift case: Phaser's RAF and the server's
+ * `setInterval` are not phase-locked, so whenever the most recent client
+ * payload arrives just after a tick boundary, the next tick sees an empty
+ * queue. Zeroing all inputs in that case would freeze the player on the
+ * server while the client keeps predicting forward — one tick worth of
+ * authoritative motion per skipped tick, which reconciliation then paints
+ * as rubberbanding.
+ *
+ * Fix (cause C): on empty-queue ticks, **retain** the previously committed
+ * *held* input fields (WASD, weapon buttons, last aim target) and **clear
+ * only the edge-triggered fields** (abilitySlot, useQuickItemSlot). Held
+ * intent is edge-triggered by the human, not per-tick by the network, so
+ * retaining it is the correct semantic. Edge-triggered casts are still
+ * cleared so a single armed cast cannot fire twice when the queue stalls.
  */
 import { query } from "bitecs"
 
@@ -22,17 +36,8 @@ export function inputSystem(ctx: SimCtx): void {
     const input = userId !== undefined ? inputMap.get(userId) : undefined
 
     if (!input) {
-      PlayerInput.up[eid] = 0
-      PlayerInput.down[eid] = 0
-      PlayerInput.left[eid] = 0
-      PlayerInput.right[eid] = 0
-      PlayerInput.weaponPrimary[eid] = 0
-      PlayerInput.weaponSecondary[eid] = 0
+      // Retain held fields; clear only edge-triggered action fields.
       PlayerInput.abilitySlot[eid] = -1
-      PlayerInput.abilityTargetX[eid] = 0
-      PlayerInput.abilityTargetY[eid] = 0
-      PlayerInput.weaponTargetX[eid] = 0
-      PlayerInput.weaponTargetY[eid] = 0
       PlayerInput.useQuickItemSlot[eid] = -1
       continue
     }

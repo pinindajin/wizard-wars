@@ -379,6 +379,26 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     QuickItemSlots.slot3Item[eid] = -1
     QuickItemSlots.slot3Charges[eid] = 0
 
+    // Zero-initialize PlayerInput explicitly. bitecs stores component
+    // data in shared TypedArrays that persist across entity-id reuse and
+    // across worlds, so we can't rely on "fresh entity = zero fields"
+    // alone. Explicit zeroing matters because `inputSystem` now retains
+    // held fields across empty-queue ticks (cause C fix) rather than
+    // zeroing them every tick.
+    PlayerInput.up[eid] = 0
+    PlayerInput.down[eid] = 0
+    PlayerInput.left[eid] = 0
+    PlayerInput.right[eid] = 0
+    PlayerInput.weaponPrimary[eid] = 0
+    PlayerInput.weaponSecondary[eid] = 0
+    PlayerInput.abilitySlot[eid] = -1
+    PlayerInput.abilityTargetX[eid] = 0
+    PlayerInput.abilityTargetY[eid] = 0
+    PlayerInput.weaponTargetX[eid] = 0
+    PlayerInput.weaponTargetY[eid] = 0
+    PlayerInput.useQuickItemSlot[eid] = -1
+    PlayerInput.seq[eid] = 0
+
     playerEntityMap.set(userId, eid)
     entityPlayerMap.set(eid, userId)
     playerUsernameMap.set(userId, username)
