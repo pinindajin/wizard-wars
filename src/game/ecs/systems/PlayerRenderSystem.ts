@@ -127,7 +127,14 @@ export const FOOT_MARKER_CENTER_Y_OFFSET_FROM_FOOT = 11
 const FIREBALL_CHANNEL_OFFSET_PX = 36
 /** Vertical bias so the channel sprite sits at the wizard's hand height, not feet. */
 const FIREBALL_CHANNEL_Y_BIAS_PX = -40
-/** Display scale for the 256-px channel sprite — tuned to match wizard scale. */
+/**
+ * Extra downward offset when facing is mostly east or west (`facingAngle` from
+ * `atan2(dy, dx)`). Uses `|sin(angle)|` so pure N/S cardinals are unchanged.
+ */
+const FIREBALL_CHANNEL_EAST_WEST_Y_NUDGE_PX = 30
+/** Treat as E/W when `|sin(facingAngle)|` is below this (≈30° from horizontal). */
+const FIREBALL_CHANNEL_EAST_WEST_SIN_MAX = 0.5
+/** Display scale for the channel sprite sheet — tuned to match wizard scale. */
 const FIREBALL_CHANNEL_SCALE = 0.35
 /** Tiny depth bump so the channel renders just above the casting wizard. */
 const FIREBALL_CHANNEL_DEPTH_EPS = 0.5
@@ -606,7 +613,14 @@ export class PlayerRenderSystem {
 
     const dx = Math.cos(state.facingAngle) * FIREBALL_CHANNEL_OFFSET_PX
     const dy = Math.sin(state.facingAngle) * FIREBALL_CHANNEL_OFFSET_PX
-    overlay.setPosition(renderPos.x + dx, renderPos.y + dy + FIREBALL_CHANNEL_Y_BIAS_PX)
+    const eastWestNudge =
+      Math.abs(Math.sin(state.facingAngle)) < FIREBALL_CHANNEL_EAST_WEST_SIN_MAX
+        ? FIREBALL_CHANNEL_EAST_WEST_Y_NUDGE_PX
+        : 0
+    overlay.setPosition(
+      renderPos.x + dx,
+      renderPos.y + dy + FIREBALL_CHANNEL_Y_BIAS_PX + eastWestNudge,
+    )
     overlay.setDepth(renderPos.y + FIREBALL_CHANNEL_DEPTH_EPS)
     overlay.setVisible(true)
   }
