@@ -76,6 +76,20 @@ import { computePlayerMoveState } from "./playerMoveState"
 import { playerDeltaSystem } from "./systems/playerDeltaSystem"
 import { projectileDeltaSystem } from "./systems/projectileDeltaSystem"
 
+/**
+ * Maps internal last-processed input seq to wire payloads (nonnegative int).
+ * Internal `-1` means no input applied yet; emits `0`.
+ *
+ * @param m - The simulation's `lastProcessedInputSeqByPlayer` map.
+ * @param userId - Affected user id.
+ */
+export function lastProcessedSeqForNetworkPayload(
+  m: ReadonlyMap<string, number>,
+  userId: string,
+): number {
+  return Math.max(0, m.get(userId) ?? 0)
+}
+
 // ─── Inter-system event types ─────────────────────────────────────────────
 
 /**
@@ -252,6 +266,12 @@ export type GameSimulation = {
    * `serverTimeMs` and per-player `lastProcessedInputSeq`.
    */
   buildGameStateSyncPayload: (serverTimeMs: number) => GameStateSyncPayload
+  /**
+   * Resets per-tick input ack state when a client establishes a new transport
+   * (browser refresh) while the player entity still exists. Internal map may
+   * hold `-1` until the first `seq: 0` is processed; see {@link lastProcessedSeqForNetworkPayload}.
+   */
+  resetClientInputStream: (userId: string) => void
 }
 
 // ─── Factory ─────────────────────────────────────────────────────────────
@@ -359,6 +379,26 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     QuickItemSlots.slot3Item[eid] = -1
     QuickItemSlots.slot3Charges[eid] = 0
 
+    // Zero-initialize PlayerInput explicitly. bitecs stores component
+    // data in shared TypedArrays that persist across entity-id reuse and
+    // across worlds, so we can't rely on "fresh entity = zero fields"
+    // alone. Explicit zeroing matters because `inputSystem` now retains
+    // held fields across empty-queue ticks (cause C fix) rather than
+    // zeroing them every tick.
+    PlayerInput.up[eid] = 0
+    PlayerInput.down[eid] = 0
+    PlayerInput.left[eid] = 0
+    PlayerInput.right[eid] = 0
+    PlayerInput.weaponPrimary[eid] = 0
+    PlayerInput.weaponSecondary[eid] = 0
+    PlayerInput.abilitySlot[eid] = -1
+    PlayerInput.abilityTargetX[eid] = 0
+    PlayerInput.abilityTargetY[eid] = 0
+    PlayerInput.weaponTargetX[eid] = 0
+    PlayerInput.weaponTargetY[eid] = 0
+    PlayerInput.useQuickItemSlot[eid] = -1
+    PlayerInput.seq[eid] = 0
+
     playerEntityMap.set(userId, eid)
     entityPlayerMap.set(eid, userId)
     playerUsernameMap.set(userId, username)
@@ -381,7 +421,8 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       invulnerable: false,
       lastProcessedInputSeq: 0,
     })
-    lastProcessedInputSeqByPlayer.set(userId, 0)
+    // `-1`: no input processed yet; first client `seq: 0` is accepted in `tick`.
+    lastProcessedInputSeqByPlayer.set(userId, -1)
 
     return eid
   }
@@ -417,6 +458,15 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     hostEndSignal = true
   }
 
+  /**
+   * Clears reconnect-stale input ack state so a new `seq` stream (from 0) is accepted.
+   *
+   * @param userId - The player that reconnected; must be an in-world entity.
+   */
+  function resetClientInputStream(userId: string): void {
+    lastProcessedInputSeqByPlayer.set(userId, -1)
+  }
+
   // ── buildGameStateSyncPayload ───────────────────────────────────────
 
   /**
@@ -446,7 +496,10 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       const moveState = computePlayerMoveState(world, eid)
       const invulnerable = hasComponent(world, eid, InvulnerableTag)
       const castingAbilityId = getCastingAbilityId(world, eid)
-      const lastProcessedInputSeq = lastProcessedInputSeqByPlayer.get(userId) ?? 0
+      const lastProcessedInputSeq = lastProcessedSeqForNetworkPayload(
+        lastProcessedInputSeqByPlayer,
+        userId,
+      )
       players.push({
         id: eid,
         playerId: userId,
@@ -607,5 +660,6 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     tick,
     requestHostEnd,
     buildGameStateSyncPayload,
+    resetClientInputStream,
   }
 }

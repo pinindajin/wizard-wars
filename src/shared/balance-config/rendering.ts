@@ -43,3 +43,12 @@ export const BASE_TILE_SIZE_PX = 64
 
 /** Y-sort depth offset: tilemap layer rendered behind everything at -1000. */
 export const TILEMAP_DEPTH = -1000
+
+/**
+ * Main camera zoom in the Arena. The world tilemap is 1344×768, matching the
+ * default game size, so at zoom 1 the visible area equals the map and scroll is
+ * clamped to (0,0) — `centerOn` cannot follow the local player. Zooming in
+ * (values &gt; 1) makes the visible world smaller than the map, giving the camera
+ * scroll headroom to keep the player centered.
+ */
+export const ARENA_CAMERA_FOLLOW_ZOOM = 1.2

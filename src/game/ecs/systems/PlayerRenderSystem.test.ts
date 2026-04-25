@@ -43,9 +43,11 @@ vi.mock("phaser", () => {
 })
 
 import {
-  HP_BAR_OFFSET_Y,
+  computeHeroHudYOffsets,
+  FOOT_MARKER_CENTER_Y_OFFSET_FROM_FOOT,
+  HUD_CLEARANCE_ABOVE_SPRITE_TOP_PX,
+  LADY_WIZARD_FRAME_HEIGHT_PX,
   NAME_TO_HP_BAR_GAP_PX,
-  NAMETAG_OFFSET_Y,
   PlayerRenderSystem,
 } from "./PlayerRenderSystem"
 import { ClientPosition, ClientPlayerState, ClientRenderPos } from "../components"
@@ -206,9 +208,10 @@ describe("PlayerRenderSystem.applyFullSync", () => {
       ellipse: ReturnType<typeof vi.fn>
     }
 
+    const footY = 20 + FOOT_MARKER_CENTER_Y_OFFSET_FROM_FOOT
     expect(add.ellipse).toHaveBeenCalledWith(
       10,
-      20 + 8,
+      footY,
       32,
       16,
       HERO_CONFIGS.red_wizard.tint,
@@ -270,18 +273,194 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     sys.localPlayerId = "p1"
 
     sys.applyFullSync(sync([snap({ id: 1, playerId: "p1", x: 0, y: 0 })]))
-    ClientRenderPos[1] = { x: 500, y: 0 }
+    // Reconciliation operates on fixed-step sim state; drive the sim
+    // forward by seeding simCurr far ahead of the ack so the error lands
+    // well above PREDICTION_SNAP_THRESHOLD_PX.
+    sys._setLocalSimForTest(1, {
+      simPrevX: 500,
+      simPrevY: 0,
+      simCurrX: 500,
+      simCurrY: 0,
+    })
 
     sys.onLocalAck(1, { x: 0, y: 0, lastProcessedInputSeq: 0 })
 
-    // With no pending replay inputs, replay target = ack position; distance
-    // from render (500) to ack (0) is well above snap threshold.
+    const simAfter = sys._getLocalSimForTest(1)
+    expect(simAfter).not.toBeNull()
+    // Snap collapses both simPrev and simCurr onto the replay target so
+    // the next render step does not interpolate through the correction.
+    expect(simAfter).toMatchObject({
+      simPrevX: 0,
+      simPrevY: 0,
+      simCurrX: 0,
+      simCurrY: 0,
+      smoothRemainingMs: 0,
+    })
     expect(ClientRenderPos[1]).toEqual({ x: 0, y: 0 })
+  })
+
+  it("runs exactly one sim step per TICK_MS of real time and calls onSimStep once per step", () => {
+    // Regression for cause B: committed sim cadence must match the
+    // server's TICK_MS, not the client's frame delta. Under held W
+    // over 3 × TICK_MS of frame delta, exactly three sim steps must
+    // fire — each committing one TICK_DT_SEC of forward motion — and
+    // the onSimStep callback must fire once per committed step (that
+    // is how Arena sends one input per server tick regardless of FPS).
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    sys.localPlayerId = "p1"
+    sys.applyFullSync(sync([snap({ id: 1, playerId: "p1", x: 0, y: 0 })]))
+
+    const start = sys._getLocalSimForTest(1)
+    expect(start).toMatchObject({ simCurrX: 0, simCurrY: 0 })
+
+    let sends = 0
+    // Use a clean 51 ms (slightly above 3 × TICK_MS = 50) so float
+    // precision at the accumulator boundary cannot eat a step.
+    sys.update(
+      51,
+      { up: true, down: false, left: false, right: false },
+      () => {
+        sends += 1
+      },
+    )
+
+    expect(sends).toBe(3)
+    const after = sys._getLocalSimForTest(1)
+    // 3 sim steps × (BASE_MOVE_SPEED_PX_PER_SEC × TICK_DT_SEC) of
+    // forward motion = 3 × 3.333… ≈ 10 px up (y decreases).
+    expect(after?.simCurrY).toBeCloseTo(-10, 5)
+  })
+
+  it("bounds sim catch-up after a long hitch (no spiral of death)", () => {
+    // If the tab was backgrounded or the thread GC-paused for a full
+    // second, we clamp the accumulator to MAX_SIM_LAG_MS (250 ms in
+    // the system) so the render frame after the hitch commits at most
+    // ~15 sim steps, not 60+.
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    sys.localPlayerId = "p1"
+    sys.applyFullSync(sync([snap({ id: 1, playerId: "p1", x: 0, y: 0 })]))
+
+    let sends = 0
+    sys.update(
+      5000,
+      { up: false, down: false, left: false, right: false },
+      () => {
+        sends += 1
+      },
+    )
+    // Clamp to 250 ms budget → at most 250 / 16.67 ≈ 15 sim steps.
+    expect(sends).toBeLessThanOrEqual(15)
   })
 })
 
-describe("PlayerRenderSystem.heroUiOffsets", () => {
-  it("places the HP bar top directly below the nametag bottom", () => {
-    expect(HP_BAR_OFFSET_Y).toBe(NAMETAG_OFFSET_Y + NAME_TO_HP_BAR_GAP_PX)
+describe("PlayerRenderSystem smoothing + render interp", () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-04-23T12:00:00.000Z"))
+    for (const id of [...clientEntities]) {
+      removeEntity(id)
+      delete ClientPosition[id]
+      delete ClientRenderPos[id]
+      delete ClientPlayerState[id]
+    }
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it("keeps forward prediction during a smooth correction window instead of sliding backward", () => {
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    sys.localPlayerId = "p1"
+
+    sys.applyFullSync(sync([snap({ id: 1, playerId: "p1", x: 0, y: 0 })]))
+    // Seed simCurr 10 px ahead of the server in the W (up = -y)
+    // direction — medium prediction error in the "smooth" band (above
+    // INVISIBLE_PREDICTION_ERROR_PX, below PREDICTION_SNAP_THRESHOLD_PX).
+    sys._setLocalSimForTest(1, {
+      simPrevX: 0,
+      simPrevY: -10,
+      simCurrX: 0,
+      simCurrY: -10,
+    })
+
+    sys.onLocalAck(1, { x: 0, y: 0, lastProcessedInputSeq: 0 })
+    // Smooth arms the correction toward (0, 0); simCurr is untouched
+    // until the next sim step runs.
+    const armed = sys._getLocalSimForTest(1)
+    expect(armed).toMatchObject({ simCurrY: -10 })
+    expect(armed?.smoothRemainingMs).toBeGreaterThan(0)
+
+    const startSimY = armed?.simCurrY ?? 0
+    // Drive enough real-time debt to commit exactly one sim step so the
+    // assertion runs against a freshly-committed simCurr regardless of
+    // fractional accumulator.
+    sys.update(20, { up: true, down: false, left: false, right: false })
+
+    const after = sys._getLocalSimForTest(1)
+    // Prediction-first blend (lerp(pPred, smoothTarget, t)): the
+    // predicted step decreases y (forward) and is only partially pulled
+    // back toward the target, so the committed simCurr.y must stay
+    // below startSimY. With the old absolute from→to rail this would
+    // have slid backward toward zero even under held W.
+    expect(after?.simCurrY).toBeLessThan(startSimY)
+  })
+
+  it("does not pull the render backward after release when prediction matches the ack (cause B + C)", () => {
+    // Regression for the video the user reported: under the full
+    // Option-3 fix, released-WASD with correct prediction must NOT
+    // produce a pull-back over the smoothing window. Arming the
+    // smoothing window only happens when reconcileLocal classifies
+    // the error as "smooth"; with prediction matching the ack the
+    // classification is "none" and no smoothing is armed, so the
+    // render stays still.
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    sys.localPlayerId = "p1"
+
+    sys.applyFullSync(sync([snap({ id: 1, playerId: "p1", x: 0, y: 0 })]))
+    // Simulate a steady 60 Hz frame: one sim step of forward motion
+    // then an ack that exactly matches the committed simCurr.
+    sys.update(
+      1000 / 60,
+      { up: true, down: false, left: false, right: false },
+    )
+    const afterStep = sys._getLocalSimForTest(1)
+    expect(afterStep).not.toBeNull()
+    const expectedY = afterStep!.simCurrY
+
+    sys.onLocalAck(1, {
+      x: 0,
+      y: expectedY,
+      lastProcessedInputSeq: 0,
+    })
+
+    // Reconciliation should classify "none" (zero error) — no
+    // smoothing armed.
+    expect(sys._getLocalSimForTest(1)?.smoothRemainingMs).toBe(0)
+
+    // Release WASD and run a few more frames.
+    const stoppedBaseline = sys._getLocalSimForTest(1)?.simCurrY
+    for (let i = 0; i < 5; i++) {
+      sys.update(1000 / 60, { up: false, down: false, left: false, right: false })
+    }
+    const afterRelease = sys._getLocalSimForTest(1)?.simCurrY
+
+    // simCurr must be unchanged after release — no pull-back.
+    expect(afterRelease).toBe(stoppedBaseline)
+  })
+})
+
+describe("PlayerRenderSystem.computeHeroHudYOffsets", () => {
+  it("keeps 3px between nametag bottom and HP bar top, and 10px from sprite top to bar bottom", () => {
+    const footY = 200
+    const { nameTagBottomY, hpBarTopY } = computeHeroHudYOffsets(footY)
+    const spriteTopY = footY - LADY_WIZARD_FRAME_HEIGHT_PX
+    const hpBarHeight = 4
+    expect(nameTagBottomY).toBe(hpBarTopY - NAME_TO_HP_BAR_GAP_PX)
+    expect(hpBarTopY + hpBarHeight).toBe(spriteTopY - HUD_CLEARANCE_ABOVE_SPRITE_TOP_PX)
   })
 })

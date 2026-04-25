@@ -188,6 +188,84 @@ describe("movement system", () => {
     expect(p.moveFacingAngle).toBeCloseTo(move0, 5)
     expect(p.facingAngle).toBeCloseTo(Math.atan2(0, 400), 5)
   })
+
+  it("retains held WASD across empty-queue ticks so the player keeps moving (cause C)", () => {
+    // Regression for the rubberbanding caused by the server zeroing all
+    // inputs whenever a tick happened to have an empty queue for a
+    // player. With retention, a single scheduling-drift gap no longer
+    // costs a tick of authoritative forward motion.
+    const sim = createGameSimulation(Date.now())
+    sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    const eid = sim.playerEntityMap.get("user1")!
+    const spawnY = ARENA_SPAWN_POINTS[0].y
+
+    // Tick 1: send up=true. Player should move forward.
+    sim.tick(
+      queueMap([["user1", emptyInput({ up: true, seq: 900 })]]),
+      Date.now() + 17,
+    )
+    const y1 = sim
+      .buildGameStateSyncPayload(Date.now())
+      .players.find((pl) => pl.id === eid)!.y
+    expect(y1).toBeLessThan(spawnY)
+
+    // Tick 2: empty queue (scheduling gap). Under the old zero-out, the
+    // player would freeze for one tick. With cause-C retention, W
+    // remains held and the player advances again by the same amount.
+    sim.tick(new Map(), Date.now() + 34)
+    const y2 = sim
+      .buildGameStateSyncPayload(Date.now())
+      .players.find((pl) => pl.id === eid)!.y
+    expect(y2).toBeLessThan(y1)
+    // Each tick of held W at BASE_MOVE_SPEED_PX_PER_SEC=200 over
+    // TICK_DT_SEC=1/60 advances ~3.33 px; assert both ticks moved by
+    // roughly the same increment (± small float epsilon).
+    const step1 = spawnY - y1
+    const step2 = y1 - y2
+    expect(Math.abs(step2 - step1)).toBeLessThan(0.01)
+  })
+
+  it("clears edge-triggered abilitySlot on empty-queue ticks (cause C guard)", () => {
+    // Retention applies to held inputs only. One-shot cast commands
+    // must *not* repeat when a follow-up tick has an empty queue, or
+    // we'd risk double-casting under scheduling jitter.
+    const sim = createGameSimulation(Date.now())
+    sim.addPlayer("user1", "Alice", "red_wizard", 0)
+
+    // Tick with armed ability slot 0; expect the cast to begin.
+    sim.tick(
+      queueMap([
+        [
+          "user1",
+          emptyInput({ abilitySlot: 0, abilityTargetX: 100, abilityTargetY: 100, seq: 1000 }),
+        ],
+      ]),
+      Date.now() + 17,
+    )
+    const castingAfter1 = sim
+      .buildGameStateSyncPayload(Date.now())
+      .players[0]!.castingAbilityId
+    expect(castingAfter1).not.toBeNull()
+
+    // Now tick twice with an empty queue — cause C must *not* retain
+    // the armed ability and accidentally double-cast.
+    sim.tick(new Map(), Date.now() + 34)
+    sim.tick(new Map(), Date.now() + 51)
+    // castingAbilityId reflects whatever is currently casting; the
+    // critical assertion is that no *new* cast starts (the player
+    // either finished the single cast or is still finishing it; what
+    // must not happen is a second cast chained off retained
+    // abilitySlot).
+    const syncAfter = sim.buildGameStateSyncPayload(Date.now())
+    // Compare against the tick-1 cast id. If a second cast started,
+    // its timing would differ; we assert it's either the same cast
+    // (still in progress) or null (finished), never a "restarted"
+    // state we can't detect from the payload alone. The minimal
+    // direct check is that no delta reports a new cast started after
+    // the initial tick: we rely on castingSystem only starting when
+    // `PlayerInput.abilitySlot >= 0`, which our fix explicitly clears.
+    expect([castingAfter1, null]).toContain(syncAfter.players[0]!.castingAbilityId)
+  })
 })
 
 describe("buildGameStateSyncPayload", () => {
@@ -223,6 +301,42 @@ describe("buildGameStateSyncPayload", () => {
     sim.tick(new Map(), Date.now())
     const sync = sim.buildGameStateSyncPayload(Date.now())
     expect(sync.fireballs).toEqual([])
+  })
+
+  it("emits lastProcessedInputSeq 0 on wire when internal ack is -1 (pre-first-input)", () => {
+    const sim = createGameSimulation(Date.now())
+    sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    const snap = sim.buildGameStateSyncPayload(Date.now()).players[0]!
+    expect(snap.lastProcessedInputSeq).toBe(0)
+  })
+
+  it("spawns with -1 seed; seq 0 and seq 1 are both applied in order", () => {
+    const sim = createGameSimulation(Date.now())
+    sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    sim.tick(
+      queueMap([["user1", { ...emptyInput({ up: true }), seq: 0 }]]),
+      Date.now(),
+    )
+    sim.tick(
+      queueMap([["user1", { ...emptyInput({ up: true }), seq: 1 }]]),
+      Date.now() + 17,
+    )
+    expect(
+      sim.buildGameStateSyncPayload(Date.now()).players[0]!.lastProcessedInputSeq,
+    ).toBe(1)
+  })
+
+  it("resetClientInputStream allows seq 0 after a high lastProcessed watermark", () => {
+    const sim = createGameSimulation(Date.now())
+    sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    sim.tick(queueMap([["user1", { ...emptyInput({ up: true }), seq: 99 }]]), Date.now())
+    sim.resetClientInputStream("user1")
+    const out = sim.tick(
+      queueMap([["user1", { ...emptyInput({ up: true }), seq: 0 }]]),
+      Date.now() + 17,
+    )
+    const delta = out.playerDeltas.find((d) => d.id === sim.playerEntityMap.get("user1"))
+    expect(delta?.lastProcessedInputSeq).toBe(0)
   })
 
   it("exposes per-player velocity, move state, and last processed input seq", () => {

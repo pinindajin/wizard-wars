@@ -6,8 +6,13 @@ import {
   REMOTE_RENDER_DELAY_MS,
   REPLAY_SMOOTHING_MS,
   TELEPORT_THRESHOLD_PX,
+  TICK_DT_SEC,
+  TICK_MS,
 } from "@/shared/balance-config/rendering"
-import { BASE_MOVE_SPEED_PX_PER_SEC, DAMAGE_FLASH_MS } from "@/shared/balance-config/combat"
+import {
+  BASE_MOVE_SPEED_PX_PER_SEC,
+  DAMAGE_FLASH_MS,
+} from "@/shared/balance-config/combat"
 import type {
   GameStateSyncPayload,
   PlayerAnimState,
@@ -19,10 +24,18 @@ import {
   type MoveIntent,
   worldStepFromIntent,
 } from "@/shared/movementIntent"
-import { ClientPosition, ClientPlayerState, ClientRenderPos } from "../components"
+import {
+  ClientPosition,
+  ClientPlayerState,
+  ClientRenderPos,
+} from "../components"
+import { WW_LOCAL_PLAYER_ID_REGISTRY_KEY } from "../../constants"
 import { addEntity, removeEntity } from "../world"
 import { animUsesMouseAim } from "@/shared/playerAnimAim"
-import { getDirectionFromAngle, getAnimKey } from "../../animation/LadyWizardAnimDefs"
+import {
+  getDirectionFromAngle,
+  getAnimKey,
+} from "../../animation/LadyWizardAnimDefs"
 import {
   reconcileLocal,
   type LocalAckState,
@@ -30,6 +43,14 @@ import {
 } from "./ReconciliationSystem"
 import { LocalInputHistory } from "../../network/LocalInputHistory"
 import { RemoteInterpolationBuffer } from "./RemoteInterpolationBuffer"
+
+/**
+ * Upper bound on the accumulated sim debt we'll let Phaser's `update()`
+ * replay in a single frame. Prevents a "spiral of death" if the tab was
+ * backgrounded or the thread was GC-paused for seconds — we clamp the
+ * catch-up to a fixed budget and drop the rest.
+ */
+const MAX_SIM_LAG_MS = 250
 
 /** Oscillation frequency for invulnerability alpha pulse (Hz). */
 const INVULN_PULSE_HZ = 4
@@ -39,6 +60,49 @@ const HP_BAR_TAG = "hp-bar"
 const HP_BAR_WIDTH = 48
 /** Height of the HP bar in pixels. */
 const HP_BAR_HEIGHT = 4
+
+/**
+ * Lady-wizard frame height in pixels (must match `frameSize` in
+ * `public/assets/sprites/heroes/lady-wizard/sheets/atlas.json`).
+ */
+export const LADY_WIZARD_FRAME_HEIGHT_PX = 124
+
+/**
+ * Visual nudge of the **sprite** only, in world pixels, without moving simulation, camera
+ * follow, foot ellipse, or nametag/HP (they stay on {@link ClientRenderPos}). Positive
+ * `X` = right, positive `Y` = down. Use to align the drawn art with the logical foot.
+ */
+export const LADY_WIZARD_SPRITE_DISPLAY_OFFSET_X = 0
+export const LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y = 45
+
+function ladyWizardSpriteDisplayPos(footX: number, footY: number) {
+  return {
+    x: footX + LADY_WIZARD_SPRITE_DISPLAY_OFFSET_X,
+    y: footY + LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y,
+  }
+}
+
+/** Pixels between nametag bottom (`setOrigin(0.5, 1)`) and HP bar top (`_drawHpBar` y). */
+export const NAME_TO_HP_BAR_GAP_PX = 3
+
+/** Pixels of vertical gap from sprite texture top to the bottom edge of the HP bar. */
+export const HUD_CLEARANCE_ABOVE_SPRITE_TOP_PX = -70
+
+/**
+ * Nametag + HP Y positions for a given foot anchor (`y` = bottom of 124px frame).
+ * HP bar top is chosen so the bar’s bottom is `HUD_CLEARANCE_ABOVE_SPRITE_TOP_PX` above the
+ * texture top; nametag sits `NAME_TO_HP_BAR_GAP_PX` above the HP bar top.
+ */
+export function computeHeroHudYOffsets(footY: number): {
+  nameTagBottomY: number
+  hpBarTopY: number
+} {
+  const spriteTopY = footY - LADY_WIZARD_FRAME_HEIGHT_PX
+  const hpBarTopY =
+    spriteTopY - HUD_CLEARANCE_ABOVE_SPRITE_TOP_PX - HP_BAR_HEIGHT
+  const nameTagBottomY = hpBarTopY - NAME_TO_HP_BAR_GAP_PX
+  return { nameTagBottomY, hpBarTopY }
+}
 
 /** Width of the hero identity foot ellipse (px). */
 const FOOT_MARKER_W = 32
@@ -50,23 +114,10 @@ const FOOT_MARKER_H = 16
  */
 const FOOT_MARKER_DEPTH_EPS = 0.1
 /**
- * Offset from foot anchor (`renderPos.y`, sprite bottom) to the ellipse center (px downward).
- * With default ellipse origin (0.5, 0.5), half the height places the ellipse top on the foot line.
+ * Offset from foot anchor (`renderPos.y`, texture bottom) to the ellipse center (px).
+ * Positive = down-screen. Exported for unit tests; tune here.
  */
-const FOOT_MARKER_CENTER_Y_FROM_FOOT = FOOT_MARKER_H / 2
-
-/**
- * Vertical layout for nametag + HP bar relative to the foot anchor (`renderPos.y`).
- * Sprite uses bottom-center origin; lady-wizard frames are 124×124 (`frameSize` in
- * `public/assets/sprites/heroes/lady-wizard/sheets/atlas.json`). Stack must sit above
- * the sprite top (~`y - 124`) with margin for stroke on the nametag.
- */
-/** Pixels between nametag bottom (`setOrigin(0.5, 1)`) and HP bar top (`_drawHpBar` y). */
-export const NAME_TO_HP_BAR_GAP_PX = 3
-/** Y offset of nametag bottom above the foot anchor (smaller y = higher on screen). */
-export const NAMETAG_OFFSET_Y = -136
-/** Y offset of HP bar top above the foot anchor; derived so the bar stays under the name. */
-export const HP_BAR_OFFSET_Y = NAMETAG_OFFSET_Y + NAME_TO_HP_BAR_GAP_PX
+export const FOOT_MARKER_CENTER_Y_OFFSET_FROM_FOOT = 11
 
 /** Per-entity rendering state that lives outside the shared ECS records. */
 interface PlayerRenderEntry {
@@ -83,14 +134,26 @@ interface PlayerRenderEntry {
   lastAnimKey: string
   /**
    * Remaining ms in the current "smooth replay correction" window. When > 0
-   * the local player's rendered position is blended linearly from its value
-   * at the start of the window (`smoothFromX/Y`) toward `smoothTargetX/Y`.
+   * each sim step is blended from the predicted position toward
+   * `smoothTargetX/Y`, so the correction decays to zero without overwriting
+   * live WASD prediction.
    */
   smoothRemainingMs: number
-  smoothFromX: number
-  smoothFromY: number
   smoothTargetX: number
   smoothTargetY: number
+  /**
+   * Fixed-step sim state for the **local** player. `simPrev` is the
+   * committed sim position at the start of the current sim tick; `simCurr`
+   * is the committed sim position after prediction + smoothing for the
+   * tick. The rendered position each frame is `lerp(simPrev, simCurr,
+   * alpha)` where `alpha = renderAccumulatorMs / TICK_MS`. Remote entries
+   * do not use these — remote render path samples the interpolation
+   * buffer directly.
+   */
+  simPrevX: number
+  simPrevY: number
+  simCurrX: number
+  simCurrY: number
 }
 
 /**
@@ -114,7 +177,8 @@ export class PlayerRenderSystem {
   readonly localInputHistory: LocalInputHistory = new LocalInputHistory()
 
   /** Per-remote snapshot buffer used by the remote render path. */
-  readonly remoteBuffer: RemoteInterpolationBuffer = new RemoteInterpolationBuffer()
+  readonly remoteBuffer: RemoteInterpolationBuffer =
+    new RemoteInterpolationBuffer()
 
   /**
    * Offset from server clock to local clock, roughly `serverTime - Date.now()`.
@@ -122,6 +186,14 @@ export class PlayerRenderSystem {
    * `now - REMOTE_RENDER_DELAY_MS` into server-time for sampling.
    */
   private serverTimeOffsetMs = 0
+
+  /**
+   * Accumulated real-time debt waiting to be drained into `TICK_MS` sim
+   * steps. Grows by frame `delta` each `update()` and is consumed in
+   * whole-tick chunks by {@link _simStepLocal}. The residual is used as
+   * the render interpolation `alpha` between `simPrev` and `simCurr`.
+   */
+  private simAccumulatorMs = 0
 
   /**
    * @param scene - The Arena scene instance.
@@ -147,7 +219,14 @@ export class PlayerRenderSystem {
     }
     for (const snap of payload.players) {
       if (!this.entries.has(snap.id)) {
-        this._spawnPlayer(snap.id, snap.playerId, snap.username, snap.heroId, snap.x, snap.y)
+        this._spawnPlayer(
+          snap.id,
+          snap.playerId,
+          snap.username,
+          snap.heroId,
+          snap.x,
+          snap.y,
+        )
       }
       ClientPosition[snap.id] = { x: snap.x, y: snap.y }
       ClientPlayerState[snap.id] = {
@@ -233,8 +312,14 @@ export class PlayerRenderSystem {
     if (reason !== "batch_update") {
       renderPos.x = x
       renderPos.y = y
-      entry.sprite.setPosition(x, y)
-      const footY = y + FOOT_MARKER_CENTER_Y_FROM_FOOT
+      entry.simPrevX = x
+      entry.simPrevY = y
+      entry.simCurrX = x
+      entry.simCurrY = y
+      const sp = ladyWizardSpriteDisplayPos(x, y)
+      entry.sprite.setPosition(sp.x, sp.y)
+      entry.sprite.setDepth(y + LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y)
+      const footY = y + FOOT_MARKER_CENTER_Y_OFFSET_FROM_FOOT
       entry.footMarker.setPosition(x, footY)
       entry.footMarker.setDepth(y - FOOT_MARKER_DEPTH_EPS)
       entry.smoothRemainingMs = 0
@@ -264,6 +349,12 @@ export class PlayerRenderSystem {
    * Applies an authoritative ACK for the local player, running
    * rewind-and-replay reconciliation and arming a smooth / snap correction
    * as needed.
+   *
+   * Reconciliation compares against the latest **committed sim position**
+   * (`simCurr`), not the interpolated rendered position, because replay
+   * itself is a fixed-step sim that only has meaning relative to committed
+   * sim state. Render interpolation between `simPrev` and `simCurr` runs
+   * a separate visual layer on top.
    */
   onLocalAck(id: number, ack: LocalAckState): void {
     const entry = this.entries.get(id)
@@ -277,20 +368,25 @@ export class PlayerRenderSystem {
       hasSwiftBoots: false,
       castingAbilityId: state.castingAbilityId,
     }
-    const result = reconcileLocal(ack, this.localInputHistory, renderPos, ctx)
+    const simCurr = { x: entry.simCurrX, y: entry.simCurrY }
+    const result = reconcileLocal(ack, this.localInputHistory, simCurr, ctx)
 
     if (result.correction === "snap") {
+      // Snap collapses both prev and curr so render interpolation does
+      // not pull through the snap over the next frame.
+      entry.simPrevX = result.renderX
+      entry.simPrevY = result.renderY
+      entry.simCurrX = result.renderX
+      entry.simCurrY = result.renderY
       renderPos.x = result.renderX
       renderPos.y = result.renderY
       entry.smoothRemainingMs = 0
     } else if (result.correction === "smooth") {
-      entry.smoothFromX = renderPos.x
-      entry.smoothFromY = renderPos.y
       entry.smoothTargetX = result.targetX
       entry.smoothTargetY = result.targetY
       entry.smoothRemainingMs = REPLAY_SMOOTHING_MS
     }
-    // "none": keep render as-is.
+    // "none": keep sim + render as-is.
   }
 
   /**
@@ -309,13 +405,14 @@ export class PlayerRenderSystem {
     const footColor = HERO_CONFIGS[heroId]?.tint ?? 0xffffff
     const isLocal = playerId === this.localPlayerId
 
-    const sprite = this.scene.add.sprite(x, y, "lady-wizard")
+    const sp0 = ladyWizardSpriteDisplayPos(x, y)
+    const sprite = this.scene.add.sprite(sp0.x, sp0.y, "lady-wizard")
     sprite.setOrigin(0.5, 1.0)
     sprite.clearTint()
-    sprite.setDepth(y)
+    sprite.setDepth(y + LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y)
     this.group.add(sprite)
 
-    const footY = y + FOOT_MARKER_CENTER_Y_FROM_FOOT
+    const footY = y + FOOT_MARKER_CENTER_Y_OFFSET_FROM_FOOT
     const footMarker = this.scene.add.ellipse(
       x,
       footY,
@@ -326,8 +423,9 @@ export class PlayerRenderSystem {
     )
     footMarker.setDepth(y - FOOT_MARKER_DEPTH_EPS)
 
+    const { nameTagBottomY } = computeHeroHudYOffsets(y)
     const nameTag = this.scene.add
-      .text(x, y + NAMETAG_OFFSET_Y, username, {
+      .text(x, nameTagBottomY, username, {
         fontSize: "11px",
         fontFamily: "monospace",
         color: isLocal ? "#ffff00" : "#ffffff",
@@ -350,13 +448,68 @@ export class PlayerRenderSystem {
       flashRemaining: 0,
       lastAnimKey: "",
       smoothRemainingMs: 0,
-      smoothFromX: x,
-      smoothFromY: y,
       smoothTargetX: x,
       smoothTargetY: y,
+      simPrevX: x,
+      simPrevY: y,
+      simCurrX: x,
+      simCurrY: y,
     })
     ClientRenderPos[id] = { x, y }
     this.onAuthoritativePosition(id, x, y, "spawn")
+  }
+
+  /**
+   * Test-only escape hatch: overwrite the fixed-step sim state for a
+   * local entity. Used by unit tests to set up reconciliation
+   * preconditions (e.g. "prediction has drifted 10 px ahead of the ack")
+   * without driving many `update()` calls just to build the setup.
+   * Prefixed with `_` and guarded with a dev-mode check in callers —
+   * **do not** invoke from production code paths.
+   *
+   * @internal
+   */
+  _setLocalSimForTest(
+    id: number,
+    next: {
+      simPrevX: number
+      simPrevY: number
+      simCurrX: number
+      simCurrY: number
+    },
+  ): void {
+    const entry = this.entries.get(id)
+    if (!entry) return
+    entry.simPrevX = next.simPrevX
+    entry.simPrevY = next.simPrevY
+    entry.simCurrX = next.simCurrX
+    entry.simCurrY = next.simCurrY
+  }
+
+  /**
+   * Test-only escape hatch: reads the current fixed-step sim state for
+   * a local entity. See {@link _setLocalSimForTest} caveats.
+   *
+   * @internal
+   */
+  _getLocalSimForTest(
+    id: number,
+  ): {
+    simPrevX: number
+    simPrevY: number
+    simCurrX: number
+    simCurrY: number
+    smoothRemainingMs: number
+  } | null {
+    const entry = this.entries.get(id)
+    if (!entry) return null
+    return {
+      simPrevX: entry.simPrevX,
+      simPrevY: entry.simPrevY,
+      simCurrX: entry.simCurrX,
+      simCurrY: entry.simCurrY,
+      smoothRemainingMs: entry.smoothRemainingMs,
+    }
   }
 
   /** Removes a player sprite and its UI elements. */
@@ -400,23 +553,118 @@ export class PlayerRenderSystem {
         const id = Number(idStr)
         ClientPosition[id] = { x: payload.spawnX, y: payload.spawnY }
         state.animState = "idle"
-        this.onAuthoritativePosition(id, payload.spawnX, payload.spawnY, "respawn")
+        this.onAuthoritativePosition(
+          id,
+          payload.spawnX,
+          payload.spawnY,
+          "respawn",
+        )
         break
       }
     }
   }
 
   /**
-   * Main per-frame update. Interpolates positions, updates animations,
-   * damage flashes, invulnerability pulse, name tags, and HP bars.
+   * Main per-frame update. Drains accumulated real-time debt into
+   * whole-tick **sim steps** (deterministic, fixed `TICK_MS` cadence)
+   * then runs a single **render step** that interpolates each local
+   * entity between `simPrev` and `simCurr` using the residual
+   * accumulator as `alpha`. Remote players are sampled from the
+   * interpolation buffer at `now - REMOTE_RENDER_DELAY_MS`.
    *
-   * Local players run pure prediction + smoothing. Remote players are
-   * sampled from the interpolation buffer at `now - REMOTE_RENDER_DELAY_MS`.
+   * Arena threads an `onSimStep` callback through here so input send +
+   * history append happen exactly **once per committed sim tick**,
+   * matching the server's 60 Hz tick cadence regardless of client
+   * render FPS. Variable-delta drift between prediction and replay is
+   * therefore eliminated.
    *
    * @param delta - Frame delta time in ms.
    * @param localMoveIntent - Local player's current movement intent for prediction.
+   * @param onSimStep - Optional callback invoked once per sim tick
+   *   after prediction has advanced, used by Arena to append to the
+   *   local input history and `sendPlayerInput` so each network
+   *   payload corresponds to exactly one committed prediction tick.
    */
-  update(delta: number, localMoveIntent: MoveIntent): void {
+  update(
+    delta: number,
+    localMoveIntent: MoveIntent,
+    onSimStep?: () => void,
+  ): void {
+    this.simAccumulatorMs = Math.min(
+      this.simAccumulatorMs + delta,
+      MAX_SIM_LAG_MS,
+    )
+    while (this.simAccumulatorMs >= TICK_MS) {
+      this.simAccumulatorMs -= TICK_MS
+      this._simStep(localMoveIntent)
+      onSimStep?.()
+    }
+
+    const alpha = TICK_MS > 0 ? this.simAccumulatorMs / TICK_MS : 0
+    this._renderStep(delta, alpha, localMoveIntent)
+  }
+
+  /**
+   * Runs one fixed-step simulation tick for every local-player entry:
+   * advances `simCurr` by one `TICK_DT_SEC` of prediction, then applies
+   * the A-fix smoothing blend (additive decay toward `smoothTarget` on
+   * top of prediction, not an absolute rail). `simPrev` is snapshotted
+   * first so the subsequent render step can interpolate visually across
+   * the newly-committed tick.
+   */
+  private _simStep(localMoveIntent: MoveIntent): void {
+    for (const [id, entry] of this.entries) {
+      const state = ClientPlayerState[id]
+      if (!state) continue
+      const isLocal = state.playerId === this.localPlayerId
+      if (!isLocal) continue
+
+      entry.simPrevX = entry.simCurrX
+      entry.simPrevY = entry.simCurrY
+
+      const castMoveMult = this._clientCastMoveMultiplier(state)
+      if (
+        this._canPredictMovement(state.animState, localMoveIntent, castMoveMult)
+      ) {
+        const { dx, dy } = normalizedMoveFromWASD(localMoveIntent)
+        const step = worldStepFromIntent(
+          dx,
+          dy,
+          BASE_MOVE_SPEED_PX_PER_SEC,
+          TICK_DT_SEC,
+          castMoveMult,
+        )
+        entry.simCurrX += step.x
+        entry.simCurrY += step.y
+      }
+
+      if (entry.smoothRemainingMs > 0) {
+        entry.smoothRemainingMs = Math.max(
+          0,
+          entry.smoothRemainingMs - TICK_MS,
+        )
+        const t = 1 - entry.smoothRemainingMs / REPLAY_SMOOTHING_MS
+        const pPredX = entry.simCurrX
+        const pPredY = entry.simCurrY
+        entry.simCurrX = pPredX + (entry.smoothTargetX - pPredX) * t
+        entry.simCurrY = pPredY + (entry.smoothTargetY - pPredY) * t
+      }
+    }
+  }
+
+  /**
+   * Runs the per-frame render pass at whatever rate Phaser calls
+   * `update()`. For local entries, `renderPos = lerp(simPrev, simCurr,
+   * alpha)` where `alpha = simAccumulatorMs / TICK_MS` — the standard
+   * "render between committed sim states" pattern (Quake / Source /
+   * Overwatch). Remote entries and all VFX / HUD / animation paths are
+   * variable-delta exactly as before.
+   */
+  private _renderStep(
+    delta: number,
+    alpha: number,
+    localMoveIntent: MoveIntent,
+  ): void {
     const nowLocal = Date.now()
     const nowServer = nowLocal + this.serverTimeOffsetMs
     const renderTimeServer = nowServer - REMOTE_RENDER_DELAY_MS
@@ -429,15 +677,26 @@ export class PlayerRenderSystem {
 
       const isLocal = state.playerId === this.localPlayerId
       if (isLocal) {
-        this._updateLocal(entry, renderPos, state, localMoveIntent, delta)
+        renderPos.x =
+          entry.simPrevX + (entry.simCurrX - entry.simPrevX) * alpha
+        renderPos.y =
+          entry.simPrevY + (entry.simCurrY - entry.simPrevY) * alpha
       } else {
-        this._updateRemote(id, entry, renderPos, state, authPos, renderTimeServer)
+        this._updateRemote(
+          id,
+          entry,
+          renderPos,
+          state,
+          authPos,
+          renderTimeServer,
+        )
       }
 
-      entry.sprite.setPosition(renderPos.x, renderPos.y)
-      entry.sprite.setDepth(renderPos.y)
+      const sp = ladyWizardSpriteDisplayPos(renderPos.x, renderPos.y)
+      entry.sprite.setPosition(sp.x, sp.y)
+      entry.sprite.setDepth(renderPos.y + LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y)
 
-      const footY = renderPos.y + FOOT_MARKER_CENTER_Y_FROM_FOOT
+      const footY = renderPos.y + FOOT_MARKER_CENTER_Y_OFFSET_FROM_FOOT
       entry.footMarker.setPosition(renderPos.x, footY)
       entry.footMarker.setDepth(renderPos.y - FOOT_MARKER_DEPTH_EPS)
 
@@ -445,7 +704,12 @@ export class PlayerRenderSystem {
       const isDying = state.animState === "dying" || state.animState === "dead"
       const angleForSprite = animUsesMouseAim(state.animState)
         ? state.facingAngle
-        : this._bodyAngleForSprite(isLocal, state.animState, localMoveIntent, state.moveFacingAngle)
+        : this._bodyAngleForSprite(
+            isLocal,
+            state.animState,
+            localMoveIntent,
+            state.moveFacingAngle,
+          )
       const direction = getDirectionFromAngle(angleForSprite)
       const animKey = getAnimKey(state.animState, direction)
       if (animKey !== entry.lastAnimKey) {
@@ -465,9 +729,11 @@ export class PlayerRenderSystem {
       // --- Invulnerability alpha pulse ---
       if (state.invulnerable) {
         entry.invulnTime += delta
-        const pulse = Math.sin((entry.invulnTime / 1000) * INVULN_PULSE_HZ * Math.PI * 2)
-        const alpha = 0.625 + pulse * 0.0625
-        entry.sprite.setAlpha(alpha)
+        const pulse = Math.sin(
+          (entry.invulnTime / 1000) * INVULN_PULSE_HZ * Math.PI * 2,
+        )
+        const spriteAlpha = 0.625 + pulse * 0.0625
+        entry.sprite.setAlpha(spriteAlpha)
       } else {
         entry.sprite.setAlpha(1)
         entry.invulnTime = 0
@@ -480,49 +746,17 @@ export class PlayerRenderSystem {
       entry.footMarker.setVisible(!hideUi)
 
       if (!hideUi) {
-        entry.nameTag.setPosition(renderPos.x, renderPos.y + NAMETAG_OFFSET_Y)
+        const { nameTagBottomY, hpBarTopY } = computeHeroHudYOffsets(
+          renderPos.y,
+        )
+        entry.nameTag.setPosition(renderPos.x, nameTagBottomY)
         entry.nameTag.setDepth(renderPos.y + 1)
 
-        const hpFraction = state.maxHealth > 0 ? state.health / state.maxHealth : 0
-        this._drawHpBar(entry.hpBar, renderPos.x, renderPos.y + HP_BAR_OFFSET_Y, hpFraction)
+        const hpFraction =
+          state.maxHealth > 0 ? state.health / state.maxHealth : 0
+        this._drawHpBar(entry.hpBar, renderPos.x, hpBarTopY, hpFraction)
         entry.hpBar.setDepth(renderPos.y + 1)
       }
-    }
-  }
-
-  /**
-   * Local-player render path: extrapolate from current render by current
-   * WASD input each frame (pure prediction), then apply any active smoothing
-   * correction from the last reconciliation ack.
-   */
-  private _updateLocal(
-    entry: PlayerRenderEntry,
-    renderPos: { x: number; y: number },
-    state: (typeof ClientPlayerState)[number],
-    moveIntent: MoveIntent,
-    delta: number,
-  ): void {
-    const castMoveMult = this._clientCastMoveMultiplier(state)
-    if (this._canPredictMovement(state.animState, moveIntent, castMoveMult)) {
-      const { dx, dy } = normalizedMoveFromWASD(moveIntent)
-      const step = worldStepFromIntent(
-        dx,
-        dy,
-        BASE_MOVE_SPEED_PX_PER_SEC,
-        delta / 1000,
-        castMoveMult,
-      )
-      renderPos.x += step.x
-      renderPos.y += step.y
-    }
-
-    if (entry.smoothRemainingMs > 0) {
-      entry.smoothRemainingMs = Math.max(0, entry.smoothRemainingMs - delta)
-      const t = 1 - entry.smoothRemainingMs / REPLAY_SMOOTHING_MS
-      renderPos.x =
-        entry.smoothFromX + (entry.smoothTargetX - entry.smoothFromX) * t
-      renderPos.y =
-        entry.smoothFromY + (entry.smoothTargetY - entry.smoothFromY) * t
     }
   }
 
@@ -592,33 +826,50 @@ export class PlayerRenderSystem {
   /**
    * Redraws the HP bar graphics for a player.
    */
-  private _drawHpBar(gfx: Phaser.GameObjects.Graphics, cx: number, y: number, fraction: number): void {
+  private _drawHpBar(
+    gfx: Phaser.GameObjects.Graphics,
+    cx: number,
+    y: number,
+    fraction: number,
+  ): void {
     gfx.clear()
     gfx.fillStyle(0x000000, 0.7)
     gfx.fillRect(cx - HP_BAR_WIDTH / 2, y, HP_BAR_WIDTH, HP_BAR_HEIGHT)
-    const fillColor = fraction > 0.5
-      ? Phaser.Display.Color.Interpolate.ColorWithColor(
-          Phaser.Display.Color.ValueToColor(0xffff00),
-          Phaser.Display.Color.ValueToColor(0x00ff44),
-          100,
-          Math.round((fraction - 0.5) * 200),
-        )
-      : Phaser.Display.Color.Interpolate.ColorWithColor(
-          Phaser.Display.Color.ValueToColor(0xff2200),
-          Phaser.Display.Color.ValueToColor(0xffff00),
-          100,
-          Math.round(fraction * 200),
-        )
-    const color = Phaser.Display.Color.GetColor(fillColor.r, fillColor.g, fillColor.b)
+    const fillColor =
+      fraction > 0.5
+        ? Phaser.Display.Color.Interpolate.ColorWithColor(
+            Phaser.Display.Color.ValueToColor(0xffff00),
+            Phaser.Display.Color.ValueToColor(0x00ff44),
+            100,
+            Math.round((fraction - 0.5) * 200),
+          )
+        : Phaser.Display.Color.Interpolate.ColorWithColor(
+            Phaser.Display.Color.ValueToColor(0xff2200),
+            Phaser.Display.Color.ValueToColor(0xffff00),
+            100,
+            Math.round(fraction * 200),
+          )
+    const color = Phaser.Display.Color.GetColor(
+      fillColor.r,
+      fillColor.g,
+      fillColor.b,
+    )
     gfx.fillStyle(color, 1)
-    gfx.fillRect(cx - HP_BAR_WIDTH / 2, y, Math.round(HP_BAR_WIDTH * fraction), HP_BAR_HEIGHT)
+    gfx.fillRect(
+      cx - HP_BAR_WIDTH / 2,
+      y,
+      Math.round(HP_BAR_WIDTH * fraction),
+      HP_BAR_HEIGHT,
+    )
   }
 
   /**
    * Resolves per-tick move scale for local prediction to match server
    * `castMoveSpeedMultiplier` (with animState fallbacks for older payloads).
    */
-  private _clientCastMoveMultiplier(state: (typeof ClientPlayerState)[number]): number {
+  private _clientCastMoveMultiplier(
+    state: (typeof ClientPlayerState)[number],
+  ): number {
     if (state.castingAbilityId) {
       const cfg = ABILITY_CONFIGS[state.castingAbilityId]
       if (cfg) return cfg.castMoveSpeedMultiplier
@@ -640,13 +891,38 @@ export class PlayerRenderSystem {
   ): boolean {
     const { dx, dy } = normalizedMoveFromWASD(moveIntent)
     if (dx === 0 && dy === 0) return false
-    if (animState === "dying" || animState === "dead" || animState === "axe_swing") {
+    if (
+      animState === "dying" ||
+      animState === "dead" ||
+      animState === "axe_swing"
+    ) {
       return false
     }
     if (animState === "light_cast" || animState === "heavy_cast") {
       return castMoveMult > 0
     }
     return true
+  }
+
+  /**
+   * World position of the local player's foot anchor (same as {@link ClientRenderPos} for
+   * that entity), for camera follow. Returns null if no local id or no render pos yet.
+   */
+  getLocalPlayerRenderPos(): { x: number; y: number } | null {
+    const localId =
+      this.localPlayerId ??
+      (this.scene.registry.get(WW_LOCAL_PLAYER_ID_REGISTRY_KEY) as
+        | string
+        | undefined) ??
+      null
+    if (!localId) return null
+    for (const [idStr, state] of Object.entries(ClientPlayerState)) {
+      if (state.playerId === localId) {
+        const p = ClientRenderPos[Number(idStr)]
+        if (p) return { x: p.x, y: p.y }
+      }
+    }
+    return null
   }
 
   /** Removes all player sprites and entries. Call on scene shutdown. */

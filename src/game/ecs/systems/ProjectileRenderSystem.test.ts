@@ -70,4 +70,31 @@ describe("ProjectileRenderSystem", () => {
     expect(ClientFireball[2]).toBeDefined()
     expect(destroyFns[0]).toHaveBeenCalled()
   })
+
+  it("advances positions by velocity * TICK_DT_SEC per committed sim step, not per render frame", () => {
+    // Regression for the projectile cause-B pattern: under variable
+    // delta integration a fireball's client-side position diverged
+    // from the server within any frame where delta != 1/60 s. With
+    // the fixed-step refactor, 3 × TICK_MS of real time must advance
+    // the committed simCurr by exactly 3 × (vx × TICK_DT_SEC) —
+    // matching the server's own integration math.
+    const { scene } = mockScene()
+    const sys = new ProjectileRenderSystem(scene as never)
+    sys.spawnFireball({
+      id: 42,
+      ownerId: "caster",
+      x: 0,
+      y: 0,
+      vx: 600,
+      vy: 0,
+    })
+
+    // 51 ms slightly above 3 × TICK_MS = 50 so float precision at the
+    // accumulator boundary cannot eat a step.
+    sys.update(51)
+
+    // After exactly 3 committed sim steps at vx=600, TICK_DT_SEC=1/60,
+    // simCurr advances by 600 × (1/60) × 3 = 30 px.
+    expect(ClientFireball[42]?.x).toBeCloseTo(30, 5)
+  })
 })

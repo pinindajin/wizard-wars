@@ -1,7 +1,7 @@
 import Phaser from "phaser"
 
 import { WsEvent } from "@/shared/events"
-import { TILEMAP_DEPTH } from "@/shared/balance-config/rendering"
+import { ARENA_CAMERA_FOLLOW_ZOOM, TILEMAP_DEPTH } from "@/shared/balance-config/rendering"
 import type {
   GameStateSyncPayload,
   PlayerBatchUpdatePayload,
@@ -84,6 +84,10 @@ export class Arena extends Phaser.Scene {
   /** Whether the match has started (MatchGo received). */
   private matchStarted = false
 
+  /** Pixel size of the loaded arena tilemap (for camera bounds). */
+  private arenaWidthPx = 0
+  private arenaHeightPx = 0
+
   constructor() {
     super({ key: "Arena" })
   }
@@ -120,6 +124,8 @@ export class Arena extends Phaser.Scene {
    */
   private _buildTilemap(): void {
     const map = this.make.tilemap({ key: "arena" })
+    this.arenaWidthPx = map.widthInPixels
+    this.arenaHeightPx = map.heightInPixels
     const tileset = map.addTilesetImage("arena-terrain", "arena-terrain")
     if (!tileset) {
       console.warn(
@@ -175,11 +181,19 @@ export class Arena extends Phaser.Scene {
   }
 
   /**
-   * Configures the main camera: static (no follow), zoom 1.
+   * Configures the main camera: world bounds from the arena tilemap, follow zoom
+   * ({@link ARENA_CAMERA_FOLLOW_ZOOM}) so `centerOn` can scroll. Each frame, `update`
+   * centers on the local player’s foot when available.
    */
   private _setupCamera(): void {
-    this.cameras.main.setZoom(1)
-    this.cameras.main.setScroll(0, 0)
+    const cam = this.cameras.main
+    cam.setZoom(ARENA_CAMERA_FOLLOW_ZOOM)
+    cam.setRoundPixels(true)
+    if (this.arenaWidthPx > 0 && this.arenaHeightPx > 0) {
+      cam.setBounds(0, 0, this.arenaWidthPx, this.arenaHeightPx)
+    } else {
+      console.warn("[Arena] Tilemap has zero size; camera bounds not set.")
+    }
   }
 
   /**
@@ -313,13 +327,12 @@ export class Arena extends Phaser.Scene {
       ? this.keyboardController.collectInput(this.connection.nextSeq())
       : INACTIVE_PLAYER_INPUT
 
-    this.playerRenderSystem.update(delta, keyboardInput)
-    this.projectileRenderSystem.update(delta)
-    this.lightningBoltRenderSystem.update(delta)
-    this.axeSwingRenderSystem.update(delta)
-    this.damageFloatersSystem.update(delta)
-
-    if (this.connection.isConnected()) {
+    // Run one local send per committed prediction tick (fixed 60 Hz),
+    // not per render frame. Threading the callback through
+    // `PlayerRenderSystem.update` keeps the accumulator + sim + send
+    // loop synchronized inside a single system boundary.
+    this.playerRenderSystem.update(delta, keyboardInput, () => {
+      if (!this.connection.isConnected()) return
       const mouseInput = this.mouseController.collectInput()
       const fullInput = {
         ...keyboardInput,
@@ -328,6 +341,15 @@ export class Arena extends Phaser.Scene {
       }
       this.playerRenderSystem.localInputHistory.append(fullInput)
       this.connection.sendPlayerInput(fullInput)
+    })
+    this.projectileRenderSystem.update(delta)
+    this.lightningBoltRenderSystem.update(delta)
+    this.axeSwingRenderSystem.update(delta)
+    this.damageFloatersSystem.update(delta)
+
+    const local = this.playerRenderSystem.getLocalPlayerRenderPos()
+    if (local) {
+      this.cameras.main.centerOn(local.x, local.y)
     }
   }
 
