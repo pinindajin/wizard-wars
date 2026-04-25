@@ -38,8 +38,8 @@
                 "key": "fireball-channel",
                 "url": "/assets/sprites/abilities/fireball-channel.png",
                 "frameConfig": {
-                    "frameWidth": 256,
-                    "frameHeight": 256
+                    "frameWidth": 254,
+                    "frameHeight": 254
                 }
             },
             {
