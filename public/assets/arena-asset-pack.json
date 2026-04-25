@@ -25,6 +25,29 @@
                 }
             },
             {
+                "type": "spritesheet",
+                "key": "fireball",
+                "url": "/assets/sprites/abilities/fireball-fly.png",
+                "frameConfig": {
+                    "frameWidth": 256,
+                    "frameHeight": 256
+                }
+            },
+            {
+                "type": "spritesheet",
+                "key": "fireball-channel",
+                "url": "/assets/sprites/abilities/fireball-channel.png",
+                "frameConfig": {
+                    "frameWidth": 256,
+                    "frameHeight": 256
+                }
+            },
+            {
+                "type": "image",
+                "key": "ember",
+                "url": "/assets/sprites/abilities/ember.png"
+            },
+            {
                 "type": "audio",
                 "key": "music-lobby-01",
                 "url": ["/assets/music/lobby/wizard-wars-lobby-01-ost.mp3"]
