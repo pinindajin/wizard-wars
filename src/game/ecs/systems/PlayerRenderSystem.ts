@@ -23,6 +23,10 @@ import { ClientPosition, ClientPlayerState, ClientRenderPos } from "../component
 import { addEntity, removeEntity } from "../world"
 import { getDirectionFromAngle, getAnimKey } from "../../animation/LadyWizardAnimDefs"
 import {
+  FIREBALL_CHANNEL_ANIM,
+  FIREBALL_CHANNEL_TEXTURE,
+} from "../../animation/FireballAnimDefs"
+import {
   reconcileLocal,
   type LocalAckState,
   type LocalReplayContext,
@@ -42,12 +46,26 @@ const HP_BAR_HEIGHT = 4
 const NAMETAG_OFFSET_Y = -72
 /** Y offset of HP bar above sprite origin. */
 const HP_BAR_OFFSET_Y = -58
+/** Pixel distance from the wizard anchor to the channel-cast overlay center. */
+const FIREBALL_CHANNEL_OFFSET_PX = 36
+/** Vertical bias so the channel sprite sits at the wizard's hand height, not feet. */
+const FIREBALL_CHANNEL_Y_BIAS_PX = -40
+/** Display scale for the 256-px channel sprite — tuned to match wizard scale. */
+const FIREBALL_CHANNEL_SCALE = 0.35
+/** Tiny depth bump so the channel renders just above the casting wizard. */
+const FIREBALL_CHANNEL_DEPTH_EPS = 0.5
 
 /** Per-entity rendering state that lives outside the shared ECS records. */
 interface PlayerRenderEntry {
   sprite: Phaser.GameObjects.Sprite
   nameTag: Phaser.GameObjects.Text
   hpBar: Phaser.GameObjects.Graphics
+  /**
+   * Lazily-allocated overlay sprite that plays the fireball channel animation
+   * in front of the wizard while a fireball is being cast. `null` until the
+   * player first casts fireball; hidden between casts to avoid object churn.
+   */
+  channelOverlay: Phaser.GameObjects.Sprite | null
   /** Accumulated time for invulnerability pulse (ms). */
   invulnTime: number
   /** Remaining damage flash time (ms). 0 = no flash active. */
@@ -303,6 +321,7 @@ export class PlayerRenderSystem {
       sprite,
       nameTag,
       hpBar,
+      channelOverlay: null,
       invulnTime: 0,
       flashRemaining: 0,
       heroTint,
@@ -324,12 +343,75 @@ export class PlayerRenderSystem {
     entry.sprite.destroy()
     entry.nameTag.destroy()
     entry.hpBar.destroy()
+    entry.channelOverlay?.destroy()
     this.entries.delete(id)
     removeEntity(id)
     this.remoteBuffer.remove(id)
     delete ClientPosition[id]
     delete ClientRenderPos[id]
     delete ClientPlayerState[id]
+  }
+
+  /**
+   * Returns whether the channel-cast overlay should be shown for `state`.
+   *
+   * Strict AND: the player must be in the `light_cast` animation state AND
+   * the server-reported `castingAbilityId` must be `"fireball"`. Mismatches
+   * (e.g. `light_cast` without an ability id) hide the overlay rather than
+   * guess. Exposed as a function so tests can exercise the rule directly.
+   */
+  static shouldShowFireballChannel(
+    state: Pick<(typeof ClientPlayerState)[number], "animState" | "castingAbilityId">,
+  ): boolean {
+    return state.animState === "light_cast" && state.castingAbilityId === "fireball"
+  }
+
+  /**
+   * Updates (and lazily creates) the channel-cast overlay for one player.
+   *
+   * Visible iff {@link PlayerRenderSystem.shouldShowFireballChannel} returns
+   * true. Position offsets along `state.facingAngle` so the projectile-to-be
+   * sits in front of the wizard regardless of which way they aim. Depth is
+   * the wizard sprite depth + a small epsilon so the overlay always renders
+   * above the casting body while staying inside the existing Y-sort scheme.
+   */
+  private _updateChannelOverlay(
+    entry: PlayerRenderEntry,
+    renderPos: { x: number; y: number },
+    state: (typeof ClientPlayerState)[number],
+  ): void {
+    const show = PlayerRenderSystem.shouldShowFireballChannel(state)
+
+    if (!show) {
+      if (entry.channelOverlay && entry.channelOverlay.visible) {
+        entry.channelOverlay.setVisible(false)
+      }
+      return
+    }
+
+    if (!entry.channelOverlay) {
+      const overlay = this.scene.add.sprite(
+        renderPos.x,
+        renderPos.y,
+        FIREBALL_CHANNEL_TEXTURE,
+      )
+      overlay.setOrigin(0.5, 0.5)
+      overlay.setScale(FIREBALL_CHANNEL_SCALE)
+      entry.channelOverlay = overlay
+    }
+
+    const overlay = entry.channelOverlay
+    if (!overlay.anims.isPlaying || overlay.anims.currentAnim?.key !== FIREBALL_CHANNEL_ANIM) {
+      if (this.scene.anims.exists(FIREBALL_CHANNEL_ANIM)) {
+        overlay.play({ key: FIREBALL_CHANNEL_ANIM, repeat: -1 }, true)
+      }
+    }
+
+    const dx = Math.cos(state.facingAngle) * FIREBALL_CHANNEL_OFFSET_PX
+    const dy = Math.sin(state.facingAngle) * FIREBALL_CHANNEL_OFFSET_PX
+    overlay.setPosition(renderPos.x + dx, renderPos.y + dy + FIREBALL_CHANNEL_Y_BIAS_PX)
+    overlay.setDepth(renderPos.y + FIREBALL_CHANNEL_DEPTH_EPS)
+    overlay.setVisible(true)
   }
 
   /** Triggers a red damage flash on a player sprite. */
@@ -435,6 +517,13 @@ export class PlayerRenderSystem {
         const hpFraction = state.maxHealth > 0 ? state.health / state.maxHealth : 0
         this._drawHpBar(entry.hpBar, renderPos.x, renderPos.y + HP_BAR_OFFSET_Y, hpFraction)
         entry.hpBar.setDepth(renderPos.y + 1)
+      }
+
+      // --- Fireball channel overlay (light_cast + castingAbilityId=fireball) ---
+      if (isDying && entry.channelOverlay) {
+        entry.channelOverlay.setVisible(false)
+      } else if (!isDying) {
+        this._updateChannelOverlay(entry, renderPos, state)
       }
     }
   }

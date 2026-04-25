@@ -214,3 +214,41 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     expect(ClientRenderPos[1]).toEqual({ x: 0, y: 0 })
   })
 })
+
+describe("PlayerRenderSystem.shouldShowFireballChannel", () => {
+  it("returns true only when both light_cast AND castingAbilityId='fireball' hold", () => {
+    expect(
+      PlayerRenderSystem.shouldShowFireballChannel({
+        animState: "light_cast",
+        castingAbilityId: "fireball",
+      }),
+    ).toBe(true)
+  })
+
+  it("returns false on any mismatch (animState wrong, ability wrong, or null)", () => {
+    expect(
+      PlayerRenderSystem.shouldShowFireballChannel({
+        animState: "idle",
+        castingAbilityId: "fireball",
+      }),
+    ).toBe(false)
+    expect(
+      PlayerRenderSystem.shouldShowFireballChannel({
+        animState: "light_cast",
+        castingAbilityId: "lightning_bolt",
+      }),
+    ).toBe(false)
+    expect(
+      PlayerRenderSystem.shouldShowFireballChannel({
+        animState: "light_cast",
+        castingAbilityId: null,
+      }),
+    ).toBe(false)
+    expect(
+      PlayerRenderSystem.shouldShowFireballChannel({
+        animState: "heavy_cast",
+        castingAbilityId: "fireball",
+      }),
+    ).toBe(false)
+  })
+})

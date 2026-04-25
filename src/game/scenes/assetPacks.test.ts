@@ -42,7 +42,7 @@ describe("asset pack URLs are absolute", () => {
     }
   })
 
-  it("arena pack declares the core gameplay files (tilemap + tileset + hero sheet)", () => {
+  it("arena pack declares the core gameplay files (tilemap + tileset + hero sheet + fireball assets)", () => {
     const files = (arenaPack as { arena: { files: PackFile[] } }).arena.files
     const urls = collectUrls(files)
     expect(urls).toContain("/assets/tilemaps/arena.json")
@@ -50,5 +50,8 @@ describe("asset pack URLs are absolute", () => {
     expect(urls).toContain(
       "/assets/sprites/heroes/lady-wizard/sheets/lady-wizard-megasheet.png",
     )
+    expect(urls).toContain("/assets/sprites/abilities/fireball-fly.png")
+    expect(urls).toContain("/assets/sprites/abilities/fireball-channel.png")
+    expect(urls).toContain("/assets/sprites/abilities/ember.png")
   })
 })

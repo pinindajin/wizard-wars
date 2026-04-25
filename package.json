@@ -30,7 +30,8 @@
     "db:studio": "prisma studio",
     "build:lady-wizard-sheets": "tsx scripts/build-lady-wizard-sheets.ts",
     "build:lady-wizard-megasheet": "tsx scripts/build-lady-wizard-megasheet.ts",
-    "build:arena-colliders": "tsx scripts/compile-arena-colliders.ts"
+    "build:arena-colliders": "tsx scripts/compile-arena-colliders.ts",
+    "build:fireball-sheets": "tsx scripts/build-fireball-sheets.ts"
   },
   "dependencies": {
     "@colyseus/schema": "^4.0.19",
@@ -75,6 +76,7 @@
     "eslint-config-next": "16.1.6",
     "jsdom": "^26.1.0",
     "prisma": "^6.0.0",
+    "sharp": "^0.34.5",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
     "typescript": "^5",
