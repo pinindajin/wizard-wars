@@ -38,3 +38,6 @@ tsconfig.tsbuildinfo
 
 # Phaser Editor (keep .scene files, skip editor cache)
 .phasereditorcache/
+
+# Test results
+test-results/
