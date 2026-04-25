@@ -61,7 +61,8 @@ interface FireballRenderEntry {
  * positions each sim tick (`TICK_DT_SEC` fixed step, matching the server's
  * integration math), interpolates between the last two committed sim states
  * for the render pass, and destroys sprite + emitter on impact or resync.
- * Emitters use `startFollow(sprite)` so the trail tracks the lerped position.
+ * Emitters are created at world (0, 0) and use `startFollow(sprite)` so the
+ * trail tracks the lerped position without double-applying world translation.
  */
 export class ProjectileRenderSystem {
   private scene: Phaser.Scene
@@ -112,7 +113,7 @@ export class ProjectileRenderSystem {
     const angle = Math.atan2(payload.vy, payload.vx)
     sprite.setRotation(angle)
 
-    const emitter = this._createEmberEmitter(payload.x, payload.y)
+    const emitter = this._createEmberEmitter()
     if (emitter) {
       emitter.startFollow(sprite)
     }
@@ -258,19 +259,20 @@ export class ProjectileRenderSystem {
 
   /**
    * Creates a Phaser 4 `ParticleEmitter` configured as a small ember trail.
+   * The emitter is placed at world (0, 0): `startFollow` injects the sprite’s
+   * world x/y into particles as local offsets, and the renderer multiplies
+   * emitter world matrix × particle matrix — a non-zero emitter position would
+   * double-apply spawn translation and detach the trail from the sprite.
    * Returns `null` if the engine build lacks particles or the texture is
    * missing — the projectile remains usable without a trail in that case.
    */
-  private _createEmberEmitter(
-    x: number,
-    y: number,
-  ): Phaser.GameObjects.Particles.ParticleEmitter | null {
+  private _createEmberEmitter(): Phaser.GameObjects.Particles.ParticleEmitter | null {
     const addParticles = this.scene.add.particles
     if (typeof addParticles !== "function") return null
     if (this.scene.textures && !this.scene.textures.exists(EMBER_TEXTURE)) {
       return null
     }
-    const emitter = this.scene.add.particles(x, y, EMBER_TEXTURE, {
+    const emitter = this.scene.add.particles(0, 0, EMBER_TEXTURE, {
       lifespan: EMBER_LIFESPAN_MS,
       frequency: EMBER_FREQUENCY_MS,
       speed: { min: EMBER_SPEED_MIN, max: EMBER_SPEED_MAX },

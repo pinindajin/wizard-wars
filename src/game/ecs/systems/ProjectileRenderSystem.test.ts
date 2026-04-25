@@ -93,6 +93,30 @@ describe("ProjectileRenderSystem", () => {
     expect(startFollowFns[0]).toHaveBeenCalledTimes(1)
   })
 
+  it("creates the ember emitter at world origin so startFollow coords are not double-translated", () => {
+    const { scene } = mockScene()
+    const sys = new ProjectileRenderSystem(scene as never)
+    sys.spawnFireball({
+      id: 11,
+      ownerId: "u",
+      x: 400,
+      y: 500,
+      vx: 1,
+      vy: 0,
+    })
+    expect(scene.add.particles).toHaveBeenCalledWith(
+      0,
+      0,
+      "ember",
+      expect.any(Object),
+    )
+    expect(scene.add.sprite).toHaveBeenCalledWith(
+      400,
+      500,
+      expect.any(String),
+    )
+  })
+
   it("stops and destroys the emitter on destroyFireball", () => {
     const { scene, emitterStopFns, emitterDestroyFns } = mockScene()
     const sys = new ProjectileRenderSystem(scene as never)
