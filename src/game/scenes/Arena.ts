@@ -28,6 +28,7 @@ import { NetworkSyncSystem } from "../ecs/systems/NetworkSyncSystem"
 import { KeyboardController } from "../input/KeyboardController"
 import { MouseController } from "../input/MouseController"
 import { registerLadyWizardAnims } from "../animation/LadyWizardAnimDefs"
+import { registerFireballAnims } from "../animation/FireballAnimDefs"
 import { BgmPlayer } from "../audio/BgmPlayer"
 import { SoundManager } from "../audio/SoundManager"
 import {
@@ -116,6 +117,7 @@ export class Arena extends Phaser.Scene {
     this._setupCamera()
     this._setupAudio()
     registerLadyWizardAnims(this.anims)
+    registerFireballAnims(this.anims)
     this._openConnection()
   }
 
