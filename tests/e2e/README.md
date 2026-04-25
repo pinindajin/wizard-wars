@@ -42,3 +42,5 @@ Drop a `*.spec.ts` file under `tests/e2e/`. The `playwright.config.ts` picks up 
 | `signup.spec.ts` | Happy-path account creation: `/signup` → fills form → redirected to `/home` → `ww-token` cookie set |
 | `lobby-countdown.spec.ts` | Host starts match; match countdown overlay appears |
 | `match-start-game-route.spec.ts` | After start, URL stays on `/lobby/.../game` with Phaser container; no redirect to `/browse` |
+| `arena-assets.spec.ts` | Arena / Phaser asset and animation readiness |
+| `match-full-flow.spec.ts` | End-to-end match: signup, lobby, game, canvas, movement, shop, abilities |

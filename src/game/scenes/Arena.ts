@@ -327,13 +327,12 @@ export class Arena extends Phaser.Scene {
       ? this.keyboardController.collectInput(this.connection.nextSeq())
       : INACTIVE_PLAYER_INPUT
 
-    this.playerRenderSystem.update(delta, keyboardInput)
-    this.projectileRenderSystem.update(delta)
-    this.lightningBoltRenderSystem.update(delta)
-    this.axeSwingRenderSystem.update(delta)
-    this.damageFloatersSystem.update(delta)
-
-    if (this.connection.isConnected()) {
+    // Run one local send per committed prediction tick (fixed 60 Hz),
+    // not per render frame. Threading the callback through
+    // `PlayerRenderSystem.update` keeps the accumulator + sim + send
+    // loop synchronized inside a single system boundary.
+    this.playerRenderSystem.update(delta, keyboardInput, () => {
+      if (!this.connection.isConnected()) return
       const mouseInput = this.mouseController.collectInput()
       const fullInput = {
         ...keyboardInput,
@@ -342,7 +341,11 @@ export class Arena extends Phaser.Scene {
       }
       this.playerRenderSystem.localInputHistory.append(fullInput)
       this.connection.sendPlayerInput(fullInput)
-    }
+    })
+    this.projectileRenderSystem.update(delta)
+    this.lightningBoltRenderSystem.update(delta)
+    this.axeSwingRenderSystem.update(delta)
+    this.damageFloatersSystem.update(delta)
 
     const local = this.playerRenderSystem.getLocalPlayerRenderPos()
     if (local) {
