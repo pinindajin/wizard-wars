@@ -68,7 +68,7 @@ export const equipItemPayloadSchema = z.object({
 
 /** Schema for ability slot assignment. */
 export const assignAbilityPayloadSchema = z.object({
-  abilityId: z.string().min(1).max(64),
+  itemId: z.string().min(1).max(64),
   slotIndex: z.number().int().min(0).max(ABILITY_BAR_SLOT_COUNT - 1),
 })
 
