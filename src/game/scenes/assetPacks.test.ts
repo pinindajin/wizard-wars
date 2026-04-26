@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest"
 import bootPack from "../../../public/assets/boot-asset-pack.json"
 import preloadPack from "../../../public/assets/preload-asset-pack.json"
 import arenaPack from "../../../public/assets/arena-asset-pack.json"
+import editorPack from "../../../public/assets/asset-pack.json"
 
 /**
  * Shared shape for an asset-pack file entry. Narrow enough for the URL
@@ -61,5 +62,28 @@ describe("asset pack URLs are absolute", () => {
     expect(urls).toContain("/assets/sprites/props/barrel.png")
     expect(urls).toContain("/assets/sprites/props/oak-tree.png")
     expect(urls).toContain("/assets/sprites/props/treasure-chest.png")
+  })
+})
+
+describe("Phaser Editor asset pack exposes arena visual assets", () => {
+  it("keeps editor metadata recognizable while declaring tiles and props", () => {
+    const meta = (
+      editorPack as {
+        meta: { contentType: string; version: number }
+      }
+    ).meta
+    const files = (editorPack as { arena: { files: PackFile[] } }).arena.files
+    const urls = collectUrls(files)
+
+    expect(meta.contentType).toBe("phasereditor2d.pack.core.AssetContentType")
+    expect(meta.version).toBe(2)
+    expect(urls).toContain("assets/tilemaps/arena.json")
+    expect(urls).toContain("assets/tilesets/arena-terrain.png")
+    expect(urls).toContain("assets/sprites/props/barrel.png")
+    expect(urls).toContain("assets/sprites/props/oak-tree.png")
+    expect(urls).toContain("assets/sprites/props/treasure-chest.png")
+    for (const u of urls) {
+      expect(u.startsWith("/"), `editor asset url should be project-relative: ${u}`).toBe(false)
+    }
   })
 })
