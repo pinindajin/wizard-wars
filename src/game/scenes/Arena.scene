@@ -1,16 +1,64 @@
 {
-    "meta": {
-        "app": "Phaser Editor v5",
-        "contentType": "scene",
-        "formatVersion": "0.7"
-    },
-    "sceneType": "Scene",
-    "id": "Arena",
+    "id": "arena-scene",
+    "sceneType": "SCENE",
     "settings": {
-        "width": 1344,
-        "height": 768,
+        "exportClass": true,
+        "autoImport": true,
+        "preloadPackFiles": [],
+        "createMethodName": "editorCreate",
+        "sceneKey": "Arena",
+        "compilerOutputLanguage": "TYPE_SCRIPT",
+        "borderWidth": 1344,
+        "borderHeight": 768,
         "backgroundColor": "#1a1a2e"
     },
-    "prefabs": [],
-    "children": []
+    "displayList": [
+        {
+            "type": "EditableTilemapLayer",
+            "id": "groundLayer",
+            "label": "Ground",
+            "tilemapId": "arenaMap",
+            "x": 0,
+            "y": 0
+        }
+    ],
+    "plainObjects": [
+        {
+            "type": "EditableTilemap",
+            "id": "arenaMap",
+            "label": "arenaMap",
+            "width": 21,
+            "height": 12,
+            "tileWidth": 64,
+            "tileHeight": 64,
+            "tilesets": [
+                {
+                    "name": "arena-terrain",
+                    "imageKey": "arena-terrain",
+                    "tileWidth": 64,
+                    "tileHeight": 64,
+                    "tileMargin": 0,
+                    "tileSpacing": 0
+                }
+            ],
+            "paintLayerId": "groundLayer",
+            "paintTileset": "arena-terrain",
+            "layers": [
+                {
+                    "name": "Ground",
+                    "data": "[4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,4,4,2,1,1,1,7,6,1,1,1,7,1,6,7,1,1,1,6,7,2,4,4,2,6,1,1,1,7,6,1,1,1,1,1,6,7,1,1,1,6,2,4,4,2,7,6,1,1,1,7,8,8,8,8,8,1,6,7,1,1,1,2,4,4,2,1,7,6,1,1,1,8,8,8,8,8,1,1,6,7,1,1,2,4,4,2,6,7,1,1,1,6,8,8,8,8,8,1,6,1,3,3,1,2,4,4,2,1,6,7,1,1,1,8,8,8,8,8,3,1,6,1,3,3,2,4,4,2,1,1,6,7,1,1,1,6,7,6,1,3,3,1,6,1,3,2,4,4,2,1,1,1,6,7,1,1,1,6,1,6,1,3,3,1,6,1,2,4,4,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4]",
+                    "width": 21,
+                    "height": 12,
+                    "tileWidth": 64,
+                    "tileHeight": 64
+                }
+            ]
+        }
+    ],
+    "meta": {
+        "app": "Phaser Editor - Scene Editor",
+        "url": "https://phaser.io/editor",
+        "contentType": "phasereditor2d.core.scene.SceneContentType",
+        "version": 5
+    }
 }
