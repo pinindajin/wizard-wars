@@ -9,23 +9,60 @@
         "sceneKey": "Arena",
         "compilerOutputLanguage": "TYPE_SCRIPT",
         "borderWidth": 1344,
-        "borderHeight": 768,
-        "backgroundColor": "#1a1a2e"
+        "borderHeight": 768
     },
     "displayList": [
         {
             "type": "EditableTilemapLayer",
             "id": "groundLayer",
             "label": "Ground",
-            "tilemapId": "arenaMap",
-            "x": 0,
-            "y": 0
+            "tilemapId": "arenaMap"
+        },
+        {
+            "type": "Image",
+            "id": "828f89a6-8884-4398-a438-cf7ba8464ea7",
+            "label": "prop_mushroom_cluster",
+            "texture": {
+                "key": "prop-mushroom-cluster"
+            },
+            "x": 1120,
+            "y": 224
+        },
+        {
+            "type": "Image",
+            "id": "6a07cff9-6a2f-4724-948e-13225a98b5a5",
+            "label": "prop_cracked_shield",
+            "texture": {
+                "key": "prop-cracked-shield"
+            },
+            "x": 222,
+            "y": 288
+        },
+        {
+            "type": "Image",
+            "id": "17af1710-7378-4821-9e8a-dc1d37072765",
+            "label": "prop_boulder_rock",
+            "texture": {
+                "key": "prop-boulder-rock"
+            },
+            "x": 1229,
+            "y": 528
+        },
+        {
+            "type": "Image",
+            "id": "35989963-0f5d-415a-9895-c7d6b35d4e35",
+            "label": "prop_mushroom_cluster_1",
+            "texture": {
+                "key": "prop-mushroom-cluster"
+            },
+            "x": 221,
+            "y": 545
         }
     ],
     "plainObjects": [
         {
-            "type": "EditableTilemap",
             "id": "arenaMap",
+            "type": "EditableTilemap",
             "label": "arenaMap",
             "width": 21,
             "height": 12,

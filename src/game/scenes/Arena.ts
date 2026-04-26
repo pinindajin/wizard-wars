@@ -28,7 +28,7 @@ export default class Arena extends Phaser.Scene {
 
 		// arenaMap
 		this.cache.tilemap.add("arenaMap_arenaMap", {
-			format: Phaser.Tilemaps.Formats.TILED_JSON,
+			format: 1,
 			data: {
 				width: 21,
 				height: 12,
@@ -66,7 +66,19 @@ export default class Arena extends Phaser.Scene {
 		arenaMap.addTilesetImage("arena-terrain");
 
 		// Ground
-		arenaMap.createLayer("Ground", ["arena-terrain"], 0, 0)!;
+		arenaMap.createLayer("Ground", ["arena-terrain"], 0, 0);
+
+		// prop_mushroom_cluster
+		this.add.image(1120, 224, "prop-mushroom-cluster");
+
+		// prop_cracked_shield
+		this.add.image(222, 288, "prop-cracked-shield");
+
+		// prop_boulder_rock
+		this.add.image(1229, 528, "prop-boulder-rock");
+
+		// prop_mushroom_cluster_1
+		this.add.image(221, 545, "prop-mushroom-cluster");
 
 		this.arenaMap = arenaMap;
 
