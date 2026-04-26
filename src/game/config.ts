@@ -1,8 +1,8 @@
 import Phaser from "phaser"
 
+import Arena from "./scenes/Arena"
 import { Boot } from "./scenes/Boot"
 import { Preload } from "./scenes/Preload"
-import { Arena } from "./scenes/Arena"
 
 /**
  * Core Phaser game configuration.

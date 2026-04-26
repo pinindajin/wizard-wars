@@ -54,4 +54,12 @@ describe("asset pack URLs are absolute", () => {
     expect(urls).toContain("/assets/sprites/abilities/fireball-channel.png")
     expect(urls).toContain("/assets/sprites/abilities/ember.png")
   })
+
+  it("arena pack exposes prop sprites for Phaser Editor visual placement", () => {
+    const files = (arenaPack as { arena: { files: PackFile[] } }).arena.files
+    const urls = collectUrls(files)
+    expect(urls).toContain("/assets/sprites/props/barrel.png")
+    expect(urls).toContain("/assets/sprites/props/oak-tree.png")
+    expect(urls).toContain("/assets/sprites/props/treasure-chest.png")
+  })
 })

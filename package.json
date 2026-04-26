@@ -31,7 +31,9 @@
     "db:studio": "prisma studio",
     "build:lady-wizard-sheets": "tsx scripts/build-lady-wizard-sheets.ts",
     "build:lady-wizard-megasheet": "tsx scripts/build-lady-wizard-megasheet.ts",
-    "build:arena-colliders": "tsx scripts/compile-arena-colliders.ts",
+    "export:arena-tilemap": "tsx scripts/export-arena-tilemap.ts",
+    "check:arena-editor-parity": "tsx scripts/export-arena-tilemap.ts --check",
+    "build:arena-colliders": "bun run export:arena-tilemap && tsx scripts/compile-arena-colliders.ts",
     "build:fireball-sheets": "tsx scripts/build-fireball-sheets.ts",
     "setup:fresh": "cp sample.env .env && bun install && bun run docker:up:dbs && bunx prisma migrate dev"
   },
