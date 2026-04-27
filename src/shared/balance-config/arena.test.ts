@@ -10,33 +10,13 @@ import {
   ARENA_COLS,
   ARENA_ROWS,
   ARENA_PROP_COLLIDERS,
-  ARENA_TERRAIN_COLLIDERS,
+  ARENA_NON_WALKABLE_COLLIDERS,
   ARENA_WORLD_COLLIDERS,
 } from "@/shared/balance-config/arena"
 import { PLAYER_RADIUS_PX } from "@/shared/balance-config/combat"
 import {
-  ARENA_LAYOUT_BLOCKED_SPAWN_CELLS,
   ARENA_LAYOUT_IMPORTED_TILE_FIRST_GID,
 } from "@/shared/balance-config/arena-layout"
-
-/**
- * Tests whether a player spawn circle overlaps a blocked arena tile.
- *
- * @param x - Spawn center x.
- * @param y - Spawn center y.
- * @param col - Blocked tile column.
- * @param row - Blocked tile row.
- * @returns Whether the spawn circle overlaps the blocked tile rectangle.
- */
-function spawnOverlapsBlockedTile(x: number, y: number, col: number, row: number): boolean {
-  const rx = col * TILE_SIZE_PX
-  const ry = row * TILE_SIZE_PX
-  const nearestX = Math.max(rx, Math.min(x, rx + TILE_SIZE_PX))
-  const nearestY = Math.max(ry, Math.min(y, ry + TILE_SIZE_PX))
-  const dx = x - nearestX
-  const dy = y - nearestY
-  return dx * dx + dy * dy < PLAYER_RADIUS_PX * PLAYER_RADIUS_PX
-}
 
 /**
  * Tests whether a player spawn circle overlaps a generated collider rectangle.
@@ -67,18 +47,18 @@ describe("arena constants", () => {
     }
   })
 
-  it("exposes generated terrain colliders for lava and non-dirt transition cells", () => {
-    expect(ARENA_TERRAIN_COLLIDERS.length).toBeGreaterThan(0)
+  it("exposes editor-authored non-walkable colliders", () => {
+    expect(ARENA_NON_WALKABLE_COLLIDERS.length).toBeGreaterThan(0)
     expect(ARENA_WORLD_COLLIDERS.length).toBe(
-      ARENA_PROP_COLLIDERS.length + ARENA_TERRAIN_COLLIDERS.length,
+      ARENA_PROP_COLLIDERS.length + ARENA_NON_WALKABLE_COLLIDERS.length,
     )
     expect(
-      ARENA_TERRAIN_COLLIDERS.some(
+      ARENA_NON_WALKABLE_COLLIDERS.some(
         (rect) => rect.width >= TILE_SIZE_PX && rect.height >= TILE_SIZE_PX,
       ),
     ).toBe(true)
     expect(
-      ARENA_TERRAIN_COLLIDERS.some(
+      ARENA_NON_WALKABLE_COLLIDERS.some(
         (rect) =>
           rect.x % TILE_SIZE_PX === 0 &&
           rect.y % TILE_SIZE_PX === 0 &&
@@ -130,17 +110,9 @@ describe("spawn points", () => {
     }
   })
 
-  it("no spawn point overlaps generated lava or lava-transition cells", () => {
+  it("no spawn point overlaps editor-authored non-walkable colliders", () => {
     for (const sp of ARENA_SPAWN_POINTS) {
-      for (const cell of ARENA_LAYOUT_BLOCKED_SPAWN_CELLS) {
-        expect(spawnOverlapsBlockedTile(sp.x, sp.y, cell.col, cell.row)).toBe(false)
-      }
-    }
-  })
-
-  it("no spawn point overlaps generated terrain colliders", () => {
-    for (const sp of ARENA_SPAWN_POINTS) {
-      for (const rect of ARENA_TERRAIN_COLLIDERS) {
+      for (const rect of ARENA_NON_WALKABLE_COLLIDERS) {
         expect(spawnOverlapsCollider(sp.x, sp.y, rect)).toBe(false)
       }
     }

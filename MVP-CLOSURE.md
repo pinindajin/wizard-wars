@@ -17,7 +17,7 @@ This file tracks the **“fix blank arena + MVP spec”** work against the long-
 | **JWT `sub` → `localPlayerId` (nametag)** | **Done** | `mountGame` / registry / `PlayerRenderSystem`. |
 | **Kill feed UI** | **Done** | `KillFeed` + `formatKillFeedLine`; `PlayerDeath` + usernames + `parsePlayerDeathPayload`. |
 | **Spectator banner / UX** | **Done** | Banner + hide ability/quick bars when spectating; `GameStateSync` / batch / death wiring in `LobbyGameHost`. |
-| **`compile-arena-colliders` script** | **Done** | `scripts/compile-arena-colliders.ts`, `bun run build:arena-colliders`, layer `PropColliders` in `arena.json`, generated `arena-prop-colliders.ts`. |
+| **`compile-arena-colliders` script** | **Done** | `scripts/compile-arena-colliders.ts`, `bun run build:arena-colliders`, object layers `PropColliders` and `NonWalkableAreas`, generated collider constants. |
 | **Imported arena map** | **Done** | Arena now uses the imported map art and committed project-owned layout data. The one-time import tooling is intentionally not part of the repo workflow. |
 | **E2E — assets + canvas** | **Done** | `arena-assets.spec.ts` (GET pack); `match-start-game-route.spec.ts` asserts Phaser canvas non-zero bbox. |
 | **Grill `grill-open-questions` (MVP YAML)** | **N/A in-repo** | Addressed in plan session; this table replaces duplicating that YAML. |
@@ -26,13 +26,15 @@ This file tracks the **“fix blank arena + MVP spec”** work against the long-
 
 - Per-direction sheets: `bun run build:lady-wizard-sheets` (if present) / `bunx tsx scripts/build-lady-wizard-sheets.ts`
 - Megasheet: `bun run build:lady-wizard-megasheet`
-- Prop colliders (Tiled layer **PropColliders**): `bun run build:arena-colliders`
+- Collider constants from Phaser Editor rectangles: `bun run build:arena-colliders`
 
 ## One-time map import notes
 
 - The current Arena art started from an external PixelLab export, then was committed as normal project assets under `public/assets/`.
 - Ongoing map and collision edits should use project-owned files (`Arena.scene`, `arena.json`, source tiles, and shared layout/collider data), not the external PixelLab export folder.
 - The original 16 terrain GIDs remain stable; imported terrain starts at GID 17.
+- Player-blocking terrain is edited in Phaser Editor as rectangle objects labelled `nonWalkableArea_*`; the exporter writes them to the Tiled `NonWalkableAreas` object layer and generated non-walkable collider constants.
+- Prop footprints use rectangle objects labelled `propCollider_*`; the exporter writes them to the Tiled `PropColliders` object layer.
 - Phaser Editor compatibility still follows Obsidian ADR 0002: `/Users/jakemcbride/Personal/Development/ObsidianVault/Projects/wizard-wars/decisions/0002-phaser-editor-arena.md`.
 
 ## TDD

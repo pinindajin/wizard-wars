@@ -1,9 +1,9 @@
 import { GENERATED_ARENA_PROP_COLLIDERS } from "./generated/arena-prop-colliders"
+import { GENERATED_ARENA_NON_WALKABLE_COLLIDERS } from "./generated/arena-non-walkable-colliders"
 import {
   ARENA_LAYOUT_COLS,
   ARENA_LAYOUT_ROWS,
   ARENA_LAYOUT_SPAWN_POINTS,
-  ARENA_LAYOUT_TERRAIN_COLLIDERS,
 } from "./arena-layout"
 
 /**
@@ -48,15 +48,15 @@ export const ARENA_PROP_COLLIDERS: readonly {
 }[] = GENERATED_ARENA_PROP_COLLIDERS
 
 /**
- * Terrain collider records for lava and lava-transition tiles.
- * Dirt terrain stays walkable; lava and lava-transition terrain block their cells.
+ * Editor-authored non-walkable area rectangles. These are the source for lava,
+ * cliff, and transition areas that block player movement.
  */
-export const ARENA_TERRAIN_COLLIDERS: readonly {
+export const ARENA_NON_WALKABLE_COLLIDERS: readonly {
   x: number
   y: number
   width: number
   height: number
-}[] = ARENA_LAYOUT_TERRAIN_COLLIDERS
+}[] = GENERATED_ARENA_NON_WALKABLE_COLLIDERS
 
 /** All static rectangles that block player movement. */
 export const ARENA_WORLD_COLLIDERS: readonly {
@@ -64,7 +64,7 @@ export const ARENA_WORLD_COLLIDERS: readonly {
   y: number
   width: number
   height: number
-}[] = [...ARENA_PROP_COLLIDERS, ...ARENA_TERRAIN_COLLIDERS]
+}[] = [...ARENA_PROP_COLLIDERS, ...ARENA_NON_WALKABLE_COLLIDERS]
 
 /** Fireball despawns this many pixels past any arena edge. */
 export const FIREBALL_DESPAWN_OVERSHOOT_PX = 400

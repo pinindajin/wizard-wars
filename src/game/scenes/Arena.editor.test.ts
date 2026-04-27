@@ -34,6 +34,29 @@ describe("Arena Phaser Editor scene", () => {
     expect(propLayer.objects).toEqual([])
   })
 
+  it("exports non-walkable areas from Phaser Editor rectangles", () => {
+    const exported = buildArenaTilemapFromScene()
+    const nonWalkableLayer = exported.layers.find(
+      (layer) => layer.type === "objectgroup" && layer.name === "NonWalkableAreas",
+    )
+
+    if (!nonWalkableLayer || nonWalkableLayer.type !== "objectgroup") {
+      throw new Error("Expected NonWalkableAreas object layer")
+    }
+
+    expect(nonWalkableLayer.objects.length).toBeGreaterThan(0)
+    expect(nonWalkableLayer.objects).toContainEqual(
+      expect.objectContaining({
+        name: "nonWalkableArea_000",
+        type: "non-walkable-area",
+        x: 0,
+        y: 0,
+        width: 4224,
+        height: 128,
+      }),
+    )
+  })
+
   it("uses Phaser Editor v5 editable tilemap data for Arena visuals", () => {
     const scene = readJson<{
       readonly meta: { readonly version: number }
@@ -47,6 +70,9 @@ describe("Arena Phaser Editor scene", () => {
     )
     expect(scene.displayList).toContainEqual(
       expect.objectContaining({ type: "EditableTilemapLayer", label: "Ground" }),
+    )
+    expect(scene.displayList).toContainEqual(
+      expect.objectContaining({ type: "Rectangle", label: "nonWalkableArea_000" }),
     )
   })
 })

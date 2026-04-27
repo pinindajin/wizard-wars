@@ -8,8 +8,8 @@
   "version": "1.10",
   "tiledversion": "1.10.2",
   "infinite": false,
-  "nextlayerid": 4,
-  "nextobjectid": 100,
+  "nextlayerid": 5,
+  "nextobjectid": 1108,
   "tilesets": [
     {
       "firstgid": 1,
@@ -3763,6 +3763,1098 @@
       "y": 0,
       "draworder": "topdown",
       "objects": []
+    },
+    {
+      "id": 4,
+      "name": "NonWalkableAreas",
+      "type": "objectgroup",
+      "visible": true,
+      "opacity": 1,
+      "x": 0,
+      "y": 0,
+      "draworder": "topdown",
+      "objects": [
+        {
+          "id": 1000,
+          "name": "nonWalkableArea_000",
+          "type": "non-walkable-area",
+          "x": 0,
+          "y": 0,
+          "width": 4224,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1001,
+          "name": "nonWalkableArea_001",
+          "type": "non-walkable-area",
+          "x": 0,
+          "y": 128,
+          "width": 320,
+          "height": 64,
+          "visible": false
+        },
+        {
+          "id": 1002,
+          "name": "nonWalkableArea_002",
+          "type": "non-walkable-area",
+          "x": 448,
+          "y": 128,
+          "width": 128,
+          "height": 64,
+          "visible": false
+        },
+        {
+          "id": 1003,
+          "name": "nonWalkableArea_003",
+          "type": "non-walkable-area",
+          "x": 768,
+          "y": 128,
+          "width": 640,
+          "height": 64,
+          "visible": false
+        },
+        {
+          "id": 1004,
+          "name": "nonWalkableArea_004",
+          "type": "non-walkable-area",
+          "x": 2880,
+          "y": 128,
+          "width": 1344,
+          "height": 64,
+          "visible": false
+        },
+        {
+          "id": 1005,
+          "name": "nonWalkableArea_005",
+          "type": "non-walkable-area",
+          "x": 0,
+          "y": 192,
+          "width": 384,
+          "height": 320,
+          "visible": false
+        },
+        {
+          "id": 1006,
+          "name": "nonWalkableArea_006",
+          "type": "non-walkable-area",
+          "x": 448,
+          "y": 192,
+          "width": 192,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1007,
+          "name": "nonWalkableArea_007",
+          "type": "non-walkable-area",
+          "x": 1024,
+          "y": 192,
+          "width": 512,
+          "height": 64,
+          "visible": false
+        },
+        {
+          "id": 1008,
+          "name": "nonWalkableArea_008",
+          "type": "non-walkable-area",
+          "x": 3584,
+          "y": 192,
+          "width": 640,
+          "height": 64,
+          "visible": false
+        },
+        {
+          "id": 1009,
+          "name": "nonWalkableArea_009",
+          "type": "non-walkable-area",
+          "x": 1280,
+          "y": 256,
+          "width": 256,
+          "height": 64,
+          "visible": false
+        },
+        {
+          "id": 1010,
+          "name": "nonWalkableArea_010",
+          "type": "non-walkable-area",
+          "x": 4032,
+          "y": 256,
+          "width": 192,
+          "height": 320,
+          "visible": false
+        },
+        {
+          "id": 1011,
+          "name": "nonWalkableArea_011",
+          "type": "non-walkable-area",
+          "x": 448,
+          "y": 320,
+          "width": 256,
+          "height": 192,
+          "visible": false
+        },
+        {
+          "id": 1012,
+          "name": "nonWalkableArea_012",
+          "type": "non-walkable-area",
+          "x": 1280,
+          "y": 320,
+          "width": 448,
+          "height": 64,
+          "visible": false
+        },
+        {
+          "id": 1013,
+          "name": "nonWalkableArea_013",
+          "type": "non-walkable-area",
+          "x": 1344,
+          "y": 384,
+          "width": 384,
+          "height": 64,
+          "visible": false
+        },
+        {
+          "id": 1014,
+          "name": "nonWalkableArea_014",
+          "type": "non-walkable-area",
+          "x": 2880,
+          "y": 384,
+          "width": 192,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1015,
+          "name": "nonWalkableArea_015",
+          "type": "non-walkable-area",
+          "x": 1280,
+          "y": 448,
+          "width": 512,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1016,
+          "name": "nonWalkableArea_016",
+          "type": "non-walkable-area",
+          "x": 0,
+          "y": 512,
+          "width": 320,
+          "height": 448,
+          "visible": false
+        },
+        {
+          "id": 1017,
+          "name": "nonWalkableArea_017",
+          "type": "non-walkable-area",
+          "x": 512,
+          "y": 512,
+          "width": 256,
+          "height": 192,
+          "visible": false
+        },
+        {
+          "id": 1018,
+          "name": "nonWalkableArea_018",
+          "type": "non-walkable-area",
+          "x": 2880,
+          "y": 512,
+          "width": 320,
+          "height": 192,
+          "visible": false
+        },
+        {
+          "id": 1019,
+          "name": "nonWalkableArea_019",
+          "type": "non-walkable-area",
+          "x": 1664,
+          "y": 576,
+          "width": 128,
+          "height": 192,
+          "visible": false
+        },
+        {
+          "id": 1020,
+          "name": "nonWalkableArea_020",
+          "type": "non-walkable-area",
+          "x": 3328,
+          "y": 576,
+          "width": 512,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1021,
+          "name": "nonWalkableArea_021",
+          "type": "non-walkable-area",
+          "x": 3968,
+          "y": 576,
+          "width": 256,
+          "height": 512,
+          "visible": false
+        },
+        {
+          "id": 1022,
+          "name": "nonWalkableArea_022",
+          "type": "non-walkable-area",
+          "x": 2880,
+          "y": 704,
+          "width": 128,
+          "height": 384,
+          "visible": false
+        },
+        {
+          "id": 1023,
+          "name": "nonWalkableArea_023",
+          "type": "non-walkable-area",
+          "x": 3392,
+          "y": 704,
+          "width": 448,
+          "height": 64,
+          "visible": false
+        },
+        {
+          "id": 1024,
+          "name": "nonWalkableArea_024",
+          "type": "non-walkable-area",
+          "x": 512,
+          "y": 768,
+          "width": 256,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1025,
+          "name": "nonWalkableArea_025",
+          "type": "non-walkable-area",
+          "x": 1728,
+          "y": 768,
+          "width": 64,
+          "height": 64,
+          "visible": false
+        },
+        {
+          "id": 1026,
+          "name": "nonWalkableArea_026",
+          "type": "non-walkable-area",
+          "x": 3392,
+          "y": 768,
+          "width": 256,
+          "height": 64,
+          "visible": false
+        },
+        {
+          "id": 1027,
+          "name": "nonWalkableArea_027",
+          "type": "non-walkable-area",
+          "x": 576,
+          "y": 896,
+          "width": 192,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1028,
+          "name": "nonWalkableArea_028",
+          "type": "non-walkable-area",
+          "x": 0,
+          "y": 960,
+          "width": 384,
+          "height": 320,
+          "visible": false
+        },
+        {
+          "id": 1029,
+          "name": "nonWalkableArea_029",
+          "type": "non-walkable-area",
+          "x": 576,
+          "y": 1024,
+          "width": 64,
+          "height": 64,
+          "visible": false
+        },
+        {
+          "id": 1030,
+          "name": "nonWalkableArea_030",
+          "type": "non-walkable-area",
+          "x": 3392,
+          "y": 1024,
+          "width": 128,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1031,
+          "name": "nonWalkableArea_031",
+          "type": "non-walkable-area",
+          "x": 3712,
+          "y": 1024,
+          "width": 64,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1032,
+          "name": "nonWalkableArea_032",
+          "type": "non-walkable-area",
+          "x": 512,
+          "y": 1088,
+          "width": 256,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1033,
+          "name": "nonWalkableArea_033",
+          "type": "non-walkable-area",
+          "x": 2880,
+          "y": 1088,
+          "width": 320,
+          "height": 192,
+          "visible": false
+        },
+        {
+          "id": 1034,
+          "name": "nonWalkableArea_034",
+          "type": "non-walkable-area",
+          "x": 4032,
+          "y": 1088,
+          "width": 192,
+          "height": 64,
+          "visible": false
+        },
+        {
+          "id": 1035,
+          "name": "nonWalkableArea_035",
+          "type": "non-walkable-area",
+          "x": 3712,
+          "y": 1152,
+          "width": 512,
+          "height": 256,
+          "visible": false
+        },
+        {
+          "id": 1036,
+          "name": "nonWalkableArea_036",
+          "type": "non-walkable-area",
+          "x": 512,
+          "y": 1216,
+          "width": 384,
+          "height": 64,
+          "visible": false
+        },
+        {
+          "id": 1037,
+          "name": "nonWalkableArea_037",
+          "type": "non-walkable-area",
+          "x": 0,
+          "y": 1280,
+          "width": 448,
+          "height": 192,
+          "visible": false
+        },
+        {
+          "id": 1038,
+          "name": "nonWalkableArea_038",
+          "type": "non-walkable-area",
+          "x": 512,
+          "y": 1280,
+          "width": 128,
+          "height": 64,
+          "visible": false
+        },
+        {
+          "id": 1039,
+          "name": "nonWalkableArea_039",
+          "type": "non-walkable-area",
+          "x": 704,
+          "y": 1280,
+          "width": 192,
+          "height": 64,
+          "visible": false
+        },
+        {
+          "id": 1040,
+          "name": "nonWalkableArea_040",
+          "type": "non-walkable-area",
+          "x": 2880,
+          "y": 1280,
+          "width": 704,
+          "height": 64,
+          "visible": false
+        },
+        {
+          "id": 1041,
+          "name": "nonWalkableArea_041",
+          "type": "non-walkable-area",
+          "x": 1024,
+          "y": 1344,
+          "width": 128,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1042,
+          "name": "nonWalkableArea_042",
+          "type": "non-walkable-area",
+          "x": 3136,
+          "y": 1344,
+          "width": 448,
+          "height": 64,
+          "visible": false
+        },
+        {
+          "id": 1043,
+          "name": "nonWalkableArea_043",
+          "type": "non-walkable-area",
+          "x": 2560,
+          "y": 1408,
+          "width": 128,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1044,
+          "name": "nonWalkableArea_044",
+          "type": "non-walkable-area",
+          "x": 3136,
+          "y": 1408,
+          "width": 128,
+          "height": 64,
+          "visible": false
+        },
+        {
+          "id": 1045,
+          "name": "nonWalkableArea_045",
+          "type": "non-walkable-area",
+          "x": 3520,
+          "y": 1408,
+          "width": 64,
+          "height": 192,
+          "visible": false
+        },
+        {
+          "id": 1046,
+          "name": "nonWalkableArea_046",
+          "type": "non-walkable-area",
+          "x": 3840,
+          "y": 1408,
+          "width": 384,
+          "height": 192,
+          "visible": false
+        },
+        {
+          "id": 1047,
+          "name": "nonWalkableArea_047",
+          "type": "non-walkable-area",
+          "x": 0,
+          "y": 1472,
+          "width": 1152,
+          "height": 192,
+          "visible": false
+        },
+        {
+          "id": 1048,
+          "name": "nonWalkableArea_048",
+          "type": "non-walkable-area",
+          "x": 2944,
+          "y": 1472,
+          "width": 320,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1049,
+          "name": "nonWalkableArea_049",
+          "type": "non-walkable-area",
+          "x": 2560,
+          "y": 1536,
+          "width": 256,
+          "height": 256,
+          "visible": false
+        },
+        {
+          "id": 1050,
+          "name": "nonWalkableArea_050",
+          "type": "non-walkable-area",
+          "x": 3968,
+          "y": 1600,
+          "width": 256,
+          "height": 448,
+          "visible": false
+        },
+        {
+          "id": 1051,
+          "name": "nonWalkableArea_051",
+          "type": "non-walkable-area",
+          "x": 0,
+          "y": 1664,
+          "width": 512,
+          "height": 256,
+          "visible": false
+        },
+        {
+          "id": 1052,
+          "name": "nonWalkableArea_052",
+          "type": "non-walkable-area",
+          "x": 832,
+          "y": 1664,
+          "width": 320,
+          "height": 64,
+          "visible": false
+        },
+        {
+          "id": 1053,
+          "name": "nonWalkableArea_053",
+          "type": "non-walkable-area",
+          "x": 3584,
+          "y": 1664,
+          "width": 256,
+          "height": 192,
+          "visible": false
+        },
+        {
+          "id": 1054,
+          "name": "nonWalkableArea_054",
+          "type": "non-walkable-area",
+          "x": 832,
+          "y": 1728,
+          "width": 256,
+          "height": 64,
+          "visible": false
+        },
+        {
+          "id": 1055,
+          "name": "nonWalkableArea_055",
+          "type": "non-walkable-area",
+          "x": 2560,
+          "y": 1792,
+          "width": 448,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1056,
+          "name": "nonWalkableArea_056",
+          "type": "non-walkable-area",
+          "x": 0,
+          "y": 1920,
+          "width": 640,
+          "height": 256,
+          "visible": false
+        },
+        {
+          "id": 1057,
+          "name": "nonWalkableArea_057",
+          "type": "non-walkable-area",
+          "x": 2624,
+          "y": 1920,
+          "width": 384,
+          "height": 64,
+          "visible": false
+        },
+        {
+          "id": 1058,
+          "name": "nonWalkableArea_058",
+          "type": "non-walkable-area",
+          "x": 3200,
+          "y": 1920,
+          "width": 320,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1059,
+          "name": "nonWalkableArea_059",
+          "type": "non-walkable-area",
+          "x": 2816,
+          "y": 1984,
+          "width": 192,
+          "height": 192,
+          "visible": false
+        },
+        {
+          "id": 1060,
+          "name": "nonWalkableArea_060",
+          "type": "non-walkable-area",
+          "x": 1536,
+          "y": 2048,
+          "width": 192,
+          "height": 192,
+          "visible": false
+        },
+        {
+          "id": 1061,
+          "name": "nonWalkableArea_061",
+          "type": "non-walkable-area",
+          "x": 3200,
+          "y": 2048,
+          "width": 384,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1062,
+          "name": "nonWalkableArea_062",
+          "type": "non-walkable-area",
+          "x": 3712,
+          "y": 2048,
+          "width": 512,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1063,
+          "name": "nonWalkableArea_063",
+          "type": "non-walkable-area",
+          "x": 0,
+          "y": 2176,
+          "width": 448,
+          "height": 192,
+          "visible": false
+        },
+        {
+          "id": 1064,
+          "name": "nonWalkableArea_064",
+          "type": "non-walkable-area",
+          "x": 3392,
+          "y": 2176,
+          "width": 192,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1065,
+          "name": "nonWalkableArea_065",
+          "type": "non-walkable-area",
+          "x": 3712,
+          "y": 2176,
+          "width": 256,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1066,
+          "name": "nonWalkableArea_066",
+          "type": "non-walkable-area",
+          "x": 4032,
+          "y": 2176,
+          "width": 192,
+          "height": 256,
+          "visible": false
+        },
+        {
+          "id": 1067,
+          "name": "nonWalkableArea_067",
+          "type": "non-walkable-area",
+          "x": 576,
+          "y": 2240,
+          "width": 256,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1068,
+          "name": "nonWalkableArea_068",
+          "type": "non-walkable-area",
+          "x": 1408,
+          "y": 2240,
+          "width": 512,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1069,
+          "name": "nonWalkableArea_069",
+          "type": "non-walkable-area",
+          "x": 3840,
+          "y": 2304,
+          "width": 128,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1070,
+          "name": "nonWalkableArea_070",
+          "type": "non-walkable-area",
+          "x": 0,
+          "y": 2368,
+          "width": 384,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1071,
+          "name": "nonWalkableArea_071",
+          "type": "non-walkable-area",
+          "x": 768,
+          "y": 2368,
+          "width": 64,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1072,
+          "name": "nonWalkableArea_072",
+          "type": "non-walkable-area",
+          "x": 1408,
+          "y": 2368,
+          "width": 320,
+          "height": 64,
+          "visible": false
+        },
+        {
+          "id": 1073,
+          "name": "nonWalkableArea_073",
+          "type": "non-walkable-area",
+          "x": 3392,
+          "y": 2368,
+          "width": 256,
+          "height": 192,
+          "visible": false
+        },
+        {
+          "id": 1074,
+          "name": "nonWalkableArea_074",
+          "type": "non-walkable-area",
+          "x": 1664,
+          "y": 2432,
+          "width": 256,
+          "height": 64,
+          "visible": false
+        },
+        {
+          "id": 1075,
+          "name": "nonWalkableArea_075",
+          "type": "non-walkable-area",
+          "x": 2048,
+          "y": 2432,
+          "width": 64,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1076,
+          "name": "nonWalkableArea_076",
+          "type": "non-walkable-area",
+          "x": 4096,
+          "y": 2432,
+          "width": 128,
+          "height": 256,
+          "visible": false
+        },
+        {
+          "id": 1077,
+          "name": "nonWalkableArea_077",
+          "type": "non-walkable-area",
+          "x": 0,
+          "y": 2496,
+          "width": 640,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1078,
+          "name": "nonWalkableArea_078",
+          "type": "non-walkable-area",
+          "x": 704,
+          "y": 2496,
+          "width": 128,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1079,
+          "name": "nonWalkableArea_079",
+          "type": "non-walkable-area",
+          "x": 1600,
+          "y": 2496,
+          "width": 320,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1080,
+          "name": "nonWalkableArea_080",
+          "type": "non-walkable-area",
+          "x": 1984,
+          "y": 2560,
+          "width": 128,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1081,
+          "name": "nonWalkableArea_081",
+          "type": "non-walkable-area",
+          "x": 3328,
+          "y": 2560,
+          "width": 320,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1082,
+          "name": "nonWalkableArea_082",
+          "type": "non-walkable-area",
+          "x": 0,
+          "y": 2624,
+          "width": 512,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1083,
+          "name": "nonWalkableArea_083",
+          "type": "non-walkable-area",
+          "x": 1600,
+          "y": 2624,
+          "width": 64,
+          "height": 192,
+          "visible": false
+        },
+        {
+          "id": 1084,
+          "name": "nonWalkableArea_084",
+          "type": "non-walkable-area",
+          "x": 1728,
+          "y": 2624,
+          "width": 192,
+          "height": 64,
+          "visible": false
+        },
+        {
+          "id": 1085,
+          "name": "nonWalkableArea_085",
+          "type": "non-walkable-area",
+          "x": 576,
+          "y": 2688,
+          "width": 256,
+          "height": 192,
+          "visible": false
+        },
+        {
+          "id": 1086,
+          "name": "nonWalkableArea_086",
+          "type": "non-walkable-area",
+          "x": 3328,
+          "y": 2688,
+          "width": 384,
+          "height": 192,
+          "visible": false
+        },
+        {
+          "id": 1087,
+          "name": "nonWalkableArea_087",
+          "type": "non-walkable-area",
+          "x": 3904,
+          "y": 2688,
+          "width": 320,
+          "height": 192,
+          "visible": false
+        },
+        {
+          "id": 1088,
+          "name": "nonWalkableArea_088",
+          "type": "non-walkable-area",
+          "x": 0,
+          "y": 2752,
+          "width": 448,
+          "height": 384,
+          "visible": false
+        },
+        {
+          "id": 1089,
+          "name": "nonWalkableArea_089",
+          "type": "non-walkable-area",
+          "x": 576,
+          "y": 2880,
+          "width": 192,
+          "height": 256,
+          "visible": false
+        },
+        {
+          "id": 1090,
+          "name": "nonWalkableArea_090",
+          "type": "non-walkable-area",
+          "x": 1600,
+          "y": 2880,
+          "width": 192,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1091,
+          "name": "nonWalkableArea_091",
+          "type": "non-walkable-area",
+          "x": 3392,
+          "y": 2880,
+          "width": 320,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1092,
+          "name": "nonWalkableArea_092",
+          "type": "non-walkable-area",
+          "x": 3840,
+          "y": 2880,
+          "width": 384,
+          "height": 256,
+          "visible": false
+        },
+        {
+          "id": 1093,
+          "name": "nonWalkableArea_093",
+          "type": "non-walkable-area",
+          "x": 1984,
+          "y": 2944,
+          "width": 128,
+          "height": 192,
+          "visible": false
+        },
+        {
+          "id": 1094,
+          "name": "nonWalkableArea_094",
+          "type": "non-walkable-area",
+          "x": 2304,
+          "y": 2944,
+          "width": 192,
+          "height": 192,
+          "visible": false
+        },
+        {
+          "id": 1095,
+          "name": "nonWalkableArea_095",
+          "type": "non-walkable-area",
+          "x": 960,
+          "y": 3008,
+          "width": 832,
+          "height": 64,
+          "visible": false
+        },
+        {
+          "id": 1096,
+          "name": "nonWalkableArea_096",
+          "type": "non-walkable-area",
+          "x": 2752,
+          "y": 3008,
+          "width": 512,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1097,
+          "name": "nonWalkableArea_097",
+          "type": "non-walkable-area",
+          "x": 3328,
+          "y": 3008,
+          "width": 384,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1098,
+          "name": "nonWalkableArea_098",
+          "type": "non-walkable-area",
+          "x": 960,
+          "y": 3072,
+          "width": 768,
+          "height": 64,
+          "visible": false
+        },
+        {
+          "id": 1099,
+          "name": "nonWalkableArea_099",
+          "type": "non-walkable-area",
+          "x": 0,
+          "y": 3136,
+          "width": 768,
+          "height": 64,
+          "visible": false
+        },
+        {
+          "id": 1100,
+          "name": "nonWalkableArea_100",
+          "type": "non-walkable-area",
+          "x": 960,
+          "y": 3136,
+          "width": 64,
+          "height": 128,
+          "visible": false
+        },
+        {
+          "id": 1101,
+          "name": "nonWalkableArea_101",
+          "type": "non-walkable-area",
+          "x": 1472,
+          "y": 3136,
+          "width": 192,
+          "height": 64,
+          "visible": false
+        },
+        {
+          "id": 1102,
+          "name": "nonWalkableArea_102",
+          "type": "non-walkable-area",
+          "x": 1984,
+          "y": 3136,
+          "width": 1536,
+          "height": 64,
+          "visible": false
+        },
+        {
+          "id": 1103,
+          "name": "nonWalkableArea_103",
+          "type": "non-walkable-area",
+          "x": 4032,
+          "y": 3136,
+          "width": 192,
+          "height": 64,
+          "visible": false
+        },
+        {
+          "id": 1104,
+          "name": "nonWalkableArea_104",
+          "type": "non-walkable-area",
+          "x": 0,
+          "y": 3200,
+          "width": 704,
+          "height": 64,
+          "visible": false
+        },
+        {
+          "id": 1105,
+          "name": "nonWalkableArea_105",
+          "type": "non-walkable-area",
+          "x": 1536,
+          "y": 3200,
+          "width": 128,
+          "height": 64,
+          "visible": false
+        },
+        {
+          "id": 1106,
+          "name": "nonWalkableArea_106",
+          "type": "non-walkable-area",
+          "x": 1984,
+          "y": 3200,
+          "width": 2240,
+          "height": 64,
+          "visible": false
+        },
+        {
+          "id": 1107,
+          "name": "nonWalkableArea_107",
+          "type": "non-walkable-area",
+          "x": 0,
+          "y": 3264,
+          "width": 4224,
+          "height": 128,
+          "visible": false
+        }
+      ]
     }
   ]
 }
