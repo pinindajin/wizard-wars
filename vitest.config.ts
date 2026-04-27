@@ -14,6 +14,7 @@ export default defineConfig({
       exclude: [
         "src/app/**/*.tsx",
         "src/game/**",
+        "src/shared/balance-config/arena-layout.ts",
         "src/shared/balance-config/generated/**",
         "src/lib/trpc.ts",
         "src/server/db/index.ts",

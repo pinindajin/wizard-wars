@@ -15,9 +15,9 @@ import {
 } from "@/shared/balance-config/arena"
 import { PLAYER_RADIUS_PX } from "@/shared/balance-config/combat"
 import {
-  GENERATED_ARENA_BLOCKED_SPAWN_CELLS,
-  GENERATED_ARENA_PIXELLAB_FIRST_GID,
-} from "@/shared/balance-config/generated/arena-layout"
+  ARENA_LAYOUT_BLOCKED_SPAWN_CELLS,
+  ARENA_LAYOUT_IMPORTED_TILE_FIRST_GID,
+} from "@/shared/balance-config/arena-layout"
 
 /**
  * Tests whether a player spawn circle overlaps a blocked arena tile.
@@ -101,8 +101,8 @@ describe("arena constants", () => {
     expect(ARENA_CENTER_Y).toBe(ARENA_HEIGHT / 2)
   })
 
-  it("starts PixelLab terrain after the 16 original terrain GIDs", () => {
-    expect(GENERATED_ARENA_PIXELLAB_FIRST_GID).toBe(17)
+  it("starts imported terrain after the 16 original terrain GIDs", () => {
+    expect(ARENA_LAYOUT_IMPORTED_TILE_FIRST_GID).toBe(17)
   })
 })
 
@@ -132,7 +132,7 @@ describe("spawn points", () => {
 
   it("no spawn point overlaps generated lava or lava-transition cells", () => {
     for (const sp of ARENA_SPAWN_POINTS) {
-      for (const cell of GENERATED_ARENA_BLOCKED_SPAWN_CELLS) {
+      for (const cell of ARENA_LAYOUT_BLOCKED_SPAWN_CELLS) {
         expect(spawnOverlapsBlockedTile(sp.x, sp.y, cell.col, cell.row)).toBe(false)
       }
     }

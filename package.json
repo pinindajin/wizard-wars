@@ -31,7 +31,6 @@
     "db:studio": "prisma studio",
     "build:lady-wizard-sheets": "tsx scripts/build-lady-wizard-sheets.ts",
     "build:lady-wizard-megasheet": "tsx scripts/build-lady-wizard-megasheet.ts",
-    "import:pixellab-arena": "tsx scripts/import-pixellab-arena.ts",
     "export:arena-tilemap": "tsx scripts/export-arena-tilemap.ts",
     "check:arena-editor-parity": "tsx scripts/export-arena-tilemap.ts --check",
     "build:arena-colliders": "bun run export:arena-tilemap && tsx scripts/compile-arena-colliders.ts",
