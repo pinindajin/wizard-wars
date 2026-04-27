@@ -1,13 +1,16 @@
 "use client"
 
+import Link from "next/link"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Client, type Room } from "@colyseus/sdk"
 
 import { fetchWsAuthToken } from "@/lib/fetch-ws-auth-token"
 import { getColyseusUrl } from "@/lib/endpoints"
+import { createTrpcClient } from "@/lib/trpc"
 import { RoomEvent } from "@/shared/roomEvents"
 import type { ChatMessage, ChatPresenceUser } from "@/shared/types"
+import { usernameHasDevToolsAccess } from "@/shared/devToolsAccess"
 import {
   LobbyHeader,
   LobbyPanel,
@@ -61,6 +64,7 @@ export default function ChatClient() {
   const [inputText, setInputText] = useState("")
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [meUsername, setMeUsername] = useState<string | null>(null)
 
   const roomRef = useRef<Room | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -127,6 +131,25 @@ export default function ChatClient() {
       roomRef.current = null
     }
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const trpc = createTrpcClient()
+        const { user } = await trpc.user.me.query()
+        if (cancelled || !user?.username) return
+        setMeUsername(user.username)
+      } catch {
+        if (!cancelled) setMeUsername(null)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const showDevToolsCard = meUsername !== null && usernameHasDevToolsAccess(meUsername)
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -241,6 +264,20 @@ export default function ChatClient() {
               View Open Lobbies
             </button>
           </LobbyPanel>
+
+          {showDevToolsCard ? (
+            <LobbyPanel eyebrow="Internal" title="Dev Tools" tone="solid">
+              <div className={cardInset}>
+                <p className={metaText}>Diagnostics and asset inspectors (visible for your username only).</p>
+                <Link
+                  className="mt-4 flex w-full items-center justify-center rounded-2xl border border-white/12 bg-white/4 px-4 py-3 text-center text-sm font-medium text-slate-100 transition hover:bg-white/8"
+                  href="/dev/sprite-viewer"
+                >
+                  Sprite Viewer
+                </Link>
+              </div>
+            </LobbyPanel>
+          ) : null}
         </div>
 
         <LobbyPanel
