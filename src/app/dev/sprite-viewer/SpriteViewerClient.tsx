@@ -30,43 +30,42 @@ const FRAME = LADY_WIZARD_FRAME_SIZE_PX
 const PLAYER_DIAMETER_PX = PLAYER_RADIUS_PX * 2
 
 /**
- * One legend bullet with a hover/focus info control and rich tooltip.
+ * One legend line with a click-to-expand details panel (avoids hover/stacking/CSS issues).
  *
- * @param props.label - Visible one-line summary next to the icon.
- * @param props.testId - Optional `data-testid` for the info button (E2E).
- * @param props.children - Tooltip body (paragraphs).
+ * @param props.label - Visible one-line summary next to the control.
+ * @param props.testId - Optional `data-testid` for the toggle button (E2E).
+ * @param props.children - Expanded body (paragraphs).
  * @returns Row element.
  */
 function LegendTipRow(props: { label: ReactNode; testId?: string; children: ReactNode }) {
   const { label, testId, children } = props
-  const tooltipId = useId().replace(/:/g, "")
+  const [open, setOpen] = useState(false)
+  const panelId = useId().replace(/:/g, "")
   return (
-    <div className="group relative z-0 flex items-start gap-2 hover:z-[50] focus-within:z-[50]">
-      <div className="min-w-0 flex-1 leading-snug">{label}</div>
-      <div className="relative shrink-0">
+    <div className="overflow-hidden rounded-md border border-zinc-700/80 bg-zinc-900/50">
+      <div className="flex items-start gap-2 px-2 py-1.5">
+        <div className="min-w-0 flex-1 leading-snug">{label}</div>
         <button
           type="button"
-          className="flex h-7 w-7 items-center justify-center rounded-md border border-violet-500/40 bg-zinc-800/95 text-xs font-bold text-violet-300 shadow-sm hover:border-violet-400 hover:bg-zinc-700 hover:text-violet-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-violet-400"
-          aria-describedby={tooltipId}
-          aria-label="Technical details about this overlay (hover or focus to read tooltip)"
+          aria-expanded={open}
+          aria-controls={panelId}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-violet-500/50 bg-zinc-800/95 text-xs font-bold text-violet-300 shadow-sm hover:border-violet-400 hover:bg-zinc-700 hover:text-violet-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-violet-400"
+          aria-label={open ? "Hide technical details" : "Show technical details"}
+          onClick={() => setOpen((v) => !v)}
           {...(testId ? { "data-testid": testId } : {})}
         >
-          <span aria-hidden>ⓘ</span>
+          <span aria-hidden>{open ? "×" : "ⓘ"}</span>
         </button>
-        {/*
-          Tooltip opens *downward* so it is not covered by the next legend rows (earlier upward
-          popovers painted under later siblings). Bridge -mt-1 pt-1 keeps hover path from button to panel.
-        */}
-        <div
-          id={tooltipId}
-          role="tooltip"
-          className="pointer-events-none invisible absolute right-0 top-full z-[60] -mt-1 w-[min(22rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] pt-1 opacity-0 shadow-xl transition duration-150 group-hover:visible group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:visible group-focus-within:opacity-100 group-focus-within:pointer-events-auto"
-        >
-          <div className="max-h-64 overflow-y-auto rounded-md border border-zinc-600 bg-zinc-950 p-3 text-left text-[10px] leading-relaxed text-zinc-200">
-            <div className="space-y-2">{children}</div>
-          </div>
-        </div>
       </div>
+      {open ? (
+        <div
+          id={panelId}
+          role="region"
+          className="max-h-56 overflow-y-auto border-t border-zinc-700/80 bg-zinc-950/95 px-2 py-2 text-left text-[10px] leading-relaxed text-zinc-200"
+        >
+          <div className="space-y-2">{children}</div>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -425,9 +424,12 @@ export function SpriteViewerClient() {
           data-testid="sprite-viewer-legend"
         >
           <div className="mb-1 text-zinc-300">Legend</div>
-          <p className="mb-2 text-[10px] leading-snug text-zinc-500">
-            Hover a row or the <span className="text-violet-400">ⓘ</span> button (or Tab to the button) to open the
-            details panel.
+          <p
+            className="mb-2 text-[10px] leading-snug text-zinc-500"
+            data-testid="sprite-viewer-legend-hint"
+          >
+            Click the <span className="text-violet-400">ⓘ</span> on each line to expand or collapse the full technical
+            notes (no hover required).
           </p>
           <div className="flex flex-col gap-2.5">
             <LegendTipRow

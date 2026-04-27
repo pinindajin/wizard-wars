@@ -1,14 +1,29 @@
 import { test, expect } from "@playwright/test"
 
 test.describe("sprite viewer dev route", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 })
+  })
+
   test("smoke: gallery, detail canvas, legend", async ({ page }) => {
     await page.goto("/dev/sprite-viewer")
     await expect(page.getByRole("heading", { name: /lady-wizard sprite viewer/i })).toBeVisible()
     const gallery = page.getByTestId("sprite-viewer-gallery")
-    await expect(gallery).toBeVisible()
+    await expect(gallery).toBeVisible({ timeout: 15_000 })
     await expect(gallery.locator("button:not([disabled])").first()).toBeVisible({ timeout: 15_000 })
     await expect(page.getByTestId("sprite-viewer-detail-canvas")).toBeVisible()
     await expect(page.getByTestId("sprite-viewer-legend")).toBeVisible()
+  })
+
+  test("legend ⓘ expands technical details", async ({ page }) => {
+    await page.goto("/dev/sprite-viewer")
+    await expect(page.getByTestId("sprite-viewer-legend")).toBeVisible()
+    await page.getByTestId("sprite-viewer-legend-info-collision").click()
+    const legend = page.getByTestId("sprite-viewer-legend")
+    await expect(legend.getByRole("region")).toBeVisible()
+    await expect(legend.getByText(/What it is/i).first()).toBeVisible()
+    await page.getByTestId("sprite-viewer-legend-info-collision").click()
+    await expect(legend.getByRole("region")).toHaveCount(0)
   })
 
   test("overlay toggles remain interactive", async ({ page }) => {
