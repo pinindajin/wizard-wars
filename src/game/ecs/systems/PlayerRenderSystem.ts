@@ -45,6 +45,11 @@ import {
   getAnimKey,
 } from "../../animation/LadyWizardAnimDefs"
 import {
+  LADY_WIZARD_FRAME_SIZE_PX,
+  LADY_WIZARD_SPRITE_DISPLAY_OFFSET_X,
+  LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y,
+} from "@/shared/sprites/ladyWizard"
+import {
   FIREBALL_CHANNEL_ANIM,
   FIREBALL_CHANNEL_TEXTURE,
 } from "../../animation/FireballAnimDefs"
@@ -78,15 +83,17 @@ const HP_BAR_HEIGHT = 4
  * Lady-wizard frame height in pixels (must match `frameSize` in
  * `public/assets/sprites/heroes/lady-wizard/sheets/atlas.json`).
  */
-export const LADY_WIZARD_FRAME_HEIGHT_PX = 124
+export const LADY_WIZARD_FRAME_HEIGHT_PX = LADY_WIZARD_FRAME_SIZE_PX
 
 /**
  * Visual nudge of the **sprite** only, in world pixels, without moving simulation, camera
  * follow, foot ellipse, or nametag/HP (they stay on {@link ClientRenderPos}). Positive
  * `X` = right, positive `Y` = down. Use to align the drawn art with the logical foot.
  */
-export const LADY_WIZARD_SPRITE_DISPLAY_OFFSET_X = 0
-export const LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y = 45
+export {
+  LADY_WIZARD_SPRITE_DISPLAY_OFFSET_X,
+  LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y,
+} from "@/shared/sprites/ladyWizard"
 
 function ladyWizardSpriteDisplayPos(footX: number, footY: number) {
   return {

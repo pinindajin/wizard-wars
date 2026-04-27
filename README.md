@@ -23,6 +23,15 @@ bunx prisma migrate dev
 open http://localhost:3000
 ```
 
+## Dev tools (local)
+
+| URL | Purpose |
+|-----|---------|
+| [http://localhost:3000/dev/sprite-viewer](http://localhost:3000/dev/sprite-viewer) | Inspect shipped lady-wizard strip PNGs from `public/assets/sprites/heroes/lady-wizard/sheets/atlas.json` with collision and alpha-edge overlays (no auth, no game session). |
+| `http://localhost:3000/dev/phaser` | Phaser Editor bootstrap (minimal Phaser mount). |
+
+Optional Playwright visual capture for the sprite viewer: `WW_SPRITE_VIEWER_VISUAL=1 bunx playwright test tests/e2e/sprite-viewer.spec.ts` (writes `test-results/sprite-viewer-detail.png`).
+
 ## Scripts
 
 | Command | Description |
