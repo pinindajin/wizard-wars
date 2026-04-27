@@ -248,16 +248,15 @@ describe("PixelLab arena importer", () => {
     expect(imported.spawnPoints).toHaveLength(12)
   })
 
-  it("builds lava and transition terrain colliders", async () => {
+  it("builds colliders only for lava and non-dirt transition terrain", async () => {
     const dir = await writeFixtureExport()
     const imported = await buildPixelLabArenaImport(dir)
 
     expect(imported.terrainColliders).toContainEqual({ x: 0, y: 0, width: 512, height: 64 })
-    expect(imported.terrainColliders).toContainEqual({ x: 64, y: 64, width: 64, height: 13 })
-    expect(imported.terrainColliders).toContainEqual({ x: 64, y: 96, width: 64, height: 32 })
+    expect(imported.terrainColliders).toContainEqual({ x: 128, y: 128, width: 64, height: 64 })
+    expect(hasCoveringRect(imported.terrainColliders, { x: 64, y: 64, width: 64, height: 13 }))
+      .toBe(false)
     expect(hasCoveringRect(imported.terrainColliders, { x: 64, y: 64, width: 13, height: 64 }))
-      .toBe(true)
-    expect(imported.terrainColliders).toContainEqual({ x: 115, y: 64, width: 13, height: 64 })
-    expect(imported.terrainColliders).toContainEqual({ x: 128, y: 160, width: 64, height: 32 })
+      .toBe(false)
   })
 })

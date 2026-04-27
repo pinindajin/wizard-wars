@@ -23,8 +23,6 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(SCRIPT_DIR, "..")
 const SOURCE_TILE_SIZE_PX = 32
 const TARGET_TILE_SIZE_PX = 64
-const TRANSITION_SIDE_DEPTH_PX = Math.round(TARGET_TILE_SIZE_PX * 0.2)
-const TRANSITION_SOUTH_DEPTH_PX = Math.round(TARGET_TILE_SIZE_PX * 0.5)
 const EXISTING_TERRAIN_TILE_COUNT = 16
 const PIXELLAB_FIRST_GID = EXISTING_TERRAIN_TILE_COUNT + 1
 const SPAWN_POINT_COUNT = 12
@@ -425,68 +423,6 @@ function buildTransitionLookup(
 }
 
 /**
- * Converts a PixelLab transition edge name into cardinal sides.
- *
- * @param edgeName - PixelLab edge key such as "south", "northwest", or "east".
- * @returns Cardinal sides contained in the edge key.
- */
-function cardinalDirections(edgeName: string): ("north" | "south" | "east" | "west")[] {
-  const normalized = edgeName.toLowerCase()
-  const directions: ("north" | "south" | "east" | "west")[] = []
-  if (normalized.includes("north")) directions.push("north")
-  if (normalized.includes("south")) directions.push("south")
-  if (normalized.includes("east")) directions.push("east")
-  if (normalized.includes("west")) directions.push("west")
-  return directions
-}
-
-/**
- * Builds walk-blocking rectangles for the non-dirt side of a transition tile.
- *
- * South-facing lava/rock occupies half a tile; north/east/west sides occupy a
- * shallower strip so players can stand on the visible dirt area.
- *
- * @param col - Tile column in imported map space.
- * @param row - Tile row in imported map space.
- * @param directions - Cardinal blocked sides.
- * @returns Collision rectangles in world pixels.
- */
-function transitionColliderRects(
-  col: number,
-  row: number,
-  directions: ReadonlySet<"north" | "south" | "east" | "west">,
-): ArenaColliderRect[] {
-  const x = col * TARGET_TILE_SIZE_PX
-  const y = row * TARGET_TILE_SIZE_PX
-  const rects: ArenaColliderRect[] = []
-
-  if (directions.has("north")) {
-    rects.push({ x, y, width: TARGET_TILE_SIZE_PX, height: TRANSITION_SIDE_DEPTH_PX })
-  }
-  if (directions.has("south")) {
-    rects.push({
-      x,
-      y: y + TARGET_TILE_SIZE_PX - TRANSITION_SOUTH_DEPTH_PX,
-      width: TARGET_TILE_SIZE_PX,
-      height: TRANSITION_SOUTH_DEPTH_PX,
-    })
-  }
-  if (directions.has("west")) {
-    rects.push({ x, y, width: TRANSITION_SIDE_DEPTH_PX, height: TARGET_TILE_SIZE_PX })
-  }
-  if (directions.has("east")) {
-    rects.push({
-      x: x + TARGET_TILE_SIZE_PX - TRANSITION_SIDE_DEPTH_PX,
-      y,
-      width: TRANSITION_SIDE_DEPTH_PX,
-      height: TARGET_TILE_SIZE_PX,
-    })
-  }
-
-  return rects
-}
-
-/**
  * Merges adjacent axis-aligned rectangles with matching spans.
  *
  * @param rects - Raw collision rectangles.
@@ -519,56 +455,31 @@ function mergeColliderRects(rects: readonly ArenaColliderRect[]): ArenaColliderR
 }
 
 /**
- * Builds player-blocking terrain colliders for lava and lava transition edges.
+ * Builds player-blocking terrain colliders for non-dirt terrain.
+ *
+ * PixelLab's transition-edge metadata is emitted on nearby dirt cells as well
+ * as lava cells. Treating those dirt cells as partial colliders creates
+ * invisible walls on walkable ground. The terrain id is the reliable signal for
+ * movement: upper terrain is dirt and stays walkable; every other terrain id is
+ * lava, cliff, or lava-transition art and blocks the full cell.
  *
  * @param col - Tile column in imported map space.
  * @param row - Tile row in imported map space.
  * @param terrainId - PixelLab terrain id at this cell.
- * @param lowerTerrainId - Lava terrain id.
  * @param upperTerrainId - Dirt terrain id.
- * @param transitionTerrainIds - Terrain ids that represent lava-to-dirt transition tiles.
- * @param transitionEdges - PixelLab transition edge metadata for this cell.
- * @param lowerTerrainName - Lava terrain name.
  * @returns Collision rectangles in world pixels.
  */
 function terrainColliderRectsForCell(
   col: number,
   row: number,
   terrainId: number,
-  lowerTerrainId: number,
   upperTerrainId: number,
-  transitionTerrainIds: ReadonlySet<number>,
-  transitionEdges: Record<string, TransitionEdge> | undefined,
-  lowerTerrainName: string,
 ): ArenaColliderRect[] {
+  if (terrainId === upperTerrainId) return []
+
   const x = col * TARGET_TILE_SIZE_PX
   const y = row * TARGET_TILE_SIZE_PX
-
-  if (terrainId === lowerTerrainId) {
-    return [{ x, y, width: TARGET_TILE_SIZE_PX, height: TARGET_TILE_SIZE_PX }]
-  }
-
-  if (transitionTerrainIds.has(terrainId)) {
-    return transitionColliderRects(col, row, new Set(["south"]))
-  }
-
-  if (terrainId !== upperTerrainId) {
-    return [{ x, y, width: TARGET_TILE_SIZE_PX, height: TARGET_TILE_SIZE_PX }]
-  }
-
-  const directions = new Set<"north" | "south" | "east" | "west">()
-  for (const [edgeName, edge] of Object.entries(transitionEdges ?? {})) {
-    const edgeTouchesLava =
-      edge.toTerrain === lowerTerrainName ||
-      edge.fromTerrain === lowerTerrainName ||
-      (edge.toTerrain === undefined && edge.fromTerrain === undefined)
-    if (!edgeTouchesLava) continue
-    for (const direction of cardinalDirections(edgeName)) {
-      directions.add(direction)
-    }
-  }
-
-  return transitionColliderRects(col, row, directions)
+  return [{ x, y, width: TARGET_TILE_SIZE_PX, height: TARGET_TILE_SIZE_PX }]
 }
 
 /**
@@ -726,17 +637,7 @@ export async function buildPixelLabArenaImport(exportDir: string): Promise<Pixel
   const expectedWidth = cols * SOURCE_TILE_SIZE_PX
   const expectedHeight = rows * SOURCE_TILE_SIZE_PX
   const primaryTileset = map.tilesets[0]
-  const lowerTerrainId = primaryTileset?.lowerTerrainId ?? 1
   const upperTerrainId = primaryTileset?.upperTerrainId ?? 2
-  const lowerTerrainName =
-    primaryTileset?.lowerTerrain ??
-    map.terrains.find((terrain) => terrain.id === lowerTerrainId)?.name ??
-    "lava"
-  const transitionTerrainIds = new Set(
-    map.terrains
-      .filter((terrain) => terrain.id !== lowerTerrainId && terrain.id !== upperTerrainId)
-      .map((terrain) => terrain.id),
-  )
   const minX = map.mapConfig.boundingBox.minX
   const minY = map.mapConfig.boundingBox.minY
   const terrainLookup = buildTerrainLookup(terrainMap)
@@ -794,11 +695,7 @@ export async function buildPixelLabArenaImport(exportDir: string): Promise<Pixel
           col,
           row,
           terrainId,
-          lowerTerrainId,
           upperTerrainId,
-          transitionTerrainIds,
-          transitionEdges,
-          lowerTerrainName,
         ),
       )
     }

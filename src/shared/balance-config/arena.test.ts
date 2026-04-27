@@ -67,8 +67,7 @@ describe("arena constants", () => {
     }
   })
 
-  it("exposes generated terrain colliders for lava and transition strips", () => {
-    const shallowTransitionDepth = Math.round(TILE_SIZE_PX * 0.2)
+  it("exposes generated terrain colliders for lava and non-dirt transition cells", () => {
     expect(ARENA_TERRAIN_COLLIDERS.length).toBeGreaterThan(0)
     expect(ARENA_WORLD_COLLIDERS.length).toBe(
       ARENA_PROP_COLLIDERS.length + ARENA_TERRAIN_COLLIDERS.length,
@@ -80,13 +79,11 @@ describe("arena constants", () => {
     ).toBe(true)
     expect(
       ARENA_TERRAIN_COLLIDERS.some(
-        (rect) => rect.y % TILE_SIZE_PX === TILE_SIZE_PX / 2 && rect.height === TILE_SIZE_PX / 2,
-      ),
-    ).toBe(true)
-    expect(
-      ARENA_TERRAIN_COLLIDERS.some(
         (rect) =>
-          rect.width === shallowTransitionDepth || rect.height === shallowTransitionDepth,
+          rect.x % TILE_SIZE_PX === 0 &&
+          rect.y % TILE_SIZE_PX === 0 &&
+          rect.width % TILE_SIZE_PX === 0 &&
+          rect.height % TILE_SIZE_PX === 0,
       ),
     ).toBe(true)
   })

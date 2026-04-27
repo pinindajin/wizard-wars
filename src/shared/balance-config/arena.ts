@@ -49,7 +49,7 @@ export const ARENA_PROP_COLLIDERS: readonly {
 
 /**
  * Terrain collider records generated from PixelLab lava and transition tiles.
- * Pure lava blocks the whole tile; transition sides block only their non-dirt strips.
+ * Dirt terrain stays walkable; lava and lava-transition terrain block their cells.
  */
 export const ARENA_TERRAIN_COLLIDERS: readonly {
   x: number
