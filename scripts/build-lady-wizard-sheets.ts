@@ -9,20 +9,17 @@ import { join, resolve } from "node:path"
 import { readdirSync, existsSync, mkdirSync, writeFileSync } from "node:fs"
 import sharp from "sharp"
 
+import {
+  LADY_WIZARD_ATLAS_CLIP_IDS,
+  LADY_WIZARD_DIRECTIONS,
+  LADY_WIZARD_FRAME_SIZE_PX,
+} from "../src/shared/sprites/ladyWizard"
+
 const SPRITE_DIR = resolve(process.cwd(), "public/assets/sprites/heroes/lady-wizard")
 const OUTPUT_DIR = resolve(SPRITE_DIR, "sheets")
-const FRAME_SIZE = 124 // px — from metadata.json
+const FRAME_SIZE = LADY_WIZARD_FRAME_SIZE_PX
 
-const DIRECTIONS = ["south", "south-east", "east", "north-east", "north", "north-west", "west", "south-west"]
-
-const ANIMATION_CLIPS = [
-  "walk",
-  "idle",
-  "death",
-  "light-spell-cast",
-  "heavy-spell-cast",
-  "summoned-axe-attack",
-]
+const DIRECTIONS = [...LADY_WIZARD_DIRECTIONS]
 
 /** Direction variants with alternate names in the filesystem. */
 const DIRECTION_ALIASES: Record<string, string[]> = {
@@ -99,7 +96,7 @@ async function main(): Promise<void> {
 
   const atlas: Record<string, Record<string, number>> = {}
 
-  for (const clip of ANIMATION_CLIPS) {
+  for (const clip of LADY_WIZARD_ATLAS_CLIP_IDS) {
     const clipDir = join(SPRITE_DIR, "animations", clip)
     if (!existsSync(clipDir)) {
       console.warn(`⚠ Clip directory not found: ${clipDir}`)

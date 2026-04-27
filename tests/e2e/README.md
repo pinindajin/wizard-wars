@@ -26,6 +26,20 @@ If you already have `bun run start` running on port 3000 with the right `DATABAS
 `AUTH_SECRET`, the test will reuse that server (the `reuseExistingServer` option is enabled
 outside CI).
 
+### Fireball trail screenshot (optional)
+
+`fireball-trail-visual.spec.ts` is **skipped** unless `WW_FIREBALL_VISUAL=1` is set, so default
+`bun run test:e2e` stays fast and stable. To capture a headless PNG for manual review (same
+DB/build prerequisites as above):
+
+```bash
+DATABASE_URL=postgresql://ww_user:ww_pass@127.0.0.1:5436/wizardwars \
+AUTH_SECRET=test-secret-32-chars-minimum-required \
+WW_FIREBALL_VISUAL=1 bunx playwright test tests/e2e/fireball-trail-visual.spec.ts
+```
+
+Writes **`test-results/fireball-trail.png`** (gitignored).
+
 ## CI
 
 The E2E job runs on pull requests whose base branch is **`main`** or **`prod`** (see `.github/workflows/ci.yml`).
@@ -44,3 +58,4 @@ Drop a `*.spec.ts` file under `tests/e2e/`. The `playwright.config.ts` picks up 
 | `match-start-game-route.spec.ts` | After start, URL stays on `/lobby/.../game` with Phaser container; no redirect to `/browse` |
 | `arena-assets.spec.ts` | Arena / Phaser asset and animation readiness |
 | `match-full-flow.spec.ts` | End-to-end match: signup, lobby, game, canvas, movement, shop, abilities |
+| `fireball-trail-visual.spec.ts` | Optional: signup → match → cast fireball; writes `test-results/fireball-trail.png` when `WW_FIREBALL_VISUAL=1` |

@@ -5,6 +5,7 @@ import { verifyToken } from "../../auth"
 import { createGameSimulation, type GameSimulation } from "../../game/simulation"
 import { createSessionEconomy, attemptPurchase, buildShopStatePayload } from "../../gameserver/sessionShop"
 import type { SessionEconomy } from "../../gameserver/sessionShop"
+import { ABILITY_CONFIGS } from "../../../shared/balance-config/abilities"
 import { TICK_MS } from "../../../shared/balance-config/rendering"
 import { ARENA_SPAWN_POINTS } from "../../../shared/balance-config/arena"
 import { RoomEvent } from "../../../shared/roomEvents"
@@ -22,6 +23,8 @@ import {
   lobbyChatPayloadSchema,
   heroSelectPayloadSchema,
   playerInputPayloadSchema,
+  shopPurchasePayloadSchema,
+  assignAbilityPayloadSchema,
   parseGameStateSyncPayload,
   parsePlayerDeathPayload,
 } from "../../../shared/validators"
@@ -38,7 +41,7 @@ import {
 } from "../../../shared/balance-config/lobby"
 import { DEFAULT_HERO_ID } from "../../../shared/balance-config/heroes"
 import { logger } from "../../logger"
-import { Equipment } from "../../game/components"
+import { AbilitySlots, Equipment, ABILITY_INDEX } from "../../game/components"
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -599,6 +602,10 @@ export class GameLobbyRoom extends Room {
       this.handleShopPurchase(client, payload)
     })
 
+    this.onMessage(RoomEvent.AssignAbility, (client: Client, payload: unknown) => {
+      this.handleAssignAbility(client, payload)
+    })
+
     this.onMessage("*", () => {
       this.resetInactivityTimer()
     })
@@ -647,8 +654,9 @@ export class GameLobbyRoom extends Room {
     const pd = client.userData as PlayerData
     const economy = this.economies.get(pd.playerId)
     if (!economy) return
-    const itemId = (payload as { itemId?: string })?.itemId
-    if (!itemId) return
+    const parsed = shopPurchasePayloadSchema.safeParse(payload)
+    if (!parsed.success) return
+    const { itemId } = parsed.data
 
     const result = attemptPurchase(economy, itemId)
     if (!result.success) {
@@ -670,8 +678,71 @@ export class GameLobbyRoom extends Room {
         Equipment.hasSwiftBoots[eid] = 1
       }
     }
+    this.syncAbilitySlotsToSimulation(pd.playerId, economy)
 
     client.send(RoomEvent.ShopState, buildShopStatePayload(economy))
+  }
+
+  /**
+   * Handles ability-bar assignment for abilities the player already owns.
+   *
+   * @param client - The assigning client.
+   * @param payload - Raw inbound payload with itemId and slotIndex.
+   */
+  private handleAssignAbility(client: Client, payload: unknown): void {
+    if (this.lobbyPhase !== "IN_PROGRESS") return
+    const pd = client.userData as PlayerData
+    const economy = this.economies.get(pd.playerId)
+    if (!economy) return
+
+    const parsed = assignAbilityPayloadSchema.safeParse(payload)
+    if (!parsed.success) return
+
+    const { itemId, slotIndex } = parsed.data
+    if (!ABILITY_CONFIGS[itemId]) {
+      client.send(RoomEvent.ShopError, { reason: "Unknown ability" })
+      return
+    }
+    if (!economy.ownedItemIds.has(itemId)) {
+      client.send(RoomEvent.ShopError, { reason: "Ability not owned" })
+      return
+    }
+
+    for (let i = 0; i < economy.abilitySlots.length; i++) {
+      if (economy.abilitySlots[i] === itemId) {
+        economy.abilitySlots[i] = null
+      }
+    }
+    economy.abilitySlots[slotIndex] = itemId
+    this.syncAbilitySlotsToSimulation(pd.playerId, economy)
+
+    client.send(RoomEvent.ShopState, buildShopStatePayload(economy))
+  }
+
+  /**
+   * Mirrors session economy ability-bar state into authoritative ECS slots.
+   *
+   * @param playerId - User id owning the entity.
+   * @param economy - Source session economy state.
+   */
+  private syncAbilitySlotsToSimulation(
+    playerId: string,
+    economy: SessionEconomy,
+  ): void {
+    const eid = this.simulation?.playerEntityMap.get(playerId)
+    if (eid === undefined) return
+
+    const toIndex = (abilityId: string | null): number => {
+      if (!abilityId) return -1
+      if (!ABILITY_CONFIGS[abilityId]) return -1
+      return ABILITY_INDEX[abilityId as keyof typeof ABILITY_INDEX] ?? -1
+    }
+
+    AbilitySlots.slot0[eid] = toIndex(economy.abilitySlots[0] ?? null)
+    AbilitySlots.slot1[eid] = toIndex(economy.abilitySlots[1] ?? null)
+    AbilitySlots.slot2[eid] = toIndex(economy.abilitySlots[2] ?? null)
+    AbilitySlots.slot3[eid] = toIndex(economy.abilitySlots[3] ?? null)
+    AbilitySlots.slot4[eid] = toIndex(economy.abilitySlots[4] ?? null)
   }
 
   /**
@@ -1020,6 +1091,7 @@ export class GameLobbyRoom extends Room {
       this.economies.set(pd.playerId, economy)
       const idx = spawnIndices[spawnIdx++ % spawnIndices.length]
       this.simulation.addPlayer(pd.playerId, pd.username, pd.heroId, idx)
+      this.syncAbilitySlotsToSimulation(pd.playerId, economy)
       // Seed each client with its starting shop state so the shop modal shows
       // correct gold + default ability-0 assignment immediately on MatchGo,
       // without requiring a request_resync or a first purchase.

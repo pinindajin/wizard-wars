@@ -3,6 +3,7 @@ import Phaser from "phaser"
 import { HERO_CONFIGS } from "@/shared/balance-config/heroes"
 import { ABILITY_CONFIGS } from "@/shared/balance-config/abilities"
 import {
+  PREDICTION_SNAP_THRESHOLD_PX,
   REMOTE_RENDER_DELAY_MS,
   REPLAY_SMOOTHING_MS,
   TELEPORT_THRESHOLD_PX,
@@ -10,8 +11,14 @@ import {
   TICK_MS,
 } from "@/shared/balance-config/rendering"
 import {
+  ARENA_HEIGHT,
+  ARENA_WIDTH,
+  ARENA_WORLD_COLLIDERS,
+} from "@/shared/balance-config/arena"
+import {
   BASE_MOVE_SPEED_PX_PER_SEC,
   DAMAGE_FLASH_MS,
+  PLAYER_RADIUS_PX,
 } from "@/shared/balance-config/combat"
 import type {
   GameStateSyncPayload,
@@ -24,6 +31,7 @@ import {
   type MoveIntent,
   worldStepFromIntent,
 } from "@/shared/movementIntent"
+import { moveWithinWorld } from "@/shared/collision/worldCollision"
 import {
   ClientPosition,
   ClientPlayerState,
@@ -36,6 +44,15 @@ import {
   getDirectionFromAngle,
   getAnimKey,
 } from "../../animation/LadyWizardAnimDefs"
+import {
+  LADY_WIZARD_FRAME_SIZE_PX,
+  LADY_WIZARD_SPRITE_DISPLAY_OFFSET_X,
+  LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y,
+} from "@/shared/sprites/ladyWizard"
+import {
+  FIREBALL_CHANNEL_ANIM,
+  FIREBALL_CHANNEL_TEXTURE,
+} from "../../animation/FireballAnimDefs"
 import {
   reconcileLocal,
   type LocalAckState,
@@ -51,6 +68,7 @@ import { RemoteInterpolationBuffer } from "./RemoteInterpolationBuffer"
  * catch-up to a fixed budget and drop the rest.
  */
 const MAX_SIM_LAG_MS = 250
+const ARENA_BOUNDS = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
 
 /** Oscillation frequency for invulnerability alpha pulse (Hz). */
 const INVULN_PULSE_HZ = 4
@@ -65,15 +83,17 @@ const HP_BAR_HEIGHT = 4
  * Lady-wizard frame height in pixels (must match `frameSize` in
  * `public/assets/sprites/heroes/lady-wizard/sheets/atlas.json`).
  */
-export const LADY_WIZARD_FRAME_HEIGHT_PX = 124
+export const LADY_WIZARD_FRAME_HEIGHT_PX = LADY_WIZARD_FRAME_SIZE_PX
 
 /**
  * Visual nudge of the **sprite** only, in world pixels, without moving simulation, camera
  * follow, foot ellipse, or nametag/HP (they stay on {@link ClientRenderPos}). Positive
  * `X` = right, positive `Y` = down. Use to align the drawn art with the logical foot.
  */
-export const LADY_WIZARD_SPRITE_DISPLAY_OFFSET_X = 0
-export const LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y = 45
+export {
+  LADY_WIZARD_SPRITE_DISPLAY_OFFSET_X,
+  LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y,
+} from "@/shared/sprites/ladyWizard"
 
 function ladyWizardSpriteDisplayPos(footX: number, footY: number) {
   return {
@@ -119,6 +139,22 @@ const FOOT_MARKER_DEPTH_EPS = 0.1
  */
 export const FOOT_MARKER_CENTER_Y_OFFSET_FROM_FOOT = 11
 
+/** Pixel distance from the wizard anchor to the channel-cast overlay center. */
+const FIREBALL_CHANNEL_OFFSET_PX = 36
+/** Vertical bias so the channel sprite sits at the wizard's hand height, not feet. */
+const FIREBALL_CHANNEL_Y_BIAS_PX = -40
+/**
+ * Extra downward offset when facing is mostly east or west (`facingAngle` from
+ * `atan2(dy, dx)`). Uses `|sin(angle)|` so pure N/S cardinals are unchanged.
+ */
+const FIREBALL_CHANNEL_EAST_WEST_Y_NUDGE_PX = 30
+/** Treat as E/W when `|sin(facingAngle)|` is below this (≈30° from horizontal). */
+const FIREBALL_CHANNEL_EAST_WEST_SIN_MAX = 0.5
+/** Display scale for the channel sprite sheet — tuned to match wizard scale. */
+const FIREBALL_CHANNEL_SCALE = 0.35
+/** Tiny depth bump so the channel renders just above the casting wizard. */
+const FIREBALL_CHANNEL_DEPTH_EPS = 0.5
+
 /** Per-entity rendering state that lives outside the shared ECS records. */
 interface PlayerRenderEntry {
   sprite: Phaser.GameObjects.Sprite
@@ -126,6 +162,12 @@ interface PlayerRenderEntry {
   footMarker: Phaser.GameObjects.Ellipse
   nameTag: Phaser.GameObjects.Text
   hpBar: Phaser.GameObjects.Graphics
+  /**
+   * Lazily-allocated overlay sprite that plays the fireball channel animation
+   * in front of the wizard while a fireball is being cast. `null` until the
+   * player first casts fireball; hidden between casts to avoid object churn.
+   */
+  channelOverlay: Phaser.GameObjects.Sprite | null
   /** Accumulated time for invulnerability pulse (ms). */
   invulnTime: number
   /** Remaining damage flash time (ms). 0 = no flash active. */
@@ -444,6 +486,7 @@ export class PlayerRenderSystem {
       footMarker,
       nameTag,
       hpBar,
+      channelOverlay: null,
       invulnTime: 0,
       flashRemaining: 0,
       lastAnimKey: "",
@@ -520,12 +563,82 @@ export class PlayerRenderSystem {
     entry.footMarker.destroy()
     entry.nameTag.destroy()
     entry.hpBar.destroy()
+    entry.channelOverlay?.destroy()
     this.entries.delete(id)
     removeEntity(id)
     this.remoteBuffer.remove(id)
     delete ClientPosition[id]
     delete ClientRenderPos[id]
     delete ClientPlayerState[id]
+  }
+
+  /**
+   * Returns whether the channel-cast overlay should be shown for `state`.
+   *
+   * Strict AND: the player must be in the `light_cast` animation state AND
+   * the server-reported `castingAbilityId` must be `"fireball"`. Mismatches
+   * (e.g. `light_cast` without an ability id) hide the overlay rather than
+   * guess. Exposed as a function so tests can exercise the rule directly.
+   */
+  static shouldShowFireballChannel(
+    state: Pick<(typeof ClientPlayerState)[number], "animState" | "castingAbilityId">,
+  ): boolean {
+    return state.animState === "light_cast" && state.castingAbilityId === "fireball"
+  }
+
+  /**
+   * Updates (and lazily creates) the channel-cast overlay for one player.
+   *
+   * Visible iff {@link PlayerRenderSystem.shouldShowFireballChannel} returns
+   * true. Position offsets along `state.facingAngle` so the projectile-to-be
+   * sits in front of the wizard regardless of which way they aim. Depth is
+   * the wizard sprite depth + a small epsilon so the overlay always renders
+   * above the casting body while staying inside the existing Y-sort scheme.
+   */
+  private _updateChannelOverlay(
+    entry: PlayerRenderEntry,
+    renderPos: { x: number; y: number },
+    state: (typeof ClientPlayerState)[number],
+  ): void {
+    const show = PlayerRenderSystem.shouldShowFireballChannel(state)
+
+    if (!show) {
+      if (entry.channelOverlay && entry.channelOverlay.visible) {
+        entry.channelOverlay.setVisible(false)
+      }
+      return
+    }
+
+    if (!entry.channelOverlay) {
+      const overlay = this.scene.add.sprite(
+        renderPos.x,
+        renderPos.y,
+        FIREBALL_CHANNEL_TEXTURE,
+      )
+      overlay.setOrigin(0.5, 0.5)
+      overlay.setScale(FIREBALL_CHANNEL_SCALE)
+      entry.channelOverlay = overlay
+    }
+
+    const overlay = entry.channelOverlay
+    if (!overlay.anims.isPlaying || overlay.anims.currentAnim?.key !== FIREBALL_CHANNEL_ANIM) {
+      if (this.scene.anims.exists(FIREBALL_CHANNEL_ANIM)) {
+        overlay.play({ key: FIREBALL_CHANNEL_ANIM, repeat: -1 }, true)
+      }
+    }
+
+    const dx = Math.cos(state.facingAngle) * FIREBALL_CHANNEL_OFFSET_PX
+    const dy = Math.sin(state.facingAngle) * FIREBALL_CHANNEL_OFFSET_PX
+    const eastWestNudge =
+      Math.abs(Math.sin(state.facingAngle)) < FIREBALL_CHANNEL_EAST_WEST_SIN_MAX
+        ? FIREBALL_CHANNEL_EAST_WEST_Y_NUDGE_PX
+        : 0
+    overlay.setPosition(
+      renderPos.x + dx,
+      renderPos.y + dy + FIREBALL_CHANNEL_Y_BIAS_PX + eastWestNudge,
+    )
+    overlay.setDepth(renderPos.y + FIREBALL_CHANNEL_DEPTH_EPS)
+    overlay.setVisible(true)
   }
 
   /** Triggers a red damage flash on a player sprite. */
@@ -634,8 +747,17 @@ export class PlayerRenderSystem {
           TICK_DT_SEC,
           castMoveMult,
         )
-        entry.simCurrX += step.x
-        entry.simCurrY += step.y
+        const moved = moveWithinWorld(
+          entry.simCurrX,
+          entry.simCurrY,
+          step.x,
+          step.y,
+          PLAYER_RADIUS_PX,
+          ARENA_BOUNDS,
+          ARENA_WORLD_COLLIDERS,
+        )
+        entry.simCurrX = moved.x
+        entry.simCurrY = moved.y
       }
 
       if (entry.smoothRemainingMs > 0) {
@@ -646,8 +768,34 @@ export class PlayerRenderSystem {
         const t = 1 - entry.smoothRemainingMs / REPLAY_SMOOTHING_MS
         const pPredX = entry.simCurrX
         const pPredY = entry.simCurrY
-        entry.simCurrX = pPredX + (entry.smoothTargetX - pPredX) * t
-        entry.simCurrY = pPredY + (entry.smoothTargetY - pPredY) * t
+        const targetStepX = pPredX + (entry.smoothTargetX - pPredX) * t - pPredX
+        const targetStepY = pPredY + (entry.smoothTargetY - pPredY) * t - pPredY
+        const moved = moveWithinWorld(
+          pPredX,
+          pPredY,
+          targetStepX,
+          targetStepY,
+          PLAYER_RADIUS_PX,
+          ARENA_BOUNDS,
+          ARENA_WORLD_COLLIDERS,
+        )
+        entry.simCurrX = moved.x
+        entry.simCurrY = moved.y
+
+        const remainingDx = entry.smoothTargetX - entry.simCurrX
+        const remainingDy = entry.smoothTargetY - entry.simCurrY
+        const remainingDist = Math.sqrt(
+          remainingDx * remainingDx + remainingDy * remainingDy,
+        )
+        if (
+          entry.smoothRemainingMs === 0 &&
+          remainingDist > PREDICTION_SNAP_THRESHOLD_PX
+        ) {
+          entry.simPrevX = entry.smoothTargetX
+          entry.simPrevY = entry.smoothTargetY
+          entry.simCurrX = entry.smoothTargetX
+          entry.simCurrY = entry.smoothTargetY
+        }
       }
     }
   }
@@ -756,6 +904,13 @@ export class PlayerRenderSystem {
           state.maxHealth > 0 ? state.health / state.maxHealth : 0
         this._drawHpBar(entry.hpBar, renderPos.x, hpBarTopY, hpFraction)
         entry.hpBar.setDepth(renderPos.y + 1)
+      }
+
+      // --- Fireball channel overlay (light_cast + castingAbilityId=fireball) ---
+      if (isDying && entry.channelOverlay) {
+        entry.channelOverlay.setVisible(false)
+      } else if (!isDying) {
+        this._updateChannelOverlay(entry, renderPos, state)
       }
     }
   }

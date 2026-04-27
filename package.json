@@ -22,6 +22,7 @@
     "docker:down": "docker compose down",
     "docker:reset": "docker compose down -v && docker compose up --build",
     "docker:up:db": "docker compose up db -d",
+    "docker:up:dbs": "docker compose up -d --wait db db-shadow",
     "docker:down:db": "docker compose down db",
     "dev:stack": "bun ./scripts/dev-with-docker.ts",
     "dev:hybrid": "bun ./scripts/dev-with-docker.ts",
@@ -30,7 +31,11 @@
     "db:studio": "prisma studio",
     "build:lady-wizard-sheets": "tsx scripts/build-lady-wizard-sheets.ts",
     "build:lady-wizard-megasheet": "tsx scripts/build-lady-wizard-megasheet.ts",
-    "build:arena-colliders": "tsx scripts/compile-arena-colliders.ts"
+    "export:arena-tilemap": "tsx scripts/export-arena-tilemap.ts",
+    "check:arena-editor-parity": "tsx scripts/export-arena-tilemap.ts --check",
+    "build:arena-colliders": "bun run export:arena-tilemap && tsx scripts/compile-arena-colliders.ts",
+    "build:fireball-sheets": "tsx scripts/build-fireball-sheets.ts",
+    "setup:fresh": "cp sample.env .env && bun install && bun run docker:up:dbs && bunx prisma migrate dev"
   },
   "dependencies": {
     "@colyseus/schema": "^4.0.19",
@@ -75,6 +80,7 @@
     "eslint-config-next": "16.1.6",
     "jsdom": "^26.1.0",
     "prisma": "^6.0.0",
+    "sharp": "^0.34.5",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
     "typescript": "^5",

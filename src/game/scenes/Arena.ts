@@ -1,376 +1,141 @@
+// You can write more code here
+
+/* START OF COMPILED CODE */
+
+/* START-USER-IMPORTS */
 import Phaser from "phaser"
 
-import { WsEvent } from "@/shared/events"
-import { ARENA_CAMERA_FOLLOW_ZOOM, TILEMAP_DEPTH } from "@/shared/balance-config/rendering"
-import type {
-  GameStateSyncPayload,
-  PlayerBatchUpdatePayload,
-  FireballLaunchPayload,
-  FireballBatchUpdatePayload,
-  FireballImpactPayload,
-  LightningBoltPayload,
-  AxeSwingPayload,
-  PlayerDeathPayload,
-  PlayerRespawnPayload,
-  DamageFloatPayload,
-} from "@/shared/types"
-import {
-  WW_GAME_CONNECTION_REGISTRY_KEY,
-  WW_LOCAL_PLAYER_ID_REGISTRY_KEY,
-} from "../constants"
+import { WW_LOCAL_PLAYER_ID_REGISTRY_KEY } from "../constants"
 import { GameConnection } from "../network/GameConnection"
 import { PlayerRenderSystem } from "../ecs/systems/PlayerRenderSystem"
-import { ProjectileRenderSystem } from "../ecs/systems/ProjectileRenderSystem"
-import { LightningBoltRenderSystem } from "../ecs/systems/LightningBoltRenderSystem"
-import { AxeSwingRenderSystem } from "../ecs/systems/AxeSwingRenderSystem"
-import { DamageFloatersSystem } from "../ecs/systems/DamageFloatersSystem"
-import { NetworkSyncSystem } from "../ecs/systems/NetworkSyncSystem"
-import { KeyboardController } from "../input/KeyboardController"
-import { MouseController } from "../input/MouseController"
-import { registerLadyWizardAnims } from "../animation/LadyWizardAnimDefs"
-import { BgmPlayer } from "../audio/BgmPlayer"
-import { SoundManager } from "../audio/SoundManager"
 import {
   publishLoaderComplete,
   wireSceneLoaderProgress,
 } from "../loaderStatus"
+import { ArenaRuntime } from "./ArenaRuntime"
+/* END-USER-IMPORTS */
 
-const INACTIVE_PLAYER_INPUT = {
-  up: false,
-  down: false,
-  left: false,
-  right: false,
-  abilitySlot: null,
-  abilityTargetX: 0,
-  abilityTargetY: 0,
-  useQuickItemSlot: null,
-  seq: 0,
-} as const
+export default class Arena extends Phaser.Scene {
 
-/**
- * Wall-clock fields injected into the outgoing payload at send time. Keeping
- * this stamp at the scene-level (not inside controllers) preserves
- * controller testability.
- */
-function stampClientSendTime(): { clientSendTimeMs: number } {
-  return { clientSendTimeMs: Date.now() }
+	constructor() {
+		super("Arena");
+
+		/* START-USER-CTR-CODE */
+		/* END-USER-CTR-CODE */
+	}
+
+	editorCreate(): void {
+
+		// arenaMap
+		this.cache.tilemap.add("arenaMap_arenaMap", {
+			format: 1,
+			data: {
+				width: 66,
+				height: 53,
+				orientation: "orthogonal",
+				tilewidth: 64,
+				tileheight: 64,
+				tilesets: [
+					{
+						columns: 228,
+						margin: 0,
+						spacing: 0,
+						tilewidth: 64,
+						tileheight: 64,
+						tilecount: 228,
+						firstgid: 1,
+						image: "arena-terrain",
+						name: "arena-terrain",
+						imagewidth: 14592,
+						imageheight: 64,
+					},
+				],
+				layers: [
+					{
+						type: "tilelayer",
+						name: "Ground",
+						width: 66,
+						height: 53,
+						opacity: 1,
+						data: [17, 17, 17, 17, 18, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 20, 17, 17, 17, 17, 17, 21, 22, 23, 24, 25, 22, 26, 23, 24, 27, 27, 27, 27, 27, 27, 27, 27, 25, 22, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 23, 24, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 28, 17, 17, 17, 17, 17, 29, 30, 31, 32, 33, 30, 34, 35, 36, 26, 26, 23, 24, 27, 27, 27, 27, 33, 37, 38, 34, 39, 39, 39, 39, 39, 39, 39, 39, 39, 39, 39, 39, 39, 39, 39, 39, 39, 39, 39, 35, 36, 26, 26, 26, 26, 26, 26, 26, 26, 26, 23, 24, 27, 27, 27, 27, 27, 27, 27, 28, 17, 17, 17, 17, 17, 40, 41, 42, 43, 44, 41, 45, 46, 47, 39, 39, 35, 36, 26, 26, 23, 24, 44, 48, 49, 45, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 46, 47, 39, 39, 39, 39, 39, 39, 39, 39, 39, 35, 36, 26, 26, 26, 26, 26, 23, 24, 28, 17, 17, 17, 17, 17, 51, 52, 53, 43, 54, 55, 56, 57, 50, 50, 50, 46, 47, 39, 39, 58, 32, 54, 59, 60, 61, 62, 63, 57, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 46, 47, 39, 39, 39, 39, 39, 58, 32, 28, 17, 17, 17, 17, 17, 64, 65, 66, 43, 27, 44, 41, 45, 50, 50, 50, 50, 50, 50, 50, 67, 68, 24, 27, 44, 48, 69, 49, 45, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 70, 71, 62, 63, 57, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 28, 17, 17, 17, 17, 17, 64, 65, 66, 43, 27, 54, 52, 73, 50, 50, 50, 50, 50, 50, 50, 74, 75, 76, 27, 54, 59, 77, 60, 56, 57, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 78, 79, 69, 49, 45, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 28, 17, 17, 17, 17, 17, 21, 80, 81, 68, 24, 27, 82, 83, 57, 50, 50, 50, 50, 50, 50, 78, 84, 85, 27, 27, 27, 27, 44, 41, 45, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 86, 87, 77, 60, 61, 63, 57, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 28, 17, 17, 17, 17, 17, 88, 89, 90, 91, 32, 27, 44, 41, 45, 50, 50, 50, 50, 50, 50, 92, 93, 94, 26, 26, 26, 23, 95, 52, 73, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 27, 44, 48, 49, 45, 70, 71, 62, 62, 62, 62, 62, 62, 63, 57, 70, 96, 97, 28, 17, 17, 17, 17, 17, 98, 99, 50, 72, 43, 27, 54, 52, 73, 50, 50, 50, 50, 50, 50, 46, 47, 39, 39, 39, 39, 58, 32, 65, 99, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 27, 54, 59, 100, 73, 78, 79, 69, 69, 69, 69, 69, 69, 49, 45, 78, 84, 85, 28, 17, 17, 17, 17, 17, 98, 99, 50, 67, 101, 26, 26, 102, 103, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 65, 99, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 25, 22, 26, 102, 103, 92, 104, 105, 77, 77, 77, 77, 77, 100, 73, 86, 106, 107, 28, 17, 17, 17, 17, 17, 98, 99, 50, 74, 108, 109, 109, 110, 111, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 67, 68, 112, 99, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 113, 114, 39, 115, 116, 46, 91, 32, 27, 27, 25, 22, 26, 102, 103, 72, 43, 27, 28, 17, 17, 17, 17, 17, 98, 99, 50, 78, 79, 69, 69, 49, 45, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 46, 117, 118, 103, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 65, 99, 50, 50, 50, 50, 67, 101, 26, 26, 119, 120, 39, 115, 116, 72, 43, 27, 28, 17, 17, 17, 17, 17, 98, 99, 50, 92, 104, 105, 77, 100, 73, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 46, 121, 116, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 65, 99, 50, 50, 50, 50, 46, 47, 39, 39, 115, 116, 50, 50, 50, 72, 43, 27, 28, 17, 17, 17, 17, 17, 122, 83, 57, 46, 91, 32, 27, 65, 99, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 65, 99, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 27, 28, 17, 17, 17, 17, 17, 40, 41, 45, 50, 72, 123, 22, 102, 103, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 65, 99, 50, 50, 50, 50, 70, 71, 63, 57, 50, 70, 124, 57, 50, 72, 43, 27, 28, 17, 17, 17, 17, 17, 51, 52, 73, 70, 96, 125, 37, 110, 111, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 82, 126, 62, 63, 57, 50, 78, 79, 49, 45, 50, 78, 127, 45, 50, 67, 68, 24, 28, 17, 17, 17, 17, 17, 64, 65, 99, 78, 84, 128, 48, 49, 45, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 44, 48, 69, 49, 45, 50, 92, 129, 130, 131, 50, 86, 132, 61, 62, 133, 134, 76, 28, 17, 17, 17, 17, 17, 64, 65, 99, 86, 106, 135, 59, 60, 61, 63, 57, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 54, 59, 77, 100, 73, 50, 46, 47, 115, 116, 50, 72, 136, 48, 69, 69, 137, 85, 28, 17, 17, 17, 17, 17, 64, 82, 83, 138, 43, 25, 139, 140, 48, 49, 45, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 27, 27, 27, 82, 126, 62, 62, 62, 62, 63, 57, 72, 141, 59, 77, 77, 142, 107, 28, 17, 17, 17, 17, 17, 64, 44, 41, 143, 101, 119, 144, 145, 146, 130, 131, 70, 71, 63, 57, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 67, 101, 26, 26, 23, 140, 48, 69, 69, 69, 69, 49, 45, 72, 43, 27, 27, 27, 27, 27, 28, 17, 17, 17, 17, 17, 64, 54, 52, 147, 47, 115, 90, 47, 39, 115, 116, 78, 79, 49, 45, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 70, 71, 63, 57, 50, 46, 47, 39, 39, 58, 148, 149, 150, 151, 151, 152, 153, 73, 67, 101, 23, 24, 27, 27, 27, 28, 17, 17, 17, 17, 17, 64, 27, 82, 126, 62, 62, 62, 62, 62, 62, 62, 154, 155, 100, 73, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 78, 79, 49, 45, 50, 50, 70, 71, 62, 156, 97, 113, 114, 39, 39, 58, 157, 99, 46, 47, 58, 32, 27, 27, 27, 28, 17, 17, 17, 17, 17, 64, 27, 44, 48, 69, 69, 69, 69, 69, 69, 69, 137, 85, 65, 99, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 86, 87, 60, 61, 63, 57, 78, 79, 69, 137, 85, 65, 99, 50, 50, 72, 158, 99, 50, 50, 72, 43, 27, 27, 27, 28, 17, 17, 17, 17, 17, 64, 27, 54, 59, 77, 77, 77, 77, 77, 77, 77, 142, 107, 65, 99, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 44, 48, 49, 45, 92, 129, 151, 159, 94, 102, 103, 50, 50, 67, 160, 103, 50, 50, 67, 101, 23, 24, 27, 28, 17, 17, 17, 17, 17, 64, 27, 27, 25, 22, 26, 26, 26, 23, 24, 27, 27, 27, 65, 99, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 54, 59, 100, 73, 46, 47, 39, 39, 39, 115, 116, 50, 50, 46, 161, 162, 62, 62, 163, 164, 58, 32, 27, 28, 17, 17, 17, 17, 17, 64, 27, 27, 113, 114, 39, 39, 39, 58, 32, 27, 27, 25, 80, 103, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 27, 27, 65, 99, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 78, 79, 69, 69, 49, 45, 72, 43, 27, 28, 17, 17, 17, 17, 17, 64, 27, 27, 65, 99, 50, 50, 50, 67, 101, 26, 26, 119, 165, 116, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 27, 27, 82, 126, 62, 63, 57, 50, 50, 50, 50, 50, 50, 50, 86, 87, 77, 77, 100, 73, 72, 43, 27, 28, 17, 17, 17, 17, 17, 64, 27, 27, 65, 99, 50, 50, 50, 46, 47, 39, 39, 115, 116, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 27, 27, 44, 48, 69, 49, 45, 50, 50, 50, 50, 50, 50, 50, 67, 101, 26, 26, 102, 103, 72, 43, 27, 28, 17, 17, 17, 17, 17, 64, 27, 27, 82, 126, 63, 57, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 67, 68, 24, 27, 54, 59, 77, 100, 73, 50, 70, 71, 62, 62, 62, 63, 166, 47, 39, 39, 115, 116, 72, 43, 27, 28, 17, 17, 17, 17, 17, 64, 27, 27, 44, 48, 49, 45, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 46, 117, 36, 26, 23, 24, 27, 65, 99, 50, 78, 79, 69, 69, 69, 49, 45, 50, 50, 50, 50, 50, 72, 43, 27, 28, 17, 17, 17, 17, 17, 64, 27, 27, 54, 59, 100, 73, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 70, 71, 62, 63, 57, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 46, 47, 39, 58, 32, 27, 65, 99, 50, 86, 87, 77, 77, 77, 60, 56, 57, 70, 71, 62, 62, 156, 97, 27, 28, 17, 17, 17, 17, 17, 64, 27, 27, 27, 27, 65, 99, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 78, 79, 69, 49, 45, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 27, 65, 99, 50, 72, 43, 27, 27, 27, 44, 41, 45, 78, 79, 69, 69, 137, 85, 27, 28, 17, 17, 17, 17, 17, 64, 27, 25, 22, 26, 102, 103, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 86, 87, 77, 100, 73, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 67, 101, 26, 102, 103, 50, 67, 101, 26, 23, 24, 54, 52, 73, 86, 87, 77, 77, 167, 168, 24, 28, 17, 17, 17, 17, 17, 64, 27, 113, 114, 169, 170, 171, 62, 63, 57, 50, 50, 50, 50, 50, 50, 50, 70, 71, 156, 97, 27, 82, 126, 62, 63, 57, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 46, 47, 39, 115, 116, 50, 46, 47, 39, 58, 32, 27, 65, 99, 72, 43, 27, 27, 113, 172, 32, 28, 17, 17, 17, 17, 17, 64, 27, 65, 99, 78, 79, 69, 69, 49, 45, 50, 50, 50, 50, 50, 50, 50, 78, 79, 137, 85, 27, 44, 48, 69, 49, 45, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 67, 101, 26, 102, 103, 67, 101, 23, 24, 65, 66, 43, 28, 17, 17, 17, 17, 17, 64, 25, 80, 103, 92, 129, 151, 152, 153, 73, 50, 50, 50, 50, 50, 50, 50, 86, 87, 142, 107, 27, 173, 174, 151, 130, 131, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 74, 108, 109, 175, 176, 166, 47, 58, 32, 65, 66, 43, 28, 17, 17, 17, 17, 17, 64, 113, 89, 116, 46, 47, 39, 58, 157, 99, 50, 50, 50, 50, 50, 50, 50, 67, 101, 26, 26, 23, 177, 37, 109, 110, 111, 70, 124, 57, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 78, 79, 69, 69, 49, 45, 50, 67, 101, 102, 81, 68, 178, 17, 17, 17, 17, 17, 64, 82, 126, 62, 62, 63, 179, 96, 180, 99, 50, 50, 50, 50, 50, 50, 50, 46, 47, 39, 169, 181, 182, 48, 69, 49, 45, 78, 127, 45, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 86, 87, 77, 77, 100, 73, 50, 46, 47, 115, 90, 91, 183, 17, 17, 17, 17, 17, 64, 44, 48, 69, 69, 49, 184, 84, 185, 99, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 78, 84, 186, 59, 77, 100, 187, 188, 189, 73, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 70, 96, 97, 27, 27, 65, 99, 50, 50, 50, 50, 50, 72, 190, 17, 17, 17, 17, 17, 64, 54, 59, 191, 150, 130, 192, 93, 193, 103, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 86, 194, 168, 24, 27, 65, 195, 84, 185, 99, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 78, 84, 85, 27, 27, 65, 99, 50, 50, 50, 50, 50, 72, 190, 17, 17, 17, 17, 17, 64, 27, 27, 113, 196, 170, 197, 198, 110, 111, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 199, 200, 36, 26, 102, 201, 93, 193, 103, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 86, 106, 107, 27, 27, 82, 83, 57, 50, 70, 71, 62, 156, 202, 17, 17, 17, 17, 17, 64, 27, 25, 80, 203, 79, 69, 69, 49, 45, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 158, 204, 47, 39, 115, 90, 47, 115, 116, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 27, 27, 27, 44, 41, 45, 50, 78, 79, 69, 137, 205, 17, 17, 17, 17, 17, 64, 27, 113, 89, 206, 87, 77, 77, 100, 73, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 67, 160, 103, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 27, 27, 27, 54, 52, 73, 50, 86, 87, 77, 142, 207, 17, 17, 17, 17, 17, 64, 27, 65, 99, 72, 43, 27, 25, 80, 103, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 74, 208, 171, 63, 57, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 67, 68, 24, 27, 27, 27, 65, 99, 70, 96, 97, 27, 27, 28, 17, 17, 17, 17, 17, 64, 27, 65, 99, 72, 43, 27, 113, 89, 116, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 78, 79, 69, 49, 45, 50, 70, 71, 63, 57, 50, 70, 71, 62, 63, 57, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 46, 91, 32, 27, 27, 27, 65, 99, 78, 84, 85, 27, 27, 28, 17, 17, 17, 17, 17, 64, 27, 65, 99, 72, 43, 27, 65, 99, 50, 70, 71, 62, 62, 62, 62, 62, 62, 62, 62, 154, 155, 77, 100, 73, 50, 78, 79, 49, 45, 50, 78, 79, 69, 49, 45, 50, 50, 70, 71, 62, 62, 62, 62, 62, 62, 63, 179, 96, 97, 27, 27, 27, 65, 99, 86, 106, 107, 27, 27, 28, 17, 17, 17, 17, 17, 64, 27, 65, 99, 72, 43, 27, 65, 99, 50, 78, 79, 69, 69, 69, 69, 69, 69, 69, 69, 137, 85, 25, 80, 103, 50, 86, 87, 100, 73, 50, 86, 87, 77, 100, 73, 50, 50, 78, 79, 69, 69, 69, 69, 69, 69, 49, 184, 84, 85, 27, 27, 27, 65, 99, 72, 43, 27, 27, 27, 28, 17, 17, 17, 17, 17, 64, 27, 82, 126, 156, 97, 27, 65, 99, 50, 86, 209, 150, 151, 151, 151, 151, 151, 152, 105, 142, 210, 211, 165, 116, 50, 72, 43, 82, 126, 62, 156, 97, 27, 82, 126, 62, 62, 154, 155, 77, 77, 77, 77, 77, 77, 60, 212, 213, 107, 25, 22, 26, 102, 103, 67, 101, 26, 23, 24, 28, 17, 17, 17, 17, 17, 64, 27, 44, 48, 137, 85, 25, 80, 103, 50, 72, 199, 114, 39, 39, 39, 39, 39, 35, 214, 24, 113, 89, 116, 50, 50, 72, 43, 44, 48, 69, 137, 85, 27, 44, 48, 69, 69, 137, 85, 27, 27, 27, 27, 27, 27, 44, 215, 85, 27, 33, 37, 109, 175, 171, 133, 198, 109, 216, 76, 28, 17, 17, 17, 17, 17, 64, 27, 54, 59, 142, 107, 33, 217, 171, 62, 156, 218, 126, 62, 62, 62, 62, 62, 133, 134, 76, 82, 126, 62, 62, 62, 156, 97, 54, 59, 77, 142, 107, 27, 54, 59, 77, 77, 142, 107, 27, 27, 27, 27, 27, 27, 54, 219, 107, 27, 44, 48, 69, 69, 69, 69, 69, 69, 137, 85, 28, 17, 17, 17, 17, 17, 64, 27, 27, 27, 27, 27, 44, 48, 69, 69, 137, 128, 48, 69, 69, 69, 69, 69, 69, 137, 85, 44, 48, 69, 69, 69, 137, 85, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 54, 59, 77, 77, 77, 77, 77, 77, 142, 107, 28, 17, 17, 17, 17, 17, 220, 221, 221, 221, 221, 221, 222, 223, 224, 224, 225, 226, 223, 224, 224, 224, 224, 224, 224, 225, 227, 222, 223, 224, 224, 224, 225, 227, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 228, 17],
+					},
+				],
+			},
+		});
+		const arenaMap = this.add.tilemap("arenaMap_arenaMap");
+		arenaMap.addTilesetImage("arena-terrain");
+
+		// Ground
+		arenaMap.createLayer("Ground", ["arena-terrain"], 0, 0);
+
+		// prop_mushroom_cluster
+		this.add.image(1120, 224, "prop-mushroom-cluster");
+
+		// prop_cracked_shield
+		this.add.image(222, 288, "prop-cracked-shield");
+
+		// prop_boulder_rock
+		this.add.image(1229, 528, "prop-boulder-rock");
+
+		// prop_mushroom_cluster_1
+		this.add.image(221, 545, "prop-mushroom-cluster");
+
+		this.arenaMap = arenaMap;
+
+		this.events.emit("scene-awake");
+	}
+
+	private arenaMap!: Phaser.Tilemaps.Tilemap;
+
+	/* START-USER-CODE */
+
+	private runtime?: ArenaRuntime
+
+	preload(): void {
+		this.load.pack("arena-assets", "/assets/arena-asset-pack.json")
+		wireSceneLoaderProgress(this, {
+			scene: "Arena",
+			description: "Arena assets",
+		})
+	}
+
+	create(): void {
+		this.editorCreate()
+		this.runtime = new ArenaRuntime(this, {
+			arenaMap: this.arenaMap,
+		})
+		this.runtime.start()
+		publishLoaderComplete(this.game as unknown as Parameters<typeof publishLoaderComplete>[0])
+	}
+
+	update(time: number, delta: number): void {
+		this.runtime?.update(time, delta)
+	}
+
+	/** Phaser group used to collect all player sprites for iteration. */
+	get playerGroup(): Phaser.GameObjects.Group {
+		return this.runtime?.playerGroup as Phaser.GameObjects.Group
+	}
+
+	/** Exposed for existing e2e diagnostics. */
+	get playerRenderSystem(): PlayerRenderSystem | undefined {
+		return this.runtime?.playerRenderSystem
+	}
+
+	getConnection(): GameConnection {
+		return this.runtime?.getConnection() as GameConnection
+	}
+
+	getLocalPlayerId(): string | null {
+		return (
+			this.runtime?.getLocalPlayerId() ??
+			((this.game.registry.get(WW_LOCAL_PLAYER_ID_REGISTRY_KEY) as string | undefined) ?? null)
+		)
+	}
+
+	/* END-USER-CODE */
 }
 
-/**
- * Main arena gameplay scene.
- * Wires together the tilemap, ECS render systems, network connection, and input controllers.
- * Compatible with Phaser Editor 2D via the editorCreate() pattern.
- */
-export class Arena extends Phaser.Scene {
-  /** Phaser group used to collect all player sprites for iteration. */
-  playerGroup!: Phaser.GameObjects.Group
+/* END OF COMPILED CODE */
 
-  /** Active Colyseus room connection. */
-  private connection!: GameConnection
-
-  private playerRenderSystem!: PlayerRenderSystem
-  private projectileRenderSystem!: ProjectileRenderSystem
-  private lightningBoltRenderSystem!: LightningBoltRenderSystem
-  private axeSwingRenderSystem!: AxeSwingRenderSystem
-  private damageFloatersSystem!: DamageFloatersSystem
-  private networkSyncSystem!: NetworkSyncSystem
-
-  private keyboardController!: KeyboardController
-  private mouseController!: MouseController
-
-  private bgmPlayer!: BgmPlayer
-  private soundManager!: SoundManager
-
-  /** Whether the match has started (MatchGo received). */
-  private matchStarted = false
-
-  /** Pixel size of the loaded arena tilemap (for camera bounds). */
-  private arenaWidthPx = 0
-  private arenaHeightPx = 0
-
-  constructor() {
-    super({ key: "Arena" })
-  }
-
-  preload(): void {
-    this.load.pack("arena-assets", "/assets/arena-asset-pack.json")
-    wireSceneLoaderProgress(this, {
-      scene: "Arena",
-      description: "Arena assets",
-    })
-  }
-
-  create(): void {
-    this.editorCreate()
-    publishLoaderComplete(this.game as unknown as Parameters<typeof publishLoaderComplete>[0])
-  }
-
-  /**
-   * Phaser Editor 2D compatible creation method.
-   * Builds the tilemap, creates player group, wires all systems, and opens the network connection.
-   */
-  editorCreate(): void {
-    this._buildTilemap()
-    this._createPlayerGroup()
-    this._createSystems()
-    this._setupCamera()
-    this._setupAudio()
-    registerLadyWizardAnims(this.anims)
-    this._openConnection()
-  }
-
-  /**
-   * Builds the Tiled JSON tilemap and places it at depth TILEMAP_DEPTH.
-   */
-  private _buildTilemap(): void {
-    const map = this.make.tilemap({ key: "arena" })
-    this.arenaWidthPx = map.widthInPixels
-    this.arenaHeightPx = map.heightInPixels
-    const tileset = map.addTilesetImage("arena-terrain", "arena-terrain")
-    if (!tileset) {
-      console.warn(
-        "[Arena] Tileset `arena-terrain` not loaded — check asset pack and public/assets path (Ground/Decoration layers skipped).",
-      )
-      return
-    }
-    const groundLayer = map.createLayer("Ground", tileset, 0, 0)
-    const decoLayer = map.createLayer("Decoration", tileset, 0, 0)
-    groundLayer?.setDepth(TILEMAP_DEPTH)
-    decoLayer?.setDepth(TILEMAP_DEPTH + 1)
-  }
-
-  /**
-   * Creates the Phaser Group that tracks all active player sprites.
-   */
-  private _createPlayerGroup(): void {
-    this.playerGroup = this.add.group()
-  }
-
-  /**
-   * Instantiates all ECS render and input systems.
-   */
-  private _createSystems(): void {
-    this.playerRenderSystem = new PlayerRenderSystem(this, this.playerGroup)
-    this.networkSyncSystem = new NetworkSyncSystem({
-      onBatchReceived: () => {
-        this.playerRenderSystem.markBatchReceived()
-      },
-      onAuthoritativePosition: (id, x, y, reason) => {
-        this.playerRenderSystem.onAuthoritativePosition(id, x, y, reason)
-      },
-      onRemoteSnapshot: (sample) => {
-        this.playerRenderSystem.onRemoteSnapshot(sample.id, sample)
-      },
-      onLocalAck: (sample) => {
-        this.playerRenderSystem.onLocalAck(sample.id, {
-          x: sample.x,
-          y: sample.y,
-          lastProcessedInputSeq: sample.lastProcessedInputSeq,
-        })
-      },
-      onServerTime: (serverTimeMs) => {
-        this.playerRenderSystem.updateServerTimeOffset(serverTimeMs)
-      },
-    })
-    this.projectileRenderSystem = new ProjectileRenderSystem(this)
-    this.lightningBoltRenderSystem = new LightningBoltRenderSystem(this)
-    this.axeSwingRenderSystem = new AxeSwingRenderSystem(this)
-    this.damageFloatersSystem = new DamageFloatersSystem(this)
-    this.keyboardController = new KeyboardController(this)
-    this.mouseController = new MouseController(this)
-  }
-
-  /**
-   * Configures the main camera: world bounds from the arena tilemap, follow zoom
-   * ({@link ARENA_CAMERA_FOLLOW_ZOOM}) so `centerOn` can scroll. Each frame, `update`
-   * centers on the local player’s foot when available.
-   */
-  private _setupCamera(): void {
-    const cam = this.cameras.main
-    cam.setZoom(ARENA_CAMERA_FOLLOW_ZOOM)
-    cam.setRoundPixels(true)
-    if (this.arenaWidthPx > 0 && this.arenaHeightPx > 0) {
-      cam.setBounds(0, 0, this.arenaWidthPx, this.arenaHeightPx)
-    } else {
-      console.warn("[Arena] Tilemap has zero size; camera bounds not set.")
-    }
-  }
-
-  /**
-   * Initialises audio subsystems.
-   */
-  private _setupAudio(): void {
-    this.soundManager = new SoundManager(this)
-    this.bgmPlayer = new BgmPlayer(this)
-    this.bgmPlayer.startBattleMusic()
-  }
-
-  /**
-   * Opens the Colyseus game room connection and subscribes to all room events.
-   * Prefers the React-injected `GameConnection` from the game registry (single session).
-   * Falls back to `connect()` only when no injection exists (e.g. isolated tests / non-Next boot).
-   */
-  private _openConnection(): void {
-    const injected = this.game.registry.get(WW_GAME_CONNECTION_REGISTRY_KEY) as
-      | GameConnection
-      | undefined
-
-    if (injected?.room) {
-      this.connection = injected
-      const sub = this.game.registry.get(WW_LOCAL_PLAYER_ID_REGISTRY_KEY) as
-        | string
-        | undefined
-      this.playerRenderSystem.localPlayerId = sub ?? null
-      this.networkSyncSystem.localPlayerId = sub ?? null
-      this._subscribeRoomEvents()
-      this.connection.sendClientSceneReady()
-      return
-    }
-
-    this.connection = new GameConnection()
-    const sub = this.game.registry.get(WW_LOCAL_PLAYER_ID_REGISTRY_KEY) as
-      | string
-      | undefined
-    this.playerRenderSystem.localPlayerId = sub ?? null
-    this.networkSyncSystem.localPlayerId = sub ?? null
-    void this.connection.connect().then(() => {
-      this._subscribeRoomEvents()
-      this.connection.sendClientSceneReady()
-    })
-  }
-
-  /**
-   * Subscribes all relevant room message handlers to the active connection.
-   */
-  private _subscribeRoomEvents(): void {
-    this.connection.onMessage((message) => {
-      switch (message.type) {
-        case WsEvent.GameStateSync: {
-          const payload = message.payload as GameStateSyncPayload
-          this.networkSyncSystem.applyFullSync(payload)
-          this.playerRenderSystem.applyFullSync(payload)
-          this.projectileRenderSystem.applyFullSyncFireballs(payload.fireballs)
-          this._ensureMatchLive()
-          break
-        }
-        case WsEvent.PlayerBatchUpdate:
-          this.networkSyncSystem.applyBatchUpdate(message.payload as PlayerBatchUpdatePayload)
-          break
-        case WsEvent.FireballLaunch:
-          this.projectileRenderSystem.spawnFireball(message.payload as FireballLaunchPayload)
-          break
-        case WsEvent.FireballBatchUpdate:
-          this.projectileRenderSystem.applyBatchUpdate(message.payload as FireballBatchUpdatePayload)
-          break
-        case WsEvent.FireballImpact: {
-          const payload = message.payload as FireballImpactPayload
-          this.projectileRenderSystem.destroyFireball(payload.id)
-          this.soundManager.play("sfx-fireball-impact")
-          break
-        }
-        case WsEvent.LightningBolt:
-          this.lightningBoltRenderSystem.spawnBolt(message.payload as LightningBoltPayload)
-          this.soundManager.play("sfx-lightning-cast")
-          break
-        case WsEvent.AxeSwing:
-          this.axeSwingRenderSystem.spawnSwing(message.payload as AxeSwingPayload)
-          this.soundManager.play("sfx-axe-swing")
-          break
-        case WsEvent.PlayerDeath:
-          this.playerRenderSystem.onPlayerDeath(message.payload as PlayerDeathPayload)
-          this.soundManager.play("sfx-player-death")
-          break
-        case WsEvent.PlayerRespawn:
-          this.playerRenderSystem.onPlayerRespawn(message.payload as PlayerRespawnPayload)
-          break
-        case WsEvent.DamageFloat:
-          this.damageFloatersSystem.spawn(message.payload as DamageFloatPayload)
-          break
-        case WsEvent.MatchGo:
-          this._onMatchGo()
-          break
-      }
-    })
-
-    if (this.connection.isMatchInProgress()) {
-      this.connection.sendRequestResync()
-    }
-  }
-
-  /**
-   * Marks the arena as live and enables input. Idempotent; used after
-   * `MatchGo` and after `GameStateSync` (e.g. refresh / resync).
-   */
-  private _ensureMatchLive(): void {
-    this.matchStarted = true
-    this.keyboardController.enable()
-    this.mouseController.enable()
-  }
-
-  /**
-   * Called when the server signals the match has started (MatchGo).
-   */
-  private _onMatchGo(): void {
-    this._ensureMatchLive()
-  }
-
-  /**
-   * Main game loop update. Runs all ECS systems each frame.
-   *
-   * @param _time - Absolute time in ms (unused directly).
-   * @param delta - Frame delta time in ms.
-   */
-  update(_time: number, delta: number): void {
-    if (!this.matchStarted) return
-
-    const keyboardInput = this.connection.isConnected()
-      ? this.keyboardController.collectInput(this.connection.nextSeq())
-      : INACTIVE_PLAYER_INPUT
-
-    // Run one local send per committed prediction tick (fixed 60 Hz),
-    // not per render frame. Threading the callback through
-    // `PlayerRenderSystem.update` keeps the accumulator + sim + send
-    // loop synchronized inside a single system boundary.
-    this.playerRenderSystem.update(delta, keyboardInput, () => {
-      if (!this.connection.isConnected()) return
-      const mouseInput = this.mouseController.collectInput()
-      const fullInput = {
-        ...keyboardInput,
-        ...mouseInput,
-        ...stampClientSendTime(),
-      }
-      this.playerRenderSystem.localInputHistory.append(fullInput)
-      this.connection.sendPlayerInput(fullInput)
-    })
-    this.projectileRenderSystem.update(delta)
-    this.lightningBoltRenderSystem.update(delta)
-    this.axeSwingRenderSystem.update(delta)
-    this.damageFloatersSystem.update(delta)
-
-    const local = this.playerRenderSystem.getLocalPlayerRenderPos()
-    if (local) {
-      this.cameras.main.centerOn(local.x, local.y)
-    }
-  }
-
-  /**
-   * Exposes the GameConnection for use by input controllers and HUD.
-   *
-   * @returns The active GameConnection instance.
-   */
-  getConnection(): GameConnection {
-    return this.connection
-  }
-
-  /**
-   * Exposes the local user's auth id (JWT `sub`); matches `playerId` in sync payloads.
-   *
-   * @returns The player id from registry, or null if not set.
-   */
-  getLocalPlayerId(): string | null {
-    const sub = this.game.registry.get(WW_LOCAL_PLAYER_ID_REGISTRY_KEY) as
-      | string
-      | undefined
-    return sub ?? null
-  }
-}
+// You can write more code here

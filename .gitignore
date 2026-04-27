@@ -35,6 +35,10 @@ server.log
 # TypeScript
 tsconfig.tsbuildinfo
 *.tsbuildinfo
+next-env.d.ts
 
 # Phaser Editor (keep .scene files, skip editor cache)
 .phasereditorcache/
+
+# Test results
+test-results/

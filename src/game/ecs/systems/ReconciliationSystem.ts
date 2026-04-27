@@ -1,7 +1,7 @@
 import {
   ARENA_WIDTH,
   ARENA_HEIGHT,
-  ARENA_PROP_COLLIDERS,
+  ARENA_WORLD_COLLIDERS,
   BASE_MOVE_SPEED_PX_PER_SEC,
   PLAYER_RADIUS_PX,
   SWING_MOVE_SPEED_MULTIPLIER,
@@ -18,7 +18,7 @@ import {
   normalizedMoveFromWASD,
   worldStepFromIntent,
 } from "@/shared/movementIntent"
-import { resolveAgainstWorld } from "@/shared/collision/worldCollision"
+import { moveWithinWorld } from "@/shared/collision/worldCollision"
 import type { PlayerInputPayload } from "@/shared/types"
 
 import type { LocalInputHistory } from "../../network/LocalInputHistory"
@@ -82,7 +82,7 @@ function replaySpeedMultiplier(ctx: LocalReplayContext): number {
 
 /**
  * Replays a single input step on top of `(x, y)`, applying the same
- * movement + world-collision math the server uses. Returns the new `(x, y)`.
+ * candidate-gated movement math the server uses. Returns the new `(x, y)`.
  */
 function stepReplay(
   x: number,
@@ -103,14 +103,16 @@ function stepReplay(
     TICK_DT_SEC,
     mult,
   )
-  const resolved = resolveAgainstWorld(
-    x + step.x,
-    y + step.y,
+  const moved = moveWithinWorld(
+    x,
+    y,
+    step.x,
+    step.y,
     PLAYER_RADIUS_PX,
     ARENA_BOUNDS,
-    ARENA_PROP_COLLIDERS,
+    ARENA_WORLD_COLLIDERS,
   )
-  return resolved
+  return { x: moved.x, y: moved.y }
 }
 
 /**

@@ -327,7 +327,7 @@ export type EquipItemPayload = {
 
 /** Client → server: assign ability to ability bar slot. */
 export type AssignAbilityPayload = {
-  readonly abilityId: string
+  readonly itemId: string
   readonly slotIndex: number
 }
 

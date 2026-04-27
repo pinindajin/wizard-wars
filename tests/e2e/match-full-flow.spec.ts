@@ -1,7 +1,24 @@
 import { test, expect } from "@playwright/test"
 import { randomBytes } from "node:crypto"
 
+import {
+  ARENA_SPAWN_POINTS,
+  ARENA_WORLD_COLLIDERS,
+  PLAYER_RADIUS_PX,
+} from "../../src/shared/balance-config"
 import { ARENA_CAMERA_FOLLOW_ZOOM } from "../../src/shared/balance-config/rendering"
+
+const FIRST_SPAWN = ARENA_SPAWN_POINTS[0]!
+const FIRST_SPAWN_NORTH_BLOCKER = ARENA_WORLD_COLLIDERS.filter(
+  (col) =>
+    FIRST_SPAWN.x >= col.x - PLAYER_RADIUS_PX &&
+    FIRST_SPAWN.x <= col.x + col.width + PLAYER_RADIUS_PX &&
+    col.y + col.height <= FIRST_SPAWN.y - PLAYER_RADIUS_PX,
+).reduce((best, col) =>
+  col.y + col.height > best.y + best.height ? col : best,
+)
+const FIRST_SPAWN_NORTH_EDGE_Y =
+  FIRST_SPAWN_NORTH_BLOCKER.y + FIRST_SPAWN_NORTH_BLOCKER.height + PLAYER_RADIUS_PX
 
 /**
  * Generates a signup-safe username (same constraints as signup.spec).
@@ -156,6 +173,10 @@ test("full match flow: assets, overlay, canvas, movement, shop, abilities", asyn
     (endY ?? 0) - (startY ?? 0),
     `expected local Y to decrease under held W (startY=${startY}, endY=${endY})`,
   ).toBeLessThan(-8)
+  expect(
+    endY ?? 0,
+    `expected local Y to stop at north non-walkable edge (edgeY=${FIRST_SPAWN_NORTH_EDGE_Y}, endY=${endY})`,
+  ).toBeGreaterThanOrEqual(FIRST_SPAWN_NORTH_EDGE_Y - 2)
 
   // Post-release no-pull-back guard (cause B + C fix): after W is
   // released, the render should stay essentially still. Before the

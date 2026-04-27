@@ -1,7 +1,12 @@
 import { describe, it, expect } from "vitest"
 import { createGameSimulation } from "@/server/game/simulation"
-import { ARENA_SPAWN_POINTS, ARENA_WIDTH } from "@/shared/balance-config/arena"
+import {
+  ARENA_SPAWN_POINTS,
+  ARENA_WIDTH,
+  ARENA_WORLD_COLLIDERS,
+} from "@/shared/balance-config/arena"
 import { PLAYER_RADIUS_PX } from "@/shared/balance-config/combat"
+import { Position } from "@/server/game/components"
 import type { PlayerInputPayload } from "@/shared/types"
 
 let nextSeq = 1
@@ -104,6 +109,21 @@ describe("movement system", () => {
     }
 
     expect(lastX).toBeLessThanOrEqual(ARENA_WIDTH - PLAYER_RADIUS_PX)
+  })
+
+  it("does not enter non-walkable terrain or emit moving velocity when blocked", () => {
+    const sim = createGameSimulation(Date.now())
+    const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    const topStrip = ARENA_WORLD_COLLIDERS[0]!
+    Position.x[eid] = topStrip.x + 704
+    Position.y[eid] = topStrip.y + topStrip.height + PLAYER_RADIUS_PX
+
+    sim.tick(queueMap([["user1", emptyInput({ up: true })]]), Date.now())
+
+    const snap = sim.buildGameStateSyncPayload(Date.now()).players[0]!
+    expect(snap.y).toBe(topStrip.y + topStrip.height + PLAYER_RADIUS_PX)
+    expect(snap.vy).toBe(0)
+    expect(snap.moveState).toBe("idle")
   })
 
   it("consumes queued inputs one per tick in seq order", () => {
@@ -343,17 +363,17 @@ describe("buildGameStateSyncPayload", () => {
     const sim = createGameSimulation(Date.now())
     sim.addPlayer("user1", "Alice", "red_wizard", 0)
 
-    // Hold W for enough ticks to clear invulnerability and register motion.
+    // Hold D for enough ticks to register motion while staying clear of nearby blockers.
     for (let i = 0; i < 30; i++) {
       sim.tick(
-        queueMap([["user1", { ...emptyInput({ up: true }), seq: 500 + i }]]),
+        queueMap([["user1", { ...emptyInput({ right: true }), seq: 500 + i }]]),
         Date.now() + i * 17,
       )
     }
 
     const sync = sim.buildGameStateSyncPayload(Date.now())
     const snap = sync.players[0]!
-    expect(snap.vy).toBeLessThan(0)
+    expect(snap.vx).toBeGreaterThan(0)
     expect(snap.moveState).toBe("moving")
     expect(snap.lastProcessedInputSeq).toBe(529)
   })

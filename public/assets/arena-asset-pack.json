@@ -25,6 +25,104 @@
                 }
             },
             {
+                "type": "spritesheet",
+                "key": "fireball",
+                "url": "/assets/sprites/abilities/fireball-fly.png",
+                "frameConfig": {
+                    "frameWidth": 256,
+                    "frameHeight": 256
+                }
+            },
+            {
+                "type": "spritesheet",
+                "key": "fireball-channel",
+                "url": "/assets/sprites/abilities/fireball-channel.png",
+                "frameConfig": {
+                    "frameWidth": 64,
+                    "frameHeight": 64
+                }
+            },
+            {
+                "type": "image",
+                "key": "ember",
+                "url": "/assets/sprites/abilities/ember.png"
+            },
+            {
+                "type": "image",
+                "key": "prop-barrel",
+                "url": "/assets/sprites/props/barrel.png"
+            },
+            {
+                "type": "image",
+                "key": "prop-battle-banner",
+                "url": "/assets/sprites/props/battle-banner.png"
+            },
+            {
+                "type": "image",
+                "key": "prop-boulder-rock",
+                "url": "/assets/sprites/props/boulder-rock.png"
+            },
+            {
+                "type": "image",
+                "key": "prop-brazier",
+                "url": "/assets/sprites/props/brazier.png"
+            },
+            {
+                "type": "image",
+                "key": "prop-cracked-shield",
+                "url": "/assets/sprites/props/cracked-shield.png"
+            },
+            {
+                "type": "image",
+                "key": "prop-crate",
+                "url": "/assets/sprites/props/crate.png"
+            },
+            {
+                "type": "image",
+                "key": "prop-fallen-log",
+                "url": "/assets/sprites/props/fallen-log.png"
+            },
+            {
+                "type": "image",
+                "key": "prop-fallen-pillar",
+                "url": "/assets/sprites/props/fallen-pillar.png"
+            },
+            {
+                "type": "image",
+                "key": "prop-mushroom-cluster",
+                "url": "/assets/sprites/props/mushroom-cluster.png"
+            },
+            {
+                "type": "image",
+                "key": "prop-oak-tree",
+                "url": "/assets/sprites/props/oak-tree.png"
+            },
+            {
+                "type": "image",
+                "key": "prop-pile-of-bones",
+                "url": "/assets/sprites/props/pile-of-bones.png"
+            },
+            {
+                "type": "image",
+                "key": "prop-rubble-pile",
+                "url": "/assets/sprites/props/rubble-pile.png"
+            },
+            {
+                "type": "image",
+                "key": "prop-skull",
+                "url": "/assets/sprites/props/skull.png"
+            },
+            {
+                "type": "image",
+                "key": "prop-treasure-chest",
+                "url": "/assets/sprites/props/treasure-chest.png"
+            },
+            {
+                "type": "image",
+                "key": "prop-tree-stump",
+                "url": "/assets/sprites/props/tree-stump.png"
+            },
+            {
                 "type": "audio",
                 "key": "music-lobby-01",
                 "url": ["/assets/music/lobby/wizard-wars-lobby-01-ost.mp3"]

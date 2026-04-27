@@ -1,6 +1,6 @@
 /**
  * worldCollisionSystem – clamps all player positions within the arena bounds
- * and resolves AABB collisions against static prop colliders.
+ * and resolves AABB collisions against static world colliders.
  *
  * Delegates to the shared `resolveAgainstWorld` math so the client's
  * rewind-and-replay path can run identical collision resolution.
@@ -13,7 +13,7 @@ import {
   ARENA_WIDTH,
   ARENA_HEIGHT,
   PLAYER_RADIUS_PX,
-  ARENA_PROP_COLLIDERS,
+  ARENA_WORLD_COLLIDERS,
 } from "../../../shared/balance-config"
 import {
   resolveAgainstWorld,
@@ -60,7 +60,7 @@ export function worldCollisionSystem(ctx: SimCtx): void {
       Position.y[eid],
       PLAYER_RADIUS_PX,
       ARENA_BOUNDS,
-      ARENA_PROP_COLLIDERS,
+      ARENA_WORLD_COLLIDERS,
     )
     Position.x[eid] = out.x
     Position.y[eid] = out.y
