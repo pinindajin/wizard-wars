@@ -3,6 +3,7 @@ import Phaser from "phaser"
 import { HERO_CONFIGS } from "@/shared/balance-config/heroes"
 import { ABILITY_CONFIGS } from "@/shared/balance-config/abilities"
 import {
+  PREDICTION_SNAP_THRESHOLD_PX,
   REMOTE_RENDER_DELAY_MS,
   REPLAY_SMOOTHING_MS,
   TELEPORT_THRESHOLD_PX,
@@ -10,8 +11,14 @@ import {
   TICK_MS,
 } from "@/shared/balance-config/rendering"
 import {
+  ARENA_HEIGHT,
+  ARENA_WIDTH,
+  ARENA_WORLD_COLLIDERS,
+} from "@/shared/balance-config/arena"
+import {
   BASE_MOVE_SPEED_PX_PER_SEC,
   DAMAGE_FLASH_MS,
+  PLAYER_RADIUS_PX,
 } from "@/shared/balance-config/combat"
 import type {
   GameStateSyncPayload,
@@ -24,6 +31,7 @@ import {
   type MoveIntent,
   worldStepFromIntent,
 } from "@/shared/movementIntent"
+import { moveWithinWorld } from "@/shared/collision/worldCollision"
 import {
   ClientPosition,
   ClientPlayerState,
@@ -55,6 +63,7 @@ import { RemoteInterpolationBuffer } from "./RemoteInterpolationBuffer"
  * catch-up to a fixed budget and drop the rest.
  */
 const MAX_SIM_LAG_MS = 250
+const ARENA_BOUNDS = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
 
 /** Oscillation frequency for invulnerability alpha pulse (Hz). */
 const INVULN_PULSE_HZ = 4
@@ -731,8 +740,17 @@ export class PlayerRenderSystem {
           TICK_DT_SEC,
           castMoveMult,
         )
-        entry.simCurrX += step.x
-        entry.simCurrY += step.y
+        const moved = moveWithinWorld(
+          entry.simCurrX,
+          entry.simCurrY,
+          step.x,
+          step.y,
+          PLAYER_RADIUS_PX,
+          ARENA_BOUNDS,
+          ARENA_WORLD_COLLIDERS,
+        )
+        entry.simCurrX = moved.x
+        entry.simCurrY = moved.y
       }
 
       if (entry.smoothRemainingMs > 0) {
@@ -743,8 +761,34 @@ export class PlayerRenderSystem {
         const t = 1 - entry.smoothRemainingMs / REPLAY_SMOOTHING_MS
         const pPredX = entry.simCurrX
         const pPredY = entry.simCurrY
-        entry.simCurrX = pPredX + (entry.smoothTargetX - pPredX) * t
-        entry.simCurrY = pPredY + (entry.smoothTargetY - pPredY) * t
+        const targetStepX = pPredX + (entry.smoothTargetX - pPredX) * t - pPredX
+        const targetStepY = pPredY + (entry.smoothTargetY - pPredY) * t - pPredY
+        const moved = moveWithinWorld(
+          pPredX,
+          pPredY,
+          targetStepX,
+          targetStepY,
+          PLAYER_RADIUS_PX,
+          ARENA_BOUNDS,
+          ARENA_WORLD_COLLIDERS,
+        )
+        entry.simCurrX = moved.x
+        entry.simCurrY = moved.y
+
+        const remainingDx = entry.smoothTargetX - entry.simCurrX
+        const remainingDy = entry.smoothTargetY - entry.simCurrY
+        const remainingDist = Math.sqrt(
+          remainingDx * remainingDx + remainingDy * remainingDy,
+        )
+        if (
+          entry.smoothRemainingMs === 0 &&
+          remainingDist > PREDICTION_SNAP_THRESHOLD_PX
+        ) {
+          entry.simPrevX = entry.smoothTargetX
+          entry.simPrevY = entry.smoothTargetY
+          entry.simCurrX = entry.smoothTargetX
+          entry.simCurrY = entry.smoothTargetY
+        }
       }
     }
   }

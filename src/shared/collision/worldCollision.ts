@@ -21,6 +21,22 @@ export type ArenaPropColliderRect = {
   readonly height: number
 }
 
+/** Result of a candidate-gated world movement step. */
+export type WorldMoveResult = {
+  /** Final legal circle center x. */
+  readonly x: number
+  /** Final legal circle center y. */
+  readonly y: number
+  /** Applied x delta from the original position. */
+  readonly appliedDx: number
+  /** Applied y delta from the original position. */
+  readonly appliedDy: number
+  /** Whether the requested x step was rejected. */
+  readonly blockedX: boolean
+  /** Whether the requested y step was rejected. */
+  readonly blockedY: boolean
+}
+
 const MAX_COLLISION_PASSES = 4
 
 /**
@@ -56,9 +72,105 @@ function circleRectMTV(
   const distSq = dx * dx + dy * dy
   if (distSq >= cr * cr) return null
 
-  const dist = Math.sqrt(distSq) || 0.001
+  const dist = Math.sqrt(distSq)
   const pen = cr - dist
   return { dx: (dx / dist) * pen, dy: (dy / dist) * pen }
+}
+
+/**
+ * Returns whether a player circle may occupy the provided world position
+ * without crossing arena bounds or overlapping a static blocker.
+ *
+ * @param x - Candidate circle center x in world pixels.
+ * @param y - Candidate circle center y in world pixels.
+ * @param radius - Circle radius in world pixels.
+ * @param bounds - Arena bounds `{ width, height }`.
+ * @param worldColliders - Static world rectangles.
+ * @returns Whether the candidate position is legal. Exact touches are legal.
+ */
+export function canOccupyWorldPosition(
+  x: number,
+  y: number,
+  radius: number,
+  bounds: ArenaBounds,
+  worldColliders: readonly ArenaPropColliderRect[],
+): boolean {
+  if (x < radius || x > bounds.width - radius) return false
+  if (y < radius || y > bounds.height - radius) return false
+
+  for (const col of worldColliders) {
+    if (circleRectMTV(x, y, radius, col.x, col.y, col.width, col.height)) {
+      return false
+    }
+  }
+
+  return true
+}
+
+/**
+ * Applies a candidate-gated movement step without allowing the circle to enter
+ * blockers. The start position is expected to already be legal; callers that
+ * need to recover from an illegal start should run `resolveAgainstWorld`.
+ *
+ * @param x - Starting circle center x in world pixels.
+ * @param y - Starting circle center y in world pixels.
+ * @param stepX - Requested x delta for this movement tick.
+ * @param stepY - Requested y delta for this movement tick.
+ * @param radius - Circle radius in world pixels.
+ * @param bounds - Arena bounds `{ width, height }`.
+ * @param worldColliders - Static world rectangles.
+ * @returns Final legal position plus the actually-applied movement delta.
+ */
+export function moveWithinWorld(
+  x: number,
+  y: number,
+  stepX: number,
+  stepY: number,
+  radius: number,
+  bounds: ArenaBounds,
+  worldColliders: readonly ArenaPropColliderRect[],
+): WorldMoveResult {
+  const canMoveTo = (nextX: number, nextY: number) =>
+    canOccupyWorldPosition(nextX, nextY, radius, bounds, worldColliders)
+
+  if (canMoveTo(x + stepX, y + stepY)) {
+    return {
+      x: x + stepX,
+      y: y + stepY,
+      appliedDx: stepX,
+      appliedDy: stepY,
+      blockedX: false,
+      blockedY: false,
+    }
+  }
+
+  const tryXFirst = Math.abs(stepX) >= Math.abs(stepY)
+  const first = tryXFirst ? { dx: stepX, dy: 0 } : { dx: 0, dy: stepY }
+  const second = tryXFirst ? { dx: 0, dy: stepY } : { dx: stepX, dy: 0 }
+
+  const candidates = [first, second]
+  for (const candidate of candidates) {
+    if (candidate.dx === 0 && candidate.dy === 0) continue
+    if (canMoveTo(x + candidate.dx, y + candidate.dy)) {
+      return {
+        x: x + candidate.dx,
+        y: y + candidate.dy,
+        appliedDx: candidate.dx,
+        appliedDy: candidate.dy,
+        blockedX: stepX !== candidate.dx,
+        blockedY: stepY !== candidate.dy,
+      }
+    }
+  }
+
+  return {
+    x,
+    y,
+    appliedDx: 0,
+    appliedDy: 0,
+    blockedX: stepX !== 0,
+    blockedY: stepY !== 0,
+  }
 }
 
 /**
