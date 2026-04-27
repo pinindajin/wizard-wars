@@ -38,7 +38,7 @@ Optional Playwright visual capture for the sprite viewer: `WW_SPRITE_VIEWER_VISU
 |---------|-------------|
 | `bun run dev:hybrid` | Start app with docker Postgres |
 | `bun run test` | Unit tests |
-| `bun run test:coverage` | Unit tests with coverage (enforces `vitest.config.ts` thresholds) |
+| `bun run test:coverage` | Unit tests with coverage (enforces **95%** lines/branches/functions/statements in `vitest.config.ts` on the measured `src/` set) |
 | `bun run test:integration` | Integration tests |
 | `bun run test:all` | All tests |
 | `bun run db:studio` | Open Prisma Studio |
