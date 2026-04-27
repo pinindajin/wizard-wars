@@ -10,6 +10,8 @@ import {
   ARENA_COLS,
   ARENA_ROWS,
   ARENA_PROP_COLLIDERS,
+  ARENA_TERRAIN_COLLIDERS,
+  ARENA_WORLD_COLLIDERS,
 } from "@/shared/balance-config/arena"
 import { PLAYER_RADIUS_PX } from "@/shared/balance-config/combat"
 import {
@@ -36,6 +38,26 @@ function spawnOverlapsBlockedTile(x: number, y: number, col: number, row: number
   return dx * dx + dy * dy < PLAYER_RADIUS_PX * PLAYER_RADIUS_PX
 }
 
+/**
+ * Tests whether a player spawn circle overlaps a generated collider rectangle.
+ *
+ * @param x - Spawn center x.
+ * @param y - Spawn center y.
+ * @param rect - Collider rectangle.
+ * @returns Whether the spawn circle overlaps the rectangle.
+ */
+function spawnOverlapsCollider(
+  x: number,
+  y: number,
+  rect: { x: number; y: number; width: number; height: number },
+): boolean {
+  const nearestX = Math.max(rect.x, Math.min(x, rect.x + rect.width))
+  const nearestY = Math.max(rect.y, Math.min(y, rect.y + rect.height))
+  const dx = x - nearestX
+  const dy = y - nearestY
+  return dx * dx + dy * dy < PLAYER_RADIUS_PX * PLAYER_RADIUS_PX
+}
+
 describe("arena constants", () => {
   it("exposes prop colliders from generated Tiled export (may be empty)", () => {
     expect(Array.isArray(ARENA_PROP_COLLIDERS)).toBe(true)
@@ -43,6 +65,30 @@ describe("arena constants", () => {
       expect(r.width).toBeGreaterThan(0)
       expect(r.height).toBeGreaterThan(0)
     }
+  })
+
+  it("exposes generated terrain colliders for lava and transition strips", () => {
+    const shallowTransitionDepth = Math.round(TILE_SIZE_PX * 0.2)
+    expect(ARENA_TERRAIN_COLLIDERS.length).toBeGreaterThan(0)
+    expect(ARENA_WORLD_COLLIDERS.length).toBe(
+      ARENA_PROP_COLLIDERS.length + ARENA_TERRAIN_COLLIDERS.length,
+    )
+    expect(
+      ARENA_TERRAIN_COLLIDERS.some(
+        (rect) => rect.width >= TILE_SIZE_PX && rect.height >= TILE_SIZE_PX,
+      ),
+    ).toBe(true)
+    expect(
+      ARENA_TERRAIN_COLLIDERS.some(
+        (rect) => rect.y % TILE_SIZE_PX === TILE_SIZE_PX / 2 && rect.height === TILE_SIZE_PX / 2,
+      ),
+    ).toBe(true)
+    expect(
+      ARENA_TERRAIN_COLLIDERS.some(
+        (rect) =>
+          rect.width === shallowTransitionDepth || rect.height === shallowTransitionDepth,
+      ),
+    ).toBe(true)
   })
 
   it("has generated dimensions at 64px per tile", () => {
@@ -91,6 +137,14 @@ describe("spawn points", () => {
     for (const sp of ARENA_SPAWN_POINTS) {
       for (const cell of GENERATED_ARENA_BLOCKED_SPAWN_CELLS) {
         expect(spawnOverlapsBlockedTile(sp.x, sp.y, cell.col, cell.row)).toBe(false)
+      }
+    }
+  })
+
+  it("no spawn point overlaps generated terrain colliders", () => {
+    for (const sp of ARENA_SPAWN_POINTS) {
+      for (const rect of ARENA_TERRAIN_COLLIDERS) {
+        expect(spawnOverlapsCollider(sp.x, sp.y, rect)).toBe(false)
       }
     }
   })

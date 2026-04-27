@@ -3,6 +3,7 @@ import {
   GENERATED_ARENA_COLS,
   GENERATED_ARENA_ROWS,
   GENERATED_ARENA_SPAWN_POINTS,
+  GENERATED_ARENA_TERRAIN_COLLIDERS,
 } from "./generated/arena-layout"
 
 /**
@@ -45,6 +46,25 @@ export const ARENA_PROP_COLLIDERS: readonly {
   width: number
   height: number
 }[] = GENERATED_ARENA_PROP_COLLIDERS
+
+/**
+ * Terrain collider records generated from PixelLab lava and transition tiles.
+ * Pure lava blocks the whole tile; transition sides block only their non-dirt strips.
+ */
+export const ARENA_TERRAIN_COLLIDERS: readonly {
+  x: number
+  y: number
+  width: number
+  height: number
+}[] = GENERATED_ARENA_TERRAIN_COLLIDERS
+
+/** All static rectangles that block player movement. */
+export const ARENA_WORLD_COLLIDERS: readonly {
+  x: number
+  y: number
+  width: number
+  height: number
+}[] = [...ARENA_PROP_COLLIDERS, ...ARENA_TERRAIN_COLLIDERS]
 
 /** Fireball despawns this many pixels past any arena edge. */
 export const FIREBALL_DESPAWN_OVERSHOOT_PX = 400

@@ -62,6 +62,26 @@ function paintTile(
 }
 
 /**
+ * Checks whether a generated collider fully covers an expected rectangle.
+ *
+ * @param rects - Generated collision rectangles.
+ * @param expected - Rectangle that should be blocked.
+ * @returns Whether the expected area is covered.
+ */
+function hasCoveringRect(
+  rects: readonly { x: number; y: number; width: number; height: number }[],
+  expected: { x: number; y: number; width: number; height: number },
+): boolean {
+  return rects.some(
+    (rect) =>
+      rect.x <= expected.x &&
+      rect.y <= expected.y &&
+      rect.x + rect.width >= expected.x + expected.width &&
+      rect.y + rect.height >= expected.y + expected.height,
+  )
+}
+
+/**
  * Writes a minimal PixelLab export fixture with lava border and safe sand center.
  *
  * @returns Fixture directory path.
@@ -78,9 +98,21 @@ async function writeFixtureExport(): Promise<string> {
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const border = x === 0 || y === 0 || x === width - 1 || y === height - 1
-      const terrainId = border ? 1 : 2
+      const southTransition = x === 2 && y === 2
+      const terrainId = border ? 1 : southTransition ? 3 : 2
       terrainCells.push({ x, y, terrainId })
       paintTile(raw, width * 32, x, y, border ? [220, 38, 38, 255] : [63, 63, 70, 255])
+      if (southTransition) {
+        for (let py = 16; py < 32; py++) {
+          for (let px = 0; px < 32; px++) {
+            const offset = ((y * 32 + py) * width * 32 + x * 32 + px) * 4
+            raw[offset] = 220
+            raw[offset + 1] = 38
+            raw[offset + 2] = 38
+            raw[offset + 3] = 255
+          }
+        }
+      }
     }
   }
 
@@ -104,6 +136,7 @@ async function writeFixtureExport(): Promise<string> {
     terrains: [
       { id: 1, name: "lava lake" },
       { id: 2, name: "dark volcanic sand" },
+      { id: 3, name: "lava lake ↔ dark volcanic sand" },
     ],
     tilesets: [
       {
@@ -123,7 +156,18 @@ async function writeFixtureExport(): Promise<string> {
   })
   writeJson(join(dir, "transition-map.json"), {
     format: "transition-map",
-    transitions: [{ x: 1, y: 1, edges: { south: { transitionSize: 1 } } }],
+    transitions: [
+      {
+        x: 1,
+        y: 1,
+        edges: {
+          north: { transitionSize: 1 },
+          south: { transitionSize: 1 },
+          east: { transitionSize: 1 },
+          west: { transitionSize: 1 },
+        },
+      },
+    ],
   })
 
   await sharp(raw, {
@@ -202,5 +246,18 @@ describe("PixelLab arena importer", () => {
     expect(imported.uniqueTiles[0]?.tileIndex).toBe(16)
     expect(imported.uniqueTiles[0]?.gid).toBe(17)
     expect(imported.spawnPoints).toHaveLength(12)
+  })
+
+  it("builds lava and transition terrain colliders", async () => {
+    const dir = await writeFixtureExport()
+    const imported = await buildPixelLabArenaImport(dir)
+
+    expect(imported.terrainColliders).toContainEqual({ x: 0, y: 0, width: 512, height: 64 })
+    expect(imported.terrainColliders).toContainEqual({ x: 64, y: 64, width: 64, height: 13 })
+    expect(imported.terrainColliders).toContainEqual({ x: 64, y: 96, width: 64, height: 32 })
+    expect(hasCoveringRect(imported.terrainColliders, { x: 64, y: 64, width: 13, height: 64 }))
+      .toBe(true)
+    expect(imported.terrainColliders).toContainEqual({ x: 115, y: 64, width: 13, height: 64 })
+    expect(imported.terrainColliders).toContainEqual({ x: 128, y: 160, width: 64, height: 32 })
   })
 })

@@ -21,7 +21,7 @@ export default class Arena extends Phaser.Scene {
 		super("Arena");
 
 		/* START-USER-CTR-CODE */
-						/* END-USER-CTR-CODE */
+		/* END-USER-CTR-CODE */
 	}
 
 	editorCreate(): void {
@@ -133,7 +133,7 @@ export default class Arena extends Phaser.Scene {
 		)
 	}
 
-			/* END-USER-CODE */
+	/* END-USER-CODE */
 }
 
 /* END OF COMPILED CODE */

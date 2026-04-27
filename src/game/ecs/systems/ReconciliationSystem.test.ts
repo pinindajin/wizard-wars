@@ -2,6 +2,14 @@ import { describe, expect, it } from "vitest"
 
 import { LocalInputHistory } from "../../network/LocalInputHistory"
 import { reconcileLocal } from "./ReconciliationSystem"
+import {
+  ARENA_HEIGHT,
+  ARENA_SPAWN_POINTS,
+  ARENA_WIDTH,
+  ARENA_WORLD_COLLIDERS,
+  PLAYER_RADIUS_PX,
+} from "@/shared/balance-config"
+import { resolveAgainstWorld } from "@/shared/collision/worldCollision"
 import type { PlayerInputPayload } from "@/shared/types"
 
 function input(over: Partial<PlayerInputPayload> & { seq: number }): PlayerInputPayload {
@@ -28,6 +36,24 @@ const noopCtx = {
   hasSwiftBoots: false,
   castingAbilityId: null,
 } as const
+
+const arenaBounds = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
+
+function findRightwardReplayStart(): { x: number; y: number } {
+  const start = ARENA_SPAWN_POINTS.find((point) => {
+    const probeX = point.x + PLAYER_RADIUS_PX
+    const resolved = resolveAgainstWorld(
+      probeX,
+      point.y,
+      PLAYER_RADIUS_PX,
+      arenaBounds,
+      ARENA_WORLD_COLLIDERS,
+    )
+    return Math.abs(resolved.x - probeX) < 0.001 && Math.abs(resolved.y - point.y) < 0.001
+  })
+  if (!start) throw new Error("Expected at least one spawn with rightward replay clearance.")
+  return start
+}
 
 describe("reconcileLocal", () => {
   it("reports no visible correction when prediction matches ack", () => {
@@ -78,13 +104,14 @@ describe("reconcileLocal", () => {
     history.append(input({ seq: 11, right: true }))
     history.append(input({ seq: 12, right: true }))
 
-    const ack = { x: 500, y: 500, lastProcessedInputSeq: 9 }
+    const start = findRightwardReplayStart()
+    const ack = { x: start.x, y: start.y, lastProcessedInputSeq: 9 }
     // Current render reflects the same pending path (predicted correctly).
-    const r = reconcileLocal(ack, history, { x: 500, y: 500 }, noopCtx)
+    const r = reconcileLocal(ack, history, start, noopCtx)
 
     // Expected: moved right by 3 ticks at BASE_MOVE_SPEED_PX_PER_SEC * TICK_DT_SEC.
-    expect(r.targetX).toBeGreaterThan(500)
-    expect(r.targetY).toBeCloseTo(500, 5)
+    expect(r.targetX).toBeGreaterThan(start.x)
+    expect(r.targetY).toBeCloseTo(start.y, 5)
     // Render should have moved to match the replay target.
     expect(r.renderX).toBeCloseTo(r.targetX, 5)
   })

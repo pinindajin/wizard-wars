@@ -23,6 +23,8 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(SCRIPT_DIR, "..")
 const SOURCE_TILE_SIZE_PX = 32
 const TARGET_TILE_SIZE_PX = 64
+const TRANSITION_SIDE_DEPTH_PX = Math.round(TARGET_TILE_SIZE_PX * 0.2)
+const TRANSITION_SOUTH_DEPTH_PX = Math.round(TARGET_TILE_SIZE_PX * 0.5)
 const EXISTING_TERRAIN_TILE_COUNT = 16
 const PIXELLAB_FIRST_GID = EXISTING_TERRAIN_TILE_COUNT + 1
 const SPAWN_POINT_COUNT = 12
@@ -76,8 +78,21 @@ type TransitionMap = {
   readonly transitions: readonly {
     readonly x: number
     readonly y: number
-    readonly edges: Record<string, unknown>
+    readonly edges: Record<string, TransitionEdge>
   }[]
+}
+
+type TransitionEdge = {
+  readonly fromTerrain?: string
+  readonly toTerrain?: string
+  readonly transitionSize?: number
+}
+
+type ArenaColliderRect = {
+  readonly x: number
+  readonly y: number
+  readonly width: number
+  readonly height: number
 }
 
 type ArenaScene = {
@@ -112,6 +127,7 @@ export type PixelLabArenaImport = {
     readonly row: number
     readonly gid: number
   }[]
+  readonly terrainColliders: readonly ArenaColliderRect[]
   readonly spawnPoints: readonly {
     readonly x: number
     readonly y: number
@@ -396,14 +412,163 @@ function buildTerrainLookup(terrainMap: TerrainMap): Map<string, number> {
  * Builds a transition-cell lookup keyed by original PixelLab cell coordinates.
  *
  * @param transitionMap - Parsed transition map, if present.
- * @returns Set of coordinates that carry transition edges.
+ * @returns Edge metadata for coordinates that carry transition edges.
  */
-function buildTransitionLookup(transitionMap: TransitionMap | null): Set<string> {
-  const out = new Set<string>()
+function buildTransitionLookup(
+  transitionMap: TransitionMap | null,
+): Map<string, Record<string, TransitionEdge>> {
+  const out = new Map<string, Record<string, TransitionEdge>>()
   for (const cell of transitionMap?.transitions ?? []) {
-    if (Object.keys(cell.edges ?? {}).length > 0) out.add(`${cell.x},${cell.y}`)
+    if (Object.keys(cell.edges ?? {}).length > 0) out.set(`${cell.x},${cell.y}`, cell.edges)
   }
   return out
+}
+
+/**
+ * Converts a PixelLab transition edge name into cardinal sides.
+ *
+ * @param edgeName - PixelLab edge key such as "south", "northwest", or "east".
+ * @returns Cardinal sides contained in the edge key.
+ */
+function cardinalDirections(edgeName: string): ("north" | "south" | "east" | "west")[] {
+  const normalized = edgeName.toLowerCase()
+  const directions: ("north" | "south" | "east" | "west")[] = []
+  if (normalized.includes("north")) directions.push("north")
+  if (normalized.includes("south")) directions.push("south")
+  if (normalized.includes("east")) directions.push("east")
+  if (normalized.includes("west")) directions.push("west")
+  return directions
+}
+
+/**
+ * Builds walk-blocking rectangles for the non-dirt side of a transition tile.
+ *
+ * South-facing lava/rock occupies half a tile; north/east/west sides occupy a
+ * shallower strip so players can stand on the visible dirt area.
+ *
+ * @param col - Tile column in imported map space.
+ * @param row - Tile row in imported map space.
+ * @param directions - Cardinal blocked sides.
+ * @returns Collision rectangles in world pixels.
+ */
+function transitionColliderRects(
+  col: number,
+  row: number,
+  directions: ReadonlySet<"north" | "south" | "east" | "west">,
+): ArenaColliderRect[] {
+  const x = col * TARGET_TILE_SIZE_PX
+  const y = row * TARGET_TILE_SIZE_PX
+  const rects: ArenaColliderRect[] = []
+
+  if (directions.has("north")) {
+    rects.push({ x, y, width: TARGET_TILE_SIZE_PX, height: TRANSITION_SIDE_DEPTH_PX })
+  }
+  if (directions.has("south")) {
+    rects.push({
+      x,
+      y: y + TARGET_TILE_SIZE_PX - TRANSITION_SOUTH_DEPTH_PX,
+      width: TARGET_TILE_SIZE_PX,
+      height: TRANSITION_SOUTH_DEPTH_PX,
+    })
+  }
+  if (directions.has("west")) {
+    rects.push({ x, y, width: TRANSITION_SIDE_DEPTH_PX, height: TARGET_TILE_SIZE_PX })
+  }
+  if (directions.has("east")) {
+    rects.push({
+      x: x + TARGET_TILE_SIZE_PX - TRANSITION_SIDE_DEPTH_PX,
+      y,
+      width: TRANSITION_SIDE_DEPTH_PX,
+      height: TARGET_TILE_SIZE_PX,
+    })
+  }
+
+  return rects
+}
+
+/**
+ * Merges adjacent axis-aligned rectangles with matching spans.
+ *
+ * @param rects - Raw collision rectangles.
+ * @returns Deterministically merged rectangles.
+ */
+function mergeColliderRects(rects: readonly ArenaColliderRect[]): ArenaColliderRect[] {
+  const sorted = [...rects].sort((a, b) => a.y - b.y || a.height - b.height || a.x - b.x)
+  const rowMerged: ArenaColliderRect[] = []
+  for (const rect of sorted) {
+    const last = rowMerged[rowMerged.length - 1]
+    if (last && last.y === rect.y && last.height === rect.height && last.x + last.width === rect.x) {
+      rowMerged[rowMerged.length - 1] = { ...last, width: last.width + rect.width }
+    } else {
+      rowMerged.push(rect)
+    }
+  }
+
+  const verticalSorted = rowMerged.sort((a, b) => a.x - b.x || a.width - b.width || a.y - b.y)
+  const merged: ArenaColliderRect[] = []
+  for (const rect of verticalSorted) {
+    const last = merged[merged.length - 1]
+    if (last && last.x === rect.x && last.width === rect.width && last.y + last.height === rect.y) {
+      merged[merged.length - 1] = { ...last, height: last.height + rect.height }
+    } else {
+      merged.push(rect)
+    }
+  }
+
+  return merged.sort((a, b) => a.y - b.y || a.x - b.x || a.height - b.height || a.width - b.width)
+}
+
+/**
+ * Builds player-blocking terrain colliders for lava and lava transition edges.
+ *
+ * @param col - Tile column in imported map space.
+ * @param row - Tile row in imported map space.
+ * @param terrainId - PixelLab terrain id at this cell.
+ * @param lowerTerrainId - Lava terrain id.
+ * @param upperTerrainId - Dirt terrain id.
+ * @param transitionTerrainIds - Terrain ids that represent lava-to-dirt transition tiles.
+ * @param transitionEdges - PixelLab transition edge metadata for this cell.
+ * @param lowerTerrainName - Lava terrain name.
+ * @returns Collision rectangles in world pixels.
+ */
+function terrainColliderRectsForCell(
+  col: number,
+  row: number,
+  terrainId: number,
+  lowerTerrainId: number,
+  upperTerrainId: number,
+  transitionTerrainIds: ReadonlySet<number>,
+  transitionEdges: Record<string, TransitionEdge> | undefined,
+  lowerTerrainName: string,
+): ArenaColliderRect[] {
+  const x = col * TARGET_TILE_SIZE_PX
+  const y = row * TARGET_TILE_SIZE_PX
+
+  if (terrainId === lowerTerrainId) {
+    return [{ x, y, width: TARGET_TILE_SIZE_PX, height: TARGET_TILE_SIZE_PX }]
+  }
+
+  if (transitionTerrainIds.has(terrainId)) {
+    return transitionColliderRects(col, row, new Set(["south"]))
+  }
+
+  if (terrainId !== upperTerrainId) {
+    return [{ x, y, width: TARGET_TILE_SIZE_PX, height: TARGET_TILE_SIZE_PX }]
+  }
+
+  const directions = new Set<"north" | "south" | "east" | "west">()
+  for (const [edgeName, edge] of Object.entries(transitionEdges ?? {})) {
+    const edgeTouchesLava =
+      edge.toTerrain === lowerTerrainName ||
+      edge.fromTerrain === lowerTerrainName ||
+      (edge.toTerrain === undefined && edge.fromTerrain === undefined)
+    if (!edgeTouchesLava) continue
+    for (const direction of cardinalDirections(edgeName)) {
+      directions.add(direction)
+    }
+  }
+
+  return transitionColliderRects(col, row, directions)
 }
 
 /**
@@ -560,7 +725,18 @@ export async function buildPixelLabArenaImport(exportDir: string): Promise<Pixel
   const rows = map.mapConfig.dimensions.height
   const expectedWidth = cols * SOURCE_TILE_SIZE_PX
   const expectedHeight = rows * SOURCE_TILE_SIZE_PX
-  const upperTerrainId = map.tilesets[0]?.upperTerrainId ?? 2
+  const primaryTileset = map.tilesets[0]
+  const lowerTerrainId = primaryTileset?.lowerTerrainId ?? 1
+  const upperTerrainId = primaryTileset?.upperTerrainId ?? 2
+  const lowerTerrainName =
+    primaryTileset?.lowerTerrain ??
+    map.terrains.find((terrain) => terrain.id === lowerTerrainId)?.name ??
+    "lava"
+  const transitionTerrainIds = new Set(
+    map.terrains
+      .filter((terrain) => terrain.id !== lowerTerrainId && terrain.id !== upperTerrainId)
+      .map((terrain) => terrain.id),
+  )
   const minX = map.mapConfig.boundingBox.minX
   const minY = map.mapConfig.boundingBox.minY
   const terrainLookup = buildTerrainLookup(terrainMap)
@@ -581,6 +757,7 @@ export async function buildPixelLabArenaImport(exportDir: string): Promise<Pixel
   const groundGids: number[] = []
   const blockedSpawnCells: { col: number; row: number; gid: number }[] = []
   const blockedSpawnTileGids = new Set<number>()
+  const terrainColliders: ArenaColliderRect[] = []
 
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
@@ -604,12 +781,26 @@ export async function buildPixelLabArenaImport(exportDir: string): Promise<Pixel
       const sourceY = minY + row
       const key = `${sourceX},${sourceY}`
       const terrainId = terrainLookup.get(key) ?? terrainMap.defaultTerrain
-      const isBlockedByTerrain = terrainId !== upperTerrainId
-      const isBlocked = isBlockedByTerrain || transitionLookup.has(key)
+      const transitionEdges = transitionLookup.get(key)
+      const isBlockedByTerrain =
+        terrainId !== upperTerrainId || (transitionEdges && Object.keys(transitionEdges).length > 0)
+      const isBlocked = Boolean(isBlockedByTerrain)
       if (isBlocked) {
         blockedSpawnCells.push({ col, row, gid })
         blockedSpawnTileGids.add(gid)
       }
+      terrainColliders.push(
+        ...terrainColliderRectsForCell(
+          col,
+          row,
+          terrainId,
+          lowerTerrainId,
+          upperTerrainId,
+          transitionTerrainIds,
+          transitionEdges,
+          lowerTerrainName,
+        ),
+      )
     }
   }
 
@@ -624,6 +815,7 @@ export async function buildPixelLabArenaImport(exportDir: string): Promise<Pixel
     groundGids,
     blockedSpawnTileGids: [...blockedSpawnTileGids].sort((a, b) => a - b),
     blockedSpawnCells,
+    terrainColliders: mergeColliderRects(terrainColliders),
     spawnPoints,
     uniqueTiles,
   }
@@ -685,6 +877,11 @@ export const GENERATED_ARENA_BLOCKED_SPAWN_TILE_GIDS = ${JSON.stringify(
   )} as const
 export const GENERATED_ARENA_BLOCKED_SPAWN_CELLS = ${JSON.stringify(
     imported.blockedSpawnCells,
+    null,
+    2,
+  )} as const
+export const GENERATED_ARENA_TERRAIN_COLLIDERS = ${JSON.stringify(
+    imported.terrainColliders,
     null,
     2,
   )} as const
@@ -785,7 +982,9 @@ function extractUserSection(source: string, start: string, end: string): string 
   const startIndex = source.indexOf(start)
   const endIndex = source.indexOf(end)
   if (startIndex < 0 || endIndex < 0 || endIndex < startIndex) return "\n"
-  return source.slice(startIndex + start.length, endIndex)
+  const section = source.slice(startIndex + start.length, endIndex)
+  if (section.trim().length === 0) return "\n"
+  return section.replace(/\n[\t ]*$/, "\n")
 }
 
 /**
@@ -933,6 +1132,7 @@ export async function importPixelLabArena(exportDir: string): Promise<void> {
     }`,
   )
   console.log(`Blocked spawn GIDs: ${imported.blockedSpawnTileGids.join(", ")}`)
+  console.log(`Terrain colliders: ${imported.terrainColliders.length}`)
 }
 
 /**
@@ -960,6 +1160,7 @@ async function dryRun(exportDir: string): Promise<void> {
     }`,
   )
   console.log(`Blocked spawn GIDs: ${imported.blockedSpawnTileGids.join(", ")}`)
+  console.log(`Terrain colliders: ${imported.terrainColliders.length}`)
 }
 
 /**
