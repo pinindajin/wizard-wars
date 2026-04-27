@@ -59,8 +59,15 @@ import {
   ARENA_WORLD_COLLIDERS,
   PLAYER_RADIUS_PX,
 } from "@/shared/balance-config"
+import { REPLAY_SMOOTHING_MS } from "@/shared/balance-config/rendering"
 
 const OPEN_TEST_POINT = ARENA_SPAWN_POINTS[0]!
+
+type TestRenderEntry = {
+  smoothRemainingMs: number
+  smoothTargetX: number
+  smoothTargetY: number
+}
 
 function snap(over: Partial<PlayerSnapshot> & Pick<PlayerSnapshot, "id" | "playerId">): PlayerSnapshot {
   return {
@@ -402,6 +409,45 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     const after = sys._getLocalSimForTest(1)
     expect(after?.simCurrX).toBeGreaterThan(start.x)
     expect(after?.simCurrY).toBe(start.y)
+  })
+
+  it("snaps to a legal smooth target when blocker-gated smoothing cannot reach it", () => {
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    sys.localPlayerId = "p1"
+    const topStrip = ARENA_WORLD_COLLIDERS[0]!
+    const start = {
+      x: topStrip.x + 704,
+      y: topStrip.y + topStrip.height + PLAYER_RADIUS_PX,
+    }
+    const target = {
+      x: start.x,
+      y: topStrip.y - PLAYER_RADIUS_PX,
+    }
+    sys.applyFullSync(sync([snap({ id: 1, playerId: "p1", x: start.x, y: start.y })]))
+
+    const entry = (sys as unknown as {
+      entries: Map<number, TestRenderEntry>
+    }).entries.get(1)
+    expect(entry).toBeDefined()
+    entry!.smoothRemainingMs = REPLAY_SMOOTHING_MS
+    entry!.smoothTargetX = target.x
+    entry!.smoothTargetY = target.y
+
+    sys.update(REPLAY_SMOOTHING_MS + 20, {
+      up: false,
+      down: false,
+      left: false,
+      right: false,
+    })
+
+    expect(sys._getLocalSimForTest(1)).toMatchObject({
+      simPrevX: target.x,
+      simPrevY: target.y,
+      simCurrX: target.x,
+      simCurrY: target.y,
+      smoothRemainingMs: 0,
+    })
   })
 })
 

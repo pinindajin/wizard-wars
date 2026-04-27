@@ -72,7 +72,7 @@ function circleRectMTV(
   const distSq = dx * dx + dy * dy
   if (distSq >= cr * cr) return null
 
-  const dist = Math.sqrt(distSq) || 0.001
+  const dist = Math.sqrt(distSq)
   const pen = cr - dist
   return { dx: (dx / dist) * pen, dy: (dy / dist) * pen }
 }

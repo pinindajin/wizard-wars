@@ -49,6 +49,8 @@ describe("canOccupyWorldPosition", () => {
     ).toBe(false)
     expect(canOccupyWorldPosition(19, 140, 20, fixtureBounds, [])).toBe(false)
     expect(canOccupyWorldPosition(281, 140, 20, fixtureBounds, [])).toBe(false)
+    expect(canOccupyWorldPosition(140, 19, 20, fixtureBounds, [])).toBe(false)
+    expect(canOccupyWorldPosition(140, 281, 20, fixtureBounds, [])).toBe(false)
   })
 })
 
@@ -207,6 +209,43 @@ describe("resolveAgainstWorld", () => {
     const outsideX = out.x <= lava.x - 20 || out.x >= lava.x + lava.width + 20
     const outsideY = out.y <= lava.y - 20 || out.y >= lava.y + lava.height + 20
     expect(outsideX || outsideY).toBe(true)
+  })
+
+  it("pushes an embedded circle out through the nearest edge", () => {
+    const lava: ArenaPropColliderRect = { x: 100, y: 100, width: 100, height: 100 }
+
+    expect(resolveAgainstWorld(195, 150, 20, bounds, [lava]).x).toBeGreaterThanOrEqual(
+      lava.x + lava.width + 20,
+    )
+    expect(resolveAgainstWorld(150, 105, 20, bounds, [lava]).y).toBeLessThanOrEqual(
+      lava.y - 20,
+    )
+    expect(resolveAgainstWorld(150, 195, 20, bounds, [lava]).y).toBeGreaterThanOrEqual(
+      lava.y + lava.height + 20,
+    )
+  })
+
+  it("keeps emergency recovery clamped when a blocker overlaps a world edge", () => {
+    expect(
+      resolveAgainstWorld(20, 50, 20, { width: 100, height: 100 }, [
+        { x: 20, y: 40, width: 20, height: 20 },
+      ]).x,
+    ).toBe(20)
+    expect(
+      resolveAgainstWorld(80, 50, 20, { width: 100, height: 100 }, [
+        { x: 60, y: 40, width: 20, height: 20 },
+      ]).x,
+    ).toBe(80)
+    expect(
+      resolveAgainstWorld(50, 20, 20, { width: 100, height: 100 }, [
+        { x: 40, y: 20, width: 20, height: 20 },
+      ]).y,
+    ).toBe(20)
+    expect(
+      resolveAgainstWorld(50, 80, 20, { width: 100, height: 100 }, [
+        { x: 40, y: 60, width: 20, height: 20 },
+      ]).y,
+    ).toBe(80)
   })
 
   it("resolves against adjacent partial transition strips", () => {
