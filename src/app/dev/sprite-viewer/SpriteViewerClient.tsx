@@ -1,6 +1,7 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import type { ReactNode } from "react"
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 
 import {
   computeAlphaOutlineSegments,
@@ -25,6 +26,44 @@ import {
 const DETAIL_SCALE = 2
 const DETAIL_PAD = 16
 const FRAME = LADY_WIZARD_FRAME_SIZE_PX
+
+const PLAYER_DIAMETER_PX = PLAYER_RADIUS_PX * 2
+
+/**
+ * One legend bullet with a hover/focus info control and rich tooltip.
+ *
+ * @param props.label - Visible one-line summary next to the icon.
+ * @param props.testId - Optional `data-testid` for the info button (E2E).
+ * @param props.children - Tooltip body (paragraphs).
+ * @returns Row element.
+ */
+function LegendTipRow(props: { label: ReactNode; testId?: string; children: ReactNode }) {
+  const { label, testId, children } = props
+  const tooltipId = useId()
+  return (
+    <div className="group relative flex items-start gap-1.5">
+      <div className="min-w-0 flex-1 leading-snug">{label}</div>
+      <div className="relative shrink-0">
+        <button
+          type="button"
+          className="flex h-5 w-5 items-center justify-center rounded border border-zinc-600 bg-zinc-800/90 text-[11px] font-semibold text-zinc-400 hover:border-zinc-500 hover:bg-zinc-700 hover:text-zinc-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-violet-500"
+          aria-describedby={tooltipId}
+          aria-label="Technical details about this overlay (hover or focus to read tooltip)"
+          {...(testId ? { "data-testid": testId } : {})}
+        >
+          <span aria-hidden>ⓘ</span>
+        </button>
+        <div
+          id={tooltipId}
+          role="tooltip"
+          className="pointer-events-none invisible absolute bottom-full right-0 z-50 mb-2 w-[min(22rem,calc(100vw-2rem))] max-h-64 translate-y-1 overflow-y-auto rounded-md border border-zinc-600 bg-zinc-950 p-3 text-left text-[10px] leading-relaxed text-zinc-200 opacity-0 shadow-xl transition duration-150 group-hover:visible group-hover:translate-y-0 group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:visible group-focus-within:translate-y-0 group-focus-within:opacity-100 group-focus-within:pointer-events-auto"
+        >
+          <div className="space-y-2">{children}</div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 /**
  * Builds a stable cache key for outline data derived from a strip URL and frame index.
@@ -379,10 +418,105 @@ export function SpriteViewerClient() {
           className="rounded border border-zinc-800 bg-zinc-900/60 p-3 font-mono text-[11px] leading-relaxed text-zinc-400"
           data-testid="sprite-viewer-legend"
         >
-          <div className="mb-1 text-zinc-300">Legend</div>
-          <div>Green: {PLAYER_RADIUS_PX}px radius (gameplay).</div>
-          <div>Yellow: axis-aligned bounds (40×40).</div>
-          <div>Cyan: opaque alpha outline (cached per frame).</div>
+          <div className="mb-2 text-zinc-300">Legend</div>
+          <div className="flex flex-col gap-2.5">
+            <LegendTipRow
+              testId="sprite-viewer-legend-info-collision"
+              label={
+                <span>
+                  <span className="text-emerald-400">Green</span>: {PLAYER_RADIUS_PX}px radius (authoritative gameplay
+                  body).
+                </span>
+              }
+            >
+              <p>
+                <strong className="text-zinc-100">What it is.</strong> Wizard Wars treats each player as a{" "}
+                <strong className="text-zinc-100">circle</strong> in world space: center at the authoritative{" "}
+                <code className="text-violet-300">(x, y)</code> from the sim, radius{" "}
+                <code className="text-violet-300">PLAYER_RADIUS_PX</code> from{" "}
+                <code className="text-violet-300">@/shared/balance-config/combat</code>. The viewer draws that circle
+                where the <strong className="text-zinc-100">sim/render anchor</strong> sits—not at the raw texture
+                bottom—using the same vertical offset as Phaser (
+                <code className="text-violet-300">LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y</code> in{" "}
+                <code className="text-violet-300">PlayerRenderSystem</code>) so art lines up with collision.
+              </p>
+              <p>
+                <strong className="text-zinc-100">Systems that use it.</strong> Server:{" "}
+                <code className="text-violet-300">simulation</code> assigns <code className="text-violet-300">Radius.r</code>;{" "}
+                <code className="text-violet-300">worldCollisionSystem</code> clamps player centers inside the arena
+                respecting radius; <code className="text-violet-300">playerCollisionSystem</code> and{" "}
+                <code className="text-violet-300">projectileCollisionSystem</code> use it for player–player and
+                player–projectile distances. Shared <code className="text-violet-300">worldCollision</code> resolves
+                circles against rectangular colliders. Client: <code className="text-violet-300">ReconciliationSystem</code>{" "}
+                uses the same constant when probing geometry during prediction replay.
+              </p>
+              <p>
+                <strong className="text-zinc-100">If you change it.</strong> Increasing radius makes heroes easier to
+                hit, harder to thread narrow gaps, and changes how tightly the server clamps you to walls and props;
+                decreasing it does the opposite. Any change must ship with matching balance and art review—nametag/HUD
+                layout is separate, but <strong className="text-zinc-100">feel</strong> (getting clipped, dodging
+                fireballs) shifts immediately because every distance test against that circle changes.
+              </p>
+            </LegendTipRow>
+            <LegendTipRow
+              testId="sprite-viewer-legend-info-bounds"
+              label={
+                <span>
+                  <span className="text-amber-300">Yellow</span>: axis-aligned bounds ({PLAYER_DIAMETER_PX}×
+                  {PLAYER_DIAMETER_PX}).
+                </span>
+              }
+            >
+              <p>
+                <strong className="text-zinc-100">What it is.</strong> A square that{" "}
+                <strong className="text-zinc-100">tightly bounds the green circle</strong>—side length{" "}
+                <code className="text-violet-300">2 × PLAYER_RADIUS_PX</code> ({PLAYER_DIAMETER_PX}px here). It is a{" "}
+                <strong className="text-zinc-100">viewer-only</strong> guide so you can eyeball how the circular
+                footprint lines up with orthogonal arena tiles and rectangular colliders.
+              </p>
+              <p>
+                <strong className="text-zinc-100">Systems that use it.</strong>{" "}
+                <strong className="text-zinc-100">None.</strong> The game does{" "}
+                <strong className="text-zinc-100">not</strong> ship a rectangular player AABB for combat; only the circle
+                is authoritative. Nothing in Colyseus, Phaser registration, or ECS reads this yellow box.
+              </p>
+              <p>
+                <strong className="text-zinc-100">If you change it.</strong> Tweaking only the viewer&apos;s square
+                styling leaves gameplay untouched. If you instead change <code className="text-violet-300">PLAYER_RADIUS_PX</code>, the
+                green circle and this yellow box both grow or shrink together because the square is always derived from
+                the circle.
+              </p>
+            </LegendTipRow>
+            <LegendTipRow
+              testId="sprite-viewer-legend-info-edge"
+              label={
+                <span>
+                  <span className="text-sky-400">Cyan</span>: opaque alpha outline (cached per frame).
+                </span>
+              }
+            >
+              <p>
+                <strong className="text-zinc-100">What it is.</strong> A 1px outline along the boundary between opaque
+                and transparent pixels in the current cel (alpha threshold in{" "}
+                <code className="text-violet-300">computeAlphaOutlineSegments</code>). Results are{" "}
+                <strong className="text-zinc-100">cached</strong> per strip URL + frame index so scrubbing playback
+                stays cheap.
+              </p>
+              <p>
+                <strong className="text-zinc-100">Systems that use it.</strong>{" "}
+                <strong className="text-zinc-100">None in gameplay.</strong> Phaser renders textures and animation
+                frames, but no server or client sim path consumes this outline for hits, line-of-sight, or pathfinding.
+                It is purely a <strong className="text-zinc-100">dev/QA art signal</strong>: trims, padding, and
+                semi-transparent fringe relative to the fixed {FRAME}px cel.
+              </p>
+              <p>
+                <strong className="text-zinc-100">If you change it.</strong> Adjusting threshold, caching, or stroke
+                color in the viewer affects diagnostics only. Changing the actual PNGs or atlas layout is what changes
+                what players see in-game through Phaser—plan asset rebuilds (<code className="text-violet-300">build:lady-wizard-sheets</code> /{" "}
+                <code className="text-violet-300">build:lady-wizard-megasheet</code>) when art changes.
+              </p>
+            </LegendTipRow>
+          </div>
         </div>
       </aside>
     </div>
