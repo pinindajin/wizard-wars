@@ -21,8 +21,8 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Generate Prisma client
         run: bunx prisma generate
-      - name: Run unit tests
-        run: bun run test
+      - name: Run unit tests with coverage
+        run: bun run test:coverage
 
   integration-fast:
     name: Integration Tests (Fast)
