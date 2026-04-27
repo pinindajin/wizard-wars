@@ -1,6 +1,170 @@
 import { describe, expect, it } from "vitest"
 
-import { resolveAgainstWorld, type ArenaPropColliderRect } from "./worldCollision"
+import {
+  canOccupyWorldPosition,
+  moveWithinWorld,
+  resolveAgainstWorld,
+  type ArenaPropColliderRect,
+} from "./worldCollision"
+
+const fixtureBounds = { width: 300, height: 300 }
+const fixtureBlocker: ArenaPropColliderRect = {
+  x: 100,
+  y: 100,
+  width: 80,
+  height: 80,
+}
+
+describe("canOccupyWorldPosition", () => {
+  it("accepts free positions and exact circle-to-rect touches", () => {
+    expect(
+      canOccupyWorldPosition(
+        60,
+        140,
+        20,
+        fixtureBounds,
+        [fixtureBlocker],
+      ),
+    ).toBe(true)
+    expect(
+      canOccupyWorldPosition(
+        fixtureBlocker.x - 20,
+        140,
+        20,
+        fixtureBounds,
+        [fixtureBlocker],
+      ),
+    ).toBe(true)
+  })
+
+  it("rejects overlapping and out-of-bounds positions", () => {
+    expect(
+      canOccupyWorldPosition(
+        fixtureBlocker.x - 19,
+        140,
+        20,
+        fixtureBounds,
+        [fixtureBlocker],
+      ),
+    ).toBe(false)
+    expect(canOccupyWorldPosition(19, 140, 20, fixtureBounds, [])).toBe(false)
+    expect(canOccupyWorldPosition(281, 140, 20, fixtureBounds, [])).toBe(false)
+  })
+})
+
+describe("moveWithinWorld", () => {
+  it("applies a full step when the candidate position stays legal", () => {
+    const out = moveWithinWorld(40, 40, 10, 5, 20, fixtureBounds, [fixtureBlocker])
+
+    expect(out).toEqual({
+      x: 50,
+      y: 45,
+      appliedDx: 10,
+      appliedDy: 5,
+      blockedX: false,
+      blockedY: false,
+    })
+  })
+
+  it("blocks horizontal entry into a collider", () => {
+    const out = moveWithinWorld(
+      fixtureBlocker.x - 20,
+      140,
+      5,
+      0,
+      20,
+      fixtureBounds,
+      [fixtureBlocker],
+    )
+
+    expect(out).toEqual({
+      x: fixtureBlocker.x - 20,
+      y: 140,
+      appliedDx: 0,
+      appliedDy: 0,
+      blockedX: true,
+      blockedY: false,
+    })
+  })
+
+  it("blocks vertical entry into a collider", () => {
+    const out = moveWithinWorld(
+      140,
+      fixtureBlocker.y - 20,
+      0,
+      5,
+      20,
+      fixtureBounds,
+      [fixtureBlocker],
+    )
+
+    expect(out).toEqual({
+      x: 140,
+      y: fixtureBlocker.y - 20,
+      appliedDx: 0,
+      appliedDy: 0,
+      blockedX: false,
+      blockedY: true,
+    })
+  })
+
+  it("slides along the open axis when diagonal movement hits a wall", () => {
+    const out = moveWithinWorld(
+      fixtureBlocker.x - 20,
+      120,
+      5,
+      10,
+      20,
+      fixtureBounds,
+      [fixtureBlocker],
+    )
+
+    expect(out).toEqual({
+      x: fixtureBlocker.x - 20,
+      y: 130,
+      appliedDx: 0,
+      appliedDy: 10,
+      blockedX: true,
+      blockedY: false,
+    })
+  })
+
+  it("uses X before Y for equal diagonal corner ties", () => {
+    const cornerBlocker: ArenaPropColliderRect = {
+      x: 100,
+      y: 100,
+      width: 80,
+      height: 80,
+    }
+    const out = moveWithinWorld(
+      80,
+      80,
+      10,
+      10,
+      20,
+      fixtureBounds,
+      [cornerBlocker],
+    )
+
+    expect(out.appliedDx).toBe(10)
+    expect(out.appliedDy).toBe(0)
+    expect(out.blockedX).toBe(false)
+    expect(out.blockedY).toBe(true)
+  })
+
+  it("blocks steps that would leave arena bounds", () => {
+    const out = moveWithinWorld(20, 80, -5, 0, 20, fixtureBounds, [])
+
+    expect(out).toEqual({
+      x: 20,
+      y: 80,
+      appliedDx: 0,
+      appliedDy: 0,
+      blockedX: true,
+      blockedY: false,
+    })
+  })
+})
 
 describe("resolveAgainstWorld", () => {
   const bounds = { width: 1000, height: 800 }

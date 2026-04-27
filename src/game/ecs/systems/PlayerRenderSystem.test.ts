@@ -54,6 +54,13 @@ import { ClientPosition, ClientPlayerState, ClientRenderPos } from "../component
 import { clientEntities, removeEntity } from "../world"
 import type { PlayerSnapshot } from "@/shared/types"
 import { HERO_CONFIGS } from "@/shared/balance-config/heroes"
+import {
+  ARENA_SPAWN_POINTS,
+  ARENA_WORLD_COLLIDERS,
+  PLAYER_RADIUS_PX,
+} from "@/shared/balance-config"
+
+const OPEN_TEST_POINT = ARENA_SPAWN_POINTS[0]!
 
 function snap(over: Partial<PlayerSnapshot> & Pick<PlayerSnapshot, "id" | "playerId">): PlayerSnapshot {
   return {
@@ -272,31 +279,43 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     const sys = new PlayerRenderSystem(scene as never, group as never)
     sys.localPlayerId = "p1"
 
-    sys.applyFullSync(sync([snap({ id: 1, playerId: "p1", x: 0, y: 0 })]))
+    sys.applyFullSync(sync([snap({
+      id: 1,
+      playerId: "p1",
+      x: OPEN_TEST_POINT.x,
+      y: OPEN_TEST_POINT.y,
+    })]))
     // Reconciliation operates on fixed-step sim state; drive the sim
     // forward by seeding simCurr far ahead of the ack so the error lands
     // well above PREDICTION_SNAP_THRESHOLD_PX.
     sys._setLocalSimForTest(1, {
-      simPrevX: 500,
-      simPrevY: 0,
-      simCurrX: 500,
-      simCurrY: 0,
+      simPrevX: OPEN_TEST_POINT.x + 500,
+      simPrevY: OPEN_TEST_POINT.y,
+      simCurrX: OPEN_TEST_POINT.x + 500,
+      simCurrY: OPEN_TEST_POINT.y,
     })
 
-    sys.onLocalAck(1, { x: 0, y: 0, lastProcessedInputSeq: 0 })
+    sys.onLocalAck(1, {
+      x: OPEN_TEST_POINT.x,
+      y: OPEN_TEST_POINT.y,
+      lastProcessedInputSeq: 0,
+    })
 
     const simAfter = sys._getLocalSimForTest(1)
     expect(simAfter).not.toBeNull()
     // Snap collapses both simPrev and simCurr onto the replay target so
     // the next render step does not interpolate through the correction.
     expect(simAfter).toMatchObject({
-      simPrevX: 0,
-      simPrevY: 0,
-      simCurrX: 0,
-      simCurrY: 0,
+      simPrevX: OPEN_TEST_POINT.x,
+      simPrevY: OPEN_TEST_POINT.y,
+      simCurrX: OPEN_TEST_POINT.x,
+      simCurrY: OPEN_TEST_POINT.y,
       smoothRemainingMs: 0,
     })
-    expect(ClientRenderPos[1]).toEqual({ x: 0, y: 0 })
+    expect(ClientRenderPos[1]).toEqual({
+      x: OPEN_TEST_POINT.x,
+      y: OPEN_TEST_POINT.y,
+    })
   })
 
   it("runs exactly one sim step per TICK_MS of real time and calls onSimStep once per step", () => {
@@ -309,10 +328,18 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     const { scene, group } = mockSceneAndGroup()
     const sys = new PlayerRenderSystem(scene as never, group as never)
     sys.localPlayerId = "p1"
-    sys.applyFullSync(sync([snap({ id: 1, playerId: "p1", x: 0, y: 0 })]))
+    sys.applyFullSync(sync([snap({
+      id: 1,
+      playerId: "p1",
+      x: OPEN_TEST_POINT.x,
+      y: OPEN_TEST_POINT.y,
+    })]))
 
     const start = sys._getLocalSimForTest(1)
-    expect(start).toMatchObject({ simCurrX: 0, simCurrY: 0 })
+    expect(start).toMatchObject({
+      simCurrX: OPEN_TEST_POINT.x,
+      simCurrY: OPEN_TEST_POINT.y,
+    })
 
     let sends = 0
     // Use a clean 51 ms (slightly above 3 × TICK_MS = 50) so float
@@ -329,7 +356,7 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     const after = sys._getLocalSimForTest(1)
     // 3 sim steps × (BASE_MOVE_SPEED_PX_PER_SEC × TICK_DT_SEC) of
     // forward motion = 3 × 3.333… ≈ 10 px up (y decreases).
-    expect(after?.simCurrY).toBeCloseTo(-10, 5)
+    expect(after?.simCurrY).toBeCloseTo(OPEN_TEST_POINT.y - 10, 5)
   })
 
   it("bounds sim catch-up after a long hitch (no spiral of death)", () => {
@@ -340,7 +367,12 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     const { scene, group } = mockSceneAndGroup()
     const sys = new PlayerRenderSystem(scene as never, group as never)
     sys.localPlayerId = "p1"
-    sys.applyFullSync(sync([snap({ id: 1, playerId: "p1", x: 0, y: 0 })]))
+    sys.applyFullSync(sync([snap({
+      id: 1,
+      playerId: "p1",
+      x: OPEN_TEST_POINT.x,
+      y: OPEN_TEST_POINT.y,
+    })]))
 
     let sends = 0
     sys.update(
@@ -352,6 +384,24 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     )
     // Clamp to 250 ms budget → at most 250 / 16.67 ≈ 15 sim steps.
     expect(sends).toBeLessThanOrEqual(15)
+  })
+
+  it("slides local prediction along non-walkable terrain instead of entering it", () => {
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    sys.localPlayerId = "p1"
+    const topStrip = ARENA_WORLD_COLLIDERS[0]!
+    const start = {
+      x: topStrip.x + 704,
+      y: topStrip.y + topStrip.height + PLAYER_RADIUS_PX,
+    }
+    sys.applyFullSync(sync([snap({ id: 1, playerId: "p1", x: start.x, y: start.y })]))
+
+    sys.update(20, { up: true, down: false, left: false, right: true })
+
+    const after = sys._getLocalSimForTest(1)
+    expect(after?.simCurrX).toBeGreaterThan(start.x)
+    expect(after?.simCurrY).toBe(start.y)
   })
 })
 
@@ -381,17 +431,21 @@ describe("PlayerRenderSystem smoothing + render interp", () => {
     // direction — medium prediction error in the "smooth" band (above
     // INVISIBLE_PREDICTION_ERROR_PX, below PREDICTION_SNAP_THRESHOLD_PX).
     sys._setLocalSimForTest(1, {
-      simPrevX: 0,
-      simPrevY: -10,
-      simCurrX: 0,
-      simCurrY: -10,
+      simPrevX: OPEN_TEST_POINT.x,
+      simPrevY: OPEN_TEST_POINT.y - 10,
+      simCurrX: OPEN_TEST_POINT.x,
+      simCurrY: OPEN_TEST_POINT.y - 10,
     })
 
-    sys.onLocalAck(1, { x: 0, y: 0, lastProcessedInputSeq: 0 })
+    sys.onLocalAck(1, {
+      x: OPEN_TEST_POINT.x,
+      y: OPEN_TEST_POINT.y,
+      lastProcessedInputSeq: 0,
+    })
     // Smooth arms the correction toward (0, 0); simCurr is untouched
     // until the next sim step runs.
     const armed = sys._getLocalSimForTest(1)
-    expect(armed).toMatchObject({ simCurrY: -10 })
+    expect(armed).toMatchObject({ simCurrY: OPEN_TEST_POINT.y - 10 })
     expect(armed?.smoothRemainingMs).toBeGreaterThan(0)
 
     const startSimY = armed?.simCurrY ?? 0
@@ -421,7 +475,12 @@ describe("PlayerRenderSystem smoothing + render interp", () => {
     const sys = new PlayerRenderSystem(scene as never, group as never)
     sys.localPlayerId = "p1"
 
-    sys.applyFullSync(sync([snap({ id: 1, playerId: "p1", x: 0, y: 0 })]))
+    sys.applyFullSync(sync([snap({
+      id: 1,
+      playerId: "p1",
+      x: OPEN_TEST_POINT.x,
+      y: OPEN_TEST_POINT.y,
+    })]))
     // Simulate a steady 60 Hz frame: one sim step of forward motion
     // then an ack that exactly matches the committed simCurr.
     sys.update(
@@ -433,7 +492,7 @@ describe("PlayerRenderSystem smoothing + render interp", () => {
     const expectedY = afterStep!.simCurrY
 
     sys.onLocalAck(1, {
-      x: 0,
+      x: OPEN_TEST_POINT.x,
       y: expectedY,
       lastProcessedInputSeq: 0,
     })

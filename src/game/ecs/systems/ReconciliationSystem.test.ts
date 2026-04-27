@@ -115,4 +115,21 @@ describe("reconcileLocal", () => {
     // Render should have moved to match the replay target.
     expect(r.renderX).toBeCloseTo(r.targetX, 5)
   })
+
+  it("replays blocked pending inputs without entering non-walkable terrain", () => {
+    const history = new LocalInputHistory()
+    history.append(input({ seq: 20, up: true }))
+
+    const topStrip = ARENA_WORLD_COLLIDERS[0]!
+    const start = {
+      x: topStrip.x + 704,
+      y: topStrip.y + topStrip.height + PLAYER_RADIUS_PX,
+    }
+    const ack = { ...start, lastProcessedInputSeq: 19 }
+    const r = reconcileLocal(ack, history, start, noopCtx)
+
+    expect(r.targetX).toBe(start.x)
+    expect(r.targetY).toBe(start.y)
+    expect(r.correction).toBe("none")
+  })
 })

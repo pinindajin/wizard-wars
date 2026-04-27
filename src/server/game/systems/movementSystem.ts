@@ -1,13 +1,13 @@
 /**
  * movementSystem – translates PlayerInput WASD into Velocity (px/s) and
  * advances Position each tick. Updates {@link Facing} toward the weapon cursor
- * (aim) and {@link MoveFacing} from non-zero WASD intent (body / idle-walk).
+ * (aim) and {@link MoveFacing} from the actual applied movement.
  *
- * Velocity semantics: `Velocity.vx/vy` store the player's velocity in
- * **pixels per second** (aligned with fireball velocity). Position is then
- * integrated by `v * TICK_DT_SEC` per tick. This matches the client's
- * rewind-and-replay math and keeps snapshot `vx/vy` directly usable for
- * remote extrapolation.
+ * Velocity semantics: `Velocity.vx/vy` store the actually-applied player
+ * velocity in **pixels per second** (aligned with fireball velocity). The
+ * requested WASD step is candidate-gated against world blockers before
+ * Position is committed. This matches the client's rewind-and-replay math
+ * and keeps snapshot `vx/vy` directly usable for remote extrapolation.
  *
  * Movement rules (in priority order):
  *  1. DyingTag / DeadTag / SpectatorTag → velocity = 0
@@ -35,12 +35,19 @@ import {
 import type { SimCtx } from "../simulation"
 import {
   BASE_MOVE_SPEED_PX_PER_SEC,
+  ARENA_HEIGHT,
+  ARENA_WIDTH,
+  ARENA_WORLD_COLLIDERS,
+  PLAYER_RADIUS_PX,
   SWING_MOVE_SPEED_MULTIPLIER,
   SWIFT_BOOTS_SPEED_BONUS,
   TICK_DT_SEC,
 } from "../../../shared/balance-config"
 import { ABILITY_CONFIGS } from "../../../shared/balance-config/abilities"
+import { moveWithinWorld } from "../../../shared/collision/worldCollision"
 import { normalizedMoveFromWASD } from "../../../shared/movementIntent"
+
+const ARENA_BOUNDS = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
 
 /**
  * Runs the movement system for one tick.
@@ -95,13 +102,24 @@ export function movementSystem(ctx: SimCtx): void {
       right: right === 1,
     })
     const speedPxPerSec = BASE_MOVE_SPEED_PX_PER_SEC * speedMultiplier
-    Velocity.vx[eid] = dx * speedPxPerSec
-    Velocity.vy[eid] = dy * speedPxPerSec
-    Position.x[eid] += Velocity.vx[eid] * TICK_DT_SEC
-    Position.y[eid] += Velocity.vy[eid] * TICK_DT_SEC
+    const stepX = dx * speedPxPerSec * TICK_DT_SEC
+    const stepY = dy * speedPxPerSec * TICK_DT_SEC
+    const moved = moveWithinWorld(
+      Position.x[eid],
+      Position.y[eid],
+      stepX,
+      stepY,
+      PLAYER_RADIUS_PX,
+      ARENA_BOUNDS,
+      ARENA_WORLD_COLLIDERS,
+    )
+    Velocity.vx[eid] = moved.appliedDx / TICK_DT_SEC
+    Velocity.vy[eid] = moved.appliedDy / TICK_DT_SEC
+    Position.x[eid] = moved.x
+    Position.y[eid] = moved.y
 
-    if (dx !== 0 || dy !== 0) {
-      MoveFacing.angle[eid] = Math.atan2(dy, dx)
+    if (moved.appliedDx !== 0 || moved.appliedDy !== 0) {
+      MoveFacing.angle[eid] = Math.atan2(moved.appliedDy, moved.appliedDx)
     }
 
     // Update aim facing toward weapon-target (mouse position)
