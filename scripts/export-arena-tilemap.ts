@@ -3,11 +3,9 @@ import { dirname, resolve } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 import {
-  ARENA_CENTER_X,
-  ARENA_CENTER_Y,
   ARENA_COLS,
   ARENA_ROWS,
-  ARENA_SPAWN_RING_RADIUS_PX,
+  ARENA_SPAWN_POINTS,
   SPAWN_POINT_COUNT,
   TILE_SIZE_PX,
 } from "../src/shared/balance-config/arena"
@@ -20,6 +18,7 @@ const GENERATED_COLLIDERS = resolve(
   ROOT,
   "src/shared/balance-config/generated/arena-prop-colliders.ts",
 )
+const ARENA_TILESET = resolve(ROOT, "public/assets/tilesets/arena-terrain.png")
 
 type EditableTileset = {
   readonly name: string
@@ -183,23 +182,37 @@ function readGroundData(tilemap: EditableTilemap): readonly number[] {
 }
 
 function generateSpawnPointObjects(): TiledObject[] {
-  return Array.from({ length: SPAWN_POINT_COUNT }, (_, i) => {
-    const angleDeg = i * 30
-    const angleRad = (angleDeg * Math.PI) / 180
-    const x = Math.round(ARENA_CENTER_X + ARENA_SPAWN_RING_RADIUS_PX * Math.cos(angleRad))
-    const y = Math.round(ARENA_CENTER_Y + ARENA_SPAWN_RING_RADIUS_PX * Math.sin(angleRad))
+  return ARENA_SPAWN_POINTS.map((point, i) => {
     return {
       id: i + 1,
       name: `spawn-point-${i}`,
       type: "spawn-point",
-      x,
-      y,
+      x: point.x,
+      y: point.y,
       width: 0,
       height: 0,
       visible: true,
       properties: [{ name: "spawnIndex", type: "int", value: i }],
     }
   })
+}
+
+/**
+ * Reads width/height from a PNG header without pulling in async image APIs.
+ *
+ * @param path - PNG file path.
+ * @returns Image dimensions in pixels.
+ */
+function readPngDimensions(path: string): { width: number; height: number } {
+  const bytes = readFileSync(path)
+  const pngSignature = "89504e470d0a1a0a"
+  if (bytes.subarray(0, 8).toString("hex") !== pngSignature) {
+    throw new Error(`Expected PNG tileset at ${path}`)
+  }
+  return {
+    width: bytes.readUInt32BE(16),
+    height: bytes.readUInt32BE(20),
+  }
 }
 
 function readPropColliderObjects(scene: ArenaScene): TiledObject[] {
@@ -236,11 +249,22 @@ export function buildArenaTilemapFromScene(scene = readArenaScene()): TiledMap {
     tilemap.tileWidth !== TILE_SIZE_PX ||
     tilemap.tileHeight !== TILE_SIZE_PX
   ) {
-    throw new Error("Arena.scene dimensions must remain 21x12 tiles at 64x64 px.")
+    throw new Error(
+      `Arena.scene dimensions must remain ${ARENA_COLS}x${ARENA_ROWS} tiles at ${TILE_SIZE_PX}x${TILE_SIZE_PX} px.`,
+    )
   }
 
   const groundData = readGroundData(tilemap)
   const propObjects = readPropColliderObjects(scene)
+  const tilesetImage = readPngDimensions(ARENA_TILESET)
+  const tilesetColumns = tilesetImage.width / TILE_SIZE_PX
+  const tilesetRows = tilesetImage.height / TILE_SIZE_PX
+
+  if (!Number.isInteger(tilesetColumns) || !Number.isInteger(tilesetRows)) {
+    throw new Error(
+      `arena-terrain.png dimensions must be divisible by ${TILE_SIZE_PX}; got ${tilesetImage.width}x${tilesetImage.height}.`,
+    )
+  }
 
   return {
     width: ARENA_COLS,
@@ -253,7 +277,7 @@ export function buildArenaTilemapFromScene(scene = readArenaScene()): TiledMap {
     tiledversion: "1.10.2",
     infinite: false,
     nextlayerid: 4,
-    nextobjectid: 100 + propObjects.length,
+    nextobjectid: Math.max(100 + propObjects.length, SPAWN_POINT_COUNT + 1),
     tilesets: [
       {
         firstgid: 1,
@@ -262,11 +286,11 @@ export function buildArenaTilemapFromScene(scene = readArenaScene()): TiledMap {
         tileheight: tileset.tileHeight,
         spacing: tileset.tileSpacing ?? 0,
         margin: tileset.tileMargin ?? 0,
-        columns: 16,
-        tilecount: 16,
+        columns: tilesetColumns,
+        tilecount: tilesetColumns * tilesetRows,
         image: "../tilesets/arena-terrain.png",
-        imagewidth: 1024,
-        imageheight: 64,
+        imagewidth: tilesetImage.width,
+        imageheight: tilesetImage.height,
       },
     ],
     layers: [

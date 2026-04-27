@@ -6,12 +6,35 @@ import {
   ARENA_CENTER_Y,
   ARENA_SPAWN_POINTS,
   SPAWN_POINT_COUNT,
-  ARENA_SPAWN_RING_RADIUS_PX,
   TILE_SIZE_PX,
   ARENA_COLS,
   ARENA_ROWS,
   ARENA_PROP_COLLIDERS,
 } from "@/shared/balance-config/arena"
+import { PLAYER_RADIUS_PX } from "@/shared/balance-config/combat"
+import {
+  GENERATED_ARENA_BLOCKED_SPAWN_CELLS,
+  GENERATED_ARENA_PIXELLAB_FIRST_GID,
+} from "@/shared/balance-config/generated/arena-layout"
+
+/**
+ * Tests whether a player spawn circle overlaps a blocked arena tile.
+ *
+ * @param x - Spawn center x.
+ * @param y - Spawn center y.
+ * @param col - Blocked tile column.
+ * @param row - Blocked tile row.
+ * @returns Whether the spawn circle overlaps the blocked tile rectangle.
+ */
+function spawnOverlapsBlockedTile(x: number, y: number, col: number, row: number): boolean {
+  const rx = col * TILE_SIZE_PX
+  const ry = row * TILE_SIZE_PX
+  const nearestX = Math.max(rx, Math.min(x, rx + TILE_SIZE_PX))
+  const nearestY = Math.max(ry, Math.min(y, ry + TILE_SIZE_PX))
+  const dx = x - nearestX
+  const dy = y - nearestY
+  return dx * dx + dy * dy < PLAYER_RADIUS_PX * PLAYER_RADIUS_PX
+}
 
 describe("arena constants", () => {
   it("exposes prop colliders from generated Tiled export (may be empty)", () => {
@@ -22,21 +45,21 @@ describe("arena constants", () => {
     }
   })
 
-  it("has correct dimensions (21x12 x 64px)", () => {
-    expect(ARENA_WIDTH).toBe(1344)
-    expect(ARENA_HEIGHT).toBe(768)
+  it("has generated dimensions at 64px per tile", () => {
     expect(TILE_SIZE_PX).toBe(64)
-    expect(ARENA_COLS).toBe(21)
-    expect(ARENA_ROWS).toBe(12)
+    expect(ARENA_COLS).toBeGreaterThan(0)
+    expect(ARENA_ROWS).toBeGreaterThan(0)
     expect(ARENA_COLS * TILE_SIZE_PX).toBe(ARENA_WIDTH)
     expect(ARENA_ROWS * TILE_SIZE_PX).toBe(ARENA_HEIGHT)
   })
 
   it("has correct center coordinates", () => {
-    expect(ARENA_CENTER_X).toBe(672)
-    expect(ARENA_CENTER_Y).toBe(384)
     expect(ARENA_CENTER_X).toBe(ARENA_WIDTH / 2)
     expect(ARENA_CENTER_Y).toBe(ARENA_HEIGHT / 2)
+  })
+
+  it("starts PixelLab terrain after the 16 original terrain GIDs", () => {
+    expect(GENERATED_ARENA_PIXELLAB_FIRST_GID).toBe(17)
   })
 })
 
@@ -44,16 +67,6 @@ describe("spawn points", () => {
   it("has 12 spawn points", () => {
     expect(ARENA_SPAWN_POINTS).toHaveLength(SPAWN_POINT_COUNT)
     expect(SPAWN_POINT_COUNT).toBe(12)
-  })
-
-  it("all spawn points are on the ring (radius ~300)", () => {
-    for (const sp of ARENA_SPAWN_POINTS) {
-      const dx = sp.x - ARENA_CENTER_X
-      const dy = sp.y - ARENA_CENTER_Y
-      const dist = Math.sqrt(dx * dx + dy * dy)
-      // Allow ±1 for rounding
-      expect(dist).toBeCloseTo(ARENA_SPAWN_RING_RADIUS_PX, 0)
-    }
   })
 
   it("all spawn points are within arena bounds", () => {
@@ -65,24 +78,20 @@ describe("spawn points", () => {
     }
   })
 
-  it("spawn points are evenly spaced 30° apart", () => {
-    const angles = ARENA_SPAWN_POINTS.map((sp) =>
-      Math.atan2(sp.y - ARENA_CENTER_Y, sp.x - ARENA_CENTER_X) * (180 / Math.PI),
-    )
-    // Sort angles and check differences are ~30°
-    const sorted = [...angles].sort((a, b) => a - b)
-    for (let i = 1; i < sorted.length; i++) {
-      const diff = sorted[i] - sorted[i - 1]
-      expect(diff).toBeCloseTo(30, 0)
-    }
-  })
-
   it("no two spawn points overlap (all distinct positions)", () => {
     const seen = new Set<string>()
     for (const sp of ARENA_SPAWN_POINTS) {
       const key = `${sp.x},${sp.y}`
       expect(seen.has(key)).toBe(false)
       seen.add(key)
+    }
+  })
+
+  it("no spawn point overlaps generated lava or lava-transition cells", () => {
+    for (const sp of ARENA_SPAWN_POINTS) {
+      for (const cell of GENERATED_ARENA_BLOCKED_SPAWN_CELLS) {
+        expect(spawnOverlapsBlockedTile(sp.x, sp.y, cell.col, cell.row)).toBe(false)
+      }
     }
   })
 })
