@@ -4,8 +4,9 @@
  * Output: public/assets/tilesets/arena-terrain.png (all 16 tiles in a row)
  */
 
+import { readdirSync } from "node:fs"
 import { resolve } from "node:path"
-import { readdirSync, existsSync } from "node:fs"
+import { pathToFileURL } from "node:url"
 import sharp from "sharp"
 
 const TILE_SIZE = 64
@@ -16,7 +17,7 @@ const OUTPUT_PATH = resolve(process.cwd(), "public/assets/tilesets/arena-terrain
  * Builds the arena terrain sprite sheet from individual tiles.
  * Arranges all tiles horizontally in one row for Phaser tilemap compatibility.
  */
-async function buildTerrainSheet(): Promise<void> {
+export async function buildTerrainSheet(): Promise<void> {
   const tilePaths = readdirSync(TERRAIN_DIR)
     .filter((f) => f.endsWith(".png"))
     .sort((a, b) => {
@@ -47,4 +48,6 @@ async function buildTerrainSheet(): Promise<void> {
   console.log(`✅ arena-terrain.png written (${tilePaths.length} tiles × 64px = ${width}×${height})`)
 }
 
-void buildTerrainSheet().catch(console.error)
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  void buildTerrainSheet().catch(console.error)
+}
