@@ -19,6 +19,7 @@ import {
   BASE_MOVE_SPEED_PX_PER_SEC,
   DAMAGE_FLASH_MS,
   PLAYER_RADIUS_PX,
+  SWING_MOVE_SPEED_MULTIPLIER,
 } from "@/shared/balance-config/combat"
 import type {
   GameStateSyncPayload,
@@ -736,6 +737,10 @@ export class PlayerRenderSystem {
       entry.simPrevY = entry.simCurrY
 
       const castMoveMult = this._clientCastMoveMultiplier(state)
+      const swingMult =
+        state.animState === "primary_melee_attack"
+          ? SWING_MOVE_SPEED_MULTIPLIER
+          : 1
       if (
         this._canPredictMovement(state.animState, localMoveIntent, castMoveMult)
       ) {
@@ -745,7 +750,7 @@ export class PlayerRenderSystem {
           dy,
           BASE_MOVE_SPEED_PX_PER_SEC,
           TICK_DT_SEC,
-          castMoveMult,
+          castMoveMult * swingMult,
         )
         const moved = moveWithinWorld(
           entry.simCurrX,
@@ -1048,8 +1053,7 @@ export class PlayerRenderSystem {
     if (dx === 0 && dy === 0) return false
     if (
       animState === "dying" ||
-      animState === "dead" ||
-      animState === "primary_melee_attack"
+      animState === "dead"
     ) {
       return false
     }

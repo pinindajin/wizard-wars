@@ -2,23 +2,34 @@ import { test, expect } from "@playwright/test"
 import { randomBytes } from "node:crypto"
 
 import {
-  ARENA_SPAWN_POINTS,
   ARENA_WORLD_COLLIDERS,
   PLAYER_RADIUS_PX,
 } from "../../src/shared/balance-config"
 import { ARENA_CAMERA_FOLLOW_ZOOM } from "../../src/shared/balance-config/rendering"
 
-const FIRST_SPAWN = ARENA_SPAWN_POINTS[0]!
-const FIRST_SPAWN_NORTH_BLOCKER = ARENA_WORLD_COLLIDERS.filter(
-  (col) =>
-    FIRST_SPAWN.x >= col.x - PLAYER_RADIUS_PX &&
-    FIRST_SPAWN.x <= col.x + col.width + PLAYER_RADIUS_PX &&
-    col.y + col.height <= FIRST_SPAWN.y - PLAYER_RADIUS_PX,
-).reduce((best, col) =>
-  col.y + col.height > best.y + best.height ? col : best,
-)
-const FIRST_SPAWN_NORTH_EDGE_Y =
-  FIRST_SPAWN_NORTH_BLOCKER.y + FIRST_SPAWN_NORTH_BLOCKER.height + PLAYER_RADIUS_PX
+/**
+ * Foot Y of the north collision boundary for the column containing `spawnX`,
+ * using the same rules as the legacy test (closest northern collider strip
+ * above `spawnY`). Spawn points are **shuffled** at match start, so we must
+ * not assume {@link ARENA_SPAWN_POINTS}[0].
+ */
+function northBarrierFootY(spawnX: number, spawnY: number): number {
+  const northOfSpawn = ARENA_WORLD_COLLIDERS.filter(
+    (col) =>
+      spawnX >= col.x - PLAYER_RADIUS_PX &&
+      spawnX <= col.x + col.width + PLAYER_RADIUS_PX &&
+      col.y + col.height <= spawnY - PLAYER_RADIUS_PX,
+  )
+  if (northOfSpawn.length === 0) {
+    throw new Error(
+      `E2E: no north collider for spawn (${spawnX}, ${spawnY}); check arena layout`,
+    )
+  }
+  const blocker = northOfSpawn.reduce((best, col) =>
+    col.y + col.height > best.y + best.height ? col : best,
+  )
+  return blocker.y + blocker.height + PLAYER_RADIUS_PX
+}
 
 /**
  * Generates a signup-safe username (same constraints as signup.spec).
@@ -136,10 +147,10 @@ test("full match flow: assets, overlay, canvas, movement, shop, abilities", asyn
   await page.locator("body").focus()
 
   /**
-   * Reads the local player's rendered world-space Y from the live Arena
+   * Reads the local player's rendered world-space position from the live Arena
    * scene. Returns null if the scene or local render pos is not available.
    */
-  const readLocalY = async (): Promise<number | null> =>
+  const readLocalPos = async (): Promise<{ x: number; y: number } | null> =>
     page.evaluate(() => {
       type ArenaLike = {
         playerRenderSystem?: {
@@ -153,19 +164,21 @@ test("full match flow: assets, overlay, canvas, movement, shop, abilities", asyn
       ).__wwGame
       if (!g?.scene) return null
       const arena = g.scene.getScene("Arena") as ArenaLike | null | undefined
-      const pos = arena?.playerRenderSystem?.getLocalPlayerRenderPos?.()
-      return pos ? pos.y : null
+      return arena?.playerRenderSystem?.getLocalPlayerRenderPos?.() ?? null
     })
 
-  const startY = await readLocalY()
-  expect(startY, "expected local render pos available before W hold").not.toBeNull()
+  const startPos = await readLocalPos()
+  expect(startPos, "expected local render pos available before W hold").not.toBeNull()
+  const startY = startPos!.y
+  const northEdgeY = northBarrierFootY(startPos!.x, startPos!.y)
 
   await page.keyboard.down("w")
   await page.waitForTimeout(500)
   await page.keyboard.up("w")
 
-  const endY = await readLocalY()
-  expect(endY, "expected local render pos available after W hold").not.toBeNull()
+  const endPos = await readLocalPos()
+  expect(endPos, "expected local render pos available after W hold").not.toBeNull()
+  const endY = endPos!.y
   // World Y decreases moving north; any smoothing window overwriting
   // prediction (pre-fix behavior) would leave endY >= startY while W was
   // held. Allow a small epsilon so a sub-pixel stall does not flake.
@@ -175,8 +188,8 @@ test("full match flow: assets, overlay, canvas, movement, shop, abilities", asyn
   ).toBeLessThan(-8)
   expect(
     endY ?? 0,
-    `expected local Y to stop at north non-walkable edge (edgeY=${FIRST_SPAWN_NORTH_EDGE_Y}, endY=${endY})`,
-  ).toBeGreaterThanOrEqual(FIRST_SPAWN_NORTH_EDGE_Y - 2)
+    `expected local Y to stop at north non-walkable edge (edgeY=${northEdgeY}, endY=${endY})`,
+  ).toBeGreaterThanOrEqual(northEdgeY - 2)
 
   // Post-release no-pull-back guard (cause B + C fix): after W is
   // released, the render should stay essentially still. Before the
@@ -187,9 +200,9 @@ test("full match flow: assets, overlay, canvas, movement, shop, abilities", asyn
   // render does not drift backward (positive y delta) by more than a
   // small epsilon.
   await page.waitForTimeout(150)
-  const settledY = await readLocalY()
+  const settledY = (await readLocalPos())?.y ?? null
   await page.waitForTimeout(250)
-  const afterSettleY = await readLocalY()
+  const afterSettleY = (await readLocalPos())?.y ?? null
   expect(
     settledY,
     "expected local render pos available shortly after W release",
