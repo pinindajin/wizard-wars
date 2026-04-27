@@ -1,6 +1,6 @@
 /**
  * Stitches per-clip, per-direction strip PNGs into a single Phaser spritesheet
- * that matches `src/game/animation/LadyWizardAnimDefs.ts` and
+ * that matches `src/shared/sprites/ladyWizard.ts` / `LadyWizardAnimDefs.ts` and
  * `public/.../sheets/atlas.json`.
  *
  * Prerequisite: `bunx tsx scripts/build-lady-wizard-sheets.ts`
@@ -11,55 +11,24 @@ import { existsSync } from "node:fs"
 import { join, resolve } from "node:path"
 import sharp from "sharp"
 
+import {
+  LADY_WIZARD_CLIP_BASE_FRAME,
+  LADY_WIZARD_CLIP_FRAMES,
+  LADY_WIZARD_CLIP_TO_SHEET_PREFIX,
+  LADY_WIZARD_FRAME_SIZE_PX,
+  LADY_WIZARD_FRAMES_PER_DIRECTION_ROW,
+  LADY_WIZARD_MEGASHEET_CLIP_ORDER,
+  LADY_WIZARD_DIRECTIONS,
+} from "../src/shared/sprites/ladyWizard"
+
 const SHEETS_DIR = resolve(
   process.cwd(),
   "public/assets/sprites/heroes/lady-wizard/sheets",
 )
 const OUTPUT = join(SHEETS_DIR, "lady-wizard-megasheet.png")
 
-const FRAME = 124
-const DIRECTIONS = [
-  "south",
-  "south-east",
-  "east",
-  "north-east",
-  "north",
-  "north-west",
-  "west",
-  "south-west",
-] as const
-
-/** Same as `CLIP_FRAMES` in LadyWizardAnimDefs. */
-const CLIP_FRAMES: Record<string, number> = {
-  breathing_idle: 4,
-  walk: 15,
-  death: 17,
-  light_spell_cast: 17,
-  heavy_spell_cast: 17,
-  summoned_axe_swing: 17,
-}
-
-/** Same as `CLIP_BASE_FRAME` in LadyWizardAnimDefs. */
-const CLIP_BASE_FRAME: Record<string, number> = {
-  breathing_idle: 0,
-  walk: 4,
-  death: 19,
-  light_spell_cast: 36,
-  heavy_spell_cast: 53,
-  summoned_axe_swing: 70,
-}
-
-const CLIP_TO_SHEET_PREFIX: Record<string, string> = {
-  breathing_idle: "idle",
-  walk: "walk",
-  death: "death",
-  light_spell_cast: "light-spell-cast",
-  heavy_spell_cast: "heavy-spell-cast",
-  summoned_axe_swing: "summoned-axe-attack",
-}
-
-const FRAMES_PER_ROW =
-  CLIP_BASE_FRAME.summoned_axe_swing + CLIP_FRAMES.summoned_axe_swing
+const FRAME = LADY_WIZARD_FRAME_SIZE_PX
+const DIRECTIONS = LADY_WIZARD_DIRECTIONS
 
 async function makeTransparentStrip(slotFrames: number): Promise<Buffer> {
   return sharp({
@@ -75,11 +44,13 @@ async function makeTransparentStrip(slotFrames: number): Promise<Buffer> {
 }
 
 async function main(): Promise<void> {
-  if (FRAMES_PER_ROW !== 87) {
-    throw new Error(`Layout drift: expected 87 columns, got ${FRAMES_PER_ROW}`)
+  if (LADY_WIZARD_FRAMES_PER_DIRECTION_ROW !== 87) {
+    throw new Error(
+      `Layout drift: expected 87 columns, got ${LADY_WIZARD_FRAMES_PER_DIRECTION_ROW}`,
+    )
   }
 
-  const width = FRAMES_PER_ROW * FRAME
+  const width = LADY_WIZARD_FRAMES_PER_DIRECTION_ROW * FRAME
   const height = DIRECTIONS.length * FRAME
   const layers: { input: Buffer; left: number; top: number }[] = []
 
@@ -87,10 +58,10 @@ async function main(): Promise<void> {
     const direction = DIRECTIONS[row]!
     const y = row * FRAME
 
-    for (const clip of Object.keys(CLIP_FRAMES) as (keyof typeof CLIP_FRAMES)[]) {
-      const prefix = CLIP_TO_SHEET_PREFIX[clip]
-      const slotW = CLIP_FRAMES[clip] * FRAME
-      const x = CLIP_BASE_FRAME[clip] * FRAME
+    for (const clip of LADY_WIZARD_MEGASHEET_CLIP_ORDER) {
+      const prefix = LADY_WIZARD_CLIP_TO_SHEET_PREFIX[clip]
+      const slotW = LADY_WIZARD_CLIP_FRAMES[clip] * FRAME
+      const x = LADY_WIZARD_CLIP_BASE_FRAME[clip] * FRAME
       const filePath = join(SHEETS_DIR, `${prefix}-${direction}.png`)
 
       let input: Buffer
@@ -104,22 +75,22 @@ async function main(): Promise<void> {
           throw new Error(`Expected height ${FRAME} for ${filePath}, got ${meta.height}`)
         }
         if (meta.width > slotW) {
-          throw new Error(
-            `Strip too wide for slot (${clip} ${direction}): ${meta.width} > ${slotW}`,
-          )
+          throw new Error(`Strip too wide for slot (${String(clip)} ${direction}): ${meta.width} > ${slotW}`)
         }
         if (meta.width === slotW) {
           input = raw
         } else {
-          const pad = await makeTransparentStrip(CLIP_FRAMES[clip])
+          const pad = await makeTransparentStrip(LADY_WIZARD_CLIP_FRAMES[clip])
           input = await sharp(pad)
             .composite([{ input: raw, left: 0, top: 0 }])
             .png()
             .toBuffer()
         }
       } else {
-        input = await makeTransparentStrip(CLIP_FRAMES[clip])
-        console.warn(`⚠ Missing ${filePath} — using transparent ${CLIP_FRAMES[clip]} frame slot`)
+        input = await makeTransparentStrip(LADY_WIZARD_CLIP_FRAMES[clip])
+        console.warn(
+          `⚠ Missing ${filePath} — using transparent ${LADY_WIZARD_CLIP_FRAMES[clip]} frame slot`,
+        )
       }
 
       layers.push({ input, left: x, top: y })
@@ -138,7 +109,9 @@ async function main(): Promise<void> {
     .png()
     .toFile(OUTPUT)
 
-  console.log(`✅ Wrote ${OUTPUT} (${width}×${height}, ${FRAMES_PER_ROW} frames/row)`)
+  console.log(
+    `✅ Wrote ${OUTPUT} (${width}×${height}, ${LADY_WIZARD_FRAMES_PER_DIRECTION_ROW} frames/row)`,
+  )
 }
 
 void main().catch((err) => {
