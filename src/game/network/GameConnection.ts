@@ -208,15 +208,6 @@ export class GameConnection {
   }
 
   /**
-   * Equip a weapon or augment the player already owns.
-   *
-   * @param itemId - The `SHOP_ITEMS` id to equip.
-   */
-  sendEquipItem(itemId: string): void {
-    this._room?.send(RoomEvent.EquipItem, { itemId })
-  }
-
-  /**
    * Assign an owned ability to a slot (0-4) on the ability bar.
    *
    * @param itemId - The ability id to assign.

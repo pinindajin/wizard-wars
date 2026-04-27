@@ -9,7 +9,7 @@ import type {
   FireballBatchUpdatePayload,
   FireballImpactPayload,
   LightningBoltPayload,
-  AxeSwingPayload,
+  PrimaryMeleeAttackPayload,
   PlayerDeathPayload,
   PlayerRespawnPayload,
   DamageFloatPayload,
@@ -22,7 +22,7 @@ import { GameConnection } from "../network/GameConnection"
 import { PlayerRenderSystem } from "../ecs/systems/PlayerRenderSystem"
 import { ProjectileRenderSystem } from "../ecs/systems/ProjectileRenderSystem"
 import { LightningBoltRenderSystem } from "../ecs/systems/LightningBoltRenderSystem"
-import { AxeSwingRenderSystem } from "../ecs/systems/AxeSwingRenderSystem"
+import { PrimaryMeleeAttackRenderSystem } from "../ecs/systems/PrimaryMeleeAttackRenderSystem"
 import { DamageFloatersSystem } from "../ecs/systems/DamageFloatersSystem"
 import { NetworkSyncSystem } from "../ecs/systems/NetworkSyncSystem"
 import { KeyboardController } from "../input/KeyboardController"
@@ -72,7 +72,7 @@ export class ArenaRuntime {
 
   private projectileRenderSystem!: ProjectileRenderSystem
   private lightningBoltRenderSystem!: LightningBoltRenderSystem
-  private axeSwingRenderSystem!: AxeSwingRenderSystem
+  private primaryMeleeAttackRenderSystem!: PrimaryMeleeAttackRenderSystem
   private damageFloatersSystem!: DamageFloatersSystem
   private networkSyncSystem!: NetworkSyncSystem
 
@@ -157,7 +157,7 @@ export class ArenaRuntime {
     })
     this.projectileRenderSystem = new ProjectileRenderSystem(this.scene)
     this.lightningBoltRenderSystem = new LightningBoltRenderSystem(this.scene)
-    this.axeSwingRenderSystem = new AxeSwingRenderSystem(this.scene)
+    this.primaryMeleeAttackRenderSystem = new PrimaryMeleeAttackRenderSystem(this.scene)
     this.damageFloatersSystem = new DamageFloatersSystem(this.scene)
     this.keyboardController = new KeyboardController(this.scene)
     this.mouseController = new MouseController(this.scene)
@@ -239,7 +239,6 @@ export class ArenaRuntime {
         case WsEvent.PlayerBatchUpdate:
           this.networkSyncSystem.applyBatchUpdate(message.payload as PlayerBatchUpdatePayload)
           break
-          break
         case WsEvent.FireballLaunch:
           this.projectileRenderSystem.spawnFireball(message.payload as FireballLaunchPayload)
           break
@@ -256,8 +255,10 @@ export class ArenaRuntime {
           this.lightningBoltRenderSystem.spawnBolt(message.payload as LightningBoltPayload)
           this.soundManager.play("sfx-lightning-cast")
           break
-        case WsEvent.AxeSwing:
-          this.axeSwingRenderSystem.spawnSwing(message.payload as AxeSwingPayload)
+        case WsEvent.PrimaryMeleeAttack:
+          this.primaryMeleeAttackRenderSystem.spawnSwing(
+            message.payload as PrimaryMeleeAttackPayload,
+          )
           this.soundManager.play("sfx-axe-swing")
           break
         case WsEvent.PlayerDeath:
@@ -328,7 +329,7 @@ export class ArenaRuntime {
     })
     this.projectileRenderSystem.update(delta)
     this.lightningBoltRenderSystem.update(delta)
-    this.axeSwingRenderSystem.update(delta)
+    this.primaryMeleeAttackRenderSystem.update(delta)
     this.damageFloatersSystem.update(delta)
 
     const local = this.playerRenderSystem.getLocalPlayerRenderPos()

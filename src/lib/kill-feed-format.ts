@@ -1,4 +1,5 @@
 import { ABILITY_CONFIGS } from "@/shared/balance-config/abilities"
+import { PRIMARY_MELEE_ATTACK_CONFIGS } from "@/shared/balance-config/equipment"
 import type { PlayerDeathPayload } from "@/shared/types"
 
 /**
@@ -11,7 +12,8 @@ export function killFeedAbilityLabel(abilityId: string | null): string {
   if (!abilityId) return "unknown"
   const cfg = ABILITY_CONFIGS[abilityId]
   if (cfg) return cfg.displayName
-  if (abilityId === "axe") return "Axe"
+  const melee = PRIMARY_MELEE_ATTACK_CONFIGS[abilityId as keyof typeof PRIMARY_MELEE_ATTACK_CONFIGS]
+  if (melee) return melee.displayName
   return abilityId.replace(/_/g, " ")
 }
 

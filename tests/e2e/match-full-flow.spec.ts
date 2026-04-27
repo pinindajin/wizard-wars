@@ -209,7 +209,6 @@ test("full match flow: assets, overlay, canvas, movement, shop, abilities", asyn
 
   // Verify shop shows all categories + lightning_bolt buy button enabled.
   await expect(page.getByTestId("shop-section-ability")).toBeVisible()
-  await expect(page.getByTestId("shop-section-weapon")).toBeVisible()
   await expect(page.getByTestId("shop-section-augment")).toBeVisible()
   await expect(page.getByTestId("shop-section-consumable")).toBeVisible()
 

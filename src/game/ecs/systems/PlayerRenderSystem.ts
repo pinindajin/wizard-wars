@@ -406,7 +406,7 @@ export class PlayerRenderSystem {
     if (!state || !renderPos) return
 
     const ctx: LocalReplayContext = {
-      isSwinging: state.animState === "axe_swing",
+      isSwinging: state.animState === "primary_melee_attack",
       hasSwiftBoots: false,
       castingAbilityId: state.castingAbilityId,
     }
@@ -1049,7 +1049,7 @@ export class PlayerRenderSystem {
     if (
       animState === "dying" ||
       animState === "dead" ||
-      animState === "axe_swing"
+      animState === "primary_melee_attack"
     ) {
       return false
     }

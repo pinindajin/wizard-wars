@@ -119,7 +119,7 @@ function respawnPlayer(
   addComponent(world, eid, InvulnerableTag)
   Cooldown.fireball[eid]    = 0
   Cooldown.lightningBolt[eid] = 0
-  Cooldown.axe[eid]         = 0
+  Cooldown.primaryMelee[eid] = 0
   Cooldown.healingPotion[eid] = 0
 
   // Invulnerability expiry stored in ticks

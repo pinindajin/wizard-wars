@@ -41,14 +41,13 @@ export const WsEvent = {
   FireballImpact: "FIREBALL_IMPACT",
   FireballBatchUpdate: "FIREBALL_BATCH_UPDATE",
   LightningBolt: "LIGHTNING_BOLT",
-  AxeSwing: "AXE_SWING",
+  PrimaryMeleeAttack: "PRIMARY_MELEE_ATTACK",
 
   // Shop / economy
   ShopPurchase: "SHOP_PURCHASE",
   ShopState: "SHOP_STATE",
   ShopError: "SHOP_ERROR",
   GoldBalance: "GOLD_BALANCE",
-  EquipItem: "EQUIP_ITEM",
   AssignAbility: "ASSIGN_ABILITY",
   UseQuickItem: "USE_QUICK_ITEM",
 

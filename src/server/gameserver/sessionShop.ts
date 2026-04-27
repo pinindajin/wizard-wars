@@ -1,7 +1,7 @@
-import { STARTING_GOLD, KILL_REWARD, SHOP_ITEM_COST, ABILITY_BAR_SLOT_COUNT, QUICK_ITEM_SLOT_COUNT } from "../../shared/balance-config/economy"
+import { STARTING_GOLD, KILL_REWARD, ABILITY_BAR_SLOT_COUNT, QUICK_ITEM_SLOT_COUNT } from "../../shared/balance-config/economy"
 import { SHOP_ITEMS } from "../../shared/balance-config/items"
 import { AUGMENT_CONFIGS } from "../../shared/balance-config/equipment"
-import { ABILITY_CONFIGS, DEFAULT_ABILITY_SLOT_0_ID } from "../../shared/balance-config/abilities"
+import { DEFAULT_ABILITY_SLOT_0_ID } from "../../shared/balance-config/abilities"
 import type { ShopStatePayload, ShopOwnedItem, QuickItemSlot } from "../../shared/types"
 
 /**
@@ -12,14 +12,12 @@ export type SessionEconomy = {
   gold: number
   kills: number
   deaths: number
-  /** Owned item IDs (abilities, weapons, augments, consumables). */
+  /** Owned item IDs (abilities, augments, consumables). */
   ownedItemIds: Set<string>
   /** Quick item slots (index 0-3 = Q, 6, 7, 8). */
   quickItemSlots: { itemId: string | null; charges: number }[]
   /** Ability bar slots (index 0-4). -1 = empty. */
   abilitySlots: (string | null)[]
-  /** Equipped weapon item ID, or null. */
-  equippedWeaponId: string | null
   /** Equipped augment item IDs. */
   equippedAugmentIds: Set<string>
 }
@@ -41,7 +39,6 @@ export const createSessionEconomy = (): SessionEconomy => {
     ownedItemIds: new Set<string>([DEFAULT_ABILITY_SLOT_0_ID]),
     quickItemSlots: Array(QUICK_ITEM_SLOT_COUNT).fill(null).map(() => ({ itemId: null, charges: 0 })),
     abilitySlots,
-    equippedWeaponId: null,
     equippedAugmentIds: new Set<string>(),
   }
 }
@@ -105,9 +102,6 @@ export const attemptPurchase = (
       }
     }
     economy.ownedItemIds.add(itemId)
-  } else if (item.category === "weapon") {
-    economy.ownedItemIds.add(itemId)
-    economy.equippedWeaponId = itemId
   } else if (item.category === "augment") {
     economy.ownedItemIds.add(itemId)
     economy.equippedAugmentIds.add(itemId)
@@ -174,7 +168,6 @@ export const buildShopStatePayload = (economy: SessionEconomy): ShopStatePayload
   return {
     gold: economy.gold,
     items,
-    equippedWeaponItemId: economy.equippedWeaponId,
     augmentItemIds: Array.from(economy.equippedAugmentIds),
     abilitySlots: economy.abilitySlots,
     quickItemSlots,

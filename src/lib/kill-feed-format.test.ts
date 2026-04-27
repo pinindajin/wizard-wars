@@ -6,11 +6,15 @@ import type { PlayerDeathPayload } from "@/shared/types"
 describe("killFeedAbilityLabel", () => {
   it("maps known abilities", () => {
     expect(killFeedAbilityLabel("fireball")).toBe("Fireball")
-    expect(killFeedAbilityLabel("axe")).toBe("Axe")
+    expect(killFeedAbilityLabel("red_wizard_cleaver")).toBe("Red Wizard Cleaver")
   })
 
   it("handles null", () => {
     expect(killFeedAbilityLabel(null)).toBe("unknown")
+  })
+
+  it("falls back to spaced words for unknown non-melee ids", () => {
+    expect(killFeedAbilityLabel("some_future_ability")).toBe("some future ability")
   })
 })
 

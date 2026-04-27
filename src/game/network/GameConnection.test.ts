@@ -74,14 +74,6 @@ describe("GameConnection send helpers + warning silence", () => {
     })
   })
 
-  it("sendEquipItem sends equip_item with itemId", () => {
-    conn.sendEquipItem("axe")
-    expect(room.sent).toContainEqual({
-      type: RoomEvent.EquipItem,
-      payload: { itemId: "axe" },
-    })
-  })
-
   it("sendAssignAbility sends assign_ability with itemId and slotIndex", () => {
     conn.sendAssignAbility("lightning_bolt", 2)
     expect(room.sent).toContainEqual({
@@ -103,7 +95,6 @@ describe("GameConnection send helpers + warning silence", () => {
     // Should not throw
     expect(() => {
       bare.sendShopPurchase("x")
-      bare.sendEquipItem("x")
       bare.sendAssignAbility("x", 0)
       bare.sendUseQuickItem(0)
     }).not.toThrow()
