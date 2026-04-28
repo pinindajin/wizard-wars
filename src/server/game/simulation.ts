@@ -351,6 +351,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     Velocity.vy[eid] = 0
     Facing.angle[eid] = facingAngle
     MoveFacing.angle[eid] = facingAngle
+    // Radius remains for player-player collision; world collision and combat use shared oval/rect helpers.
     Radius.r[eid] = PLAYER_RADIUS_PX
     Health.current[eid] = DEFAULT_PLAYER_HEALTH
     Health.max[eid] = DEFAULT_PLAYER_HEALTH

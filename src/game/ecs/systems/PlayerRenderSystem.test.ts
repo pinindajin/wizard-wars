@@ -57,7 +57,7 @@ import { HERO_CONFIGS } from "@/shared/balance-config/heroes"
 import {
   ARENA_SPAWN_POINTS,
   ARENA_WORLD_COLLIDERS,
-  PLAYER_RADIUS_PX,
+  PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
 } from "@/shared/balance-config"
 import { REPLAY_SMOOTHING_MS } from "@/shared/balance-config/rendering"
 
@@ -400,7 +400,7 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     const topStrip = ARENA_WORLD_COLLIDERS[0]!
     const start = {
       x: topStrip.x + 704,
-      y: topStrip.y + topStrip.height + PLAYER_RADIUS_PX,
+      y: topStrip.y + topStrip.height + PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
     }
     sys.applyFullSync(sync([snap({ id: 1, playerId: "p1", x: start.x, y: start.y })]))
 
@@ -418,11 +418,11 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     const topStrip = ARENA_WORLD_COLLIDERS[0]!
     const start = {
       x: topStrip.x + 704,
-      y: topStrip.y + topStrip.height + PLAYER_RADIUS_PX,
+      y: topStrip.y + topStrip.height + PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
     }
     const target = {
       x: start.x,
-      y: topStrip.y - PLAYER_RADIUS_PX,
+      y: topStrip.y - PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
     }
     sys.applyFullSync(sync([snap({ id: 1, playerId: "p1", x: start.x, y: start.y })]))
 

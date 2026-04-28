@@ -1,14 +1,14 @@
 /**
  * Shared swing-cone geometry for primary melee (and any future arc attacks).
  */
+import {
+  normalizeAngleDiff,
+  pointInSwingCone,
+  swingConeIntersectsRect,
+  type CharacterHitboxRect,
+} from "../../../shared/collision/characterHitbox"
 
-/** Normalizes `angleA - angleB` to (-π, π]. */
-export function normalizeAngleDiff(diff: number): number {
-  let d = diff
-  while (d > Math.PI) d -= 2 * Math.PI
-  while (d < -Math.PI) d += 2 * Math.PI
-  return d
-}
+export { normalizeAngleDiff }
 
 /**
  * Returns true if point (px,py) is within the swing cone at (ox,oy) with
@@ -23,12 +23,27 @@ export function inSwingCone(
   radiusPx: number,
   arcDeg: number,
 ): boolean {
-  const halfArcRad = ((arcDeg / 2) * Math.PI) / 180
-  const dx = px - ox
-  const dy = py - oy
-  const distSq = dx * dx + dy * dy
-  if (distSq > radiusPx * radiusPx) return false
-  const angle = Math.atan2(dy, dx)
-  const diff = normalizeAngleDiff(angle - facingAngle)
-  return Math.abs(diff) <= halfArcRad
+  return pointInSwingCone(ox, oy, facingAngle, px, py, radiusPx, arcDeg)
+}
+
+/**
+ * Returns true if a melee swing cone intersects the character combat hitbox.
+ *
+ * @param ox - Swing origin x in world pixels.
+ * @param oy - Swing origin y in world pixels.
+ * @param facingAngle - Swing facing angle in radians.
+ * @param radiusPx - Swing radius in world pixels.
+ * @param arcDeg - Full swing arc in degrees.
+ * @param hitbox - Character hitbox rectangle in world pixels.
+ * @returns Whether the cone intersects the hitbox.
+ */
+export function swingConeIntersectsCharacterHitbox(
+  ox: number,
+  oy: number,
+  facingAngle: number,
+  radiusPx: number,
+  arcDeg: number,
+  hitbox: CharacterHitboxRect,
+): boolean {
+  return swingConeIntersectsRect(ox, oy, facingAngle, radiusPx, arcDeg, hitbox)
 }

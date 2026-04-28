@@ -8,7 +8,10 @@ import {
   ARENA_WIDTH,
   ARENA_WORLD_COLLIDERS,
 } from "@/shared/balance-config/arena"
-import { PLAYER_RADIUS_PX } from "@/shared/balance-config/combat"
+import {
+  PLAYER_WORLD_COLLISION_RADIUS_X_PX,
+  PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
+} from "@/shared/balance-config/combat"
 import {
   Cooldown,
   DeadTag,
@@ -121,7 +124,7 @@ describe("movement system", () => {
       if (delta?.x !== undefined) lastX = delta.x
     }
 
-    expect(lastX).toBeLessThanOrEqual(ARENA_WIDTH - PLAYER_RADIUS_PX)
+    expect(lastX).toBeLessThanOrEqual(ARENA_WIDTH - PLAYER_WORLD_COLLISION_RADIUS_X_PX)
   })
 
   it("does not enter non-walkable terrain or emit moving velocity when blocked", () => {
@@ -129,12 +132,12 @@ describe("movement system", () => {
     const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
     const topStrip = ARENA_WORLD_COLLIDERS[0]!
     Position.x[eid] = topStrip.x + 704
-    Position.y[eid] = topStrip.y + topStrip.height + PLAYER_RADIUS_PX
+    Position.y[eid] = topStrip.y + topStrip.height + PLAYER_WORLD_COLLISION_RADIUS_Y_PX
 
     sim.tick(queueMap([["user1", emptyInput({ up: true })]]), Date.now())
 
     const snap = sim.buildGameStateSyncPayload(Date.now()).players[0]!
-    expect(snap.y).toBe(topStrip.y + topStrip.height + PLAYER_RADIUS_PX)
+    expect(snap.y).toBe(topStrip.y + topStrip.height + PLAYER_WORLD_COLLISION_RADIUS_Y_PX)
     expect(snap.vy).toBe(0)
     expect(snap.moveState).toBe("idle")
   })

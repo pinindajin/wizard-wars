@@ -8,7 +8,8 @@ import {
   ARENA_WIDTH,
   ARENA_WORLD_COLLIDERS,
   BASE_MOVE_SPEED_PX_PER_SEC,
-  PLAYER_RADIUS_PX,
+  PLAYER_WORLD_COLLISION_RADIUS_X_PX,
+  PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
   SWING_MOVE_SPEED_MULTIPLIER,
   SWIFT_BOOTS_SPEED_BONUS,
   TICK_DT_SEC,
@@ -42,14 +43,18 @@ const noopCtx = {
 } as const
 
 const arenaBounds = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
+const playerWorldFootprint = {
+  radiusX: PLAYER_WORLD_COLLISION_RADIUS_X_PX,
+  radiusY: PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
+}
 
 function findRightwardReplayStart(): { x: number; y: number } {
   const start = ARENA_SPAWN_POINTS.find((point) => {
-    const probeX = point.x + PLAYER_RADIUS_PX
+    const probeX = point.x + PLAYER_WORLD_COLLISION_RADIUS_X_PX
     const resolved = resolveAgainstWorld(
       probeX,
       point.y,
-      PLAYER_RADIUS_PX,
+      playerWorldFootprint,
       arenaBounds,
       ARENA_WORLD_COLLIDERS,
     )
@@ -186,7 +191,7 @@ describe("reconcileLocal", () => {
     const topStrip = ARENA_WORLD_COLLIDERS[0]!
     const start = {
       x: topStrip.x + 704,
-      y: topStrip.y + topStrip.height + PLAYER_RADIUS_PX,
+      y: topStrip.y + topStrip.height + PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
     }
     const ack = { ...start, lastProcessedInputSeq: 19 }
     const r = reconcileLocal(ack, history, start, noopCtx)

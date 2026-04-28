@@ -39,7 +39,7 @@ export const MoveFacing = {
   angle: new Float32Array(MAX_ENTITIES),
 }
 
-/** Collision circle radius in pixels. */
+/** Player-player collision circle radius in pixels; world/combat use separate shared footprints. */
 export const Radius = {
   r: new Float32Array(MAX_ENTITIES),
 }

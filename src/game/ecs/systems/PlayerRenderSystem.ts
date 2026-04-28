@@ -18,7 +18,8 @@ import {
 import {
   BASE_MOVE_SPEED_PX_PER_SEC,
   DAMAGE_FLASH_MS,
-  PLAYER_RADIUS_PX,
+  PLAYER_WORLD_COLLISION_RADIUS_X_PX,
+  PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
   SWING_MOVE_SPEED_MULTIPLIER,
 } from "@/shared/balance-config/combat"
 import type {
@@ -70,6 +71,10 @@ import { RemoteInterpolationBuffer } from "./RemoteInterpolationBuffer"
  */
 const MAX_SIM_LAG_MS = 250
 const ARENA_BOUNDS = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
+const PLAYER_WORLD_FOOTPRINT = {
+  radiusX: PLAYER_WORLD_COLLISION_RADIUS_X_PX,
+  radiusY: PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
+}
 
 /** Oscillation frequency for invulnerability alpha pulse (Hz). */
 const INVULN_PULSE_HZ = 4
@@ -757,7 +762,7 @@ export class PlayerRenderSystem {
           entry.simCurrY,
           step.x,
           step.y,
-          PLAYER_RADIUS_PX,
+          PLAYER_WORLD_FOOTPRINT,
           ARENA_BOUNDS,
           ARENA_WORLD_COLLIDERS,
         )
@@ -780,7 +785,7 @@ export class PlayerRenderSystem {
           pPredY,
           targetStepX,
           targetStepY,
-          PLAYER_RADIUS_PX,
+          PLAYER_WORLD_FOOTPRINT,
           ARENA_BOUNDS,
           ARENA_WORLD_COLLIDERS,
         )

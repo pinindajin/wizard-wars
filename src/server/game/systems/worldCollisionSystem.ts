@@ -12,7 +12,8 @@ import type { SimCtx } from "../simulation"
 import {
   ARENA_WIDTH,
   ARENA_HEIGHT,
-  PLAYER_RADIUS_PX,
+  PLAYER_WORLD_COLLISION_RADIUS_X_PX,
+  PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
   ARENA_WORLD_COLLIDERS,
 } from "../../../shared/balance-config"
 import {
@@ -23,9 +24,13 @@ import {
 export type { ArenaPropColliderRect } from "../../../shared/collision/worldCollision"
 
 const ARENA_BOUNDS = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
+const PLAYER_WORLD_FOOTPRINT = {
+  radiusX: PLAYER_WORLD_COLLISION_RADIUS_X_PX,
+  radiusY: PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
+}
 
 /**
- * Pushes one player circle out of static axis-aligned rectangles and clamps
+ * Pushes one player oval out of static axis-aligned rectangles and clamps
  * it against the arena bounds (shared with sim tests + client replay).
  *
  * @param eid - Player entity id with valid `Position`.
@@ -38,7 +43,7 @@ export function resolvePlayerAgainstPropColliders(
   const out = resolveAgainstWorld(
     Position.x[eid],
     Position.y[eid],
-    PLAYER_RADIUS_PX,
+    PLAYER_WORLD_FOOTPRINT,
     ARENA_BOUNDS,
     colliders,
   )
@@ -58,7 +63,7 @@ export function worldCollisionSystem(ctx: SimCtx): void {
     const out = resolveAgainstWorld(
       Position.x[eid],
       Position.y[eid],
-      PLAYER_RADIUS_PX,
+      PLAYER_WORLD_FOOTPRINT,
       ARENA_BOUNDS,
       ARENA_WORLD_COLLIDERS,
     )

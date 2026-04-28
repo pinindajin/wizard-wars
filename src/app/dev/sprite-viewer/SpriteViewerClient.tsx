@@ -8,7 +8,6 @@ import {
   strokeAlphaOutlineSegments,
   type AlphaOutlineSegment,
 } from "@/lib/sprite-outline"
-import { PLAYER_RADIUS_PX } from "@/shared/balance-config/combat"
 import {
   type LadyWizardAtlasClipId,
   LADY_WIZARD_ATLAS_CLIP_TO_MEGASHEET,
@@ -25,15 +24,15 @@ import {
 import {
   SPRITE_VIEWER_CENTERPOINT_MARKER_ARM_PX,
   SPRITE_VIEWER_CENTERPOINT_MARKER_RADIUS_PX,
+  spriteViewerCharacterHitbox,
   spriteViewerCenterpoint,
   spriteViewerCenterpointTooltip,
+  spriteViewerMovementOvalRadii,
 } from "@/shared/sprites/spriteViewerOverlays"
 
 const DETAIL_SCALE = 2
 const DETAIL_PAD = 16
 const FRAME = LADY_WIZARD_FRAME_SIZE_PX
-
-const PLAYER_DIAMETER_PX = PLAYER_RADIUS_PX * 2
 
 /**
  * One legend line with a click-to-expand details panel (avoids hover/stacking/CSS issues).
@@ -250,18 +249,23 @@ export function SpriteViewerClient() {
 
     const centerpoint = spriteViewerCenterpoint()
     if (showCollision) {
+      const movementOval = spriteViewerMovementOvalRadii()
+      const combatHitbox = spriteViewerCharacterHitbox()
       ctx.strokeStyle = "rgba(34, 197, 94, 0.85)"
       ctx.lineWidth = 1 / DETAIL_SCALE
       ctx.beginPath()
-      ctx.arc(centerpoint.x, centerpoint.y, PLAYER_RADIUS_PX, 0, Math.PI * 2)
-      ctx.stroke()
-      ctx.strokeStyle = "rgba(250, 204, 21, 0.75)"
-      ctx.strokeRect(
-        centerpoint.x - PLAYER_RADIUS_PX,
-        centerpoint.y - PLAYER_RADIUS_PX,
-        PLAYER_RADIUS_PX * 2,
-        PLAYER_RADIUS_PX * 2,
+      ctx.ellipse(
+        centerpoint.x,
+        centerpoint.y,
+        movementOval.radiusX,
+        movementOval.radiusY,
+        0,
+        0,
+        Math.PI * 2,
       )
+      ctx.stroke()
+      ctx.strokeStyle = "rgba(216, 180, 254, 0.95)"
+      ctx.strokeRect(combatHitbox.x, combatHitbox.y, combatHitbox.width, combatHitbox.height)
       ctx.strokeStyle = "rgba(244, 63, 94, 0.95)"
       ctx.fillStyle = "rgba(255, 255, 255, 0.95)"
       ctx.beginPath()
@@ -333,8 +337,8 @@ export function SpriteViewerClient() {
           <h1 className="font-mono text-lg tracking-tight text-zinc-100">Lady-wizard sprite viewer</h1>
           <p className="max-w-xl text-sm text-zinc-400">
             Shipped strips from <code className="text-violet-300">/assets/.../sheets/atlas.json</code>. Collision
-            circle uses <code className="text-violet-300">PLAYER_RADIUS_PX</code> centered on the sim anchor (texture
-            bottom minus <code className="text-violet-300">{LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y}px</code>).
+            overlay shows the movement oval and character hitbox centered on the sim anchor (texture bottom minus{" "}
+            <code className="text-violet-300">{LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y}px</code>).
           </p>
         </header>
 
@@ -474,77 +478,60 @@ export function SpriteViewerClient() {
                 <code className="text-violet-300">LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y</code>.
               </p>
               <p>
-                <strong className="text-zinc-100">Relationship to radius.</strong>{" "}
-                <code className="text-violet-300">PLAYER_RADIUS_PX</code> is drawn around this point. The radius does{" "}
-                <strong className="text-zinc-100"> not</strong> determine the point; spawn/sync state provides the
-                point, and the radius defines the gameplay body around it.
+                <strong className="text-zinc-100">Relationship to overlays.</strong> The movement oval and character
+                hitbox are drawn from balance constants around this point. Spawn/sync state provides the point; the
+                overlays define separate world-collision and combat shapes around it.
               </p>
             </LegendTipRow>
             <LegendTipRow
               testId="sprite-viewer-legend-info-collision"
               label={
                 <span>
-                  <span className="text-emerald-400">Green</span>: {PLAYER_RADIUS_PX}px radius (authoritative gameplay
-                  body).
+                  <span className="text-emerald-400">Green</span>: movement oval ({spriteViewerMovementOvalRadii().radiusX}×
+                  {spriteViewerMovementOvalRadii().radiusY} radii).
                 </span>
               }
             >
               <p>
-                <strong className="text-zinc-100">What it is.</strong> Wizard Wars treats each player as a{" "}
-                <strong className="text-zinc-100">circle</strong> in world space: center at the authoritative{" "}
-                <code className="text-violet-300">(x, y)</code> from the sim, radius{" "}
-                <code className="text-violet-300">PLAYER_RADIUS_PX</code> from{" "}
-                <code className="text-violet-300">@/shared/balance-config/combat</code>. The viewer draws that circle
-                where the <strong className="text-zinc-100">sim/render anchor</strong> sits—not at the raw texture
-                bottom—using the same vertical offset as Phaser (
-                <code className="text-violet-300">LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y</code> in{" "}
-                <code className="text-violet-300">PlayerRenderSystem</code>) so art lines up with collision.
+                <strong className="text-zinc-100">What it is.</strong> World collision uses an axis-aligned oval in
+                world space: center at authoritative <code className="text-violet-300">(x, y)</code>, horizontal radius{" "}
+                <code className="text-violet-300">{spriteViewerMovementOvalRadii().radiusX}px</code>, vertical radius{" "}
+                <code className="text-violet-300">{spriteViewerMovementOvalRadii().radiusY}px</code>.
               </p>
               <p>
                 <strong className="text-zinc-100">Systems that use it.</strong> Server:{" "}
-                <code className="text-violet-300">simulation</code> assigns <code className="text-violet-300">Radius.r</code>;{" "}
-                <code className="text-violet-300">worldCollisionSystem</code> clamps player centers inside the arena
-                respecting radius; <code className="text-violet-300">playerCollisionSystem</code> and{" "}
-                <code className="text-violet-300">projectileCollisionSystem</code> use it for player–player and
-                player–projectile distances. Shared <code className="text-violet-300">worldCollision</code> resolves
-                circles against rectangular colliders. Client: <code className="text-violet-300">ReconciliationSystem</code>{" "}
-                uses the same constant when probing geometry during prediction replay.
+                <code className="text-violet-300">movementSystem</code> and{" "}
+                <code className="text-violet-300">worldCollisionSystem</code>. Client:{" "}
+                <code className="text-violet-300">ReconciliationSystem</code> and{" "}
+                <code className="text-violet-300">PlayerRenderSystem</code> prediction replay.
               </p>
               <p>
-                <strong className="text-zinc-100">If you change it.</strong> Increasing radius makes heroes easier to
-                hit, harder to thread narrow gaps, and changes how tightly the server clamps you to walls and props;
-                decreasing it does the opposite. Any change must ship with matching balance and art review—nametag/HUD
-                layout is separate, but <strong className="text-zinc-100">feel</strong> (getting clipped, dodging
-                fireballs) shifts immediately because every distance test against that circle changes.
+                <strong className="text-zinc-100">If you change it.</strong> This changes wall, bounds, and non-walkable
+                terrain feel only. Combat damage uses the purple character hitbox.
               </p>
             </LegendTipRow>
             <LegendTipRow
-              testId="sprite-viewer-legend-info-bounds"
+              testId="sprite-viewer-legend-info-hitbox"
               label={
                 <span>
-                  <span className="text-amber-300">Yellow</span>: axis-aligned bounds ({PLAYER_DIAMETER_PX}×
-                  {PLAYER_DIAMETER_PX}).
+                  <span className="text-fuchsia-300">Purple</span>: character hitbox ({spriteViewerCharacterHitbox().width}×
+                  {spriteViewerCharacterHitbox().height}).
                 </span>
               }
             >
               <p>
-                <strong className="text-zinc-100">What it is.</strong> A square that{" "}
-                <strong className="text-zinc-100">tightly bounds the green circle</strong>—side length{" "}
-                <code className="text-violet-300">2 × PLAYER_RADIUS_PX</code> ({PLAYER_DIAMETER_PX}px here). It is a{" "}
-                <strong className="text-zinc-100">viewer-only</strong> guide so you can eyeball how the circular
-                footprint lines up with orthogonal arena tiles and rectangular colliders.
+                <strong className="text-zinc-100">What it is.</strong> The combat body rectangle anchored at the sim
+                point: 15 px left, 15 px right, 40 px up, and 15 px down.
               </p>
               <p>
                 <strong className="text-zinc-100">Systems that use it.</strong>{" "}
-                <strong className="text-zinc-100">None.</strong> The game does{" "}
-                <strong className="text-zinc-100">not</strong> ship a rectangular player AABB for combat; only the circle
-                is authoritative. Nothing in Colyseus, Phaser registration, or ECS reads this yellow box.
+                <code className="text-violet-300">projectileCollisionSystem</code>,{" "}
+                <code className="text-violet-300">lightningBoltSystem</code>, and{" "}
+                <code className="text-violet-300">primaryMeleeAttackSystem</code>.
               </p>
               <p>
-                <strong className="text-zinc-100">If you change it.</strong> Tweaking only the viewer&apos;s square
-                styling leaves gameplay untouched. If you instead change <code className="text-violet-300">PLAYER_RADIUS_PX</code>, the
-                green circle and this yellow box both grow or shrink together because the square is always derived from
-                the circle.
+                <strong className="text-zinc-100">If you change it.</strong> Fireball, lightning, and melee hit fairness
+                shifts. Movement against terrain stays controlled by the green oval.
               </p>
             </LegendTipRow>
             <LegendTipRow

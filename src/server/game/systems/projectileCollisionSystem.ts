@@ -1,6 +1,6 @@
 /**
  * projectileCollisionSystem – checks fireball projectiles against live player
- * circles and queues DamageRequests when a hit is detected.
+ * character hitboxes and queues DamageRequests when a hit is detected.
  *
  * Fireballs deal self-damage (caster can be hit by their own fireball).
  * Each fireball is removed on first hit.
@@ -10,7 +10,6 @@ import { query, hasComponent } from "bitecs"
 import {
   Position,
   Velocity,
-  Ownership,
   FireballTag,
   PlayerTag,
   DyingTag,
@@ -20,10 +19,13 @@ import {
 } from "../components"
 import type { SimCtx, DamageRequest } from "../simulation"
 import {
-  PLAYER_RADIUS_PX,
   FIREBALL_DAMAGE,
   FIREBALL_KNOCKBACK_PX,
 } from "../../../shared/balance-config"
+import {
+  characterHitboxForCenter,
+  circleIntersectsRect,
+} from "../../../shared/collision/characterHitbox"
 
 /** Approximate fireball hit radius in pixels. */
 const FIREBALL_RADIUS = 8
@@ -53,7 +55,6 @@ export function projectileCollisionSystem(ctx: SimCtx): void {
 
     const fbX = Position.x[fbEid]
     const fbY = Position.y[fbEid]
-    const ownerEid = Ownership.ownerEid[fbEid]
     const ownerUserId = fireballOwnerMap.get(fbEid) ?? null
 
     for (const playerEid of query(world, [PlayerTag])) {
@@ -62,10 +63,8 @@ export function projectileCollisionSystem(ctx: SimCtx): void {
       if (hasComponent(world, playerEid, SpectatorTag)) continue
       if (hasComponent(world, playerEid, InvulnerableTag)) continue
 
-      const dx = fbX - Position.x[playerEid]
-      const dy = fbY - Position.y[playerEid]
-      const minDist = PLAYER_RADIUS_PX + FIREBALL_RADIUS
-      if (dx * dx + dy * dy >= minDist * minDist) continue
+      const hitbox = characterHitboxForCenter(Position.x[playerEid], Position.y[playerEid])
+      if (!circleIntersectsRect(fbX, fbY, FIREBALL_RADIUS, hitbox)) continue
 
       // Hit!
       const targetUserId = entityPlayerMap.get(playerEid) ?? null
