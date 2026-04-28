@@ -15,6 +15,7 @@ const HERO_PRIMARY_MELEE_COVERAGE_INCLUDE = [
   "src/shared/roomEvents.ts",
   "src/shared/validators.ts",
   "src/shared/playerAnimAim.ts",
+  "src/shared/sprites/spriteViewerOverlays.ts",
   "src/server/gameserver/sessionShop.ts",
   "src/server/game/components.ts",
   "src/server/game/systems/primaryMeleeAttackSystem.ts",

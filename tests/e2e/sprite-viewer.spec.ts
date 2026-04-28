@@ -13,16 +13,18 @@ test.describe("sprite viewer dev route", () => {
     await expect(gallery.locator("button:not([disabled])").first()).toBeVisible({ timeout: 15_000 })
     await expect(page.getByTestId("sprite-viewer-detail-canvas")).toBeVisible()
     await expect(page.getByTestId("sprite-viewer-legend")).toBeVisible()
+    await expect(page.getByText(/centerpoint \/ sim anchor/i)).toBeVisible()
   })
 
   test("legend ⓘ expands technical details", async ({ page }) => {
     await page.goto("/dev/sprite-viewer")
     await expect(page.getByTestId("sprite-viewer-legend")).toBeVisible()
-    await page.getByTestId("sprite-viewer-legend-info-collision").click()
+    await page.getByTestId("sprite-viewer-legend-info-centerpoint").click()
     const legend = page.getByTestId("sprite-viewer-legend")
     await expect(legend.getByRole("region")).toBeVisible()
-    await expect(legend.getByText(/What it is/i).first()).toBeVisible()
-    await page.getByTestId("sprite-viewer-legend-info-collision").click()
+    await expect(legend.getByText(/Position\.x\/y/i)).toBeVisible()
+    await expect(legend.getByText(/radius defines the gameplay body/i)).toBeVisible()
+    await page.getByTestId("sprite-viewer-legend-info-centerpoint").click()
     await expect(legend.getByRole("region")).toHaveCount(0)
   })
 

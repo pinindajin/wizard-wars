@@ -22,6 +22,12 @@ import {
   type LadyWizardAtlasJson,
   type LadyWizardViewerCell,
 } from "@/shared/sprites/ladyWizardViewerModel"
+import {
+  SPRITE_VIEWER_CENTERPOINT_MARKER_ARM_PX,
+  SPRITE_VIEWER_CENTERPOINT_MARKER_RADIUS_PX,
+  spriteViewerCenterpoint,
+  spriteViewerCenterpointTooltip,
+} from "@/shared/sprites/spriteViewerOverlays"
 
 const DETAIL_SCALE = 2
 const DETAIL_PAD = 16
@@ -242,20 +248,37 @@ export function SpriteViewerClient() {
     ctx.scale(DETAIL_SCALE, DETAIL_SCALE)
     ctx.drawImage(img, displayFrame * FRAME, 0, FRAME, FRAME, -FRAME / 2, -FRAME, FRAME, FRAME)
 
-    const simY = -LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y
+    const centerpoint = spriteViewerCenterpoint()
     if (showCollision) {
       ctx.strokeStyle = "rgba(34, 197, 94, 0.85)"
       ctx.lineWidth = 1 / DETAIL_SCALE
       ctx.beginPath()
-      ctx.arc(0, simY, PLAYER_RADIUS_PX, 0, Math.PI * 2)
+      ctx.arc(centerpoint.x, centerpoint.y, PLAYER_RADIUS_PX, 0, Math.PI * 2)
       ctx.stroke()
       ctx.strokeStyle = "rgba(250, 204, 21, 0.75)"
       ctx.strokeRect(
-        -PLAYER_RADIUS_PX,
-        simY - PLAYER_RADIUS_PX,
+        centerpoint.x - PLAYER_RADIUS_PX,
+        centerpoint.y - PLAYER_RADIUS_PX,
         PLAYER_RADIUS_PX * 2,
         PLAYER_RADIUS_PX * 2,
       )
+      ctx.strokeStyle = "rgba(244, 63, 94, 0.95)"
+      ctx.fillStyle = "rgba(255, 255, 255, 0.95)"
+      ctx.beginPath()
+      ctx.moveTo(centerpoint.x - SPRITE_VIEWER_CENTERPOINT_MARKER_ARM_PX, centerpoint.y)
+      ctx.lineTo(centerpoint.x + SPRITE_VIEWER_CENTERPOINT_MARKER_ARM_PX, centerpoint.y)
+      ctx.moveTo(centerpoint.x, centerpoint.y - SPRITE_VIEWER_CENTERPOINT_MARKER_ARM_PX)
+      ctx.lineTo(centerpoint.x, centerpoint.y + SPRITE_VIEWER_CENTERPOINT_MARKER_ARM_PX)
+      ctx.stroke()
+      ctx.beginPath()
+      ctx.arc(
+        centerpoint.x,
+        centerpoint.y,
+        SPRITE_VIEWER_CENTERPOINT_MARKER_RADIUS_PX,
+        0,
+        Math.PI * 2,
+      )
+      ctx.fill()
     }
 
     if (showEdge) {
@@ -432,6 +455,31 @@ export function SpriteViewerClient() {
             notes (no hover required).
           </p>
           <div className="flex flex-col gap-2.5">
+            <LegendTipRow
+              testId="sprite-viewer-legend-info-centerpoint"
+              label={
+                <span title={spriteViewerCenterpointTooltip()}>
+                  <span className="text-rose-400">Red/white</span>: centerpoint / sim anchor.
+                </span>
+              }
+            >
+              <p>
+                <strong className="text-zinc-100">What it is.</strong> The centerpoint is the authoritative{" "}
+                <code className="text-violet-300">Position.x/y</code> used by movement, collision, combat targeting,
+                camera follow, and render interpolation. The detail canvas draws it at{" "}
+                <code className="text-violet-300">
+                  ({spriteViewerCenterpoint().x}, {spriteViewerCenterpoint().y})
+                </code>{" "}
+                relative to the cel because the sprite art is bottom-anchored and shifted by{" "}
+                <code className="text-violet-300">LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y</code>.
+              </p>
+              <p>
+                <strong className="text-zinc-100">Relationship to radius.</strong>{" "}
+                <code className="text-violet-300">PLAYER_RADIUS_PX</code> is drawn around this point. The radius does{" "}
+                <strong className="text-zinc-100"> not</strong> determine the point; spawn/sync state provides the
+                point, and the radius defines the gameplay body around it.
+              </p>
+            </LegendTipRow>
             <LegendTipRow
               testId="sprite-viewer-legend-info-collision"
               label={
