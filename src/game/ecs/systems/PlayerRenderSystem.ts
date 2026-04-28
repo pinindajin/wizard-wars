@@ -18,7 +18,7 @@ import {
 import {
   BASE_MOVE_SPEED_PX_PER_SEC,
   DAMAGE_FLASH_MS,
-  PLAYER_RADIUS_PX,
+  PLAYER_WORLD_COLLISION_FOOTPRINT,
   SWING_MOVE_SPEED_MULTIPLIER,
 } from "@/shared/balance-config/combat"
 import type {
@@ -757,7 +757,7 @@ export class PlayerRenderSystem {
           entry.simCurrY,
           step.x,
           step.y,
-          PLAYER_RADIUS_PX,
+          PLAYER_WORLD_COLLISION_FOOTPRINT,
           ARENA_BOUNDS,
           ARENA_WORLD_COLLIDERS,
         )
@@ -780,7 +780,7 @@ export class PlayerRenderSystem {
           pPredY,
           targetStepX,
           targetStepY,
-          PLAYER_RADIUS_PX,
+          PLAYER_WORLD_COLLISION_FOOTPRINT,
           ARENA_BOUNDS,
           ARENA_WORLD_COLLIDERS,
         )

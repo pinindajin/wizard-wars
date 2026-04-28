@@ -13,18 +13,22 @@ import {
   ARENA_NON_WALKABLE_COLLIDERS,
   ARENA_WORLD_COLLIDERS,
 } from "@/shared/balance-config/arena"
-import { PLAYER_RADIUS_PX } from "@/shared/balance-config/combat"
+import {
+  PLAYER_WORLD_COLLISION_OFFSET_Y_PX,
+  PLAYER_WORLD_COLLISION_RADIUS_X_PX,
+  PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
+} from "@/shared/balance-config/combat"
 import {
   ARENA_LAYOUT_IMPORTED_TILE_FIRST_GID,
 } from "@/shared/balance-config/arena-layout"
 
 /**
- * Tests whether a player spawn circle overlaps a generated collider rectangle.
+ * Tests whether a player spawn oval overlaps a generated collider rectangle.
  *
  * @param x - Spawn center x.
  * @param y - Spawn center y.
  * @param rect - Collider rectangle.
- * @returns Whether the spawn circle overlaps the rectangle.
+ * @returns Whether the spawn oval overlaps the rectangle.
  */
 function spawnOverlapsCollider(
   x: number,
@@ -32,10 +36,11 @@ function spawnOverlapsCollider(
   rect: { x: number; y: number; width: number; height: number },
 ): boolean {
   const nearestX = Math.max(rect.x, Math.min(x, rect.x + rect.width))
-  const nearestY = Math.max(rect.y, Math.min(y, rect.y + rect.height))
-  const dx = x - nearestX
-  const dy = y - nearestY
-  return dx * dx + dy * dy < PLAYER_RADIUS_PX * PLAYER_RADIUS_PX
+  const ellipseCenterY = y + PLAYER_WORLD_COLLISION_OFFSET_Y_PX
+  const nearestY = Math.max(rect.y, Math.min(ellipseCenterY, rect.y + rect.height))
+  const dx = (x - nearestX) / PLAYER_WORLD_COLLISION_RADIUS_X_PX
+  const dy = (ellipseCenterY - nearestY) / PLAYER_WORLD_COLLISION_RADIUS_Y_PX
+  return dx * dx + dy * dy < 1
 }
 
 describe("arena constants", () => {

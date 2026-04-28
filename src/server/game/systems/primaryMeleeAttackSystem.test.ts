@@ -75,4 +75,77 @@ describe("primaryMeleeAttackSystem", () => {
     expect(primaryMeleeAttacks).toHaveLength(1)
     expect(primaryMeleeAttacks[0]!.casterId).toBe("")
   })
+
+  it("hits a character hitbox even when the target center is outside swing radius", () => {
+    const world = createWorld()
+    const attacker = addEntity(world)
+    addComponent(world, attacker, PlayerTag)
+    addComponent(world, attacker, Position)
+    addComponent(world, attacker, Facing)
+    addComponent(world, attacker, Equipment)
+    addComponent(world, attacker, Cooldown)
+    addComponent(world, attacker, PlayerInput)
+
+    Position.x[attacker] = 0
+    Position.y[attacker] = 100
+    Facing.angle[attacker] = 0
+    Equipment.primaryMeleeAttackIndex[attacker] = 0
+    Cooldown.primaryMelee[attacker] = 0
+    PlayerInput.weaponPrimary[attacker] = 1
+
+    const target = addEntity(world)
+    addComponent(world, target, PlayerTag)
+    addComponent(world, target, Position)
+    Position.x[target] = 90
+    Position.y[target] = 100
+
+    const ctx = emptyCtx({
+      world,
+      entityPlayerMap: new Map([
+        [attacker, "attacker"],
+        [target, "target"],
+      ]),
+    })
+    primaryMeleeAttackSystem(ctx)
+
+    expect(ctx.damageRequests).toHaveLength(1)
+    expect(ctx.damageRequests[0]!.targetEid).toBe(target)
+    expect(ctx.primaryMeleeAttacks[0]!.hitPlayerIds).toEqual(["target"])
+  })
+
+  it("misses when the character hitbox is outside the swing cone", () => {
+    const world = createWorld()
+    const attacker = addEntity(world)
+    addComponent(world, attacker, PlayerTag)
+    addComponent(world, attacker, Position)
+    addComponent(world, attacker, Facing)
+    addComponent(world, attacker, Equipment)
+    addComponent(world, attacker, Cooldown)
+    addComponent(world, attacker, PlayerInput)
+
+    Position.x[attacker] = 0
+    Position.y[attacker] = 100
+    Facing.angle[attacker] = Math.PI
+    Equipment.primaryMeleeAttackIndex[attacker] = 0
+    Cooldown.primaryMelee[attacker] = 0
+    PlayerInput.weaponPrimary[attacker] = 1
+
+    const target = addEntity(world)
+    addComponent(world, target, PlayerTag)
+    addComponent(world, target, Position)
+    Position.x[target] = 90
+    Position.y[target] = 100
+
+    const ctx = emptyCtx({
+      world,
+      entityPlayerMap: new Map([
+        [attacker, "attacker"],
+        [target, "target"],
+      ]),
+    })
+    primaryMeleeAttackSystem(ctx)
+
+    expect(ctx.damageRequests).toHaveLength(0)
+    expect(ctx.primaryMeleeAttacks[0]!.hitPlayerIds).toEqual([])
+  })
 })

@@ -3,7 +3,9 @@ import { randomBytes } from "node:crypto"
 
 import {
   ARENA_WORLD_COLLIDERS,
-  PLAYER_RADIUS_PX,
+  PLAYER_WORLD_COLLISION_OFFSET_Y_PX,
+  PLAYER_WORLD_COLLISION_RADIUS_X_PX,
+  PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
 } from "../../src/shared/balance-config"
 import { ARENA_CAMERA_FOLLOW_ZOOM } from "../../src/shared/balance-config/rendering"
 
@@ -14,11 +16,12 @@ import { ARENA_CAMERA_FOLLOW_ZOOM } from "../../src/shared/balance-config/render
  * not assume {@link ARENA_SPAWN_POINTS}[0].
  */
 function northBarrierFootY(spawnX: number, spawnY: number): number {
+  const topClearance = PLAYER_WORLD_COLLISION_RADIUS_Y_PX - PLAYER_WORLD_COLLISION_OFFSET_Y_PX
   const northOfSpawn = ARENA_WORLD_COLLIDERS.filter(
     (col) =>
-      spawnX >= col.x - PLAYER_RADIUS_PX &&
-      spawnX <= col.x + col.width + PLAYER_RADIUS_PX &&
-      col.y + col.height <= spawnY - PLAYER_RADIUS_PX,
+      spawnX >= col.x - PLAYER_WORLD_COLLISION_RADIUS_X_PX &&
+      spawnX <= col.x + col.width + PLAYER_WORLD_COLLISION_RADIUS_X_PX &&
+      col.y + col.height <= spawnY - topClearance,
   )
   if (northOfSpawn.length === 0) {
     throw new Error(
@@ -28,7 +31,7 @@ function northBarrierFootY(spawnX: number, spawnY: number): number {
   const blocker = northOfSpawn.reduce((best, col) =>
     col.y + col.height > best.y + best.height ? col : best,
   )
-  return blocker.y + blocker.height + PLAYER_RADIUS_PX
+  return blocker.y + blocker.height + topClearance
 }
 
 /**

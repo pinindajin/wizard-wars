@@ -30,7 +30,8 @@ import {
   type PrimaryMeleeAttackId,
 } from "../../../shared/balance-config/equipment"
 import { TICK_MS } from "../../../shared/balance-config"
-import { inSwingCone } from "./swingConeGeometry"
+import { characterHitboxForCenter } from "../../../shared/collision/characterHitbox"
+import { swingConeIntersectsCharacterHitbox } from "./swingConeGeometry"
 
 /**
  * Runs the primary melee attack system for one tick.
@@ -79,14 +80,13 @@ export function primaryMeleeAttackSystem(ctx: SimCtx): void {
       if (hasComponent(world, target, InvulnerableTag)) continue
 
       if (
-        !inSwingCone(
+        !swingConeIntersectsCharacterHitbox(
           cx,
           cy,
           facing,
-          Position.x[target],
-          Position.y[target],
           cfg.radiusPx,
           cfg.arcDeg,
+          characterHitboxForCenter(Position.x[target], Position.y[target]),
         )
       ) {
         continue
