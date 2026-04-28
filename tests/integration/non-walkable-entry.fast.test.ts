@@ -6,7 +6,8 @@ import {
   ARENA_HEIGHT,
   ARENA_WORLD_COLLIDERS,
   ARENA_WIDTH,
-  PLAYER_WORLD_COLLISION_RADIUS_X_PX,
+  PLAYER_WORLD_COLLISION_FOOTPRINT,
+  PLAYER_WORLD_COLLISION_OFFSET_Y_PX,
   PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
 } from "@/shared/balance-config"
 import { canOccupyWorldPosition } from "@/shared/collision/worldCollision"
@@ -54,24 +55,21 @@ describe("non-walkable movement integration", () => {
     const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
     const topStrip = ARENA_WORLD_COLLIDERS[0]!
     const bounds = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
-    const footprint = {
-      radiusX: PLAYER_WORLD_COLLISION_RADIUS_X_PX,
-      radiusY: PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
-    }
+    const topClearance = PLAYER_WORLD_COLLISION_RADIUS_Y_PX - PLAYER_WORLD_COLLISION_OFFSET_Y_PX
 
     Position.x[eid] = topStrip.x + 704
-    Position.y[eid] = topStrip.y + topStrip.height + PLAYER_WORLD_COLLISION_RADIUS_Y_PX
+    Position.y[eid] = topStrip.y + topStrip.height + topClearance
 
     sim.tick(queue(input({ up: true })), Date.now())
 
     const snap = sim.buildGameStateSyncPayload(Date.now()).players[0]!
-    expect(snap.y).toBe(topStrip.y + topStrip.height + PLAYER_WORLD_COLLISION_RADIUS_Y_PX)
+    expect(snap.y).toBe(topStrip.y + topStrip.height + topClearance)
     expect(snap.vy).toBe(0)
     expect(
       canOccupyWorldPosition(
         snap.x,
         snap.y,
-        footprint,
+        PLAYER_WORLD_COLLISION_FOOTPRINT,
         bounds,
         ARENA_WORLD_COLLIDERS,
       ),

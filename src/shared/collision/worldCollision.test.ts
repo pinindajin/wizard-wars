@@ -8,7 +8,9 @@ import {
 } from "./worldCollision"
 
 const fixtureBounds = { width: 300, height: 300 }
-const fixtureFootprint = { radiusX: 20, radiusY: 15 }
+const fixtureFootprint = { radiusX: 20, radiusY: 12, offsetY: 10 }
+const fixtureTopClearance = fixtureFootprint.radiusY - fixtureFootprint.offsetY
+const fixtureBottomClearance = fixtureFootprint.radiusY + fixtureFootprint.offsetY
 const fixtureBlocker: ArenaPropColliderRect = {
   x: 100,
   y: 100,
@@ -50,8 +52,8 @@ describe("canOccupyWorldPosition", () => {
     ).toBe(false)
     expect(canOccupyWorldPosition(19, 140, fixtureFootprint, fixtureBounds, [])).toBe(false)
     expect(canOccupyWorldPosition(281, 140, fixtureFootprint, fixtureBounds, [])).toBe(false)
-    expect(canOccupyWorldPosition(140, 14, fixtureFootprint, fixtureBounds, [])).toBe(false)
-    expect(canOccupyWorldPosition(140, 286, fixtureFootprint, fixtureBounds, [])).toBe(false)
+    expect(canOccupyWorldPosition(140, 1, fixtureFootprint, fixtureBounds, [])).toBe(false)
+    expect(canOccupyWorldPosition(140, 279, fixtureFootprint, fixtureBounds, [])).toBe(false)
   })
 })
 
@@ -93,7 +95,7 @@ describe("moveWithinWorld", () => {
   it("blocks vertical entry into a collider", () => {
     const out = moveWithinWorld(
       140,
-      fixtureBlocker.y - 15,
+      fixtureBlocker.y - fixtureBottomClearance,
       0,
       5,
       fixtureFootprint,
@@ -103,7 +105,7 @@ describe("moveWithinWorld", () => {
 
     expect(out).toEqual({
       x: 140,
-      y: fixtureBlocker.y - 15,
+      y: fixtureBlocker.y - fixtureBottomClearance,
       appliedDx: 0,
       appliedDy: 0,
       blockedX: false,
@@ -140,8 +142,8 @@ describe("moveWithinWorld", () => {
       height: 80,
     }
     const out = moveWithinWorld(
-      80,
-      80,
+      75,
+      75,
       10,
       10,
       fixtureFootprint,
@@ -190,16 +192,16 @@ describe("resolveAgainstWorld", () => {
 
   it("clamps against the top and bottom bounds", () => {
     const top = resolveAgainstWorld(500, -50, fixtureFootprint, bounds, [])
-    expect(top.y).toBe(15)
+    expect(top.y).toBe(fixtureTopClearance)
 
     const bot = resolveAgainstWorld(500, 5000, fixtureFootprint, bounds, [])
-    expect(bot.y).toBe(bounds.height - 15)
+    expect(bot.y).toBe(bounds.height - fixtureBottomClearance)
   })
 
   it("resolves an oval overlapping a prop collider along an edge", () => {
     const prop: ArenaPropColliderRect = { x: 100, y: 100, width: 100, height: 100 }
     const out = resolveAgainstWorld(150, 90, fixtureFootprint, bounds, [prop])
-    expect(out.y).toBeLessThanOrEqual(prop.y - fixtureFootprint.radiusY + 1e-6)
+    expect(out.y).toBeLessThanOrEqual(prop.y - fixtureBottomClearance + 1e-6)
   })
 
   it("pushes an oval out when its center starts inside a collider", () => {
@@ -210,8 +212,8 @@ describe("resolveAgainstWorld", () => {
       out.x <= lava.x - fixtureFootprint.radiusX ||
       out.x >= lava.x + lava.width + fixtureFootprint.radiusX
     const outsideY =
-      out.y <= lava.y - fixtureFootprint.radiusY ||
-      out.y >= lava.y + lava.height + fixtureFootprint.radiusY
+      out.y <= lava.y - fixtureBottomClearance ||
+      out.y >= lava.y + lava.height + fixtureTopClearance
     expect(outsideX || outsideY).toBe(true)
   })
 
@@ -222,10 +224,10 @@ describe("resolveAgainstWorld", () => {
       lava.x + lava.width + fixtureFootprint.radiusX,
     )
     expect(resolveAgainstWorld(150, 105, fixtureFootprint, bounds, [lava]).y).toBeLessThanOrEqual(
-      lava.y - fixtureFootprint.radiusY,
+      lava.y - fixtureBottomClearance,
     )
     expect(resolveAgainstWorld(150, 195, fixtureFootprint, bounds, [lava]).y).toBeGreaterThanOrEqual(
-      lava.y + lava.height + fixtureFootprint.radiusY,
+      lava.y + lava.height + fixtureTopClearance,
     )
   })
 
@@ -241,15 +243,15 @@ describe("resolveAgainstWorld", () => {
       ]).x,
     ).toBe(80)
     expect(
-      resolveAgainstWorld(50, 15, fixtureFootprint, { width: 100, height: 100 }, [
+      resolveAgainstWorld(50, fixtureTopClearance, fixtureFootprint, { width: 100, height: 100 }, [
         { x: 40, y: 20, width: 20, height: 20 },
       ]).y,
-    ).toBe(15)
+    ).toBe(fixtureTopClearance)
     expect(
-      resolveAgainstWorld(50, 85, fixtureFootprint, { width: 100, height: 100 }, [
+      resolveAgainstWorld(50, 100 - fixtureBottomClearance, fixtureFootprint, { width: 100, height: 100 }, [
         { x: 40, y: 60, width: 20, height: 20 },
       ]).y,
-    ).toBe(85)
+    ).toBe(100 - fixtureBottomClearance)
   })
 
   it("resolves against adjacent partial transition strips", () => {
@@ -259,7 +261,7 @@ describe("resolveAgainstWorld", () => {
     const out = resolveAgainstWorld(120, 120, fixtureFootprint, bounds, [northStrip, westStrip])
 
     expect(out.x).toBeGreaterThanOrEqual(westStrip.x + westStrip.width + fixtureFootprint.radiusX)
-    expect(out.y).toBeGreaterThanOrEqual(northStrip.y + northStrip.height + fixtureFootprint.radiusY)
+    expect(out.y).toBeGreaterThanOrEqual(northStrip.y + northStrip.height + fixtureTopClearance)
   })
 
   it("does not move an oval fully outside a prop", () => {

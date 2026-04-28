@@ -256,7 +256,7 @@ export function SpriteViewerClient() {
       ctx.beginPath()
       ctx.ellipse(
         centerpoint.x,
-        centerpoint.y,
+        centerpoint.y + movementOval.offsetY,
         movementOval.radiusX,
         movementOval.radiusY,
         0,
@@ -488,7 +488,7 @@ export function SpriteViewerClient() {
               label={
                 <span>
                   <span className="text-emerald-400">Green</span>: movement oval ({spriteViewerMovementOvalRadii().radiusX}×
-                  {spriteViewerMovementOvalRadii().radiusY} radii).
+                  {spriteViewerMovementOvalRadii().radiusY} radii, +{spriteViewerMovementOvalRadii().offsetY}px y).
                 </span>
               }
             >
@@ -496,7 +496,9 @@ export function SpriteViewerClient() {
                 <strong className="text-zinc-100">What it is.</strong> World collision uses an axis-aligned oval in
                 world space: center at authoritative <code className="text-violet-300">(x, y)</code>, horizontal radius{" "}
                 <code className="text-violet-300">{spriteViewerMovementOvalRadii().radiusX}px</code>, vertical radius{" "}
-                <code className="text-violet-300">{spriteViewerMovementOvalRadii().radiusY}px</code>.
+                <code className="text-violet-300">{spriteViewerMovementOvalRadii().radiusY}px</code>, shifted{" "}
+                <code className="text-violet-300">{spriteViewerMovementOvalRadii().offsetY}px</code> below the sim
+                anchor.
               </p>
               <p>
                 <strong className="text-zinc-100">Systems that use it.</strong> Server:{" "}

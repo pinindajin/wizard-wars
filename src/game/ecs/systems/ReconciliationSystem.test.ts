@@ -8,6 +8,8 @@ import {
   ARENA_WIDTH,
   ARENA_WORLD_COLLIDERS,
   BASE_MOVE_SPEED_PX_PER_SEC,
+  PLAYER_WORLD_COLLISION_FOOTPRINT,
+  PLAYER_WORLD_COLLISION_OFFSET_Y_PX,
   PLAYER_WORLD_COLLISION_RADIUS_X_PX,
   PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
   SWING_MOVE_SPEED_MULTIPLIER,
@@ -43,18 +45,13 @@ const noopCtx = {
 } as const
 
 const arenaBounds = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
-const playerWorldFootprint = {
-  radiusX: PLAYER_WORLD_COLLISION_RADIUS_X_PX,
-  radiusY: PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
-}
-
 function findRightwardReplayStart(): { x: number; y: number } {
   const start = ARENA_SPAWN_POINTS.find((point) => {
     const probeX = point.x + PLAYER_WORLD_COLLISION_RADIUS_X_PX
     const resolved = resolveAgainstWorld(
       probeX,
       point.y,
-      playerWorldFootprint,
+      PLAYER_WORLD_COLLISION_FOOTPRINT,
       arenaBounds,
       ARENA_WORLD_COLLIDERS,
     )
@@ -189,9 +186,10 @@ describe("reconcileLocal", () => {
     history.append(input({ seq: 20, up: true }))
 
     const topStrip = ARENA_WORLD_COLLIDERS[0]!
+    const topClearance = PLAYER_WORLD_COLLISION_RADIUS_Y_PX - PLAYER_WORLD_COLLISION_OFFSET_Y_PX
     const start = {
       x: topStrip.x + 704,
-      y: topStrip.y + topStrip.height + PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
+      y: topStrip.y + topStrip.height + topClearance,
     }
     const ack = { ...start, lastProcessedInputSeq: 19 }
     const r = reconcileLocal(ack, history, start, noopCtx)

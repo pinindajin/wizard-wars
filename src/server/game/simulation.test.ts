@@ -9,6 +9,7 @@ import {
   ARENA_WORLD_COLLIDERS,
 } from "@/shared/balance-config/arena"
 import {
+  PLAYER_WORLD_COLLISION_OFFSET_Y_PX,
   PLAYER_WORLD_COLLISION_RADIUS_X_PX,
   PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
 } from "@/shared/balance-config/combat"
@@ -131,13 +132,14 @@ describe("movement system", () => {
     const sim = createGameSimulation(Date.now())
     const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
     const topStrip = ARENA_WORLD_COLLIDERS[0]!
+    const topClearance = PLAYER_WORLD_COLLISION_RADIUS_Y_PX - PLAYER_WORLD_COLLISION_OFFSET_Y_PX
     Position.x[eid] = topStrip.x + 704
-    Position.y[eid] = topStrip.y + topStrip.height + PLAYER_WORLD_COLLISION_RADIUS_Y_PX
+    Position.y[eid] = topStrip.y + topStrip.height + topClearance
 
     sim.tick(queueMap([["user1", emptyInput({ up: true })]]), Date.now())
 
     const snap = sim.buildGameStateSyncPayload(Date.now()).players[0]!
-    expect(snap.y).toBe(topStrip.y + topStrip.height + PLAYER_WORLD_COLLISION_RADIUS_Y_PX)
+    expect(snap.y).toBe(topStrip.y + topStrip.height + topClearance)
     expect(snap.vy).toBe(0)
     expect(snap.moveState).toBe("idle")
   })

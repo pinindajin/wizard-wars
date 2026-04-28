@@ -14,6 +14,7 @@ import {
   ARENA_WORLD_COLLIDERS,
 } from "@/shared/balance-config/arena"
 import {
+  PLAYER_WORLD_COLLISION_OFFSET_Y_PX,
   PLAYER_WORLD_COLLISION_RADIUS_X_PX,
   PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
 } from "@/shared/balance-config/combat"
@@ -35,9 +36,10 @@ function spawnOverlapsCollider(
   rect: { x: number; y: number; width: number; height: number },
 ): boolean {
   const nearestX = Math.max(rect.x, Math.min(x, rect.x + rect.width))
-  const nearestY = Math.max(rect.y, Math.min(y, rect.y + rect.height))
+  const ellipseCenterY = y + PLAYER_WORLD_COLLISION_OFFSET_Y_PX
+  const nearestY = Math.max(rect.y, Math.min(ellipseCenterY, rect.y + rect.height))
   const dx = (x - nearestX) / PLAYER_WORLD_COLLISION_RADIUS_X_PX
-  const dy = (y - nearestY) / PLAYER_WORLD_COLLISION_RADIUS_Y_PX
+  const dy = (ellipseCenterY - nearestY) / PLAYER_WORLD_COLLISION_RADIUS_Y_PX
   return dx * dx + dy * dy < 1
 }
 

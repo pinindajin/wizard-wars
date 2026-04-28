@@ -3,8 +3,7 @@ import {
   ARENA_HEIGHT,
   ARENA_WORLD_COLLIDERS,
   BASE_MOVE_SPEED_PX_PER_SEC,
-  PLAYER_WORLD_COLLISION_RADIUS_X_PX,
-  PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
+  PLAYER_WORLD_COLLISION_FOOTPRINT,
   SWING_MOVE_SPEED_MULTIPLIER,
   SWIFT_BOOTS_SPEED_BONUS,
   TICK_DT_SEC,
@@ -60,10 +59,6 @@ export type ReconcileResult = {
 }
 
 const ARENA_BOUNDS = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
-const PLAYER_WORLD_FOOTPRINT = {
-  radiusX: PLAYER_WORLD_COLLISION_RADIUS_X_PX,
-  radiusY: PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
-}
 
 /**
  * Computes the per-tick speed multiplier used by local replay, mirroring
@@ -113,7 +108,7 @@ function stepReplay(
     y,
     step.x,
     step.y,
-    PLAYER_WORLD_FOOTPRINT,
+    PLAYER_WORLD_COLLISION_FOOTPRINT,
     ARENA_BOUNDS,
     ARENA_WORLD_COLLIDERS,
   )

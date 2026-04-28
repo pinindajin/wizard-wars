@@ -3,8 +3,7 @@ import {
   CHARACTER_HITBOX_LEFT_PX,
   CHARACTER_HITBOX_RIGHT_PX,
   CHARACTER_HITBOX_UP_PX,
-  PLAYER_WORLD_COLLISION_RADIUS_X_PX,
-  PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
+  PLAYER_WORLD_COLLISION_FOOTPRINT,
 } from "@/shared/balance-config/combat"
 import { LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y } from "@/shared/sprites/ladyWizard"
 
@@ -29,6 +28,7 @@ export type SpriteViewerRect = {
 export type SpriteViewerOvalRadii = {
   readonly radiusX: number
   readonly radiusY: number
+  readonly offsetY: number
 }
 
 /**
@@ -48,10 +48,7 @@ export function spriteViewerCenterpoint(): SpriteViewerCenterpoint {
  * @returns Axis-aligned movement oval radii in detail-canvas world pixels.
  */
 export function spriteViewerMovementOvalRadii(): SpriteViewerOvalRadii {
-  return {
-    radiusX: PLAYER_WORLD_COLLISION_RADIUS_X_PX,
-    radiusY: PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
-  }
+  return PLAYER_WORLD_COLLISION_FOOTPRINT
 }
 
 /**

@@ -5,6 +5,7 @@ import {
   CHARACTER_HITBOX_LEFT_PX,
   CHARACTER_HITBOX_RIGHT_PX,
   CHARACTER_HITBOX_UP_PX,
+  PLAYER_WORLD_COLLISION_OFFSET_Y_PX,
   PLAYER_WORLD_COLLISION_RADIUS_X_PX,
   PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
 } from "@/shared/balance-config/combat"
@@ -38,6 +39,7 @@ describe("sprite viewer overlays", () => {
     expect(spriteViewerMovementOvalRadii()).toEqual({
       radiusX: PLAYER_WORLD_COLLISION_RADIUS_X_PX,
       radiusY: PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
+      offsetY: PLAYER_WORLD_COLLISION_OFFSET_Y_PX,
     })
   })
 

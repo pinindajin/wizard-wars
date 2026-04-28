@@ -13,7 +13,17 @@ export const PLAYER_RADIUS_PX = 20
 export const PLAYER_WORLD_COLLISION_RADIUS_X_PX = 20
 
 /** Vertical radius of the player's oval world-collision footprint in pixels. */
-export const PLAYER_WORLD_COLLISION_RADIUS_Y_PX = 15
+export const PLAYER_WORLD_COLLISION_RADIUS_Y_PX = 12
+
+/** Vertical offset from the sim anchor to the oval world-collision center in pixels. */
+export const PLAYER_WORLD_COLLISION_OFFSET_Y_PX = 10
+
+/** Complete player oval footprint used for world collision. */
+export const PLAYER_WORLD_COLLISION_FOOTPRINT = {
+  radiusX: PLAYER_WORLD_COLLISION_RADIUS_X_PX,
+  radiusY: PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
+  offsetY: PLAYER_WORLD_COLLISION_OFFSET_Y_PX,
+} as const
 
 /** Character combat hitbox extent to the left of the sim anchor in pixels. */
 export const CHARACTER_HITBOX_LEFT_PX = 15

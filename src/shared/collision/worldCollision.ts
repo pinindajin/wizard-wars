@@ -25,6 +25,7 @@ export type ArenaPropColliderRect = {
 export type WorldCollisionFootprint = {
   readonly radiusX: number
   readonly radiusY: number
+  readonly offsetY: number
 }
 
 /** Result of a candidate-gated world movement step. */
@@ -98,9 +99,10 @@ function ellipseRectMTV(
   footprint: WorldCollisionFootprint,
   rect: ArenaPropColliderRect,
 ): { dx: number; dy: number } | null {
+  const ellipseCenterY = cy + footprint.offsetY
   const mtv = unitCircleRectMTV(
     cx / footprint.radiusX,
-    cy / footprint.radiusY,
+    ellipseCenterY / footprint.radiusY,
     rect.x / footprint.radiusX,
     rect.y / footprint.radiusY,
     rect.width / footprint.radiusX,
@@ -133,7 +135,8 @@ export function canOccupyWorldPosition(
   worldColliders: readonly ArenaPropColliderRect[],
 ): boolean {
   if (x < footprint.radiusX || x > bounds.width - footprint.radiusX) return false
-  if (y < footprint.radiusY || y > bounds.height - footprint.radiusY) return false
+  if (y < footprint.radiusY - footprint.offsetY) return false
+  if (y > bounds.height - footprint.radiusY - footprint.offsetY) return false
 
   for (const col of worldColliders) {
     if (ellipseRectMTV(x, y, footprint, col)) {
@@ -234,9 +237,9 @@ export function resolveAgainstWorld(
   let cy = y
 
   const minX = footprint.radiusX
-  const minY = footprint.radiusY
+  const minY = footprint.radiusY - footprint.offsetY
   const maxX = bounds.width - footprint.radiusX
-  const maxY = bounds.height - footprint.radiusY
+  const maxY = bounds.height - footprint.radiusY - footprint.offsetY
 
   if (cx < minX) cx = minX
   if (cx > maxX) cx = maxX
