@@ -74,8 +74,8 @@ export class PrimaryMeleeAttackRenderSystem {
         sw.sprite.setAlpha(alpha)
         const swingAngle = sw.payload.facingAngle - (Math.PI / 4) + (Math.PI / 2) * progress
         sw.sprite.setPosition(
-          sw.payload.x + Math.cos(swingAngle) * sw.payload.radiusPx * 0.6,
-          sw.payload.y + Math.sin(swingAngle) * sw.payload.radiusPx * 0.6,
+          sw.payload.x + Math.cos(swingAngle) * sw.payload.hurtboxRadiusPx * 0.6,
+          sw.payload.y + Math.sin(swingAngle) * sw.payload.hurtboxRadiusPx * 0.6,
         )
         sw.sprite.setRotation(swingAngle)
       }
@@ -98,21 +98,21 @@ export class PrimaryMeleeAttackRenderSystem {
   ): void {
     gfx.clear()
 
-    const halfArc = (payload.arcDeg / 2) * (Math.PI / 180)
+    const halfArc = (payload.hurtboxArcDeg / 2) * (Math.PI / 180)
     const startAngle = payload.facingAngle - halfArc
     const endAngle = startAngle + halfArc * 2 * progress
 
     gfx.fillStyle(CONE_FILL_COLOR, alpha * 0.35)
     gfx.beginPath()
     gfx.moveTo(payload.x, payload.y)
-    gfx.arc(payload.x, payload.y, payload.radiusPx, startAngle, endAngle, false)
+    gfx.arc(payload.x, payload.y, payload.hurtboxRadiusPx, startAngle, endAngle, false)
     gfx.closePath()
     gfx.fillPath()
 
     gfx.lineStyle(2, CONE_STROKE_COLOR, alpha * 0.8)
     gfx.beginPath()
     gfx.moveTo(payload.x, payload.y)
-    gfx.arc(payload.x, payload.y, payload.radiusPx, startAngle, endAngle, false)
+    gfx.arc(payload.x, payload.y, payload.hurtboxRadiusPx, startAngle, endAngle, false)
     gfx.closePath()
     gfx.strokePath()
   }

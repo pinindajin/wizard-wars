@@ -104,12 +104,16 @@ export const AXE_DAMAGE_PROPERTIES = combineDamageProperties(
   DamageProperty.Physical,
   DamageProperty.Slashing,
 )
-/** Axe swing arc in degrees (cone in front of player). */
-export const AXE_SWING_ARC_DEG = 90
-/** Axe swing radius in px. */
-export const AXE_SWING_RADIUS_PX = 80
-/** Axe swing animation duration in ms (= cooldown). */
-export const AXE_SWING_DURATION_MS = 400
+/** Hurtbox radius in pixels. Half-circle extends this far in front of the attacker. */
+export const AXE_HURTBOX_RADIUS_PX = 45
+/** Hurtbox arc width in degrees. 180 = half-circle (flat side at character, curve facing forward). */
+export const AXE_HURTBOX_ARC_DEG = 180
+/** Axe swing animation duration in ms = cooldown. Matches lady-wizard summoned_axe_swing: 17 frames @ 12 fps ≈ 1417ms. */
+export const AXE_SWING_DURATION_MS = 1417
+/** Start of the dangerous-frames window (ms since swing start) during which the hurtbox can deal damage. */
+export const AXE_DANGEROUS_WINDOW_START_MS = 500
+/** End of the dangerous-frames window (ms since swing start, exclusive). */
+export const AXE_DANGEROUS_WINDOW_END_MS = 900
 
 // --- Healing Potion ---
 /** HP restored by a healing potion. */

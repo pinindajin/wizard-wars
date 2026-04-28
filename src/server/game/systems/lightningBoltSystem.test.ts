@@ -38,6 +38,7 @@ function emptyCtx(overrides: Partial<SimCtx> = {}): SimCtx {
     prevPlayerStates: new Map(),
     prevFireballStates: new Map(),
     killStats: new Map(),
+    activeMeleeAttacks: new Map(),
     playerDeltas: [],
     fireballDeltas: [],
     ...overrides,

@@ -9,11 +9,12 @@ function basePayload() {
     x: 100,
     y: 200,
     facingAngle: 0,
-    hitPlayerIds: [] as string[],
     damage: 25,
-    radiusPx: 80,
-    arcDeg: 90,
+    hurtboxRadiusPx: 45,
+    hurtboxArcDeg: 180,
     durationMs: 200,
+    dangerousWindowStartMs: 60,
+    dangerousWindowEndMs: 140,
   }
 }
 

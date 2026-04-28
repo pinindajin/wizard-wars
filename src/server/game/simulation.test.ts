@@ -18,12 +18,17 @@ import {
   DeadTag,
   DyingTag,
   Equipment,
+  Health,
   InvulnerableTag,
   Position,
   SpectatorTag,
   SwingingWeapon,
 } from "@/server/game/components"
-import { primaryMeleeAttackIdToIndex } from "@/shared/balance-config/equipment"
+import {
+  primaryMeleeAttackIdToIndex,
+  PRIMARY_MELEE_ATTACK_CONFIGS,
+} from "@/shared/balance-config/equipment"
+import { TICK_MS } from "@/shared/balance-config"
 import type { PlayerInputPayload } from "@/shared/types"
 
 let nextSeq = 1
@@ -55,6 +60,15 @@ function queueMap(
   }
   return out
 }
+
+/** Advance the simulation by `n` ticks with no inputs. */
+function advanceTicks(sim: ReturnType<typeof createGameSimulation>, n: number): void {
+  for (let i = 0; i < n; i++) sim.tick(new Map(), Date.now())
+}
+
+/** Number of ticks needed to clear the dangerous window for the cleaver attack. */
+const TICKS_PAST_DANGEROUS_WINDOW =
+  Math.ceil(PRIMARY_MELEE_ATTACK_CONFIGS.red_wizard_cleaver.dangerousWindowEndMs / TICK_MS) + 1
 
 describe("createGameSimulation", () => {
   it("creates a simulation with correct match start time", () => {
@@ -438,9 +452,10 @@ describe("primary melee attack", () => {
     const swing = output.primaryMeleeAttacks[0]!
     expect(swing.attackId).toBe("red_wizard_cleaver")
     expect(swing.damage).toBeGreaterThan(0)
-    expect(swing.radiusPx).toBeGreaterThan(0)
-    expect(swing.arcDeg).toBeGreaterThan(0)
+    expect(swing.hurtboxRadiusPx).toBeGreaterThan(0)
+    expect(swing.hurtboxArcDeg).toBeGreaterThan(0)
     expect(swing.durationMs).toBeGreaterThan(0)
+    expect(swing.dangerousWindowEndMs).toBeGreaterThan(swing.dangerousWindowStartMs)
   })
 
   it("does not start a second swing while SwingingWeapon is active", () => {
@@ -490,7 +505,7 @@ describe("primary melee attack", () => {
     }
   })
 
-  it("hits a second player in the swing cone", () => {
+  it("does not damage a target before the dangerous window starts", () => {
     const sim = createGameSimulation(Date.now())
     const ea = sim.addPlayer("a", "A", "red_wizard", 0)
     const eb = sim.addPlayer("b", "B", "red_wizard", 1)
@@ -498,9 +513,10 @@ describe("primary melee attack", () => {
     const cy = ARENA_CENTER_Y
     Position.x[ea] = cx
     Position.y[ea] = cy
-    Position.x[eb] = cx + 60
+    Position.x[eb] = cx + 30
     Position.y[eb] = cy
-    const output = sim.tick(
+    const startHp = Health.current[eb]
+    sim.tick(
       queueMap([
         [
           "a",
@@ -513,10 +529,41 @@ describe("primary melee attack", () => {
       ]),
       Date.now(),
     )
-    expect(output.primaryMeleeAttacks[0]?.hitPlayerIds).toContain("b")
+    const cfg = PRIMARY_MELEE_ATTACK_CONFIGS.red_wizard_cleaver
+    const ticksBeforeWindow = Math.floor(cfg.dangerousWindowStartMs / TICK_MS) - 1
+    advanceTicks(sim, Math.max(0, ticksBeforeWindow))
+    expect(Health.current[eb]).toBe(startHp)
   })
 
-  it("skips invulnerable victim in the cone", () => {
+  it("damages a target standing inside the half-circle hurtbox during the dangerous window", () => {
+    const sim = createGameSimulation(Date.now())
+    const ea = sim.addPlayer("a", "A", "red_wizard", 0)
+    const eb = sim.addPlayer("b", "B", "red_wizard", 1)
+    const cx = ARENA_CENTER_X
+    const cy = ARENA_CENTER_Y
+    Position.x[ea] = cx
+    Position.y[ea] = cy
+    Position.x[eb] = cx + 30
+    Position.y[eb] = cy
+    const startHp = Health.current[eb]
+    sim.tick(
+      queueMap([
+        [
+          "a",
+          emptyInput({
+            weaponPrimary: true,
+            weaponTargetX: cx + 500,
+            weaponTargetY: cy,
+          }),
+        ],
+      ]),
+      Date.now(),
+    )
+    advanceTicks(sim, TICKS_PAST_DANGEROUS_WINDOW)
+    expect(Health.current[eb]).toBeLessThan(startHp)
+  })
+
+  it("does not damage an invulnerable target during the dangerous window", () => {
     const sim = createGameSimulation(Date.now())
     const ea = sim.addPlayer("a", "A", "red_wizard", 0)
     const eb = sim.addPlayer("b", "B", "red_wizard", 1)
@@ -524,10 +571,11 @@ describe("primary melee attack", () => {
     const cy = ARENA_CENTER_Y
     Position.x[ea] = cx
     Position.y[ea] = cy
-    Position.x[eb] = cx + 60
+    Position.x[eb] = cx + 30
     Position.y[eb] = cy
     addComponent(sim.world, eb, InvulnerableTag)
-    const output = sim.tick(
+    const startHp = Health.current[eb]
+    sim.tick(
       queueMap([
         [
           "a",
@@ -540,10 +588,11 @@ describe("primary melee attack", () => {
       ]),
       Date.now(),
     )
-    expect(output.primaryMeleeAttacks[0]?.hitPlayerIds).toEqual([])
+    advanceTicks(sim, TICKS_PAST_DANGEROUS_WINDOW)
+    expect(Health.current[eb]).toBe(startHp)
   })
 
-  it("skips dead or spectator victim in the cone", () => {
+  it("does not damage a dead or spectator target during the dangerous window", () => {
     for (const Tag of [DeadTag, SpectatorTag] as const) {
       const sim = createGameSimulation(Date.now())
       sim.addPlayer("a", "A", "red_wizard", 0)
@@ -553,10 +602,11 @@ describe("primary melee attack", () => {
       const cy = ARENA_CENTER_Y - 40
       Position.x[ea] = cx
       Position.y[ea] = cy
-      Position.x[eb] = cx + 60
+      Position.x[eb] = cx + 30
       Position.y[eb] = cy
       addComponent(sim.world, eb, Tag)
-      const output = sim.tick(
+      const startHp = Health.current[eb]
+      sim.tick(
         queueMap([
           [
             "a",
@@ -569,11 +619,12 @@ describe("primary melee attack", () => {
         ]),
         Date.now(),
       )
-      expect(output.primaryMeleeAttacks[0]?.hitPlayerIds).toEqual([])
+      advanceTicks(sim, TICKS_PAST_DANGEROUS_WINDOW)
+      expect(Health.current[eb]).toBe(startHp)
     }
   })
 
-  it("skips dying victim in the cone", () => {
+  it("does not damage a dying target during the dangerous window", () => {
     const sim = createGameSimulation(Date.now())
     const ea = sim.addPlayer("a", "A", "red_wizard", 0)
     const eb = sim.addPlayer("b", "B", "red_wizard", 1)
@@ -581,11 +632,12 @@ describe("primary melee attack", () => {
     const cy = ARENA_CENTER_Y + 80
     Position.x[ea] = cx
     Position.y[ea] = cy
-    Position.x[eb] = cx + 60
+    Position.x[eb] = cx + 30
     Position.y[eb] = cy
     addComponent(sim.world, eb, DyingTag)
     DyingTag.expiresAtMs[eb] = Date.now() + 5000
-    const output = sim.tick(
+    const startHp = Health.current[eb]
+    sim.tick(
       queueMap([
         [
           "a",
@@ -598,39 +650,11 @@ describe("primary melee attack", () => {
       ]),
       Date.now(),
     )
-    expect(output.primaryMeleeAttacks[0]?.hitPlayerIds).toEqual([])
+    advanceTicks(sim, TICKS_PAST_DANGEROUS_WINDOW)
+    expect(Health.current[eb]).toBe(startHp)
   })
 
-  it("does not list a hit when victim has no user id in entityPlayerMap", () => {
-    const sim = createGameSimulation(Date.now())
-    sim.addPlayer("a", "A", "red_wizard", 0)
-    const eb = sim.addPlayer("b", "B", "red_wizard", 1)
-    const ea = sim.playerEntityMap.get("a")!
-    const cx = ARENA_CENTER_X - 400
-    const cy = ARENA_CENTER_Y - 120
-    Position.x[ea] = cx
-    Position.y[ea] = cy
-    Position.x[eb] = cx + 60
-    Position.y[eb] = cy
-    sim.entityPlayerMap.delete(eb)
-    const output = sim.tick(
-      queueMap([
-        [
-          "a",
-          emptyInput({
-            weaponPrimary: true,
-            weaponTargetX: cx + 500,
-            weaponTargetY: cy,
-          }),
-        ],
-      ]),
-      Date.now(),
-    )
-    expect(output.primaryMeleeAttacks[0]?.hitPlayerIds).toEqual([])
-    sim.entityPlayerMap.set(eb, "b")
-  })
-
-  it("does not hit a victim outside the swing radius", () => {
+  it("does not damage a target standing outside the hurtbox radius", () => {
     const sim = createGameSimulation(Date.now())
     sim.addPlayer("a", "A", "red_wizard", 0)
     sim.addPlayer("b", "B", "red_wizard", 1)
@@ -642,7 +666,8 @@ describe("primary melee attack", () => {
     Position.y[ea] = cy
     Position.x[eb] = cx + 200
     Position.y[eb] = cy
-    const output = sim.tick(
+    const startHp = Health.current[eb]
+    sim.tick(
       queueMap([
         [
           "a",
@@ -655,7 +680,37 @@ describe("primary melee attack", () => {
       ]),
       Date.now(),
     )
-    expect(output.primaryMeleeAttacks[0]?.hitPlayerIds).toEqual([])
+    advanceTicks(sim, TICKS_PAST_DANGEROUS_WINDOW)
+    expect(Health.current[eb]).toBe(startHp)
+  })
+
+  it("damages a target only once per swing even when overlap persists across the dangerous window", () => {
+    const sim = createGameSimulation(Date.now())
+    const ea = sim.addPlayer("a", "A", "red_wizard", 0)
+    const eb = sim.addPlayer("b", "B", "red_wizard", 1)
+    const cx = ARENA_CENTER_X
+    const cy = ARENA_CENTER_Y
+    Position.x[ea] = cx
+    Position.y[ea] = cy
+    Position.x[eb] = cx + 30
+    Position.y[eb] = cy
+    const startHp = Health.current[eb]
+    sim.tick(
+      queueMap([
+        [
+          "a",
+          emptyInput({
+            weaponPrimary: true,
+            weaponTargetX: cx + 500,
+            weaponTargetY: cy,
+          }),
+        ],
+      ]),
+      Date.now(),
+    )
+    advanceTicks(sim, TICKS_PAST_DANGEROUS_WINDOW)
+    const damageDealt = startHp - Health.current[eb]
+    expect(damageDealt).toBe(PRIMARY_MELEE_ATTACK_CONFIGS.red_wizard_cleaver.damage)
   })
 
   it("removes SwingingWeapon after swing duration when weapon input stops", () => {
@@ -665,7 +720,9 @@ describe("primary melee attack", () => {
     sim.tick(queueMap([["user1", emptyInput({ weaponPrimary: true, seq: 1 })]]), Date.now())
     expect(hasComponent(sim.world, eid, SwingingWeapon)).toBe(true)
     sim.tick(queueMap([["user1", emptyInput({ weaponPrimary: false, seq: 2 })]]), Date.now())
-    for (let i = 0; i < 35; i++) sim.tick(new Map(), Date.now())
+    const ticksToFinish =
+      Math.ceil(PRIMARY_MELEE_ATTACK_CONFIGS.red_wizard_cleaver.durationMs / TICK_MS) + 5
+    for (let i = 0; i < ticksToFinish; i++) sim.tick(new Map(), Date.now())
     expect(hasComponent(sim.world, eid, SwingingWeapon)).toBe(false)
   })
 })

@@ -1,8 +1,10 @@
 import {
-  AXE_SWING_DURATION_MS,
   AXE_DAMAGE,
-  AXE_SWING_ARC_DEG,
-  AXE_SWING_RADIUS_PX,
+  AXE_DANGEROUS_WINDOW_END_MS,
+  AXE_DANGEROUS_WINDOW_START_MS,
+  AXE_HURTBOX_ARC_DEG,
+  AXE_HURTBOX_RADIUS_PX,
+  AXE_SWING_DURATION_MS,
   SWIFT_BOOTS_SPEED_BONUS,
 } from "./combat"
 import { DamageProperty, combineDamageProperties } from "./damage"
@@ -49,23 +51,39 @@ export const AUGMENT_CONFIGS: Record<string, AugmentConfig> = {
 /** Canonical ids for each hero's primary cleaver-style melee (balanceable per hero). */
 export type PrimaryMeleeAttackId = "red_wizard_cleaver" | "barbarian_cleaver" | "ranger_cleaver"
 
-/** Server-authoritative tuning for a hero primary melee cone attack. */
+/**
+ * Server-authoritative tuning for a hero primary melee hurtbox attack.
+ *
+ * Hurtbox is a sector centered on the attacker, oriented to facing.
+ * Damage applies to any enemy whose character hitbox overlaps the hurtbox during
+ * the dangerous-frames window `[dangerousWindowStartMs, dangerousWindowEndMs)`,
+ * with single-hit-per-attack semantics.
+ */
 export type PrimaryMeleeAttackConfig = {
   readonly id: PrimaryMeleeAttackId
   readonly displayName: string
   readonly damage: number
-  readonly radiusPx: number
-  readonly arcDeg: number
+  /** Hurtbox radius in pixels. */
+  readonly hurtboxRadiusPx: number
+  /** Hurtbox arc width in degrees (180 = half-circle). */
+  readonly hurtboxArcDeg: number
+  /** Total swing duration in ms (drives cooldown and hurtbox lifetime). */
   readonly durationMs: number
+  /** Inclusive start of the dangerous window in ms since swing start. */
+  readonly dangerousWindowStartMs: number
+  /** Exclusive end of the dangerous window in ms since swing start. */
+  readonly dangerousWindowEndMs: number
   readonly damageProperties: number
   readonly swingSfxKey: string
 }
 
 const cleaverBase: Omit<PrimaryMeleeAttackConfig, "id" | "displayName"> = {
   damage: AXE_DAMAGE,
-  radiusPx: AXE_SWING_RADIUS_PX,
-  arcDeg: AXE_SWING_ARC_DEG,
+  hurtboxRadiusPx: AXE_HURTBOX_RADIUS_PX,
+  hurtboxArcDeg: AXE_HURTBOX_ARC_DEG,
   durationMs: AXE_SWING_DURATION_MS,
+  dangerousWindowStartMs: AXE_DANGEROUS_WINDOW_START_MS,
+  dangerousWindowEndMs: AXE_DANGEROUS_WINDOW_END_MS,
   damageProperties: combineDamageProperties(DamageProperty.Physical, DamageProperty.Slashing),
   swingSfxKey: "sfx-axe-swing",
 }

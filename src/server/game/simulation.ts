@@ -38,7 +38,10 @@ import {
   PLAYER_RADIUS_PX,
 } from "../../shared/balance-config"
 import { DEFAULT_HERO_ID, getHeroPrimaryMeleeAttackId } from "../../shared/balance-config/heroes"
-import { primaryMeleeAttackIdToIndex } from "../../shared/balance-config/equipment"
+import {
+  primaryMeleeAttackIdToIndex,
+  type PrimaryMeleeAttackId,
+} from "../../shared/balance-config/equipment"
 import type {
   PlayerInputPayload,
   PlayerDelta,
@@ -121,6 +124,26 @@ export type PendingLightningBolt = {
   casterUserId: string
   targetX: number
   targetY: number
+}
+
+/**
+ * Active primary melee swing tracked across ticks.
+ *
+ * Created on the input tick and removed once the swing duration elapses. The
+ * `hitTargets` set guarantees single-hit-per-attack semantics during the
+ * dangerous-frames window. Keyed by caster eid in {@link SimCtx.activeMeleeAttacks}
+ * (cooldown enforces one active attack per caster).
+ */
+export type ActiveMeleeAttack = {
+  attackId: PrimaryMeleeAttackId
+  /** Tick on which the swing started (input tick). */
+  startTick: number
+  /** Facing angle in radians, locked at swing start. */
+  facingAngle: number
+  /** Caster userId at swing start (kept for damage attribution if entityPlayerMap drifts). */
+  casterUserId: string
+  /** Target eids already damaged by this attack instance. */
+  hitTargets: Set<number>
 }
 
 /** Per-player statistics accumulated across the match for the scoreboard. */
@@ -210,6 +233,12 @@ export type SimCtx = {
   prevPlayerStates: Map<number, PlayerPrevState>
   prevFireballStates: Map<number, FireballPrevState>
   killStats: Map<string, KillStats>
+  /**
+   * Active primary melee swings keyed by caster eid. Persists across ticks for
+   * the swing's full duration; primaryMeleeAttackSystem reads/mutates this each
+   * tick to gate damage application to the dangerous-frames window.
+   */
+  activeMeleeAttacks: Map<number, ActiveMeleeAttack>
 
   // ── Written by playerDeltaSystem and projectileDeltaSystem ──
   playerDeltas: PlayerDelta[]
@@ -299,6 +328,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
   const prevFireballStates = new Map<number, FireballPrevState>()
   const killStats = new Map<string, KillStats>()
   const lastProcessedInputSeqByPlayer = new Map<string, number>()
+  const activeMeleeAttacks = new Map<number, ActiveMeleeAttack>()
 
   let currentTick = 0
   let hostEndSignal = false
@@ -452,6 +482,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     playerHeroIdMap.delete(userId)
     prevPlayerStates.delete(eid)
     lastProcessedInputSeqByPlayer.delete(userId)
+    activeMeleeAttacks.delete(eid)
   }
 
   // ── requestHostEnd ───────────────────────────────────────────────────
@@ -612,6 +643,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       prevPlayerStates,
       prevFireballStates,
       killStats,
+      activeMeleeAttacks,
       playerDeltas: [],
       fireballDeltas: [],
     }

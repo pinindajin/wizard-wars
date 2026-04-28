@@ -24,11 +24,16 @@ import {
 import {
   SPRITE_VIEWER_CENTERPOINT_MARKER_ARM_PX,
   SPRITE_VIEWER_CENTERPOINT_MARKER_RADIUS_PX,
+  SPRITE_VIEWER_DEFAULT_PRIMARY_ATTACK_ID,
+  SPRITE_VIEWER_PRIMARY_ATTACK_ATLAS_CLIP_ID,
+  spriteViewerAttackHurtbox,
   spriteViewerCharacterHitbox,
   spriteViewerCenterpoint,
   spriteViewerCenterpointTooltip,
+  spriteViewerFrameIsDangerous,
   spriteViewerMovementOvalRadii,
 } from "@/shared/sprites/spriteViewerOverlays"
+import type { LadyWizardDirection } from "@/shared/sprites/ladyWizard"
 
 const DETAIL_SCALE = 2
 const DETAIL_PAD = 16
@@ -127,6 +132,7 @@ export function SpriteViewerClient() {
   const [stripBroken, setStripBroken] = useState(false)
   const [showCollision, setShowCollision] = useState(true)
   const [showEdge, setShowEdge] = useState(true)
+  const [showAttackHurtbox, setShowAttackHurtbox] = useState(true)
 
   const cells = useMemo(() => (atlas ? buildLadyWizardViewerCells(atlas) : []), [atlas])
 
@@ -292,8 +298,40 @@ export function SpriteViewerClient() {
       strokeAlphaOutlineSegments(ctx, segs, -FRAME / 2, -FRAME)
     }
 
+    if (showAttackHurtbox && selected.atlasClipId === SPRITE_VIEWER_PRIMARY_ATTACK_ATLAS_CLIP_ID) {
+      const overlay = spriteViewerAttackHurtbox(
+        SPRITE_VIEWER_DEFAULT_PRIMARY_ATTACK_ID,
+        selected.direction as LadyWizardDirection,
+        fps,
+      )
+      const halfArcRad = (overlay.arcDeg * Math.PI) / 360
+      const dangerous = spriteViewerFrameIsDangerous(displayFrame, overlay)
+      ctx.strokeStyle = dangerous ? "rgba(239, 68, 68, 0.95)" : "rgba(255, 255, 255, 0.85)"
+      ctx.lineWidth = 1.5 / DETAIL_SCALE
+      ctx.beginPath()
+      ctx.arc(
+        centerpoint.x,
+        centerpoint.y,
+        overlay.radiusPx,
+        overlay.facingRad - halfArcRad,
+        overlay.facingRad + halfArcRad,
+      )
+      ctx.closePath()
+      ctx.stroke()
+    }
+
     ctx.restore()
-  }, [selected, stripLoaded, stripBroken, displayFrame, showCollision, showEdge, getOrComputeOutline])
+  }, [
+    selected,
+    stripLoaded,
+    stripBroken,
+    displayFrame,
+    showCollision,
+    showEdge,
+    showAttackHurtbox,
+    fps,
+    getOrComputeOutline,
+  ])
 
   useEffect(() => {
     drawDetail()
@@ -410,6 +448,15 @@ export function SpriteViewerClient() {
                 data-testid="sprite-viewer-edge-toggle"
               />
               Alpha edge
+            </label>
+            <label className="flex items-center gap-1">
+              <input
+                type="checkbox"
+                checked={showAttackHurtbox}
+                onChange={(e) => setShowAttackHurtbox(e.target.checked)}
+                data-testid="sprite-viewer-hurtbox-toggle"
+              />
+              Hurtbox
             </label>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -534,6 +581,32 @@ export function SpriteViewerClient() {
               <p>
                 <strong className="text-zinc-100">If you change it.</strong> Fireball, lightning, and melee hit fairness
                 shifts. Movement against terrain stays controlled by the green oval.
+              </p>
+            </LegendTipRow>
+            <LegendTipRow
+              testId="sprite-viewer-legend-info-hurtbox-attack"
+              label={
+                <span>
+                  <span className="text-rose-400">Red</span>/
+                  <span className="text-zinc-100">white</span>: primary-attack hurtbox.
+                </span>
+              }
+            >
+              <p>
+                <strong className="text-zinc-100">What it is.</strong> A half-circle drawn around the sim anchor when{" "}
+                <code className="text-violet-300">summoned-axe-attack</code> is selected. The flat side passes through
+                the centerpoint and the curve faces the direction of the displayed cell.
+              </p>
+              <p>
+                <strong className="text-zinc-100">Color.</strong> White when the current frame is outside the
+                dangerous-frames window, red when the current frame is inside it. The window comes from{" "}
+                <code className="text-violet-300">PRIMARY_MELEE_ATTACK_CONFIGS</code> in ms and is mapped to frame
+                indices using the animation FPS.
+              </p>
+              <p>
+                <strong className="text-zinc-100">Systems that use it.</strong>{" "}
+                <code className="text-violet-300">primaryMeleeAttackSystem</code> on the server tests this hurtbox
+                against the purple character hitbox during the dangerous window for damage.
               </p>
             </LegendTipRow>
             <LegendTipRow
