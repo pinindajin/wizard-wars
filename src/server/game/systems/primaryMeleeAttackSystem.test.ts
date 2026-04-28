@@ -10,8 +10,10 @@ import {
   Position,
 } from "../components"
 import { createCommandBuffer } from "../commandBuffer"
-import type { SimCtx } from "../simulation"
+import type { ActiveMeleeAttack, SimCtx } from "../simulation"
 import { primaryMeleeAttackSystem } from "./primaryMeleeAttackSystem"
+import { PRIMARY_MELEE_ATTACK_CONFIGS } from "../../../shared/balance-config/equipment"
+import { TICK_MS } from "../../../shared/balance-config"
 
 function emptyCtx(overrides: Partial<SimCtx> = {}): SimCtx {
   return {
@@ -45,107 +47,175 @@ function emptyCtx(overrides: Partial<SimCtx> = {}): SimCtx {
     prevPlayerStates: new Map(),
     prevFireballStates: new Map(),
     killStats: new Map(),
+    activeMeleeAttacks: new Map(),
     playerDeltas: [],
     fireballDeltas: [],
     ...overrides,
   }
 }
 
+function addAttacker(world: ReturnType<typeof createWorld>, x: number, y: number, facing = 0) {
+  const eid = addEntity(world)
+  addComponent(world, eid, PlayerTag)
+  addComponent(world, eid, Position)
+  addComponent(world, eid, Facing)
+  addComponent(world, eid, Equipment)
+  addComponent(world, eid, Cooldown)
+  addComponent(world, eid, PlayerInput)
+  Position.x[eid] = x
+  Position.y[eid] = y
+  Facing.angle[eid] = facing
+  Equipment.primaryMeleeAttackIndex[eid] = 0
+  Cooldown.primaryMelee[eid] = 0
+  PlayerInput.weaponPrimary[eid] = 1
+  return eid
+}
+
+function addTarget(world: ReturnType<typeof createWorld>, x: number, y: number) {
+  const eid = addEntity(world)
+  addComponent(world, eid, PlayerTag)
+  addComponent(world, eid, Position)
+  Position.x[eid] = x
+  Position.y[eid] = y
+  return eid
+}
+
 describe("primaryMeleeAttackSystem", () => {
-  it("emits casterId empty string when entityPlayerMap has no entry for the attacker", () => {
+  it("emits a payload on the input tick and registers an active attack", () => {
     const world = createWorld()
-    const eid = addEntity(world)
-    addComponent(world, eid, PlayerTag)
-    addComponent(world, eid, Position)
-    addComponent(world, eid, Facing)
-    addComponent(world, eid, Equipment)
-    addComponent(world, eid, Cooldown)
-    addComponent(world, eid, PlayerInput)
+    const eid = addAttacker(world, 100, 100)
+    const ctx = emptyCtx({
+      world,
+      currentTick: 20,
+      entityPlayerMap: new Map([[eid, "attacker"]]),
+    })
 
-    Position.x[eid] = 100
-    Position.y[eid] = 100
-    Facing.angle[eid] = 0
-    Equipment.primaryMeleeAttackIndex[eid] = 0
-    Cooldown.primaryMelee[eid] = 0
-    PlayerInput.weaponPrimary[eid] = 1
-
-    const primaryMeleeAttacks: SimCtx["primaryMeleeAttacks"] = []
-    const ctx = emptyCtx({ world, primaryMeleeAttacks })
     primaryMeleeAttackSystem(ctx)
-    expect(primaryMeleeAttacks).toHaveLength(1)
-    expect(primaryMeleeAttacks[0]!.casterId).toBe("")
+
+    expect(ctx.primaryMeleeAttacks).toHaveLength(1)
+    const swing = ctx.primaryMeleeAttacks[0]!
+    expect(swing.casterId).toBe("attacker")
+    expect(swing.attackId).toBe("red_wizard_cleaver")
+    expect(swing.hurtboxRadiusPx).toBeGreaterThan(0)
+    expect(swing.hurtboxArcDeg).toBeGreaterThan(0)
+    expect(swing.dangerousWindowStartMs).toBeGreaterThanOrEqual(0)
+    expect(swing.dangerousWindowEndMs).toBeGreaterThan(swing.dangerousWindowStartMs)
+
+    expect(ctx.activeMeleeAttacks.size).toBe(1)
+    const active = ctx.activeMeleeAttacks.get(eid)!
+    expect(active.attackId).toBe("red_wizard_cleaver")
+    expect(active.startTick).toBe(20)
+    expect(active.facingAngle).toBe(0)
+    expect(active.hitTargets.size).toBe(0)
   })
 
-  it("hits a character hitbox even when the target center is outside swing radius", () => {
+  it("does not queue damage on the input tick (damage gates on dangerous window)", () => {
     const world = createWorld()
-    const attacker = addEntity(world)
-    addComponent(world, attacker, PlayerTag)
-    addComponent(world, attacker, Position)
-    addComponent(world, attacker, Facing)
-    addComponent(world, attacker, Equipment)
-    addComponent(world, attacker, Cooldown)
-    addComponent(world, attacker, PlayerInput)
+    const attacker = addAttacker(world, 0, 100)
+    addTarget(world, 30, 100)
+    const ctx = emptyCtx({
+      world,
+      currentTick: 0,
+      entityPlayerMap: new Map([[attacker, "a"]]),
+    })
 
-    Position.x[attacker] = 0
-    Position.y[attacker] = 100
-    Facing.angle[attacker] = 0
-    Equipment.primaryMeleeAttackIndex[attacker] = 0
-    Cooldown.primaryMelee[attacker] = 0
-    PlayerInput.weaponPrimary[attacker] = 1
+    primaryMeleeAttackSystem(ctx)
 
-    const target = addEntity(world)
-    addComponent(world, target, PlayerTag)
-    addComponent(world, target, Position)
-    Position.x[target] = 90
-    Position.y[target] = 100
+    expect(ctx.damageRequests).toHaveLength(0)
+  })
+
+  it("queues damage exactly once when target is in hurtbox during dangerous window", () => {
+    const world = createWorld()
+    const attacker = addAttacker(world, 0, 100)
+    const target = addTarget(world, 30, 100)
+    const cfg = PRIMARY_MELEE_ATTACK_CONFIGS.red_wizard_cleaver
+    const startTick = 0
+    const dangerousTick = startTick + Math.ceil(cfg.dangerousWindowStartMs / TICK_MS) + 1
+
+    const active: ActiveMeleeAttack = {
+      attackId: "red_wizard_cleaver",
+      startTick,
+      facingAngle: 0,
+      casterUserId: "a",
+      hitTargets: new Set(),
+    }
+    const activeMeleeAttacks = new Map<number, ActiveMeleeAttack>([[attacker, active]])
+
+    PlayerInput.weaponPrimary[attacker] = 0
+    Cooldown.primaryMelee[attacker] = startTick + Math.ceil(cfg.durationMs / TICK_MS)
 
     const ctx = emptyCtx({
       world,
-      entityPlayerMap: new Map([
-        [attacker, "attacker"],
-        [target, "target"],
-      ]),
+      currentTick: dangerousTick,
+      activeMeleeAttacks,
+      entityPlayerMap: new Map([[attacker, "a"]]),
     })
-    primaryMeleeAttackSystem(ctx)
 
+    primaryMeleeAttackSystem(ctx)
     expect(ctx.damageRequests).toHaveLength(1)
     expect(ctx.damageRequests[0]!.targetEid).toBe(target)
-    expect(ctx.primaryMeleeAttacks[0]!.hitPlayerIds).toEqual(["target"])
+    expect(active.hitTargets.has(target)).toBe(true)
+
+    const ctx2 = emptyCtx({
+      world,
+      currentTick: dangerousTick + 1,
+      activeMeleeAttacks,
+      entityPlayerMap: new Map([[attacker, "a"]]),
+    })
+    primaryMeleeAttackSystem(ctx2)
+    expect(ctx2.damageRequests).toHaveLength(0)
   })
 
-  it("misses when the character hitbox is outside the swing cone", () => {
+  it("does not queue damage when target hitbox is outside the half-circle (behind attacker)", () => {
     const world = createWorld()
-    const attacker = addEntity(world)
-    addComponent(world, attacker, PlayerTag)
-    addComponent(world, attacker, Position)
-    addComponent(world, attacker, Facing)
-    addComponent(world, attacker, Equipment)
-    addComponent(world, attacker, Cooldown)
-    addComponent(world, attacker, PlayerInput)
+    const attacker = addAttacker(world, 0, 100, Math.PI)
+    addTarget(world, 30, 100)
+    const cfg = PRIMARY_MELEE_ATTACK_CONFIGS.red_wizard_cleaver
 
-    Position.x[attacker] = 0
-    Position.y[attacker] = 100
-    Facing.angle[attacker] = Math.PI
-    Equipment.primaryMeleeAttackIndex[attacker] = 0
-    Cooldown.primaryMelee[attacker] = 0
-    PlayerInput.weaponPrimary[attacker] = 1
-
-    const target = addEntity(world)
-    addComponent(world, target, PlayerTag)
-    addComponent(world, target, Position)
-    Position.x[target] = 90
-    Position.y[target] = 100
+    const active: ActiveMeleeAttack = {
+      attackId: "red_wizard_cleaver",
+      startTick: 0,
+      facingAngle: Math.PI,
+      casterUserId: "a",
+      hitTargets: new Set(),
+    }
+    const activeMeleeAttacks = new Map<number, ActiveMeleeAttack>([[attacker, active]])
+    PlayerInput.weaponPrimary[attacker] = 0
+    Cooldown.primaryMelee[attacker] = Math.ceil(cfg.durationMs / TICK_MS)
 
     const ctx = emptyCtx({
       world,
-      entityPlayerMap: new Map([
-        [attacker, "attacker"],
-        [target, "target"],
-      ]),
+      currentTick: Math.ceil(cfg.dangerousWindowStartMs / TICK_MS) + 1,
+      activeMeleeAttacks,
     })
     primaryMeleeAttackSystem(ctx)
 
     expect(ctx.damageRequests).toHaveLength(0)
-    expect(ctx.primaryMeleeAttacks[0]!.hitPlayerIds).toEqual([])
+  })
+
+  it("removes the active attack after the swing duration elapses", () => {
+    const world = createWorld()
+    const attacker = addAttacker(world, 0, 100)
+    const cfg = PRIMARY_MELEE_ATTACK_CONFIGS.red_wizard_cleaver
+
+    const active: ActiveMeleeAttack = {
+      attackId: "red_wizard_cleaver",
+      startTick: 0,
+      facingAngle: 0,
+      casterUserId: "a",
+      hitTargets: new Set(),
+    }
+    const activeMeleeAttacks = new Map<number, ActiveMeleeAttack>([[attacker, active]])
+    PlayerInput.weaponPrimary[attacker] = 0
+    Cooldown.primaryMelee[attacker] = Math.ceil(cfg.durationMs / TICK_MS)
+
+    const ctx = emptyCtx({
+      world,
+      currentTick: Math.ceil(cfg.durationMs / TICK_MS) + 5,
+      activeMeleeAttacks,
+    })
+    primaryMeleeAttackSystem(ctx)
+
+    expect(activeMeleeAttacks.size).toBe(0)
   })
 })
