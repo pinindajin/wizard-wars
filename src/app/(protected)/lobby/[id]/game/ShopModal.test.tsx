@@ -13,12 +13,10 @@ import type { ShopStatePayload } from "@/shared/types"
 function makeConnection() {
   return {
     sendShopPurchase: vi.fn(),
-    sendEquipItem: vi.fn(),
     sendAssignAbility: vi.fn(),
     sendUseQuickItem: vi.fn(),
   } as unknown as GameConnection & {
     sendShopPurchase: ReturnType<typeof vi.fn>
-    sendEquipItem: ReturnType<typeof vi.fn>
     sendAssignAbility: ReturnType<typeof vi.fn>
     sendUseQuickItem: ReturnType<typeof vi.fn>
   }
@@ -31,7 +29,6 @@ function makeState(overrides?: Partial<ShopStatePayload>): ShopStatePayload {
   return {
     gold: 50,
     items: [],
-    equippedWeaponItemId: null,
     augmentItemIds: [],
     abilitySlots: [null, null, null, null, null],
     quickItemSlots: [
@@ -45,7 +42,7 @@ function makeState(overrides?: Partial<ShopStatePayload>): ShopStatePayload {
 }
 
 describe("ShopModal", () => {
-  it("renders every category section with at least one item", () => {
+  it("renders ability, augment, and consumable sections with at least one item", () => {
     const onClose = vi.fn()
     render(
       <ShopModal
@@ -55,9 +52,15 @@ describe("ShopModal", () => {
       />,
     )
     expect(screen.getByTestId("shop-section-ability")).toBeDefined()
-    expect(screen.getByTestId("shop-section-weapon")).toBeDefined()
     expect(screen.getByTestId("shop-section-augment")).toBeDefined()
     expect(screen.getByTestId("shop-section-consumable")).toBeDefined()
+  })
+
+  it("does not render weapon section", () => {
+    render(
+      <ShopModal shopState={makeState()} connection={makeConnection()} onClose={() => {}} />,
+    )
+    expect(screen.queryByTestId("shop-section-weapon")).toBeNull()
   })
 
   it("disables buy when gold < cost and enables otherwise", () => {
@@ -84,8 +87,8 @@ describe("ShopModal", () => {
     render(
       <ShopModal shopState={makeState()} connection={conn} onClose={() => {}} />,
     )
-    fireEvent.click(screen.getByTestId("shop-buy-axe"))
-    expect(conn.sendShopPurchase).toHaveBeenCalledWith("axe")
+    fireEvent.click(screen.getByTestId("shop-buy-lightning_bolt"))
+    expect(conn.sendShopPurchase).toHaveBeenCalledWith("lightning_bolt")
   })
 
   it("clicking assign slot calls sendAssignAbility with id + slotIndex", () => {
@@ -95,14 +98,6 @@ describe("ShopModal", () => {
     fireEvent.click(screen.getByTestId("shop-assign-lightning_bolt"))
     fireEvent.click(screen.getByTestId("shop-assign-lightning_bolt-slot-2"))
     expect(conn.sendAssignAbility).toHaveBeenCalledWith("lightning_bolt", 2)
-  })
-
-  it("equip button on owned weapon calls sendEquipItem", () => {
-    const conn = makeConnection()
-    const state = makeState({ items: [{ itemId: "axe" }] })
-    render(<ShopModal shopState={state} connection={conn} onClose={() => {}} />)
-    fireEvent.click(screen.getByTestId("shop-equip-axe"))
-    expect(conn.sendEquipItem).toHaveBeenCalledWith("axe")
   })
 
   it("closes on Esc", () => {

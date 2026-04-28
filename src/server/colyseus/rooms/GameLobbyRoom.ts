@@ -664,14 +664,8 @@ export class GameLobbyRoom extends Room {
       return
     }
 
-    // Apply item to simulation if applicable (axe equip, swift boots)
+    // Apply item to simulation if applicable (swift boots)
     const sim = this.simulation
-    if (sim && itemId === "axe") {
-      const eid = sim.playerEntityMap.get(pd.playerId)
-      if (eid !== undefined) {
-        Equipment.hasAxe[eid] = 1
-      }
-    }
     if (sim && itemId === "swift_boots") {
       const eid = sim.playerEntityMap.get(pd.playerId)
       if (eid !== undefined) {
@@ -1346,8 +1340,8 @@ export class GameLobbyRoom extends Room {
     for (const bolt of output.lightningBolts) {
       this.broadcast(RoomEvent.LightningBolt, bolt)
     }
-    for (const swing of output.axeSwings) {
-      this.broadcast(RoomEvent.AxeSwing, swing)
+    for (const swing of output.primaryMeleeAttacks) {
+      this.broadcast(RoomEvent.PrimaryMeleeAttack, swing)
     }
     for (const death of output.playerDeaths) {
       this.broadcast(RoomEvent.PlayerDeath, parsePlayerDeathPayload(death))

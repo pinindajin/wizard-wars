@@ -36,7 +36,7 @@ export function getCastingAbilityId(world: World, eid: number): string | null {
 export function computePlayerAnimState(world: World, eid: number): PlayerAnimState {
   if (hasComponent(world, eid, DeadTag)) return "dead"
   if (hasComponent(world, eid, DyingTag)) return "dying"
-  if (hasComponent(world, eid, SwingingWeapon)) return "axe_swing"
+  if (hasComponent(world, eid, SwingingWeapon)) return "primary_melee_attack"
 
   if (hasComponent(world, eid, Casting)) {
     const abilityId = ABILITY_INDEX_TO_ID[Casting.abilityIndex[eid]] ?? ""

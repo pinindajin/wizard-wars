@@ -8,12 +8,7 @@ import type { ShopStatePayload } from "@/shared/types"
 import type { GameConnection } from "@/game/network/GameConnection"
 
 /** Ordered category tabs rendered in the modal. */
-const CATEGORY_ORDER: readonly ShopItemCategory[] = [
-  "ability",
-  "weapon",
-  "augment",
-  "consumable",
-]
+const CATEGORY_ORDER: readonly ShopItemCategory[] = ["ability", "augment", "consumable"]
 
 /** Props for ShopModal. */
 type ShopModalProps = {
@@ -27,7 +22,7 @@ type ShopModalProps = {
 
 /**
  * In-match shop modal. Lists every `SHOP_ITEMS` entry grouped by category and
- * exposes buy / equip / assign actions. Closes on `Esc` or `B` (the configured
+ * exposes buy / assign actions. Closes on `Esc` or `B` (the configured
  * `openShopModal` keybind) — `LobbyGameHost` also toggles via the same key.
  *
  * @param props - ShopModalProps.
@@ -43,7 +38,6 @@ export default function ShopModal({ shopState, connection, onClose }: ShopModalP
     () => new Set(shopState?.augmentItemIds ?? []),
     [shopState?.augmentItemIds],
   )
-  const equippedWeapon = shopState?.equippedWeaponItemId ?? null
   const [assigning, setAssigning] = useState<string | null>(null)
 
   useEffect(() => {
@@ -69,7 +63,6 @@ export default function ShopModal({ shopState, connection, onClose }: ShopModalP
   const grouped = useMemo(() => {
     const acc: Record<ShopItemCategory, ShopItemConfig[]> = {
       ability: [],
-      weapon: [],
       augment: [],
       consumable: [],
     }
@@ -126,8 +119,6 @@ export default function ShopModal({ shopState, connection, onClose }: ShopModalP
                   {items.map((item) => {
                     const owned = ownedIds.has(item.id)
                     const canAfford = gold >= item.cost
-                    const isEquippedWeapon =
-                      item.category === "weapon" && equippedWeapon === item.id
                     const isEquippedAugment =
                       item.category === "augment" && equippedAugmentIds.has(item.id)
                     const canBuy = !owned && canAfford
@@ -175,31 +166,6 @@ export default function ShopModal({ shopState, connection, onClose }: ShopModalP
                             </button>
                           )}
 
-                          {item.category === "weapon" && owned && !isEquippedWeapon && (
-                            <button
-                              type="button"
-                              onClick={() => connection.sendEquipItem(item.id)}
-                              className="rounded border border-amber-500 px-3 py-1 text-sm text-amber-200 hover:bg-amber-900/40"
-                              data-testid={`shop-equip-${item.id}`}
-                            >
-                              Equip
-                            </button>
-                          )}
-                          {item.category === "weapon" && isEquippedWeapon && (
-                            <span className="rounded border border-amber-600/60 px-3 py-1 text-sm text-amber-300">
-                              Equipped
-                            </span>
-                          )}
-                          {item.category === "augment" && owned && !isEquippedAugment && (
-                            <button
-                              type="button"
-                              onClick={() => connection.sendEquipItem(item.id)}
-                              className="rounded border border-emerald-500 px-3 py-1 text-sm text-emerald-200 hover:bg-emerald-900/40"
-                              data-testid={`shop-equip-${item.id}`}
-                            >
-                              Equip
-                            </button>
-                          )}
                           {item.category === "augment" && isEquippedAugment && (
                             <span className="rounded border border-emerald-600/60 px-3 py-1 text-sm text-emerald-300">
                               Equipped

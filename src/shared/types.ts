@@ -173,7 +173,7 @@ export type PlayerAnimState =
   | "dying"
   | "light_cast"
   | "heavy_cast"
-  | "axe_swing"
+  | "primary_melee_attack"
   | "dead"
 
 /** Batch player state update payload. */
@@ -246,14 +246,18 @@ export type LightningBoltPayload = {
   readonly damage: number
 }
 
-/** Axe swing event payload. */
-export type AxeSwingPayload = {
+/** Primary melee cone attack event payload (server-resolved geometry for client render). */
+export type PrimaryMeleeAttackPayload = {
   readonly casterId: string
+  readonly attackId: string
   readonly x: number
   readonly y: number
   readonly facingAngle: number
   readonly hitPlayerIds: readonly string[]
   readonly damage: number
+  readonly radiusPx: number
+  readonly arcDeg: number
+  readonly durationMs: number
 }
 
 /** Player death event. */
@@ -287,7 +291,6 @@ export type GoldBalancePayload = {
 export type ShopStatePayload = {
   readonly gold: number
   readonly items: readonly ShopOwnedItem[]
-  readonly equippedWeaponItemId: string | null
   readonly augmentItemIds: readonly string[]
   readonly abilitySlots: readonly (string | null)[]
   readonly quickItemSlots: readonly QuickItemSlot[]
@@ -318,11 +321,6 @@ export type ShopErrorPayload = {
 /** Client → server: use a quick item slot. */
 export type UseQuickItemPayload = {
   readonly slotIndex: number
-}
-
-/** Client → server: equip an item (weapon or augment). */
-export type EquipItemPayload = {
-  readonly itemId: string
 }
 
 /** Client → server: assign ability to ability bar slot. */

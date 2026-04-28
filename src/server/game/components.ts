@@ -94,7 +94,8 @@ export const Knockback = {
 export const Cooldown = {
   fireball: new Uint32Array(MAX_ENTITIES),
   lightningBolt: new Uint32Array(MAX_ENTITIES),
-  axe: new Uint32Array(MAX_ENTITIES),
+  /** Primary melee swing end tick (was legacy `axe` cooldown array). */
+  primaryMelee: new Uint32Array(MAX_ENTITIES),
   healingPotion: new Uint32Array(MAX_ENTITIES),
 }
 
@@ -125,9 +126,13 @@ export const RespawnTimer = {
   facingAngle: new Float32Array(MAX_ENTITIES),
 }
 
-/** Equipment flags (0 = not equipped, 1 = equipped). */
+/**
+ * Equipment and loadout indices.
+ * `primaryMeleeAttackIndex` stores {@link PRIMARY_MELEE_ATTACK_IDS} index for the hero's cleaver attack.
+ */
 export const Equipment = {
-  hasAxe: new Uint8Array(MAX_ENTITIES),
+  /** Index into hero primary melee attack ids; -1 if unset (should not happen for players). */
+  primaryMeleeAttackIndex: new Int32Array(MAX_ENTITIES),
   hasSwiftBoots: new Uint8Array(MAX_ENTITIES),
 }
 

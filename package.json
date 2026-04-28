@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:coverage:change": "vitest run --config vitest.change-coverage.config.ts --coverage",
     "test:integration:fast": "vitest run --config vitest.integration.fast.config.ts",
     "test:integration:slow": "vitest run --config vitest.integration.slow.config.ts",
     "test:integration": "bun run test:integration:fast && bun run test:integration:slow",

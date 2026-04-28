@@ -1,12 +1,25 @@
+import { addComponent, hasComponent } from "bitecs"
 import { describe, it, expect } from "vitest"
 import { createGameSimulation } from "@/server/game/simulation"
 import {
+  ARENA_CENTER_X,
+  ARENA_CENTER_Y,
   ARENA_SPAWN_POINTS,
   ARENA_WIDTH,
   ARENA_WORLD_COLLIDERS,
 } from "@/shared/balance-config/arena"
 import { PLAYER_RADIUS_PX } from "@/shared/balance-config/combat"
-import { Position } from "@/server/game/components"
+import {
+  Cooldown,
+  DeadTag,
+  DyingTag,
+  Equipment,
+  InvulnerableTag,
+  Position,
+  SpectatorTag,
+  SwingingWeapon,
+} from "@/server/game/components"
+import { primaryMeleeAttackIdToIndex } from "@/shared/balance-config/equipment"
 import type { PlayerInputPayload } from "@/shared/types"
 
 let nextSeq = 1
@@ -397,5 +410,257 @@ describe("match end", () => {
     expect(output.matchEnded?.entries).toHaveLength(1)
     expect(output.matchEnded?.entries[0].playerId).toBe("user1")
     expect(output.matchEnded?.entries[0].username).toBe("Alice")
+  })
+})
+
+describe("primary melee attack", () => {
+  it("sets primary melee attack index from selected hero", () => {
+    const sim = createGameSimulation(Date.now())
+    const eid = sim.addPlayer("user1", "Alice", "barbarian", 0)
+    expect(Equipment.primaryMeleeAttackIndex[eid]).toBe(
+      primaryMeleeAttackIdToIndex("barbarian_cleaver"),
+    )
+  })
+
+  it("emits primary melee attack payload on first weapon primary tick", () => {
+    const sim = createGameSimulation(Date.now())
+    sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    const output = sim.tick(
+      queueMap([["user1", emptyInput({ weaponPrimary: true })]]),
+      Date.now(),
+    )
+    expect(output.primaryMeleeAttacks).toHaveLength(1)
+    const swing = output.primaryMeleeAttacks[0]!
+    expect(swing.attackId).toBe("red_wizard_cleaver")
+    expect(swing.damage).toBeGreaterThan(0)
+    expect(swing.radiusPx).toBeGreaterThan(0)
+    expect(swing.arcDeg).toBeGreaterThan(0)
+    expect(swing.durationMs).toBeGreaterThan(0)
+  })
+
+  it("does not start a second swing while SwingingWeapon is active", () => {
+    const sim = createGameSimulation(Date.now())
+    sim.addPlayer("a", "A", "red_wizard", 0)
+    sim.tick(queueMap([["a", emptyInput({ weaponPrimary: true, seq: 1 })]]), Date.now())
+    const out2 = sim.tick(
+      queueMap([["a", emptyInput({ weaponPrimary: true, seq: 2 })]]),
+      Date.now(),
+    )
+    expect(out2.primaryMeleeAttacks).toHaveLength(0)
+  })
+
+  it("does not swing when primary melee cooldown is not ready", () => {
+    const sim = createGameSimulation(Date.now())
+    const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    Cooldown.primaryMelee[eid] = 9_999_999
+    const output = sim.tick(
+      queueMap([["user1", emptyInput({ weaponPrimary: true })]]),
+      Date.now(),
+    )
+    expect(output.primaryMeleeAttacks).toHaveLength(0)
+  })
+
+  it("does not swing when primary melee equipment index is out of range", () => {
+    const sim = createGameSimulation(Date.now())
+    const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    Equipment.primaryMeleeAttackIndex[eid] = 99
+    const output = sim.tick(
+      queueMap([["user1", emptyInput({ weaponPrimary: true })]]),
+      Date.now(),
+    )
+    expect(output.primaryMeleeAttacks).toHaveLength(0)
+  })
+
+  it("does not swing when caster has DyingTag, DeadTag, or SpectatorTag", () => {
+    for (const Tag of [DyingTag, DeadTag, SpectatorTag] as const) {
+      const sim = createGameSimulation(Date.now())
+      const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
+      addComponent(sim.world, eid, Tag)
+      if (Tag === DyingTag) DyingTag.expiresAtMs[eid] = Date.now() + 5000
+      const output = sim.tick(
+        queueMap([["user1", emptyInput({ weaponPrimary: true })]]),
+        Date.now(),
+      )
+      expect(output.primaryMeleeAttacks).toHaveLength(0)
+    }
+  })
+
+  it("hits a second player in the swing cone", () => {
+    const sim = createGameSimulation(Date.now())
+    const ea = sim.addPlayer("a", "A", "red_wizard", 0)
+    const eb = sim.addPlayer("b", "B", "red_wizard", 1)
+    const cx = ARENA_CENTER_X
+    const cy = ARENA_CENTER_Y
+    Position.x[ea] = cx
+    Position.y[ea] = cy
+    Position.x[eb] = cx + 60
+    Position.y[eb] = cy
+    const output = sim.tick(
+      queueMap([
+        [
+          "a",
+          emptyInput({
+            weaponPrimary: true,
+            weaponTargetX: cx + 500,
+            weaponTargetY: cy,
+          }),
+        ],
+      ]),
+      Date.now(),
+    )
+    expect(output.primaryMeleeAttacks[0]?.hitPlayerIds).toContain("b")
+  })
+
+  it("skips invulnerable victim in the cone", () => {
+    const sim = createGameSimulation(Date.now())
+    const ea = sim.addPlayer("a", "A", "red_wizard", 0)
+    const eb = sim.addPlayer("b", "B", "red_wizard", 1)
+    const cx = ARENA_CENTER_X - 200
+    const cy = ARENA_CENTER_Y
+    Position.x[ea] = cx
+    Position.y[ea] = cy
+    Position.x[eb] = cx + 60
+    Position.y[eb] = cy
+    addComponent(sim.world, eb, InvulnerableTag)
+    const output = sim.tick(
+      queueMap([
+        [
+          "a",
+          emptyInput({
+            weaponPrimary: true,
+            weaponTargetX: cx + 500,
+            weaponTargetY: cy,
+          }),
+        ],
+      ]),
+      Date.now(),
+    )
+    expect(output.primaryMeleeAttacks[0]?.hitPlayerIds).toEqual([])
+  })
+
+  it("skips dead or spectator victim in the cone", () => {
+    for (const Tag of [DeadTag, SpectatorTag] as const) {
+      const sim = createGameSimulation(Date.now())
+      sim.addPlayer("a", "A", "red_wizard", 0)
+      const eb = sim.addPlayer("b", "B", "red_wizard", 1)
+      const ea = sim.playerEntityMap.get("a")!
+      const cx = ARENA_CENTER_X + 220
+      const cy = ARENA_CENTER_Y - 40
+      Position.x[ea] = cx
+      Position.y[ea] = cy
+      Position.x[eb] = cx + 60
+      Position.y[eb] = cy
+      addComponent(sim.world, eb, Tag)
+      const output = sim.tick(
+        queueMap([
+          [
+            "a",
+            emptyInput({
+              weaponPrimary: true,
+              weaponTargetX: cx + 500,
+              weaponTargetY: cy,
+            }),
+          ],
+        ]),
+        Date.now(),
+      )
+      expect(output.primaryMeleeAttacks[0]?.hitPlayerIds).toEqual([])
+    }
+  })
+
+  it("skips dying victim in the cone", () => {
+    const sim = createGameSimulation(Date.now())
+    const ea = sim.addPlayer("a", "A", "red_wizard", 0)
+    const eb = sim.addPlayer("b", "B", "red_wizard", 1)
+    const cx = ARENA_CENTER_X + 100
+    const cy = ARENA_CENTER_Y + 80
+    Position.x[ea] = cx
+    Position.y[ea] = cy
+    Position.x[eb] = cx + 60
+    Position.y[eb] = cy
+    addComponent(sim.world, eb, DyingTag)
+    DyingTag.expiresAtMs[eb] = Date.now() + 5000
+    const output = sim.tick(
+      queueMap([
+        [
+          "a",
+          emptyInput({
+            weaponPrimary: true,
+            weaponTargetX: cx + 500,
+            weaponTargetY: cy,
+          }),
+        ],
+      ]),
+      Date.now(),
+    )
+    expect(output.primaryMeleeAttacks[0]?.hitPlayerIds).toEqual([])
+  })
+
+  it("does not list a hit when victim has no user id in entityPlayerMap", () => {
+    const sim = createGameSimulation(Date.now())
+    sim.addPlayer("a", "A", "red_wizard", 0)
+    const eb = sim.addPlayer("b", "B", "red_wizard", 1)
+    const ea = sim.playerEntityMap.get("a")!
+    const cx = ARENA_CENTER_X - 400
+    const cy = ARENA_CENTER_Y - 120
+    Position.x[ea] = cx
+    Position.y[ea] = cy
+    Position.x[eb] = cx + 60
+    Position.y[eb] = cy
+    sim.entityPlayerMap.delete(eb)
+    const output = sim.tick(
+      queueMap([
+        [
+          "a",
+          emptyInput({
+            weaponPrimary: true,
+            weaponTargetX: cx + 500,
+            weaponTargetY: cy,
+          }),
+        ],
+      ]),
+      Date.now(),
+    )
+    expect(output.primaryMeleeAttacks[0]?.hitPlayerIds).toEqual([])
+    sim.entityPlayerMap.set(eb, "b")
+  })
+
+  it("does not hit a victim outside the swing radius", () => {
+    const sim = createGameSimulation(Date.now())
+    sim.addPlayer("a", "A", "red_wizard", 0)
+    sim.addPlayer("b", "B", "red_wizard", 1)
+    const ea = sim.playerEntityMap.get("a")!
+    const eb = sim.playerEntityMap.get("b")!
+    const cx = ARENA_CENTER_X
+    const cy = ARENA_CENTER_Y + 200
+    Position.x[ea] = cx
+    Position.y[ea] = cy
+    Position.x[eb] = cx + 200
+    Position.y[eb] = cy
+    const output = sim.tick(
+      queueMap([
+        [
+          "a",
+          emptyInput({
+            weaponPrimary: true,
+            weaponTargetX: cx + 500,
+            weaponTargetY: cy,
+          }),
+        ],
+      ]),
+      Date.now(),
+    )
+    expect(output.primaryMeleeAttacks[0]?.hitPlayerIds).toEqual([])
+  })
+
+  it("removes SwingingWeapon after swing duration when weapon input stops", () => {
+    const sim = createGameSimulation(Date.now())
+    sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    const eid = sim.playerEntityMap.get("user1")!
+    sim.tick(queueMap([["user1", emptyInput({ weaponPrimary: true, seq: 1 })]]), Date.now())
+    expect(hasComponent(sim.world, eid, SwingingWeapon)).toBe(true)
+    sim.tick(queueMap([["user1", emptyInput({ weaponPrimary: false, seq: 2 })]]), Date.now())
+    for (let i = 0; i < 35; i++) sim.tick(new Map(), Date.now())
+    expect(hasComponent(sim.world, eid, SwingingWeapon)).toBe(false)
   })
 })

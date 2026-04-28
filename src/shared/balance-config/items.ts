@@ -1,6 +1,6 @@
 import { SHOP_ITEM_COST } from "./economy"
 
-export type ShopItemCategory = "ability" | "weapon" | "augment" | "consumable"
+export type ShopItemCategory = "ability" | "augment" | "consumable"
 
 export type ShopItemConfig = {
   readonly id: string
@@ -31,12 +31,5 @@ export const SHOP_ITEMS: Record<string, ShopItemConfig> = {
     cost: SHOP_ITEM_COST,
     category: "augment",
     description: "+10% move speed. Non-stackable.",
-  },
-  axe: {
-    id: "axe",
-    displayName: "Axe",
-    cost: SHOP_ITEM_COST,
-    category: "weapon",
-    description: "Left-click auto-attack: 90° cone, 80px radius, 30 damage (Physical | Slashing).",
   },
 }

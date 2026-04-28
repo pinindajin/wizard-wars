@@ -53,7 +53,6 @@ import { ABILITY_CONFIGS } from "../../../shared/balance-config/abilities"
 const COOLDOWN_TICKS: Record<string, number> = {
   fireball: Math.ceil(FIREBALL_COOLDOWN_MS / TICK_MS),
   lightning_bolt: Math.ceil(LIGHTNING_COOLDOWN_MS / TICK_MS),
-  axe: 0, // axe cooldown managed by axeSwingSystem
   healing_potion: Math.ceil(HEALING_POTION_CAST_MS / TICK_MS),
 }
 
@@ -80,7 +79,6 @@ function isCooldownReady(eid: number, abilityId: string, currentTick: number): b
   switch (abilityId) {
     case "fireball":      return currentTick >= Cooldown.fireball[eid]
     case "lightning_bolt":return currentTick >= Cooldown.lightningBolt[eid]
-    case "axe":           return currentTick >= Cooldown.axe[eid]
     case "healing_potion":return currentTick >= Cooldown.healingPotion[eid]
     default:              return false
   }
@@ -92,7 +90,6 @@ function setCooldown(eid: number, abilityId: string, currentTick: number): void 
   switch (abilityId) {
     case "fireball":      Cooldown.fireball[eid]      = currentTick + cd; break
     case "lightning_bolt":Cooldown.lightningBolt[eid] = currentTick + cd; break
-    case "axe":           Cooldown.axe[eid]           = currentTick + cd; break
     case "healing_potion":Cooldown.healingPotion[eid] = currentTick + cd; break
   }
 }

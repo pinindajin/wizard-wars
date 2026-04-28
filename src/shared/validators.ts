@@ -61,11 +61,6 @@ export const shopPurchasePayloadSchema = z.object({
   itemId: z.string().min(1).max(64),
 })
 
-/** Schema for equip item. */
-export const equipItemPayloadSchema = z.object({
-  itemId: z.string().min(1).max(64),
-})
-
 /** Schema for ability slot assignment. */
 export const assignAbilityPayloadSchema = z.object({
   itemId: z.string().min(1).max(64),
@@ -91,7 +86,7 @@ export const playerAnimStateSchema = z.enum([
   "dying",
   "light_cast",
   "heavy_cast",
-  "axe_swing",
+  "primary_melee_attack",
   "dead",
 ])
 
