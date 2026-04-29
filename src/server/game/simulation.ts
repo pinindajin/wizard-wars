@@ -2,7 +2,8 @@
  * Wizard Wars server-side game simulation.
  *
  * Owns the bitECS world, all entity maps, inter-system shared state, and runs
- * the full deterministic system pipeline on every 20 Hz tick.
+ * the full deterministic system pipeline once per server tick (`TICK_MS` /
+ * `TICK_RATE_HZ` in shared balance-config rendering).
  */
 import { createWorld, addEntity, addComponent, removeEntity, query, hasComponent, World } from "bitecs"
 

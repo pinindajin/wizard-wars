@@ -6,7 +6,8 @@ import { Preload } from "./scenes/Preload"
 
 /**
  * Core Phaser game configuration.
- * Arena is 1344x768; scale manager fits the canvas to the viewport and centers it.
+ * Canvas is 1344×768; the playable world uses `ARENA_WIDTH`×`ARENA_HEIGHT` from
+ * shared balance-config. Scale manager fits the canvas to the viewport and centers it.
  */
 export const gameConfig: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
