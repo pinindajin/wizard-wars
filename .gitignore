@@ -28,6 +28,9 @@ Thumbs.db
 *.swp
 *.swo
 
+# Cursor / MCP (Playwright page snapshots)
+.playwright-mcp/
+
 # Logs
 *.log
 server.log
