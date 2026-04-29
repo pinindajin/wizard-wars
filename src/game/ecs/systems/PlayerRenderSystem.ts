@@ -18,7 +18,8 @@ import {
 import {
   BASE_MOVE_SPEED_PX_PER_SEC,
   DAMAGE_FLASH_MS,
-  PLAYER_RADIUS_PX,
+  PLAYER_WORLD_COLLISION_FOOTPRINT,
+  SWING_MOVE_SPEED_MULTIPLIER,
 } from "@/shared/balance-config/combat"
 import type {
   GameStateSyncPayload,
@@ -406,7 +407,7 @@ export class PlayerRenderSystem {
     if (!state || !renderPos) return
 
     const ctx: LocalReplayContext = {
-      isSwinging: state.animState === "axe_swing",
+      isSwinging: state.animState === "primary_melee_attack",
       hasSwiftBoots: false,
       castingAbilityId: state.castingAbilityId,
     }
@@ -736,6 +737,10 @@ export class PlayerRenderSystem {
       entry.simPrevY = entry.simCurrY
 
       const castMoveMult = this._clientCastMoveMultiplier(state)
+      const swingMult =
+        state.animState === "primary_melee_attack"
+          ? SWING_MOVE_SPEED_MULTIPLIER
+          : 1
       if (
         this._canPredictMovement(state.animState, localMoveIntent, castMoveMult)
       ) {
@@ -745,14 +750,14 @@ export class PlayerRenderSystem {
           dy,
           BASE_MOVE_SPEED_PX_PER_SEC,
           TICK_DT_SEC,
-          castMoveMult,
+          castMoveMult * swingMult,
         )
         const moved = moveWithinWorld(
           entry.simCurrX,
           entry.simCurrY,
           step.x,
           step.y,
-          PLAYER_RADIUS_PX,
+          PLAYER_WORLD_COLLISION_FOOTPRINT,
           ARENA_BOUNDS,
           ARENA_WORLD_COLLIDERS,
         )
@@ -775,7 +780,7 @@ export class PlayerRenderSystem {
           pPredY,
           targetStepX,
           targetStepY,
-          PLAYER_RADIUS_PX,
+          PLAYER_WORLD_COLLISION_FOOTPRINT,
           ARENA_BOUNDS,
           ARENA_WORLD_COLLIDERS,
         )
@@ -1048,8 +1053,7 @@ export class PlayerRenderSystem {
     if (dx === 0 && dy === 0) return false
     if (
       animState === "dying" ||
-      animState === "dead" ||
-      animState === "axe_swing"
+      animState === "dead"
     ) {
       return false
     }

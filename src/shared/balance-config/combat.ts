@@ -6,8 +6,36 @@ export const DEFAULT_PLAYER_HEALTH = 100
 /** Lives each player starts a match with. */
 export const STARTING_LIVES = 5
 
-/** Player collision radius in pixels. */
+/** Player-player collision radius in pixels. World collision uses the oval footprint constants below. */
 export const PLAYER_RADIUS_PX = 20
+
+/** Horizontal radius of the player's oval world-collision footprint in pixels. */
+export const PLAYER_WORLD_COLLISION_RADIUS_X_PX = 20
+
+/** Vertical radius of the player's oval world-collision footprint in pixels. */
+export const PLAYER_WORLD_COLLISION_RADIUS_Y_PX = 9
+
+/** Vertical offset from the sim anchor to the oval world-collision center in pixels. */
+export const PLAYER_WORLD_COLLISION_OFFSET_Y_PX = 8
+
+/** Complete player oval footprint used for world collision. */
+export const PLAYER_WORLD_COLLISION_FOOTPRINT = {
+  radiusX: PLAYER_WORLD_COLLISION_RADIUS_X_PX,
+  radiusY: PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
+  offsetY: PLAYER_WORLD_COLLISION_OFFSET_Y_PX,
+} as const
+
+/** Character combat hitbox extent to the left of the sim anchor in pixels. */
+export const CHARACTER_HITBOX_LEFT_PX = 15
+
+/** Character combat hitbox extent to the right of the sim anchor in pixels. */
+export const CHARACTER_HITBOX_RIGHT_PX = 15
+
+/** Character combat hitbox extent above the sim anchor in pixels. */
+export const CHARACTER_HITBOX_UP_PX = 40
+
+/** Character combat hitbox extent below the sim anchor in pixels. */
+export const CHARACTER_HITBOX_DOWN_PX = 15
 
 /** Base movement speed in pixels per second. */
 export const BASE_MOVE_SPEED_PX_PER_SEC = 200
@@ -76,12 +104,16 @@ export const AXE_DAMAGE_PROPERTIES = combineDamageProperties(
   DamageProperty.Physical,
   DamageProperty.Slashing,
 )
-/** Axe swing arc in degrees (cone in front of player). */
-export const AXE_SWING_ARC_DEG = 90
-/** Axe swing radius in px. */
-export const AXE_SWING_RADIUS_PX = 80
-/** Axe swing animation duration in ms (= cooldown). */
-export const AXE_SWING_DURATION_MS = 400
+/** Hurtbox radius in pixels. Half-circle extends this far in front of the attacker. */
+export const AXE_HURTBOX_RADIUS_PX = 45
+/** Hurtbox arc width in degrees. 180 = half-circle (flat side at character, curve facing forward). */
+export const AXE_HURTBOX_ARC_DEG = 180
+/** Axe swing animation duration in ms = cooldown. Matches lady-wizard summoned_axe_swing: 17 frames @ 12 fps ≈ 1417ms. */
+export const AXE_SWING_DURATION_MS = 1417
+/** Start of the dangerous-frames window (ms since swing start) during which the hurtbox can deal damage. */
+export const AXE_DANGEROUS_WINDOW_START_MS = 500
+/** End of the dangerous-frames window (ms since swing start, exclusive). */
+export const AXE_DANGEROUS_WINDOW_END_MS = 900
 
 // --- Healing Potion ---
 /** HP restored by a healing potion. */

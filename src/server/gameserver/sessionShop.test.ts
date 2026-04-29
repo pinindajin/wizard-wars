@@ -24,10 +24,6 @@ describe("createSessionEconomy", () => {
     }
   })
 
-  it("has no equipped weapon", () => {
-    const economy = createSessionEconomy()
-    expect(economy.equippedWeaponId).toBe(null)
-  })
 })
 
 describe("attemptPurchase", () => {
@@ -49,12 +45,12 @@ describe("attemptPurchase", () => {
     }
   })
 
-  it("purchases axe and equips it", () => {
+  it("rejects removed weapon id axe as unknown without spending gold", () => {
     const economy = createSessionEconomy()
-    economy.gold = 20
+    const initialGold = economy.gold
     const result = attemptPurchase(economy, "axe")
-    expect(result.success).toBe(true)
-    expect(economy.equippedWeaponId).toBe("axe")
+    expect(result.success).toBe(false)
+    expect(economy.gold).toBe(initialGold)
   })
 
   it("purchases swift boots and marks them equipped", () => {
@@ -163,5 +159,11 @@ describe("buildShopStatePayload", () => {
     const payload = buildShopStatePayload(economy)
     expect(payload.abilitySlots[0]).toBe("fireball")
     expect(payload.abilitySlots[1]).toBe(null)
+  })
+
+  it("does not include equippedWeaponItemId", () => {
+    const economy = createSessionEconomy()
+    const payload = buildShopStatePayload(economy)
+    expect("equippedWeaponItemId" in payload).toBe(false)
   })
 })

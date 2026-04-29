@@ -30,7 +30,7 @@ const ANIM_CLIPS: Record<PlayerAnimState, string> = {
   dead: "death",
   light_cast: "light_spell_cast",
   heavy_cast: "heavy_spell_cast",
-  axe_swing: "summoned_axe_swing",
+  primary_melee_attack: "summoned_axe_swing",
 }
 
 /**

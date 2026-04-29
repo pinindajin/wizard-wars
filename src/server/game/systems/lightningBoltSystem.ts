@@ -4,7 +4,7 @@
  *
  * For each cast:
  *  - Computes a main arc of length LIGHTNING_BOLT_ARC_PX from caster toward target.
- *  - Finds all enemy players within LIGHTNING_HIT_RADIUS_PX of the arc segment.
+ *  - Finds all enemy character hitboxes touched by the arc segment capsule.
  *  - Queues damage requests for each hit player.
  *  - Emits a LightningBoltPayload with a deterministic seed for branch geometry.
  *
@@ -26,34 +26,10 @@ import {
   LIGHTNING_BOLT_ARC_PX,
   LIGHTNING_HIT_RADIUS_PX,
 } from "../../../shared/balance-config"
-
-/**
- * Returns the squared distance from point (px, py) to the line segment
- * from (ax, ay) to (bx, by).
- */
-function pointToSegmentDistSq(
-  px: number,
-  py: number,
-  ax: number,
-  ay: number,
-  bx: number,
-  by: number,
-): number {
-  const dx = bx - ax
-  const dy = by - ay
-  const lenSq = dx * dx + dy * dy
-  if (lenSq === 0) {
-    const ex = px - ax
-    const ey = py - ay
-    return ex * ex + ey * ey
-  }
-  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq))
-  const closestX = ax + t * dx
-  const closestY = ay + t * dy
-  const fx = px - closestX
-  const fy = py - closestY
-  return fx * fx + fy * fy
-}
+import {
+  capsuleIntersectsRect,
+  characterHitboxForCenter,
+} from "../../../shared/collision/characterHitbox"
 
 /**
  * Runs the lightning bolt system for one tick.
@@ -62,8 +38,6 @@ function pointToSegmentDistSq(
  */
 export function lightningBoltSystem(ctx: SimCtx): void {
   const { world, currentTick, pendingLightningBolts, damageRequests, lightningBolts, entityPlayerMap } = ctx
-
-  const hitRadiusSq = LIGHTNING_HIT_RADIUS_PX * LIGHTNING_HIT_RADIUS_PX
 
   for (const pending of pendingLightningBolts) {
     const { casterEid, casterUserId, targetX, targetY } = pending
@@ -87,15 +61,19 @@ export function lightningBoltSystem(ctx: SimCtx): void {
       if (hasComponent(world, target, SpectatorTag)) continue
       if (hasComponent(world, target, InvulnerableTag)) continue
 
-      const distSq = pointToSegmentDistSq(
-        Position.x[target],
-        Position.y[target],
-        originX,
-        originY,
-        endX,
-        endY,
-      )
-      if (distSq > hitRadiusSq) continue
+      const hitbox = characterHitboxForCenter(Position.x[target], Position.y[target])
+      if (
+        !capsuleIntersectsRect(
+          originX,
+          originY,
+          endX,
+          endY,
+          LIGHTNING_HIT_RADIUS_PX,
+          hitbox,
+        )
+      ) {
+        continue
+      }
 
       const targetUserId = entityPlayerMap.get(target)
       if (targetUserId) hitPlayerIds.push(targetUserId)

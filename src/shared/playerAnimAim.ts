@@ -8,7 +8,7 @@ import type { PlayerAnimState } from "@/shared/types"
  */
 export function animUsesMouseAim(animState: PlayerAnimState): boolean {
   return (
-    animState === "axe_swing" ||
+    animState === "primary_melee_attack" ||
     animState === "light_cast" ||
     animState === "heavy_cast"
   )

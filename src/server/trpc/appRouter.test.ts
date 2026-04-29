@@ -1,0 +1,201 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+
+import type { ChatMessage } from "@/shared/types"
+
+const prismaMock = vi.hoisted(() => ({
+  user: {
+    findFirst: vi.fn(),
+    findUnique: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+  },
+  chatLog: {
+    create: vi.fn(),
+    findFirst: vi.fn(),
+    findMany: vi.fn(),
+    deleteMany: vi.fn(),
+  },
+}))
+
+vi.mock("../db", () => ({
+  prisma: prismaMock,
+}))
+
+import { appRouter } from "./router"
+import { createTrpcContext } from "./init"
+
+const chatStoreMock = {
+  saveChatLog: vi.fn(async () => {}),
+  getLatestChatLog: vi.fn(async () => null as ChatMessage[] | null),
+  deleteOldLogs: vi.fn(async () => {}),
+}
+
+describe("appRouter", () => {
+  beforeEach(() => {
+    vi.stubEnv("AUTH_SECRET", "test-secret-32-chars-minimum-required")
+    prismaMock.user.findFirst.mockReset()
+    prismaMock.user.findUnique.mockReset()
+    prismaMock.user.findUnique.mockResolvedValue(null)
+    prismaMock.user.create.mockReset()
+    prismaMock.user.update.mockReset()
+    chatStoreMock.getLatestChatLog.mockReset()
+    chatStoreMock.getLatestChatLog.mockResolvedValue(null)
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it("health query returns ok", async () => {
+    const ctx = await createTrpcContext({
+      prismaClient: prismaMock as never,
+      chatStore: chatStoreMock,
+    })
+    const caller = appRouter.createCaller(ctx)
+    await expect(caller.health()).resolves.toEqual({ status: "ok" })
+  })
+
+  it("chat.latest returns messages from chatStore", async () => {
+    const msgs: ChatMessage[] = [
+      {
+        id: "1",
+        userId: "u",
+        username: "x",
+        text: "hi",
+        createdAt: "2020-01-01T00:00:00.000Z",
+      },
+    ]
+    chatStoreMock.getLatestChatLog.mockResolvedValueOnce(msgs)
+    const ctx = await createTrpcContext({
+      prismaClient: prismaMock as never,
+      chatStore: chatStoreMock,
+      headers: new Headers({ cookie: "ww-token=ignored" }),
+    })
+    const caller = appRouter.createCaller({
+      ...ctx,
+      user: { sub: "u1", username: "Alice" },
+    })
+    await expect(caller.chat.latest()).resolves.toEqual({ messages: msgs })
+  })
+
+  it("auth.signup creates user when username free", async () => {
+    prismaMock.user.findFirst.mockResolvedValueOnce(null)
+    prismaMock.user.create.mockResolvedValueOnce({ id: "id1", username: "NewUser" })
+    const setCookie = vi.fn()
+    const ctx = await createTrpcContext({
+      prismaClient: prismaMock as never,
+      chatStore: chatStoreMock,
+      setCookie,
+    })
+    const caller = appRouter.createCaller(ctx)
+    const out = await caller.auth.signup({ username: "NewUser", password: "password12" })
+    expect(out.user.username).toBe("NewUser")
+    expect(setCookie).toHaveBeenCalled()
+  })
+
+  it("auth.signup throws CONFLICT when username taken", async () => {
+    prismaMock.user.findFirst.mockResolvedValueOnce({ username: "Taken" })
+    const ctx = await createTrpcContext({
+      prismaClient: prismaMock as never,
+      chatStore: chatStoreMock,
+    })
+    const caller = appRouter.createCaller(ctx)
+    await expect(
+      caller.auth.signup({ username: "Taken", password: "password12" }),
+    ).rejects.toMatchObject({ code: "CONFLICT" })
+  })
+
+  it("auth.login succeeds with valid password", async () => {
+    const bcrypt = await import("bcryptjs")
+    const hash = await bcrypt.hash("password12", 10)
+    prismaMock.user.findUnique.mockResolvedValueOnce({
+      id: "u1",
+      username: "Bob",
+      passwordHash: hash,
+    })
+    const setCookie = vi.fn()
+    const ctx = await createTrpcContext({
+      prismaClient: prismaMock as never,
+      chatStore: chatStoreMock,
+      setCookie,
+    })
+    const caller = appRouter.createCaller(ctx)
+    const out = await caller.auth.login({ username: "Bob", password: "password12" })
+    expect(out.user.id).toBe("u1")
+    expect(setCookie).toHaveBeenCalled()
+  })
+
+  it("auth.login throws when user missing", async () => {
+    prismaMock.user.findUnique.mockResolvedValueOnce(null)
+    const ctx = await createTrpcContext({
+      prismaClient: prismaMock as never,
+      chatStore: chatStoreMock,
+    })
+    const caller = appRouter.createCaller(ctx)
+    await expect(caller.auth.login({ username: "nope", password: "password12" })).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    })
+  })
+
+  it("auth.login throws when password wrong", async () => {
+    const bcrypt = await import("bcryptjs")
+    const hash = await bcrypt.hash("rightpass", 10)
+    prismaMock.user.findUnique.mockResolvedValueOnce({
+      id: "u1",
+      username: "Bob",
+      passwordHash: hash,
+    })
+    const ctx = await createTrpcContext({
+      prismaClient: prismaMock as never,
+      chatStore: chatStoreMock,
+    })
+    const caller = appRouter.createCaller(ctx)
+    await expect(caller.auth.login({ username: "Bob", password: "wrongpass1" })).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    })
+  })
+
+  it("user.me requires auth", async () => {
+    const ctx = await createTrpcContext({
+      prismaClient: prismaMock as never,
+      chatStore: chatStoreMock,
+    })
+    const caller = appRouter.createCaller({ ...ctx, user: null })
+    await expect(caller.user.me()).rejects.toMatchObject({ code: "UNAUTHORIZED" })
+  })
+
+  it("user.me returns prisma user", async () => {
+    prismaMock.user.findUnique.mockResolvedValueOnce({
+      id: "u1",
+      username: "Bob",
+      combatNumbersMode: "OFF",
+      bgmVolume: 50,
+      sfxVolume: 60,
+      openSettingsKey: "\\",
+    })
+    const ctx = await createTrpcContext({
+      prismaClient: prismaMock as never,
+      chatStore: chatStoreMock,
+    })
+    const caller = appRouter.createCaller({ ...ctx, user: { sub: "u1", username: "Bob" } })
+    const out = await caller.user.me()
+    expect(out.user?.username).toBe("Bob")
+  })
+
+  it("user.updateSettings updates user", async () => {
+    prismaMock.user.update.mockResolvedValueOnce({
+      id: "u1",
+      combatNumbersMode: "ON",
+      bgmVolume: 10,
+      sfxVolume: 20,
+      openSettingsKey: "Tab",
+    })
+    const ctx = await createTrpcContext({
+      prismaClient: prismaMock as never,
+      chatStore: chatStoreMock,
+    })
+    const caller = appRouter.createCaller({ ...ctx, user: { sub: "u1", username: "Bob" } })
+    const out = await caller.user.updateSettings({ bgmVolume: 10 })
+    expect(out.user.bgmVolume).toBe(10)
+  })
+})

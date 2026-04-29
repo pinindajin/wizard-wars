@@ -37,14 +37,18 @@ import {
   STARTING_GOLD,
   PLAYER_RADIUS_PX,
 } from "../../shared/balance-config"
-import { DEFAULT_HERO_ID } from "../../shared/balance-config/heroes"
+import { DEFAULT_HERO_ID, getHeroPrimaryMeleeAttackId } from "../../shared/balance-config/heroes"
+import {
+  primaryMeleeAttackIdToIndex,
+  type PrimaryMeleeAttackId,
+} from "../../shared/balance-config/equipment"
 import type {
   PlayerInputPayload,
   PlayerDelta,
   FireballLaunchPayload,
   FireballImpactPayload,
   LightningBoltPayload,
-  AxeSwingPayload,
+  PrimaryMeleeAttackPayload,
   PlayerDeathPayload,
   PlayerRespawnPayload,
   DamageFloatPayload,
@@ -63,7 +67,7 @@ import { knockbackSystem } from "./systems/knockbackSystem"
 import { playerCollisionSystem } from "./systems/playerCollisionSystem"
 import { worldCollisionSystem } from "./systems/worldCollisionSystem"
 import { projectileMovementSystem } from "./systems/projectileMovementSystem"
-import { axeSwingSystem } from "./systems/axeSwingSystem"
+import { primaryMeleeAttackSystem } from "./systems/primaryMeleeAttackSystem"
 import { lightningBoltSystem } from "./systems/lightningBoltSystem"
 import { projectileCollisionSystem } from "./systems/projectileCollisionSystem"
 import { healthSystem } from "./systems/healthSystem"
@@ -94,7 +98,7 @@ export function lastProcessedSeqForNetworkPayload(
 
 /**
  * Request for healthSystem to apply damage to a target entity.
- * Queued by projectileCollisionSystem, axeSwingSystem, and lightningBoltSystem.
+ * Queued by projectileCollisionSystem, primaryMeleeAttackSystem, and lightningBoltSystem.
  */
 export type DamageRequest = {
   targetEid: number
@@ -120,6 +124,26 @@ export type PendingLightningBolt = {
   casterUserId: string
   targetX: number
   targetY: number
+}
+
+/**
+ * Active primary melee swing tracked across ticks.
+ *
+ * Created on the input tick and removed once the swing duration elapses. The
+ * `hitTargets` set guarantees single-hit-per-attack semantics during the
+ * dangerous-frames window. Keyed by caster eid in {@link SimCtx.activeMeleeAttacks}
+ * (cooldown enforces one active attack per caster).
+ */
+export type ActiveMeleeAttack = {
+  attackId: PrimaryMeleeAttackId
+  /** Tick on which the swing started (input tick). */
+  startTick: number
+  /** Facing angle in radians, locked at swing start. */
+  facingAngle: number
+  /** Caster userId at swing start (kept for damage attribution if entityPlayerMap drifts). */
+  casterUserId: string
+  /** Target eids already damaged by this attack instance. */
+  hitTargets: Set<number>
 }
 
 /** Per-player statistics accumulated across the match for the scoreboard. */
@@ -197,7 +221,7 @@ export type SimCtx = {
   fireballImpacts: FireballImpactPayload[]
   fireballRemovedIds: number[]
   lightningBolts: LightningBoltPayload[]
-  axeSwings: AxeSwingPayload[]
+  primaryMeleeAttacks: PrimaryMeleeAttackPayload[]
   damageFloats: DamageFloatPayload[]
   goldUpdates: { userId: string; gold: number }[]
 
@@ -209,6 +233,12 @@ export type SimCtx = {
   prevPlayerStates: Map<number, PlayerPrevState>
   prevFireballStates: Map<number, FireballPrevState>
   killStats: Map<string, KillStats>
+  /**
+   * Active primary melee swings keyed by caster eid. Persists across ticks for
+   * the swing's full duration; primaryMeleeAttackSystem reads/mutates this each
+   * tick to gate damage application to the dangerous-frames window.
+   */
+  activeMeleeAttacks: Map<number, ActiveMeleeAttack>
 
   // ── Written by playerDeltaSystem and projectileDeltaSystem ──
   playerDeltas: PlayerDelta[]
@@ -227,7 +257,7 @@ export type SimOutput = {
   fireballLaunches: FireballLaunchPayload[]
   fireballImpacts: FireballImpactPayload[]
   lightningBolts: LightningBoltPayload[]
-  axeSwings: AxeSwingPayload[]
+  primaryMeleeAttacks: PrimaryMeleeAttackPayload[]
   damageFloats: DamageFloatPayload[]
   goldUpdates: { userId: string; gold: number }[]
   matchEnded: {
@@ -241,6 +271,8 @@ export type SimOutput = {
 export type GameSimulation = {
   world: World
   playerEntityMap: Map<string, number>
+  /** entity id → user id (JWT sub); exposed for tests and diagnostics. */
+  entityPlayerMap: Map<number, string>
   /** entity id → display username */
   entityUsernameMap: Map<number, string>
   matchStartedAtMs: number
@@ -296,6 +328,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
   const prevFireballStates = new Map<number, FireballPrevState>()
   const killStats = new Map<string, KillStats>()
   const lastProcessedInputSeqByPlayer = new Map<string, number>()
+  const activeMeleeAttacks = new Map<number, ActiveMeleeAttack>()
 
   let currentTick = 0
   let hostEndSignal = false
@@ -348,6 +381,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     Velocity.vy[eid] = 0
     Facing.angle[eid] = facingAngle
     MoveFacing.angle[eid] = facingAngle
+    // Radius remains for player-player collision; world collision and combat use shared oval/rect helpers.
     Radius.r[eid] = PLAYER_RADIUS_PX
     Health.current[eid] = DEFAULT_PLAYER_HEALTH
     Health.max[eid] = DEFAULT_PLAYER_HEALTH
@@ -357,10 +391,12 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
 
     Cooldown.fireball[eid] = 0
     Cooldown.lightningBolt[eid] = 0
-    Cooldown.axe[eid] = 0
+    Cooldown.primaryMelee[eid] = 0
     Cooldown.healingPotion[eid] = 0
 
-    Equipment.hasAxe[eid] = 0
+    Equipment.primaryMeleeAttackIndex[eid] = primaryMeleeAttackIdToIndex(
+      getHeroPrimaryMeleeAttackId(heroId),
+    )
     Equipment.hasSwiftBoots[eid] = 0
 
     // Slot 0 = fireball by default
@@ -446,6 +482,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     playerHeroIdMap.delete(userId)
     prevPlayerStates.delete(eid)
     lastProcessedInputSeqByPlayer.delete(userId)
+    activeMeleeAttacks.delete(eid)
   }
 
   // ── requestHostEnd ───────────────────────────────────────────────────
@@ -598,7 +635,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       fireballImpacts: [],
       fireballRemovedIds: [],
       lightningBolts: [],
-      axeSwings: [],
+      primaryMeleeAttacks: [],
       damageFloats: [],
       goldUpdates: [],
       matchEnded: null,
@@ -606,6 +643,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       prevPlayerStates,
       prevFireballStates,
       killStats,
+      activeMeleeAttacks,
       playerDeltas: [],
       fireballDeltas: [],
     }
@@ -618,7 +656,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     playerCollisionSystem(ctx)
     worldCollisionSystem(ctx)
     projectileMovementSystem(ctx)
-    axeSwingSystem(ctx)
+    primaryMeleeAttackSystem(ctx)
     lightningBoltSystem(ctx)
     projectileCollisionSystem(ctx)
     healthSystem(ctx)
@@ -643,7 +681,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       fireballLaunches: ctx.fireballLaunches,
       fireballImpacts: ctx.fireballImpacts,
       lightningBolts: ctx.lightningBolts,
-      axeSwings: ctx.axeSwings,
+      primaryMeleeAttacks: ctx.primaryMeleeAttacks,
       damageFloats: ctx.damageFloats,
       goldUpdates: ctx.goldUpdates,
       matchEnded: ctx.matchEnded,
@@ -653,6 +691,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
   return {
     world,
     playerEntityMap,
+    entityPlayerMap,
     entityUsernameMap,
     matchStartedAtMs,
     addPlayer,

@@ -4,7 +4,7 @@ import { animUsesMouseAim } from "@/shared/playerAnimAim"
 
 describe("animUsesMouseAim", () => {
   it("returns true for aim-driven animation states", () => {
-    expect(animUsesMouseAim("axe_swing")).toBe(true)
+    expect(animUsesMouseAim("primary_melee_attack")).toBe(true)
     expect(animUsesMouseAim("light_cast")).toBe(true)
     expect(animUsesMouseAim("heavy_cast")).toBe(true)
   })

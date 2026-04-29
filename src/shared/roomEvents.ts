@@ -44,14 +44,13 @@ export const RoomEvent = {
   FireballImpact: "fireball_impact",
   FireballBatchUpdate: "fireball_batch_update",
   LightningBolt: "lightning_bolt",
-  AxeSwing: "axe_swing",
+  PrimaryMeleeAttack: "primary_melee_attack",
 
   // Shop / economy
   ShopPurchase: "shop_purchase",
   ShopState: "shop_state",
   ShopError: "shop_error",
   GoldBalance: "gold_balance",
-  EquipItem: "equip_item",
   AssignAbility: "assign_ability",
   UseQuickItem: "use_quick_item",
 

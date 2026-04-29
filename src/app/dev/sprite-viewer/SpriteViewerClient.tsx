@@ -8,7 +8,6 @@ import {
   strokeAlphaOutlineSegments,
   type AlphaOutlineSegment,
 } from "@/lib/sprite-outline"
-import { PLAYER_RADIUS_PX } from "@/shared/balance-config/combat"
 import {
   type LadyWizardAtlasClipId,
   LADY_WIZARD_ATLAS_CLIP_TO_MEGASHEET,
@@ -22,12 +21,23 @@ import {
   type LadyWizardAtlasJson,
   type LadyWizardViewerCell,
 } from "@/shared/sprites/ladyWizardViewerModel"
+import {
+  SPRITE_VIEWER_CENTERPOINT_MARKER_ARM_PX,
+  SPRITE_VIEWER_CENTERPOINT_MARKER_RADIUS_PX,
+  SPRITE_VIEWER_DEFAULT_PRIMARY_ATTACK_ID,
+  SPRITE_VIEWER_PRIMARY_ATTACK_ATLAS_CLIP_ID,
+  spriteViewerAttackHurtbox,
+  spriteViewerCharacterHitbox,
+  spriteViewerCenterpoint,
+  spriteViewerCenterpointTooltip,
+  spriteViewerFrameIsDangerous,
+  spriteViewerMovementOvalRadii,
+} from "@/shared/sprites/spriteViewerOverlays"
+import type { LadyWizardDirection } from "@/shared/sprites/ladyWizard"
 
 const DETAIL_SCALE = 2
 const DETAIL_PAD = 16
 const FRAME = LADY_WIZARD_FRAME_SIZE_PX
-
-const PLAYER_DIAMETER_PX = PLAYER_RADIUS_PX * 2
 
 /**
  * One legend line with a click-to-expand details panel (avoids hover/stacking/CSS issues).
@@ -122,6 +132,7 @@ export function SpriteViewerClient() {
   const [stripBroken, setStripBroken] = useState(false)
   const [showCollision, setShowCollision] = useState(true)
   const [showEdge, setShowEdge] = useState(true)
+  const [showAttackHurtbox, setShowAttackHurtbox] = useState(true)
 
   const cells = useMemo(() => (atlas ? buildLadyWizardViewerCells(atlas) : []), [atlas])
 
@@ -242,20 +253,42 @@ export function SpriteViewerClient() {
     ctx.scale(DETAIL_SCALE, DETAIL_SCALE)
     ctx.drawImage(img, displayFrame * FRAME, 0, FRAME, FRAME, -FRAME / 2, -FRAME, FRAME, FRAME)
 
-    const simY = -LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y
+    const centerpoint = spriteViewerCenterpoint()
     if (showCollision) {
+      const movementOval = spriteViewerMovementOvalRadii()
+      const combatHitbox = spriteViewerCharacterHitbox()
       ctx.strokeStyle = "rgba(34, 197, 94, 0.85)"
       ctx.lineWidth = 1 / DETAIL_SCALE
       ctx.beginPath()
-      ctx.arc(0, simY, PLAYER_RADIUS_PX, 0, Math.PI * 2)
-      ctx.stroke()
-      ctx.strokeStyle = "rgba(250, 204, 21, 0.75)"
-      ctx.strokeRect(
-        -PLAYER_RADIUS_PX,
-        simY - PLAYER_RADIUS_PX,
-        PLAYER_RADIUS_PX * 2,
-        PLAYER_RADIUS_PX * 2,
+      ctx.ellipse(
+        centerpoint.x,
+        centerpoint.y + movementOval.offsetY,
+        movementOval.radiusX,
+        movementOval.radiusY,
+        0,
+        0,
+        Math.PI * 2,
       )
+      ctx.stroke()
+      ctx.strokeStyle = "rgba(216, 180, 254, 0.95)"
+      ctx.strokeRect(combatHitbox.x, combatHitbox.y, combatHitbox.width, combatHitbox.height)
+      ctx.strokeStyle = "rgba(244, 63, 94, 0.95)"
+      ctx.fillStyle = "rgba(255, 255, 255, 0.95)"
+      ctx.beginPath()
+      ctx.moveTo(centerpoint.x - SPRITE_VIEWER_CENTERPOINT_MARKER_ARM_PX, centerpoint.y)
+      ctx.lineTo(centerpoint.x + SPRITE_VIEWER_CENTERPOINT_MARKER_ARM_PX, centerpoint.y)
+      ctx.moveTo(centerpoint.x, centerpoint.y - SPRITE_VIEWER_CENTERPOINT_MARKER_ARM_PX)
+      ctx.lineTo(centerpoint.x, centerpoint.y + SPRITE_VIEWER_CENTERPOINT_MARKER_ARM_PX)
+      ctx.stroke()
+      ctx.beginPath()
+      ctx.arc(
+        centerpoint.x,
+        centerpoint.y,
+        SPRITE_VIEWER_CENTERPOINT_MARKER_RADIUS_PX,
+        0,
+        Math.PI * 2,
+      )
+      ctx.fill()
     }
 
     if (showEdge) {
@@ -265,8 +298,40 @@ export function SpriteViewerClient() {
       strokeAlphaOutlineSegments(ctx, segs, -FRAME / 2, -FRAME)
     }
 
+    if (showAttackHurtbox && selected.atlasClipId === SPRITE_VIEWER_PRIMARY_ATTACK_ATLAS_CLIP_ID) {
+      const overlay = spriteViewerAttackHurtbox(
+        SPRITE_VIEWER_DEFAULT_PRIMARY_ATTACK_ID,
+        selected.direction as LadyWizardDirection,
+        fps,
+      )
+      const halfArcRad = (overlay.arcDeg * Math.PI) / 360
+      const dangerous = spriteViewerFrameIsDangerous(displayFrame, overlay)
+      ctx.strokeStyle = dangerous ? "rgba(239, 68, 68, 0.95)" : "rgba(255, 255, 255, 0.85)"
+      ctx.lineWidth = 1.5 / DETAIL_SCALE
+      ctx.beginPath()
+      ctx.arc(
+        centerpoint.x,
+        centerpoint.y,
+        overlay.radiusPx,
+        overlay.facingRad - halfArcRad,
+        overlay.facingRad + halfArcRad,
+      )
+      ctx.closePath()
+      ctx.stroke()
+    }
+
     ctx.restore()
-  }, [selected, stripLoaded, stripBroken, displayFrame, showCollision, showEdge, getOrComputeOutline])
+  }, [
+    selected,
+    stripLoaded,
+    stripBroken,
+    displayFrame,
+    showCollision,
+    showEdge,
+    showAttackHurtbox,
+    fps,
+    getOrComputeOutline,
+  ])
 
   useEffect(() => {
     drawDetail()
@@ -310,8 +375,8 @@ export function SpriteViewerClient() {
           <h1 className="font-mono text-lg tracking-tight text-zinc-100">Lady-wizard sprite viewer</h1>
           <p className="max-w-xl text-sm text-zinc-400">
             Shipped strips from <code className="text-violet-300">/assets/.../sheets/atlas.json</code>. Collision
-            circle uses <code className="text-violet-300">PLAYER_RADIUS_PX</code> centered on the sim anchor (texture
-            bottom minus <code className="text-violet-300">{LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y}px</code>).
+            overlay shows the movement oval and character hitbox centered on the sim anchor (texture bottom minus{" "}
+            <code className="text-violet-300">{LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y}px</code>).
           </p>
         </header>
 
@@ -384,6 +449,15 @@ export function SpriteViewerClient() {
               />
               Alpha edge
             </label>
+            <label className="flex items-center gap-1">
+              <input
+                type="checkbox"
+                checked={showAttackHurtbox}
+                onChange={(e) => setShowAttackHurtbox(e.target.checked)}
+                data-testid="sprite-viewer-hurtbox-toggle"
+              />
+              Hurtbox
+            </label>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <button
@@ -433,70 +507,106 @@ export function SpriteViewerClient() {
           </p>
           <div className="flex flex-col gap-2.5">
             <LegendTipRow
-              testId="sprite-viewer-legend-info-collision"
+              testId="sprite-viewer-legend-info-centerpoint"
               label={
-                <span>
-                  <span className="text-emerald-400">Green</span>: {PLAYER_RADIUS_PX}px radius (authoritative gameplay
-                  body).
+                <span title={spriteViewerCenterpointTooltip()}>
+                  <span className="text-rose-400">Red/white</span>: centerpoint / sim anchor.
                 </span>
               }
             >
               <p>
-                <strong className="text-zinc-100">What it is.</strong> Wizard Wars treats each player as a{" "}
-                <strong className="text-zinc-100">circle</strong> in world space: center at the authoritative{" "}
-                <code className="text-violet-300">(x, y)</code> from the sim, radius{" "}
-                <code className="text-violet-300">PLAYER_RADIUS_PX</code> from{" "}
-                <code className="text-violet-300">@/shared/balance-config/combat</code>. The viewer draws that circle
-                where the <strong className="text-zinc-100">sim/render anchor</strong> sits—not at the raw texture
-                bottom—using the same vertical offset as Phaser (
-                <code className="text-violet-300">LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y</code> in{" "}
-                <code className="text-violet-300">PlayerRenderSystem</code>) so art lines up with collision.
+                <strong className="text-zinc-100">What it is.</strong> The centerpoint is the authoritative{" "}
+                <code className="text-violet-300">Position.x/y</code> used by movement, collision, combat targeting,
+                camera follow, and render interpolation. The detail canvas draws it at{" "}
+                <code className="text-violet-300">
+                  ({spriteViewerCenterpoint().x}, {spriteViewerCenterpoint().y})
+                </code>{" "}
+                relative to the cel because the sprite art is bottom-anchored and shifted by{" "}
+                <code className="text-violet-300">LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y</code>.
               </p>
               <p>
-                <strong className="text-zinc-100">Systems that use it.</strong> Server:{" "}
-                <code className="text-violet-300">simulation</code> assigns <code className="text-violet-300">Radius.r</code>;{" "}
-                <code className="text-violet-300">worldCollisionSystem</code> clamps player centers inside the arena
-                respecting radius; <code className="text-violet-300">playerCollisionSystem</code> and{" "}
-                <code className="text-violet-300">projectileCollisionSystem</code> use it for player–player and
-                player–projectile distances. Shared <code className="text-violet-300">worldCollision</code> resolves
-                circles against rectangular colliders. Client: <code className="text-violet-300">ReconciliationSystem</code>{" "}
-                uses the same constant when probing geometry during prediction replay.
-              </p>
-              <p>
-                <strong className="text-zinc-100">If you change it.</strong> Increasing radius makes heroes easier to
-                hit, harder to thread narrow gaps, and changes how tightly the server clamps you to walls and props;
-                decreasing it does the opposite. Any change must ship with matching balance and art review—nametag/HUD
-                layout is separate, but <strong className="text-zinc-100">feel</strong> (getting clipped, dodging
-                fireballs) shifts immediately because every distance test against that circle changes.
+                <strong className="text-zinc-100">Relationship to overlays.</strong> The movement oval and character
+                hitbox are drawn from balance constants around this point. Spawn/sync state provides the point; the
+                overlays define separate world-collision and combat shapes around it.
               </p>
             </LegendTipRow>
             <LegendTipRow
-              testId="sprite-viewer-legend-info-bounds"
+              testId="sprite-viewer-legend-info-collision"
               label={
                 <span>
-                  <span className="text-amber-300">Yellow</span>: axis-aligned bounds ({PLAYER_DIAMETER_PX}×
-                  {PLAYER_DIAMETER_PX}).
+                  <span className="text-emerald-400">Green</span>: movement oval ({spriteViewerMovementOvalRadii().radiusX}×
+                  {spriteViewerMovementOvalRadii().radiusY} radii, +{spriteViewerMovementOvalRadii().offsetY}px y).
                 </span>
               }
             >
               <p>
-                <strong className="text-zinc-100">What it is.</strong> A square that{" "}
-                <strong className="text-zinc-100">tightly bounds the green circle</strong>—side length{" "}
-                <code className="text-violet-300">2 × PLAYER_RADIUS_PX</code> ({PLAYER_DIAMETER_PX}px here). It is a{" "}
-                <strong className="text-zinc-100">viewer-only</strong> guide so you can eyeball how the circular
-                footprint lines up with orthogonal arena tiles and rectangular colliders.
+                <strong className="text-zinc-100">What it is.</strong> World collision uses an axis-aligned oval in
+                world space: center at authoritative <code className="text-violet-300">(x, y)</code>, horizontal radius{" "}
+                <code className="text-violet-300">{spriteViewerMovementOvalRadii().radiusX}px</code>, vertical radius{" "}
+                <code className="text-violet-300">{spriteViewerMovementOvalRadii().radiusY}px</code>, shifted{" "}
+                <code className="text-violet-300">{spriteViewerMovementOvalRadii().offsetY}px</code> below the sim
+                anchor.
+              </p>
+              <p>
+                <strong className="text-zinc-100">Systems that use it.</strong> Server:{" "}
+                <code className="text-violet-300">movementSystem</code> and{" "}
+                <code className="text-violet-300">worldCollisionSystem</code>. Client:{" "}
+                <code className="text-violet-300">ReconciliationSystem</code> and{" "}
+                <code className="text-violet-300">PlayerRenderSystem</code> prediction replay.
+              </p>
+              <p>
+                <strong className="text-zinc-100">If you change it.</strong> This changes wall, bounds, and non-walkable
+                terrain feel only. Combat damage uses the purple character hitbox.
+              </p>
+            </LegendTipRow>
+            <LegendTipRow
+              testId="sprite-viewer-legend-info-hitbox"
+              label={
+                <span>
+                  <span className="text-fuchsia-300">Purple</span>: character hitbox ({spriteViewerCharacterHitbox().width}×
+                  {spriteViewerCharacterHitbox().height}).
+                </span>
+              }
+            >
+              <p>
+                <strong className="text-zinc-100">What it is.</strong> The combat body rectangle anchored at the sim
+                point: 15 px left, 15 px right, 40 px up, and 15 px down.
               </p>
               <p>
                 <strong className="text-zinc-100">Systems that use it.</strong>{" "}
-                <strong className="text-zinc-100">None.</strong> The game does{" "}
-                <strong className="text-zinc-100">not</strong> ship a rectangular player AABB for combat; only the circle
-                is authoritative. Nothing in Colyseus, Phaser registration, or ECS reads this yellow box.
+                <code className="text-violet-300">projectileCollisionSystem</code>,{" "}
+                <code className="text-violet-300">lightningBoltSystem</code>, and{" "}
+                <code className="text-violet-300">primaryMeleeAttackSystem</code>.
               </p>
               <p>
-                <strong className="text-zinc-100">If you change it.</strong> Tweaking only the viewer&apos;s square
-                styling leaves gameplay untouched. If you instead change <code className="text-violet-300">PLAYER_RADIUS_PX</code>, the
-                green circle and this yellow box both grow or shrink together because the square is always derived from
-                the circle.
+                <strong className="text-zinc-100">If you change it.</strong> Fireball, lightning, and melee hit fairness
+                shifts. Movement against terrain stays controlled by the green oval.
+              </p>
+            </LegendTipRow>
+            <LegendTipRow
+              testId="sprite-viewer-legend-info-hurtbox-attack"
+              label={
+                <span>
+                  <span className="text-rose-400">Red</span>/
+                  <span className="text-zinc-100">white</span>: primary-attack hurtbox.
+                </span>
+              }
+            >
+              <p>
+                <strong className="text-zinc-100">What it is.</strong> A half-circle drawn around the sim anchor when{" "}
+                <code className="text-violet-300">summoned-axe-attack</code> is selected. The flat side passes through
+                the centerpoint and the curve faces the direction of the displayed cell.
+              </p>
+              <p>
+                <strong className="text-zinc-100">Color.</strong> White when the current frame is outside the
+                dangerous-frames window, red when the current frame is inside it. The window comes from{" "}
+                <code className="text-violet-300">PRIMARY_MELEE_ATTACK_CONFIGS</code> in ms and is mapped to frame
+                indices using the animation FPS.
+              </p>
+              <p>
+                <strong className="text-zinc-100">Systems that use it.</strong>{" "}
+                <code className="text-violet-300">primaryMeleeAttackSystem</code> on the server tests this hurtbox
+                against the purple character hitbox during the dangerous window for damage.
               </p>
             </LegendTipRow>
             <LegendTipRow

@@ -38,7 +38,7 @@ import {
   ARENA_HEIGHT,
   ARENA_WIDTH,
   ARENA_WORLD_COLLIDERS,
-  PLAYER_RADIUS_PX,
+  PLAYER_WORLD_COLLISION_FOOTPRINT,
   SWING_MOVE_SPEED_MULTIPLIER,
   SWIFT_BOOTS_SPEED_BONUS,
   TICK_DT_SEC,
@@ -109,7 +109,7 @@ export function movementSystem(ctx: SimCtx): void {
       Position.y[eid],
       stepX,
       stepY,
-      PLAYER_RADIUS_PX,
+      PLAYER_WORLD_COLLISION_FOOTPRINT,
       ARENA_BOUNDS,
       ARENA_WORLD_COLLIDERS,
     )

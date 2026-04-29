@@ -3,8 +3,8 @@
  * and the client's rewind-and-replay path. Kept dependency-free so it can be
  * imported from any environment (node, browser, tests).
  *
- * Players are treated as circles (center `(x, y)`, radius `r`). The arena is
- * an axis-aligned bounding box and static world blockers are axis-aligned rectangles.
+ * Players are treated as axis-aligned ellipses for world collision. The arena
+ * is an axis-aligned bounding box and static world blockers are axis-aligned rectangles.
  */
 
 /** Axis-aligned bounds (inclusive min, exclusive max). */
@@ -21,11 +21,18 @@ export type ArenaPropColliderRect = {
   readonly height: number
 }
 
+/** Axis-aligned oval footprint radii used for player world collision. */
+export type WorldCollisionFootprint = {
+  readonly radiusX: number
+  readonly radiusY: number
+  readonly offsetY: number
+}
+
 /** Result of a candidate-gated world movement step. */
 export type WorldMoveResult = {
-  /** Final legal circle center x. */
+  /** Final legal footprint center x. */
   readonly x: number
-  /** Final legal circle center y. */
+  /** Final legal footprint center y. */
   readonly y: number
   /** Applied x delta from the original position. */
   readonly appliedDx: number
@@ -40,13 +47,12 @@ export type WorldMoveResult = {
 const MAX_COLLISION_PASSES = 4
 
 /**
- * Computes the minimum-translation vector that pushes a circle out of an
+ * Computes the minimum-translation vector that pushes a unit circle out of an
  * axis-aligned rectangle. Returns `null` when the circle does not overlap.
  */
-function circleRectMTV(
+function unitCircleRectMTV(
   cx: number,
   cy: number,
-  cr: number,
   rx: number,
   ry: number,
   rw: number,
@@ -59,10 +65,10 @@ function circleRectMTV(
     const toBottom = ry + rh - cy
     const min = Math.min(toLeft, toRight, toTop, toBottom)
 
-    if (min === toLeft) return { dx: -(toLeft + cr), dy: 0 }
-    if (min === toRight) return { dx: toRight + cr, dy: 0 }
-    if (min === toTop) return { dx: 0, dy: -(toTop + cr) }
-    return { dx: 0, dy: toBottom + cr }
+    if (min === toLeft) return { dx: -(toLeft + 1), dy: 0 }
+    if (min === toRight) return { dx: toRight + 1, dy: 0 }
+    if (min === toTop) return { dx: 0, dy: -(toTop + 1) }
+    return { dx: 0, dy: toBottom + 1 }
   }
 
   const nearX = Math.max(rx, Math.min(cx, rx + rw))
@@ -70,20 +76,53 @@ function circleRectMTV(
   const dx = cx - nearX
   const dy = cy - nearY
   const distSq = dx * dx + dy * dy
-  if (distSq >= cr * cr) return null
+  if (distSq >= 1) return null
 
   const dist = Math.sqrt(distSq)
-  const pen = cr - dist
+  const pen = 1 - dist
   return { dx: (dx / dist) * pen, dy: (dy / dist) * pen }
 }
 
 /**
- * Returns whether a player circle may occupy the provided world position
+ * Computes the minimum-translation vector that pushes an ellipse out of an
+ * axis-aligned rectangle by scaling the world into unit-circle space.
+ *
+ * @param cx - Ellipse center x in world pixels.
+ * @param cy - Ellipse center y in world pixels.
+ * @param footprint - Ellipse radii in world pixels.
+ * @param rect - Static world blocker rectangle.
+ * @returns World-space MTV, or `null` when the ellipse does not overlap.
+ */
+function ellipseRectMTV(
+  cx: number,
+  cy: number,
+  footprint: WorldCollisionFootprint,
+  rect: ArenaPropColliderRect,
+): { dx: number; dy: number } | null {
+  const ellipseCenterY = cy + footprint.offsetY
+  const mtv = unitCircleRectMTV(
+    cx / footprint.radiusX,
+    ellipseCenterY / footprint.radiusY,
+    rect.x / footprint.radiusX,
+    rect.y / footprint.radiusY,
+    rect.width / footprint.radiusX,
+    rect.height / footprint.radiusY,
+  )
+
+  if (!mtv) return null
+  return {
+    dx: mtv.dx * footprint.radiusX,
+    dy: mtv.dy * footprint.radiusY,
+  }
+}
+
+/**
+ * Returns whether a player footprint may occupy the provided world position
  * without crossing arena bounds or overlapping a static blocker.
  *
- * @param x - Candidate circle center x in world pixels.
- * @param y - Candidate circle center y in world pixels.
- * @param radius - Circle radius in world pixels.
+ * @param x - Candidate footprint center x in world pixels.
+ * @param y - Candidate footprint center y in world pixels.
+ * @param footprint - Axis-aligned oval footprint radii in world pixels.
  * @param bounds - Arena bounds `{ width, height }`.
  * @param worldColliders - Static world rectangles.
  * @returns Whether the candidate position is legal. Exact touches are legal.
@@ -91,15 +130,16 @@ function circleRectMTV(
 export function canOccupyWorldPosition(
   x: number,
   y: number,
-  radius: number,
+  footprint: WorldCollisionFootprint,
   bounds: ArenaBounds,
   worldColliders: readonly ArenaPropColliderRect[],
 ): boolean {
-  if (x < radius || x > bounds.width - radius) return false
-  if (y < radius || y > bounds.height - radius) return false
+  if (x < footprint.radiusX || x > bounds.width - footprint.radiusX) return false
+  if (y < footprint.radiusY - footprint.offsetY) return false
+  if (y > bounds.height - footprint.radiusY - footprint.offsetY) return false
 
   for (const col of worldColliders) {
-    if (circleRectMTV(x, y, radius, col.x, col.y, col.width, col.height)) {
+    if (ellipseRectMTV(x, y, footprint, col)) {
       return false
     }
   }
@@ -116,7 +156,7 @@ export function canOccupyWorldPosition(
  * @param y - Starting circle center y in world pixels.
  * @param stepX - Requested x delta for this movement tick.
  * @param stepY - Requested y delta for this movement tick.
- * @param radius - Circle radius in world pixels.
+ * @param footprint - Axis-aligned oval footprint radii in world pixels.
  * @param bounds - Arena bounds `{ width, height }`.
  * @param worldColliders - Static world rectangles.
  * @returns Final legal position plus the actually-applied movement delta.
@@ -126,12 +166,12 @@ export function moveWithinWorld(
   y: number,
   stepX: number,
   stepY: number,
-  radius: number,
+  footprint: WorldCollisionFootprint,
   bounds: ArenaBounds,
   worldColliders: readonly ArenaPropColliderRect[],
 ): WorldMoveResult {
   const canMoveTo = (nextX: number, nextY: number) =>
-    canOccupyWorldPosition(nextX, nextY, radius, bounds, worldColliders)
+    canOccupyWorldPosition(nextX, nextY, footprint, bounds, worldColliders)
 
   if (canMoveTo(x + stepX, y + stepY)) {
     return {
@@ -174,14 +214,14 @@ export function moveWithinWorld(
 }
 
 /**
- * Clamps a circle's center against arena bounds (respecting radius) and pushes
+ * Clamps a footprint center against arena bounds (respecting radii) and pushes
  * it out of any overlapping world rectangles. Pure function — caller passes in
  * the resulting `(x, y)` to wherever it's stored (ECS Position, client
  * ClientPosition, etc.).
  *
- * @param x - Circle center x in world pixels.
- * @param y - Circle center y in world pixels.
- * @param radius - Circle radius in world pixels.
+ * @param x - Footprint center x in world pixels.
+ * @param y - Footprint center y in world pixels.
+ * @param footprint - Axis-aligned oval footprint radii in world pixels.
  * @param bounds - Arena bounds `{ width, height }`.
  * @param worldColliders - Static world rectangles.
  * @returns Resolved `{ x, y }` position after all clamps / MTVs are applied.
@@ -189,17 +229,17 @@ export function moveWithinWorld(
 export function resolveAgainstWorld(
   x: number,
   y: number,
-  radius: number,
+  footprint: WorldCollisionFootprint,
   bounds: ArenaBounds,
   worldColliders: readonly ArenaPropColliderRect[],
 ): { x: number; y: number } {
   let cx = x
   let cy = y
 
-  const minX = radius
-  const minY = radius
-  const maxX = bounds.width - radius
-  const maxY = bounds.height - radius
+  const minX = footprint.radiusX
+  const minY = footprint.radiusY - footprint.offsetY
+  const maxX = bounds.width - footprint.radiusX
+  const maxY = bounds.height - footprint.radiusY - footprint.offsetY
 
   if (cx < minX) cx = minX
   if (cx > maxX) cx = maxX
@@ -209,7 +249,7 @@ export function resolveAgainstWorld(
   for (let pass = 0; pass < MAX_COLLISION_PASSES; pass++) {
     let moved = false
     for (const col of worldColliders) {
-      const mtv = circleRectMTV(cx, cy, radius, col.x, col.y, col.width, col.height)
+      const mtv = ellipseRectMTV(cx, cy, footprint, col)
       if (mtv) {
         cx += mtv.dx
         cy += mtv.dy
