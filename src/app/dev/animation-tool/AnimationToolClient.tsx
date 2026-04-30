@@ -93,6 +93,14 @@ function savedActionConfig(
   return config.heroes[heroId]?.actions[actionId] ?? null
 }
 
+function frameStartMs(frameIndex: number, durationMs: number, frameCount: number): number {
+  return Math.floor((frameIndex * durationMs) / frameCount)
+}
+
+function frameEndMs(frameIndex: number, durationMs: number, frameCount: number): number {
+  return frameIndex >= frameCount - 1 ? durationMs : frameStartMs(frameIndex + 1, durationMs, frameCount)
+}
+
 function LegendTipRow(props: { label: ReactNode; testId?: string; children: ReactNode }) {
   const { label, testId, children } = props
   const [open, setOpen] = useState(false)
@@ -122,6 +130,152 @@ function LegendTipRow(props: { label: ReactNode; testId?: string; children: Reac
           <div className="space-y-2">{children}</div>
         </div>
       ) : null}
+    </div>
+  )
+}
+
+function FrameTimeline(props: {
+  readonly config: AnimationActionConfig
+  readonly frameCount: number
+  readonly currentFrame: number
+  readonly timeMs: number
+  readonly setPlaying: (playing: boolean) => void
+  readonly setTimeMs: (timeMs: number) => void
+  readonly playing: boolean
+}) {
+  const { config, frameCount, currentFrame, timeMs, setPlaying, setTimeMs, playing } = props
+  const fps = frameRateForDuration(frameCount, config.durationMs)
+  const labelStride = Math.max(1, Math.ceil(frameCount / 8))
+  const castFrame =
+    config.type === "spell" && config.effectTiming === "during"
+      ? msToFrameIndex(config.effectAtMs ?? 0, config.durationMs, frameCount)
+      : null
+
+  function jumpToFrame(frameIndex: number) {
+    setPlaying(false)
+    setTimeMs(Math.min(frameStartMs(frameIndex, config.durationMs, frameCount), config.durationMs - 1))
+  }
+
+  return (
+    <div className="mt-4 rounded-xl border border-stone-800 bg-stone-950/70 p-3 font-mono">
+      <div className="flex flex-wrap items-center gap-3 text-xs text-stone-500">
+        <button
+          type="button"
+          className="rounded-lg border border-stone-700 bg-stone-900 px-3 py-2 text-stone-400 hover:border-violet-500 hover:text-violet-200"
+          onClick={() => jumpToFrame(0)}
+          data-testid="animation-tool-first-frame"
+          aria-label="Jump to first frame"
+        >
+          {"<<"}
+        </button>
+        <button
+          type="button"
+          className="rounded-lg border border-violet-700/80 bg-violet-950/30 px-5 py-2 font-bold text-violet-200 hover:bg-violet-900/50"
+          onClick={() => setPlaying(!playing)}
+          disabled={false}
+          data-testid="animation-tool-timeline-play"
+        >
+          {playing ? "Pause" : "> Play"}
+        </button>
+        <button
+          type="button"
+          className="rounded-lg border border-stone-700 bg-stone-900 px-3 py-2 text-stone-400 hover:border-violet-500 hover:text-violet-200"
+          onClick={() => jumpToFrame(Math.max(0, currentFrame - 1))}
+          data-testid="animation-tool-prev-frame"
+          aria-label="Jump to previous frame"
+        >
+          {"<"}
+        </button>
+        <button
+          type="button"
+          className="rounded-lg border border-stone-700 bg-stone-900 px-3 py-2 text-stone-400 hover:border-violet-500 hover:text-violet-200"
+          onClick={() => jumpToFrame(Math.min(frameCount - 1, currentFrame + 1))}
+          data-testid="animation-tool-next-frame"
+          aria-label="Jump to next frame"
+        >
+          {">"}
+        </button>
+        <div className="min-w-[180px] text-stone-500">
+          Frame <span className="text-stone-100">{currentFrame + 1}/{frameCount}</span>{" "}
+          {Math.round(timeMs)}ms / {config.durationMs}ms
+        </div>
+        <div className="ml-auto text-stone-500">
+          {Math.round(fps)} fps · {frameCount}f
+        </div>
+      </div>
+
+      <div
+        className="mt-3 grid gap-0.5"
+        style={{ gridTemplateColumns: `repeat(${frameCount}, minmax(0, 1fr))` }}
+        data-testid="animation-tool-frame-strip"
+      >
+        {Array.from({ length: frameCount }, (_, frameIndex) => {
+          const start = frameStartMs(frameIndex, config.durationMs, frameCount)
+          const end = frameEndMs(frameIndex, config.durationMs, frameCount)
+          const isCurrent = frameIndex === currentFrame
+          const isDangerous =
+            config.type === "primaryAttack" &&
+            end > config.dangerousWindowStartMs &&
+            start < config.dangerousWindowEndMs
+          const isCast = castFrame === frameIndex
+          const classes = [
+            "relative h-9 rounded border transition-colors",
+            isCurrent
+              ? "border-violet-300 bg-violet-500"
+              : isCast
+                ? "border-amber-500 bg-amber-500/40 hover:bg-amber-500/55"
+                : isDangerous
+                  ? "border-red-500 bg-red-900/70 hover:bg-red-800/80"
+                  : "border-stone-700 bg-stone-900/80 hover:border-violet-700 hover:bg-stone-800",
+          ].join(" ")
+          return (
+            <button
+              key={frameIndex}
+              type="button"
+              className={classes}
+              onClick={() => jumpToFrame(frameIndex)}
+              data-testid={`animation-tool-frame-${frameIndex + 1}`}
+              aria-label={`Jump to frame ${frameIndex + 1}, ${start}ms`}
+            >
+              {isCast ? (
+                <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[10px] font-bold text-amber-300">
+                  cast
+                </span>
+              ) : null}
+            </button>
+          )
+        })}
+      </div>
+
+      <div
+        className="mt-2 grid gap-0.5 text-center text-[10px] text-stone-600"
+        style={{ gridTemplateColumns: `repeat(${frameCount}, minmax(0, 1fr))` }}
+        aria-hidden
+      >
+        {Array.from({ length: frameCount }, (_, frameIndex) => (
+          <span key={frameIndex}>
+            {frameIndex === 0 || frameIndex === frameCount - 1 || frameIndex % labelStride === 0
+              ? frameStartMs(frameIndex, config.durationMs, frameCount)
+              : ""}
+          </span>
+        ))}
+      </div>
+
+      <div className="mt-2 flex flex-wrap gap-4 text-[11px] text-stone-500">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-3 w-3 rounded bg-violet-500" /> current
+        </span>
+        {config.type === "primaryAttack" ? (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-3 w-3 rounded bg-red-700" /> dangerous window
+          </span>
+        ) : null}
+        {castFrame != null ? (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-3 w-3 rounded bg-amber-500" /> cast frame
+          </span>
+        ) : null}
+      </div>
     </div>
   )
 }
@@ -919,6 +1073,15 @@ export function AnimationToolClient() {
                 </span>
               </label>
             </div>
+            <FrameTimeline
+              config={actionConfig}
+              frameCount={frameCount}
+              currentFrame={currentFrame}
+              timeMs={timeMs}
+              setPlaying={setPlaying}
+              setTimeMs={setTimeMs}
+              playing={playing}
+            />
             {missingDirections.length > 0 ? (
               <p className="mt-3 rounded border border-amber-700/60 bg-amber-950/30 p-2 font-mono text-xs text-amber-200">
                 Missing directions: {missingDirections.join(", ")}. Save still allowed.
