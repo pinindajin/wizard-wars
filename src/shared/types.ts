@@ -56,6 +56,8 @@ export type LobbyStatePayload = {
   readonly players: readonly LobbyPlayer[]
   readonly hostPlayerId: string | null
   readonly maxPlayers: number
+  /** Wall-clock ms (epoch) when the lobby idle timer will fire; only in `LOBBY`. */
+  readonly lobbyIdleExpiresAtServerMs?: number
   readonly startedAtServerTimeMs?: number
 }
 
