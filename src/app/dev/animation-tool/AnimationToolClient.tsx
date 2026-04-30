@@ -1,6 +1,7 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import type { ReactNode } from "react"
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 
 import {
   computeAlphaOutlineSegments,
@@ -90,6 +91,39 @@ function savedActionConfig(
   actionId: AnimationActionId,
 ): AnimationActionConfig | null {
   return config.heroes[heroId]?.actions[actionId] ?? null
+}
+
+function LegendTipRow(props: { label: ReactNode; testId?: string; children: ReactNode }) {
+  const { label, testId, children } = props
+  const [open, setOpen] = useState(false)
+  const panelId = useId().replace(/:/g, "")
+  return (
+    <div className="overflow-hidden rounded-md border border-zinc-700/80 bg-zinc-900/50">
+      <div className="flex items-start gap-2 px-2 py-1.5">
+        <div className="min-w-0 flex-1 leading-snug">{label}</div>
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={panelId}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-violet-500/50 bg-zinc-800/95 text-xs font-bold text-violet-300 shadow-sm hover:border-violet-400 hover:bg-zinc-700 hover:text-violet-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-violet-400"
+          aria-label={open ? "Hide technical details" : "Show technical details"}
+          onClick={() => setOpen((value) => !value)}
+          {...(testId ? { "data-testid": testId } : {})}
+        >
+          <span aria-hidden>{open ? "×" : "ⓘ"}</span>
+        </button>
+      </div>
+      {open ? (
+        <div
+          id={panelId}
+          role="region"
+          className="max-h-56 overflow-y-auto border-t border-zinc-700/80 bg-zinc-950/95 px-2 py-2 text-left text-[10px] leading-relaxed text-zinc-200"
+        >
+          <div className="space-y-2">{children}</div>
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 function outlineCacheKey(stripUrl: string, frameIndex: number): string {
@@ -208,7 +242,7 @@ function DirectionPreview(props: {
         Math.PI * 2,
       )
       ctx.stroke()
-      ctx.strokeStyle = "rgba(251, 146, 60, 0.95)"
+      ctx.strokeStyle = "rgba(217, 70, 239, 0.95)"
       ctx.strokeRect(combatHitbox.x, combatHitbox.y, combatHitbox.width, combatHitbox.height)
       ctx.strokeStyle = "rgba(244, 63, 94, 0.95)"
       ctx.fillStyle = "rgba(255, 255, 255, 0.95)"
@@ -701,9 +735,141 @@ export function AnimationToolClient() {
               </label>
             ))}
             <p className="mt-3 font-mono text-[11px] text-stone-500">
-              Centerpoint offset: {LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y}px. Collision = teal oval + orange combat
+              Centerpoint offset: {LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y}px. Collision = teal oval + purple combat
               hitbox.
             </p>
+          </div>
+
+          <div
+            className="relative overflow-visible rounded-xl border border-stone-700 bg-stone-950/70 p-3 font-mono text-[11px] leading-relaxed text-zinc-400"
+            data-testid="animation-tool-legend"
+          >
+            <div className="mb-1 text-zinc-300">Legend</div>
+            <p
+              className="mb-2 text-[10px] leading-snug text-zinc-500"
+              data-testid="animation-tool-legend-hint"
+            >
+              Click the <span className="text-violet-400">ⓘ</span> on each line to expand or collapse the full
+              technical notes (no hover required).
+            </p>
+            <div className="flex flex-col gap-2.5">
+              <LegendTipRow
+                testId="animation-tool-legend-info-centerpoint"
+                label={
+                  <span>
+                    <span className="text-rose-400">Red/white</span>: centerpoint / sim anchor.
+                  </span>
+                }
+              >
+                <p>
+                  <strong className="text-zinc-100">What it is.</strong> The centerpoint is the authoritative{" "}
+                  <code className="text-violet-300">Position.x/y</code> used by movement, collision, combat targeting,
+                  camera follow, and render interpolation. The preview draws it at{" "}
+                  <code className="text-violet-300">
+                    ({spriteViewerCenterpoint().x}, {spriteViewerCenterpoint().y})
+                  </code>{" "}
+                  relative to the cel because the sprite art is bottom-anchored and shifted by{" "}
+                  <code className="text-violet-300">LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y</code>.
+                </p>
+                <p>
+                  <strong className="text-zinc-100">Relationship to overlays.</strong> The movement oval and character
+                  hitbox are drawn from balance constants around this point. Animation timing changes do not move the
+                  sim anchor.
+                </p>
+              </LegendTipRow>
+              <LegendTipRow
+                testId="animation-tool-legend-info-collision"
+                label={
+                  <span>
+                    <span className="text-emerald-400">Green</span>: movement oval (
+                    {spriteViewerMovementOvalRadii().radiusX}×{spriteViewerMovementOvalRadii().radiusY} radii, +
+                    {spriteViewerMovementOvalRadii().offsetY}px y).
+                  </span>
+                }
+              >
+                <p>
+                  <strong className="text-zinc-100">What it is.</strong> World collision uses an axis-aligned oval in
+                  world space: center at authoritative <code className="text-violet-300">(x, y)</code>, horizontal
+                  radius <code className="text-violet-300">{spriteViewerMovementOvalRadii().radiusX}px</code>, vertical
+                  radius <code className="text-violet-300">{spriteViewerMovementOvalRadii().radiusY}px</code>, shifted{" "}
+                  <code className="text-violet-300">{spriteViewerMovementOvalRadii().offsetY}px</code> below the sim
+                  anchor.
+                </p>
+                <p>
+                  <strong className="text-zinc-100">Systems that use it.</strong> Server:{" "}
+                  <code className="text-violet-300">movementSystem</code> and{" "}
+                  <code className="text-violet-300">worldCollisionSystem</code>. Client prediction replay also uses the
+                  same collision shape.
+                </p>
+              </LegendTipRow>
+              <LegendTipRow
+                testId="animation-tool-legend-info-hitbox"
+                label={
+                  <span>
+                    <span className="text-fuchsia-300">Purple</span>: character hitbox (
+                    {spriteViewerCharacterHitbox().width}×{spriteViewerCharacterHitbox().height}).
+                  </span>
+                }
+              >
+                <p>
+                  <strong className="text-zinc-100">What it is.</strong> The combat body rectangle anchored at the sim
+                  point: 15 px left, 15 px right, 40 px up, and 15 px down.
+                </p>
+                <p>
+                  <strong className="text-zinc-100">Systems that use it.</strong>{" "}
+                  <code className="text-violet-300">projectileCollisionSystem</code>,{" "}
+                  <code className="text-violet-300">lightningBoltSystem</code>, and{" "}
+                  <code className="text-violet-300">primaryMeleeAttackSystem</code>.
+                </p>
+              </LegendTipRow>
+              <LegendTipRow
+                testId="animation-tool-legend-info-hurtbox-attack"
+                label={
+                  <span>
+                    <span className="text-rose-400">Red</span>/
+                    <span className="text-zinc-100">white</span>: primary-attack hurtbox.
+                  </span>
+                }
+              >
+                <p>
+                  <strong className="text-zinc-100">What it is.</strong> A half-circle drawn around the sim anchor for
+                  primary attacks. The flat side passes through the centerpoint and the curve faces the displayed
+                  direction.
+                </p>
+                <p>
+                  <strong className="text-zinc-100">Color.</strong> White when the current playback time is outside the
+                  dangerous window, red when it is inside. In this tool, the window comes from the live ms values you are
+                  editing, so the preview updates before and after saving a snapshot.
+                </p>
+                <p>
+                  <strong className="text-zinc-100">Systems that use it.</strong>{" "}
+                  <code className="text-violet-300">primaryMeleeAttackSystem</code> on the server tests this hurtbox
+                  against the purple character hitbox during the dangerous window for damage.
+                </p>
+              </LegendTipRow>
+              <LegendTipRow
+                testId="animation-tool-legend-info-edge"
+                label={
+                  <span>
+                    <span className="text-sky-400">Cyan</span>: opaque alpha outline (cached per frame).
+                  </span>
+                }
+              >
+                <p>
+                  <strong className="text-zinc-100">What it is.</strong> A 1px outline along the boundary between
+                  opaque and transparent pixels in the current cel (alpha threshold in{" "}
+                  <code className="text-violet-300">computeAlphaOutlineSegments</code>). Results are{" "}
+                  <strong className="text-zinc-100">cached</strong> per strip URL + frame index so scrubbing playback
+                  stays cheap.
+                </p>
+                <p>
+                  <strong className="text-zinc-100">Systems that use it.</strong>{" "}
+                  <strong className="text-zinc-100">None in gameplay.</strong> It is purely a{" "}
+                  <strong className="text-zinc-100">dev/QA art signal</strong> for trims, padding, and semi-transparent
+                  fringe relative to the fixed {FRAME}px cel.
+                </p>
+              </LegendTipRow>
+            </div>
           </div>
 
           <button
