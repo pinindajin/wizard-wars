@@ -923,13 +923,31 @@ export function AnimationToolClient() {
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-5 p-4 md:p-6">
-      <header className="rounded-2xl border border-lime-700/30 bg-[radial-gradient(circle_at_top_left,#36531455,transparent_38%),linear-gradient(135deg,#1c1917,#0c0a09)] p-5 shadow-2xl">
-        <p className="font-mono text-xs uppercase tracking-[0.35em] text-lime-300/80">dev-only</p>
-        <h1 className="mt-2 font-mono text-2xl text-stone-50">Animation timing tool</h1>
-        <p className="mt-2 max-w-3xl text-sm text-stone-300">
-          Edits shared ms timing per hero/action. Frames are aid only; runtime executes on
-          fixed ticks at the first tick at or after the configured ms.
-        </p>
+      <header className="flex flex-col gap-5 rounded-2xl border border-lime-700/30 bg-[radial-gradient(circle_at_top_left,#36531455,transparent_38%),linear-gradient(135deg,#1c1917,#0c0a09)] p-5 shadow-2xl md:flex-row md:items-start md:justify-between">
+        <div>
+          <p className="font-mono text-xs uppercase tracking-[0.35em] text-lime-300/80">dev-only</p>
+          <h1 className="mt-2 font-mono text-2xl text-stone-50">Animation timing tool</h1>
+          <p className="mt-2 max-w-3xl text-sm text-stone-300">
+            Edits shared ms timing per hero/action. Frames are aid only; runtime executes on
+            fixed ticks at the first tick at or after the configured ms.
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-col gap-2 md:min-w-60 md:items-end">
+          <button
+            type="button"
+            className="rounded-xl bg-lime-500 px-5 py-3 font-mono text-sm font-bold text-stone-950 hover:bg-lime-400 disabled:cursor-not-allowed disabled:bg-stone-700 disabled:text-stone-400"
+            onClick={() => void save()}
+            disabled={timingHasErrors}
+            data-testid="animation-tool-save"
+          >
+            Save snapshot
+          </button>
+          {saveStatus ? <p className="font-mono text-xs text-stone-400">{saveStatus}</p> : null}
+          <p className="max-w-72 font-mono text-[11px] text-stone-500 md:text-right">
+            Saves config v{ANIMATION_CONFIG_SCHEMA_VERSION} to tools/animation/output, then sync with{" "}
+            <code>bun run dev:animation-sync</code>.
+          </p>
+        </div>
       </header>
 
       <section className="grid gap-4 lg:grid-cols-[320px_1fr]">
@@ -1015,8 +1033,8 @@ export function AnimationToolClient() {
             </div>
           </CollapsiblePanel>
 
-          <div className="rounded-xl border border-stone-700 bg-stone-950/70 p-3">
-            <div className="font-mono text-xs text-lime-200">Timing</div>
+          <CollapsiblePanel title="Timing">
+            <div className="rounded-xl border border-stone-700 bg-stone-950/70 p-3">
             <label className="mt-3 flex flex-col gap-1 font-mono text-xs text-stone-300">
               Duration ms
               <input
@@ -1132,9 +1150,11 @@ export function AnimationToolClient() {
             ) : null}
 
             <p className="mt-3 rounded bg-black/40 p-2 font-mono text-[11px] text-stone-400">{markerCopy}</p>
-          </div>
+            </div>
+          </CollapsiblePanel>
 
-          <div className="rounded-xl border border-stone-700 bg-stone-950/70 p-3">
+          <CollapsiblePanel title="Overlays & Legend" defaultOpen={false}>
+            <div className="rounded-xl border border-stone-700 bg-stone-950/70 p-3">
             <div className="font-mono text-xs text-lime-200">Overlays</div>
             {(["collision", "alpha", "hurtbox"] as const).map((key) => (
               <label key={key} className="mt-2 flex items-center gap-2 font-mono text-xs text-stone-300">
@@ -1150,10 +1170,10 @@ export function AnimationToolClient() {
               Centerpoint offset: {LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y}px. Collision = teal oval + purple combat
               hitbox.
             </p>
-          </div>
+            </div>
 
           <div
-            className="relative overflow-visible rounded-xl border border-stone-700 bg-stone-950/70 p-3 font-mono text-[11px] leading-relaxed text-zinc-400"
+            className="relative mt-3 overflow-visible rounded-xl border border-stone-700 bg-stone-950/70 p-3 font-mono text-[11px] leading-relaxed text-zinc-400"
             data-testid="animation-tool-legend"
           >
             <div className="mb-1 text-zinc-300">Legend</div>
@@ -1283,21 +1303,7 @@ export function AnimationToolClient() {
               </LegendTipRow>
             </div>
           </div>
-
-          <button
-            type="button"
-            className="rounded-xl bg-lime-500 px-4 py-3 font-mono text-sm font-bold text-stone-950 hover:bg-lime-400"
-            onClick={() => void save()}
-            disabled={timingHasErrors}
-            data-testid="animation-tool-save"
-          >
-            Save snapshot
-          </button>
-          {saveStatus ? <p className="font-mono text-xs text-stone-400">{saveStatus}</p> : null}
-          <p className="font-mono text-[11px] text-stone-500">
-            Saves full config v{ANIMATION_CONFIG_SCHEMA_VERSION} to tools/animation/output, then sync with{" "}
-            <code>bun run dev:animation-sync</code>.
-          </p>
+          </CollapsiblePanel>
         </aside>
 
         <div className="flex min-w-0 flex-col gap-4">
