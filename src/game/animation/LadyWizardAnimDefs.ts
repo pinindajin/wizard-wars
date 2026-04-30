@@ -79,7 +79,7 @@ export const getDirectionFromAngle = (angle: number): Direction => {
     "north",
     "north-east",
   ]
-  return remap[index] ?? "south"
+  return remap[index]!
 }
 
 function clipDurationMs(clip: LadyWizardMegasheetClip): number {

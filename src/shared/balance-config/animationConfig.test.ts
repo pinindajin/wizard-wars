@@ -127,6 +127,14 @@ describe("animation config", () => {
     expect(actions.map((action) => action.id)).toContain("primary:red_wizard_cleaver")
     expect(actions.some((action) => action.id.includes("south"))).toBe(false)
     expect(getAnimationToolActions("unknown_hero")[0]!.id).toBe("idle")
+    expect(
+      getAnimationToolActions("ranger", {
+        ...ANIMATION_CONFIG,
+        heroes: {
+          red_wizard: ANIMATION_CONFIG.heroes.red_wizard,
+        },
+      } as never)[0]!.config,
+    ).toBe(ANIMATION_CONFIG.heroes.red_wizard.actions.idle)
   })
 
   it("parses tool saves and exposes typed config helpers", () => {
@@ -147,6 +155,26 @@ describe("animation config", () => {
     expect(
       getPrimaryAttackAnimationConfigByAttackId("not_real" as never).durationMs,
     ).toBeGreaterThan(0)
+  })
+
+  it("falls back to canonical default config when the injected config lacks an action", () => {
+    expect(
+      getAnimationActionConfig("missing", "walk", {
+        schemaVersion: 1,
+        heroes: {
+          red_wizard: { actions: {} },
+        },
+      } as never).type,
+    ).toBe("behavior")
+
+    expect(() =>
+      getAnimationActionConfig("missing", "spell:not_real", {
+        schemaVersion: 1,
+        heroes: {
+          red_wizard: { actions: {} },
+        },
+      } as never),
+    ).toThrow(/Missing animation action/)
   })
 
   it("throws when a helper is asked for the wrong action kind", () => {

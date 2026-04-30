@@ -1,4 +1,4 @@
-import { mkdir, readdir, unlink } from "node:fs/promises"
+import { mkdir, readFile, readdir, unlink } from "node:fs/promises"
 import { resolve } from "node:path"
 
 import { afterEach, describe, expect, it } from "vitest"
@@ -55,7 +55,7 @@ describe("animation tool save route", () => {
     expect(response.status).toBe(400)
   })
 
-  it("writes latest snapshot in dev", async () => {
+  it("writes timestamped and latest snapshots in dev", async () => {
     setNodeEnv("development")
     await mkdir(outputDir, { recursive: true })
 
@@ -67,7 +67,26 @@ describe("animation tool save route", () => {
     )
 
     expect(response.status).toBe(200)
-    const body = (await response.json()) as { ok: boolean }
+    const body = (await response.json()) as { ok: boolean; savedAt: string; path: string }
     expect(body.ok).toBe(true)
+    expect(body.path).toMatch(/tools\/animation\/output\/.+\.json$/)
+
+    const files = await readdir(outputDir)
+    const jsonFiles = files.filter((filename) => filename.endsWith(".json"))
+    expect(jsonFiles).toContain("latest.json")
+    expect(jsonFiles.some((filename) => filename !== "latest.json")).toBe(true)
+
+    const latest = JSON.parse(await readFile(resolve(outputDir, "latest.json"), "utf8")) as {
+      savedAt: string
+      config: unknown
+    }
+    const timestamped = JSON.parse(await readFile(body.path, "utf8")) as {
+      savedAt: string
+      config: unknown
+    }
+    expect(latest.savedAt).toBe(body.savedAt)
+    expect(timestamped.savedAt).toBe(body.savedAt)
+    expect(latest.config).toEqual(ANIMATION_CONFIG)
+    expect(timestamped.config).toEqual(ANIMATION_CONFIG)
   })
 })
