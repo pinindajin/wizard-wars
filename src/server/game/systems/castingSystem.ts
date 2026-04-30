@@ -72,7 +72,9 @@ function spellCastTicks(heroId: string, abilityId: string): {
   const cfg = getSpellAnimationConfig(heroId, abilityId)
   const animationTicks = msToTickOffset(cfg.durationMs)
   const effectTicks =
-    cfg.effectTiming === "after"
+    cfg.effectTiming === "before"
+      ? 0
+      : cfg.effectTiming === "after"
       ? animationTicks
       : msToTickOffset(cfg.effectAtMs ?? cfg.durationMs)
   return { animationTicks, effectTicks }

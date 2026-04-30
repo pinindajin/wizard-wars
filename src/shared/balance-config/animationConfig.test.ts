@@ -51,7 +51,17 @@ describe("animation config", () => {
     expect(animationConfigSchema.safeParse(badAttack).success).toBe(false)
   })
 
-  it("rejects missing during ms, after ms, and overlong dangerous windows", () => {
+  it("accepts before spell timing without an effect ms", () => {
+    const before = structuredClone(ANIMATION_CONFIG)
+    before.heroes.red_wizard.actions["spell:fireball"] = {
+      type: "spell",
+      durationMs: 500,
+      effectTiming: "before",
+    }
+    expect(animationConfigSchema.safeParse(before).success).toBe(true)
+  })
+
+  it("rejects missing during ms, before/after ms, and overlong dangerous windows", () => {
     const missingDuring = structuredClone(ANIMATION_CONFIG)
     missingDuring.heroes.red_wizard.actions["spell:fireball"] = {
       type: "spell",
@@ -68,6 +78,15 @@ describe("animation config", () => {
       effectAtMs: 100,
     }
     expect(animationConfigSchema.safeParse(afterWithMs).success).toBe(false)
+
+    const beforeWithMs = structuredClone(ANIMATION_CONFIG)
+    beforeWithMs.heroes.red_wizard.actions["spell:fireball"] = {
+      type: "spell",
+      durationMs: 500,
+      effectTiming: "before",
+      effectAtMs: 100,
+    }
+    expect(animationConfigSchema.safeParse(beforeWithMs).success).toBe(false)
 
     const tooLongAttack = structuredClone(ANIMATION_CONFIG)
     tooLongAttack.heroes.red_wizard.actions["primary:red_wizard_cleaver"] = {

@@ -237,7 +237,10 @@ function FrameTimeline(props: {
     config.type === "spell" && config.effectTiming === "during"
       ? msToFrameIndex(config.effectAtMs ?? 0, config.durationMs, frameCount)
       : null
+  const castsBeforeAnimation = config.type === "spell" && config.effectTiming === "before"
   const castsAfterAnimation = config.type === "spell" && config.effectTiming === "after"
+  const markerColumn = castsBeforeAnimation || castsAfterAnimation ? "8px " : ""
+  const markerAfterColumn = castsAfterAnimation ? " 8px" : ""
 
   function jumpToFrame(frameIndex: number) {
     setPlaying(false)
@@ -295,12 +298,22 @@ function FrameTimeline(props: {
       <div
         className="mt-3 grid gap-0.5"
         style={{
-          gridTemplateColumns: `${Array.from({ length: frameCount }, () => "minmax(0, 1fr)").join(" ")}${
-            castsAfterAnimation ? " 8px" : ""
-          }`,
+          gridTemplateColumns: `${markerColumn}${Array.from({ length: frameCount }, () => "minmax(0, 1fr)").join(" ")}${markerAfterColumn}`,
         }}
         data-testid="animation-tool-frame-strip"
       >
+        {castsBeforeAnimation ? (
+          <div
+            className="relative h-9 rounded-sm border border-amber-500 bg-amber-500/60"
+            data-testid="animation-tool-cast-before-marker"
+            aria-label="Spell effect casts before animation"
+            role="img"
+          >
+            <span className="absolute -top-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] font-bold text-amber-300">
+              cast
+            </span>
+          </div>
+        ) : null}
         {Array.from({ length: frameCount }, (_, frameIndex) => {
           const start = frameStartMs(frameIndex, config.durationMs, frameCount)
           const end = frameEndMs(frameIndex, config.durationMs, frameCount)
@@ -354,12 +367,11 @@ function FrameTimeline(props: {
       <div
         className="mt-2 grid gap-0.5 text-center text-[10px] text-stone-600"
         style={{
-          gridTemplateColumns: `${Array.from({ length: frameCount }, () => "minmax(0, 1fr)").join(" ")}${
-            castsAfterAnimation ? " 8px" : ""
-          }`,
+          gridTemplateColumns: `${markerColumn}${Array.from({ length: frameCount }, () => "minmax(0, 1fr)").join(" ")}${markerAfterColumn}`,
         }}
         aria-hidden
       >
+        {castsBeforeAnimation ? <span>0</span> : null}
         {Array.from({ length: frameCount }, (_, frameIndex) => (
           <span key={frameIndex}>
             {frameIndex === 0 || frameIndex === frameCount - 1 || frameIndex % labelStride === 0
@@ -382,6 +394,11 @@ function FrameTimeline(props: {
         {castFrame != null ? (
           <span className="inline-flex items-center gap-1.5">
             <span className="h-3 w-3 rounded bg-amber-500" /> cast frame
+          </span>
+        ) : null}
+        {castsBeforeAnimation ? (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-3 w-1.5 rounded-sm bg-amber-500" /> cast before animation
           </span>
         ) : null}
         {castsAfterAnimation ? (
@@ -816,7 +833,9 @@ export function AnimationToolClient() {
 
   const markerCopy =
     actionConfig.type === "spell"
-      ? actionConfig.effectTiming === "after"
+      ? actionConfig.effectTiming === "before"
+        ? "effect fires before animation"
+        : actionConfig.effectTiming === "after"
         ? "effect fires after animation"
         : `effect fires at ${actionConfig.effectAtMs}ms, frame ${
             msToFrameIndex(actionConfig.effectAtMs ?? 0, actionConfig.durationMs, frameCount) + 1
@@ -949,9 +968,9 @@ export function AnimationToolClient() {
                     className="rounded border border-stone-700 bg-stone-950 p-2"
                     value={actionConfig.effectTiming}
                     onChange={(event) => {
-                      const effectTiming = event.target.value as "after" | "during"
+                      const effectTiming = event.target.value as "before" | "after" | "during"
                       updateActionConfig(
-                        effectTiming === "after"
+                        effectTiming === "before" || effectTiming === "after"
                           ? { type: "spell", durationMs: actionConfig.durationMs, effectTiming }
                           : {
                               type: "spell",
@@ -962,6 +981,7 @@ export function AnimationToolClient() {
                       )
                     }}
                   >
+                    <option value="before">Before animation</option>
                     <option value="after">After animation</option>
                     <option value="during">During animation</option>
                   </select>

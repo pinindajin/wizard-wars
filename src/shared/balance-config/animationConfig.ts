@@ -16,7 +16,7 @@ import {
 
 export const ANIMATION_CONFIG_SCHEMA_VERSION = 1
 
-export const animationEffectTimingSchema = z.enum(["after", "during"])
+export const animationEffectTimingSchema = z.enum(["before", "after", "during"])
 
 const durationMsSchema = z.number().int().positive()
 
@@ -48,11 +48,14 @@ export const spellAnimationActionSchema = z
         })
       }
     }
-    if (value.effectTiming === "after" && value.effectAtMs !== undefined) {
+    if (
+      (value.effectTiming === "before" || value.effectTiming === "after") &&
+      value.effectAtMs !== undefined
+    ) {
       ctx.addIssue({
         code: "custom",
         path: ["effectAtMs"],
-        message: "after spell effects must not include effectAtMs",
+        message: `${value.effectTiming} spell effects must not include effectAtMs`,
       })
     }
   })

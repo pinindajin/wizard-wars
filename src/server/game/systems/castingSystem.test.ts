@@ -1,5 +1,5 @@
 import { addComponent, addEntity, createWorld, hasComponent } from "bitecs"
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it } from "vitest"
 
 import {
   ABILITY_INDEX,
@@ -16,7 +16,16 @@ import {
 import { createCommandBuffer } from "../commandBuffer"
 import type { SimCtx } from "../simulation"
 import { castingSystem } from "./castingSystem"
-import { getSpellAnimationConfig, msToTickOffset } from "../../../shared/balance-config/animationConfig"
+import {
+  ANIMATION_CONFIG,
+  getSpellAnimationConfig,
+  msToTickOffset,
+  type AnimationActionConfig,
+} from "../../../shared/balance-config/animationConfig"
+
+const originalFireballConfig = structuredClone(
+  ANIMATION_CONFIG.heroes.red_wizard.actions["spell:fireball"],
+)
 
 function emptyCtx(overrides: Partial<SimCtx> = {}): SimCtx {
   return {
@@ -86,6 +95,11 @@ function addCaster(world: ReturnType<typeof createWorld>, x = 100, y = 100): num
 }
 
 describe("castingSystem animation timing", () => {
+  afterEach(() => {
+    ANIMATION_CONFIG.heroes.red_wizard.actions["spell:fireball"] =
+      structuredClone(originalFireballConfig) as AnimationActionConfig
+  })
+
   it("fires fireball from press-time position and target-derived facing", () => {
     const world = createWorld()
     const caster = addCaster(world)
@@ -116,6 +130,34 @@ describe("castingSystem animation timing", () => {
     expect(ctx.fireballLaunches[0]!.x).toBeCloseTo(125)
     expect(ctx.fireballLaunches[0]!.y).toBeCloseTo(100)
     expect(ctx.fireballLaunches[0]!.vx).toBeGreaterThan(0)
+  })
+
+  it("can fire a spell effect before the animation finishes", () => {
+    ANIMATION_CONFIG.heroes.red_wizard.actions["spell:fireball"] = {
+      type: "spell",
+      durationMs: 500,
+      effectTiming: "before",
+    }
+    const world = createWorld()
+    const caster = addCaster(world)
+    const commandBuffer = createCommandBuffer()
+    const ctx = emptyCtx({
+      world,
+      currentTick: 10,
+      commandBuffer,
+      entityPlayerMap: new Map([[caster, "caster"]]),
+    })
+
+    castingSystem(ctx)
+    expect(ctx.fireballLaunches).toHaveLength(0)
+
+    ctx.currentTick = 11
+    castingSystem(ctx)
+    commandBuffer.execute(world)
+
+    expect(ctx.fireballLaunches).toHaveLength(1)
+    expect(hasComponent(world, caster, Casting)).toBe(true)
+    expect(Casting.animationEndsAtTick[caster]).toBe(10 + msToTickOffset(500))
   })
 
   it("queues lightning with press-time target even if input changes before release", () => {
