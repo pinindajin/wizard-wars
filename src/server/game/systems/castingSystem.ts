@@ -2,11 +2,11 @@
  * castingSystem – manages the full lifecycle of castable abilities.
  *
  * On each tick:
- *  1. Completes active casts whose `endsAtTick` has passed:
+ *  1. Advances active casts:
  *     - Fireball: spawns a projectile entity via the command buffer.
  *     - Lightning Bolt: queues a PendingLightningBolt for lightningBoltSystem.
  *     - Healing Potion: heals the caster immediately.
- *     - Starts the appropriate cooldown.
+ *     - Effects fire at configured ms timing; cooldown starts when animation ends.
  *  2. Starts new casts from PlayerInput.abilitySlot.
  *  3. Processes quick-item (healing potion) usage from PlayerInput.useQuickItemSlot.
  */
@@ -23,29 +23,32 @@ import {
   Position,
   Velocity,
   Facing,
+  Hero,
   Ownership,
   ProjectileTag,
   FireballTag,
   DyingTag,
   DeadTag,
   SpectatorTag,
-  ABILITY_INDEX,
   ABILITY_INDEX_TO_ID,
   ITEM_INDEX_TO_ID,
+  HERO_INDEX_TO_ID,
 } from "../components"
 import type { SimCtx, PendingLightningBolt } from "../simulation"
 import {
   FIREBALL_SPEED_PX_PER_SEC,
   FIREBALL_COOLDOWN_MS,
-  FIREBALL_CAST_MS,
   LIGHTNING_COOLDOWN_MS,
-  LIGHTNING_CAST_MS,
   HEALING_POTION_CAST_MS,
   HEALING_POTION_HP,
   DEFAULT_PLAYER_HEALTH,
   TICK_MS,
 } from "../../../shared/balance-config"
 import { ABILITY_CONFIGS } from "../../../shared/balance-config/abilities"
+import {
+  getSpellAnimationConfig,
+  msToTickOffset,
+} from "../../../shared/balance-config/animationConfig"
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
@@ -56,10 +59,25 @@ const COOLDOWN_TICKS: Record<string, number> = {
   healing_potion: Math.ceil(HEALING_POTION_CAST_MS / TICK_MS),
 }
 
-/** Returns the tick count for the cast duration of an ability. */
-function castTicks(abilityId: string): number {
-  const cfg = ABILITY_CONFIGS[abilityId]
-  return cfg ? Math.ceil(cfg.castMs / TICK_MS) : 0
+/** Returns the hero id stored on an entity, falling back to the default index. */
+function heroIdForCaster(eid: number): string {
+  return HERO_INDEX_TO_ID[Hero.typeIndex[eid]] ?? HERO_INDEX_TO_ID[0]!
+}
+
+/** Returns configured animation/effect ticks for a spell cast. */
+function spellCastTicks(heroId: string, abilityId: string): {
+  animationTicks: number
+  effectTicks: number
+} {
+  const cfg = getSpellAnimationConfig(heroId, abilityId)
+  const animationTicks = msToTickOffset(cfg.durationMs)
+  const effectTicks =
+    cfg.effectTiming === "before"
+      ? 0
+      : cfg.effectTiming === "after"
+      ? animationTicks
+      : msToTickOffset(cfg.effectAtMs ?? cfg.durationMs)
+  return { animationTicks, effectTicks }
 }
 
 /** Returns the AbilitySlots slot value for a given slot index. */
@@ -97,12 +115,18 @@ function setCooldown(eid: number, abilityId: string, currentTick: number): void 
 // ─── Cast completion handlers ────────────────────────────────────────────
 
 /** Spawns a fireball projectile entity via the command buffer. */
-function launchFireball(ctx: SimCtx, casterEid: number): void {
+function launchFireball(
+  ctx: SimCtx,
+  casterEid: number,
+  capturedX: number,
+  capturedY: number,
+  capturedAngle: number,
+): void {
   const { world, commandBuffer, fireballOwnerMap, entityPlayerMap, fireballLaunches } = ctx
 
-  const cx = Position.x[casterEid]
-  const cy = Position.y[casterEid]
-  const angle = Facing.angle[casterEid]
+  const cx = capturedX
+  const cy = capturedY
+  const angle = capturedAngle
   const vx = Math.cos(angle) * FIREBALL_SPEED_PX_PER_SEC
   const vy = Math.sin(angle) * FIREBALL_SPEED_PX_PER_SEC
   // Spawn slightly in front of caster to avoid self-collision on tick 0
@@ -139,16 +163,19 @@ function launchFireball(ctx: SimCtx, casterEid: number): void {
 }
 
 /** Queues a pending lightning bolt for lightningBoltSystem. */
-function queueLightningBolt(ctx: SimCtx, casterEid: number): void {
+function queueLightningBolt(
+  ctx: SimCtx,
+  casterEid: number,
+  capturedTargetX: number,
+  capturedTargetY: number,
+): void {
   const casterUserId = ctx.entityPlayerMap.get(casterEid) ?? ""
-  const targetX = PlayerInput.abilityTargetX[casterEid]
-  const targetY = PlayerInput.abilityTargetY[casterEid]
 
   const pending: PendingLightningBolt = {
     casterEid,
     casterUserId,
-    targetX,
-    targetY,
+    targetX: capturedTargetX,
+    targetY: capturedTargetY,
   }
   ctx.pendingLightningBolts.push(pending)
 }
@@ -174,25 +201,48 @@ export function castingSystem(ctx: SimCtx): void {
 
   // ── 1. Complete active casts ─────────────────────────────────────────
   for (const eid of query(world, [PlayerTag, Casting])) {
-    if (currentTick < Casting.endsAtTick[eid]) continue
+    if (
+      hasComponent(world, eid, DyingTag) ||
+      hasComponent(world, eid, DeadTag) ||
+      hasComponent(world, eid, SpectatorTag)
+    ) {
+      removeComponent(world, eid, Casting)
+      continue
+    }
 
     const abilityIndex = Casting.abilityIndex[eid]
     const abilityId = ABILITY_INDEX_TO_ID[abilityIndex] ?? ""
 
-    switch (abilityId) {
-      case "fireball":
-        launchFireball(ctx, eid)
-        break
-      case "lightning_bolt":
-        queueLightningBolt(ctx, eid)
-        break
-      case "healing_potion":
-        applyHealingPotion(ctx, eid)
-        break
+    if (Casting.effectFired[eid] !== 1 && currentTick >= Casting.effectFiresAtTick[eid]) {
+      switch (abilityId) {
+        case "fireball":
+          launchFireball(
+            ctx,
+            eid,
+            Casting.capturedPositionX[eid],
+            Casting.capturedPositionY[eid],
+            Casting.capturedFacingAngle[eid],
+          )
+          break
+        case "lightning_bolt":
+          queueLightningBolt(
+            ctx,
+            eid,
+            Casting.capturedTargetX[eid],
+            Casting.capturedTargetY[eid],
+          )
+          break
+        case "healing_potion":
+          applyHealingPotion(ctx, eid)
+          break
+      }
+      Casting.effectFired[eid] = 1
     }
 
-    setCooldown(eid, abilityId, currentTick)
-    removeComponent(world, eid, Casting)
+    if (currentTick >= Casting.animationEndsAtTick[eid]) {
+      setCooldown(eid, abilityId, currentTick)
+      removeComponent(world, eid, Casting)
+    }
   }
 
   // ── 2. Start new ability-bar casts ───────────────────────────────────
@@ -216,10 +266,24 @@ export function castingSystem(ctx: SimCtx): void {
 
     if (!isCooldownReady(eid, abilityId, currentTick)) continue
 
+    const heroId = heroIdForCaster(eid)
+    const timing = spellCastTicks(heroId, abilityId)
+
     addComponent(world, eid, Casting)
     Casting.abilityIndex[eid] = abilityIndex
-    Casting.endsAtTick[eid] = currentTick + castTicks(abilityId)
+    Casting.startedAtTick[eid] = currentTick
+    Casting.animationEndsAtTick[eid] = currentTick + timing.animationTicks
+    Casting.effectFiresAtTick[eid] = currentTick + timing.effectTicks
+    Casting.effectFired[eid] = 0
     Casting.quick[eid] = cfg.quick ? 1 : 0
+    Casting.capturedPositionX[eid] = Position.x[eid]
+    Casting.capturedPositionY[eid] = Position.y[eid]
+    Casting.capturedTargetX[eid] = PlayerInput.abilityTargetX[eid]
+    Casting.capturedTargetY[eid] = PlayerInput.abilityTargetY[eid]
+    const targetDx = Casting.capturedTargetX[eid] - Casting.capturedPositionX[eid]
+    const targetDy = Casting.capturedTargetY[eid] - Casting.capturedPositionY[eid]
+    Casting.capturedFacingAngle[eid] =
+      targetDx !== 0 || targetDy !== 0 ? Math.atan2(targetDy, targetDx) : Facing.angle[eid]
   }
 
   // ── 3. Quick-item usage (healing potion etc.) ────────────────────────

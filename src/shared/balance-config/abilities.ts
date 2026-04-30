@@ -7,7 +7,10 @@ export type AbilityConfig = {
   readonly displayName: string
   /** If true, the caster can keep moving during the cast animation. */
   readonly quick: boolean
-  /** Cast animation lock duration in ms. */
+  /**
+   * Default cast animation lock duration in ms.
+   * Runtime cast timing is loaded from `src/shared/balance-config/animation-config.json`.
+   */
   readonly castMs: number
   /** Cooldown after cast animation completes, in ms. */
   readonly cooldownMs: number

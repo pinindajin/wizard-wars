@@ -5,6 +5,7 @@
 export * from "./arena"
 export * from "./audio"
 export * from "./abilities"
+export * from "./animationConfig"
 export * from "./camera"
 export * from "./combat"
 export * from "./damage"

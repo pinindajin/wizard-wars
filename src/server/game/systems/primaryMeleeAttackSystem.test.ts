@@ -3,11 +3,13 @@ import { describe, it, expect } from "vitest"
 
 import {
   Cooldown,
+  DeadTag,
   Equipment,
   Facing,
   PlayerInput,
   PlayerTag,
   Position,
+  SpectatorTag,
 } from "../components"
 import { createCommandBuffer } from "../commandBuffer"
 import type { ActiveMeleeAttack, SimCtx } from "../simulation"
@@ -107,6 +109,16 @@ describe("primaryMeleeAttackSystem", () => {
     expect(active.startTick).toBe(20)
     expect(active.facingAngle).toBe(0)
     expect(active.hitTargets.size).toBe(0)
+  })
+
+  it("uses empty caster id when the entity-player map has no entry", () => {
+    const world = createWorld()
+    addAttacker(world, 100, 100)
+    const ctx = emptyCtx({ world, currentTick: 20 })
+
+    primaryMeleeAttackSystem(ctx)
+
+    expect(ctx.primaryMeleeAttacks[0]!.casterId).toBe("")
   })
 
   it("does not queue damage on the input tick (damage gates on dangerous window)", () => {
@@ -217,5 +229,37 @@ describe("primaryMeleeAttackSystem", () => {
     primaryMeleeAttackSystem(ctx)
 
     expect(activeMeleeAttacks.size).toBe(0)
+  })
+
+  it("does not resolve active-swing damage when caster is dead or spectator", () => {
+    for (const component of [DeadTag, SpectatorTag]) {
+      const world = createWorld()
+      const attacker = addAttacker(world, 0, 100)
+      addTarget(world, 30, 100)
+      addComponent(world, attacker, component)
+      const cfg = PRIMARY_MELEE_ATTACK_CONFIGS.red_wizard_cleaver
+      const activeMeleeAttacks = new Map<number, ActiveMeleeAttack>([
+        [
+          attacker,
+          {
+            attackId: "red_wizard_cleaver",
+            startTick: 0,
+            facingAngle: 0,
+            casterUserId: "a",
+            hitTargets: new Set(),
+          },
+        ],
+      ])
+      PlayerInput.weaponPrimary[attacker] = 0
+
+      const ctx = emptyCtx({
+        world,
+        currentTick: Math.ceil(cfg.dangerousWindowStartMs / TICK_MS) + 1,
+        activeMeleeAttacks,
+      })
+
+      primaryMeleeAttackSystem(ctx)
+      expect(ctx.damageRequests).toHaveLength(0)
+    }
   })
 })
