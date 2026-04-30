@@ -10,7 +10,7 @@ import type { AuthUser } from "../../shared/types"
  */
 
 /** Path prefixes that require a valid JWT cookie. */
-const PROTECTED_PATH_PREFIXES = ["/home", "/lobby", "/browse"] as const
+const PROTECTED_PATH_PREFIXES = ["/home", "/lobby", "/browse", "/dev/admin"] as const
 
 /**
  * Returns whether `pathname` is under a protected app area.
