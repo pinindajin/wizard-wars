@@ -42,6 +42,13 @@ import {
   spriteViewerCenterpoint,
   spriteViewerMovementOvalRadii,
 } from "@/shared/sprites/spriteViewerOverlays"
+import {
+  bumpReplacesSinceRebuild,
+  clearReplacesSinceRebuild,
+  replaceStripCacheKey,
+  validateLadyWizardReplaceFile,
+  withStripCacheBust,
+} from "@/app/dev/animation-tool/animationToolReplaceClient"
 
 const FRAME = LADY_WIZARD_FRAME_SIZE_PX
 const PREVIEW_SCALE = 1.45
@@ -511,10 +518,28 @@ function DirectionPreview(props: {
   readonly frameIndex: number
   readonly frameCount: number
   readonly toggles: OverlayToggles
+  /** Strip URL including optional `?v=` cache-bust after a successful replace. */
+  readonly stripDisplayUrl: string
+  readonly replaceBusy: boolean
+  readonly replaceError: string | null
+  readonly onReplaceFile: (file: File) => void | Promise<void>
 }) {
-  const { cell, action, config, timeMs, frameIndex, frameCount, toggles } = props
+  const {
+    cell,
+    action,
+    config,
+    timeMs,
+    frameIndex,
+    frameCount,
+    toggles,
+    stripDisplayUrl,
+    replaceBusy,
+    replaceError,
+    onReplaceFile,
+  } = props
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const imageRef = useRef<HTMLImageElement | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
   const outlineCacheRef = useRef<Map<string, AlphaOutlineSegment[]>>(new Map())
   const [loaded, setLoaded] = useState(false)
   const [broken, setBroken] = useState(false)
@@ -537,11 +562,11 @@ function DirectionPreview(props: {
       imageRef.current = null
       setBroken(true)
     }
-    img.src = cell.stripUrl
-  }, [cell])
+    img.src = stripDisplayUrl
+  }, [cell.missing, stripDisplayUrl])
 
   const getOutline = useCallback((img: HTMLImageElement, idx: number) => {
-    const key = outlineCacheKey(cell.stripUrl, idx)
+    const key = outlineCacheKey(stripDisplayUrl, idx)
     const cached = outlineCacheRef.current.get(key)
     if (cached) return cached
     const idata = copyFrameImageData(img, idx)
@@ -549,7 +574,7 @@ function DirectionPreview(props: {
     const segs = computeAlphaOutlineSegments(idata.data, FRAME, FRAME)
     outlineCacheRef.current.set(key, segs)
     return segs
-  }, [cell.stripUrl])
+  }, [stripDisplayUrl])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -656,6 +681,11 @@ function DirectionPreview(props: {
     ctx.restore()
   }, [action.id, broken, cell, config, frameCount, frameIndex, getOutline, loaded, timeMs, toggles])
 
+  const replaceDisabled = cell.missing
+  const replaceTitle = replaceDisabled
+    ? "Replace updates atlas-backed strips only. Add this direction via the source-frame pipeline first."
+    : "Upload a horizontal PNG strip (width = frames × 124px, height = 124px)"
+
   return (
     <div
       className={[
@@ -664,12 +694,40 @@ function DirectionPreview(props: {
       ].join(" ")}
       data-testid={`animation-tool-preview-${cell.direction}`}
     >
-      <div className="mb-1 flex items-center justify-between font-mono text-[11px]">
-        <span className="text-stone-300">{cell.direction}</span>
+      <div className="mb-1 flex items-center justify-between gap-2 font-mono text-[11px]">
+        <span className="min-w-0 truncate text-stone-300">{cell.direction}</span>
         <span className={cell.missing ? "text-amber-400" : "text-stone-500"}>
           {cell.missing ? "missing" : `${frameIndex + 1}/${frameCount}`}
         </span>
       </div>
+      <div className="mb-2 flex items-center gap-2">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png,.png"
+          className="sr-only"
+          tabIndex={-1}
+          aria-hidden
+          onChange={(event) => {
+            const picked = event.target.files?.[0]
+            event.target.value = ""
+            if (picked) void onReplaceFile(picked)
+          }}
+        />
+        <button
+          type="button"
+          className="rounded border border-violet-600/70 bg-violet-950/60 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-violet-200 hover:bg-violet-900/80 disabled:cursor-not-allowed disabled:border-stone-700 disabled:bg-stone-900 disabled:text-stone-600"
+          disabled={replaceDisabled || replaceBusy}
+          title={replaceTitle}
+          data-testid={`animation-tool-replace-${cell.direction}`}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          {replaceBusy ? "…" : "Replace"}
+        </button>
+      </div>
+      {replaceError ? (
+        <p className="mb-2 font-mono text-[10px] leading-snug text-red-300">{replaceError}</p>
+      ) : null}
       <canvas
         ref={canvasRef}
         className="mx-auto block rounded-lg border border-black/80 bg-black"
@@ -695,6 +753,12 @@ export function AnimationToolClient() {
     alpha: true,
     hurtbox: true,
   })
+  const [stripVersionByKey, setStripVersionByKey] = useState<Record<string, string>>({})
+  const [replacesSinceRebuild, setReplacesSinceRebuild] = useState(0)
+  const [megasheetRebuildBusy, setMegasheetRebuildBusy] = useState(false)
+  const [megasheetRebuildStatus, setMegasheetRebuildStatus] = useState("")
+  const [replaceErrorByKey, setReplaceErrorByKey] = useState<Record<string, string>>({})
+  const [replaceUploadingKey, setReplaceUploadingKey] = useState<string | null>(null)
   const rafRef = useRef<number | null>(null)
   const lastRafRef = useRef<number>(0)
 
@@ -906,6 +970,78 @@ export function AnimationToolClient() {
     }
   }
 
+  const handleReplaceStrip = useCallback(
+    async (atlasClipId: string, direction: string, expectedFrames: number, file: File) => {
+      const key = replaceStripCacheKey(atlasClipId, direction)
+      setReplaceErrorByKey((prev) => ({ ...prev, [key]: "" }))
+      setReplaceUploadingKey(key)
+      try {
+        const pre = await validateLadyWizardReplaceFile(file, expectedFrames)
+        if (!pre.ok) {
+          setReplaceErrorByKey((prev) => ({ ...prev, [key]: pre.message }))
+          return
+        }
+        const form = new FormData()
+        form.set("atlasClipId", atlasClipId)
+        form.set("direction", direction)
+        form.set("file", file)
+        const res = await fetch("/api/dev/animation-tool/replace-sheet", {
+          method: "POST",
+          body: form,
+        })
+        const body = (await res.json()) as {
+          ok?: boolean
+          message?: string
+          recovery?: { run?: string[] }
+          version?: string
+        }
+        if (!res.ok || body.ok === false) {
+          const recovery =
+            body.recovery?.run?.length != null && body.recovery.run.length > 0
+              ? ` Recovery: ${body.recovery.run.join(" · ")}`
+              : ""
+          setReplaceErrorByKey((prev) => ({
+            ...prev,
+            [key]: `${body.message ?? `request failed (${res.status})`}${recovery}`,
+          }))
+          return
+        }
+        if (body.version) {
+          setStripVersionByKey((prev) => ({ ...prev, [key]: body.version! }))
+        }
+        setReplacesSinceRebuild((n) => bumpReplacesSinceRebuild(n))
+        setReplaceErrorByKey((prev) => ({ ...prev, [key]: "" }))
+      } catch (error) {
+        setReplaceErrorByKey((prev) => ({
+          ...prev,
+          [key]: error instanceof Error ? error.message : "replace failed",
+        }))
+      } finally {
+        setReplaceUploadingKey(null)
+      }
+    },
+    [],
+  )
+
+  const handleRebuildMegasheet = useCallback(async () => {
+    setMegasheetRebuildBusy(true)
+    setMegasheetRebuildStatus("rebuilding…")
+    try {
+      const res = await fetch("/api/dev/animation-tool/rebuild-megasheet", { method: "POST" })
+      const body = (await res.json()) as { ok?: boolean; message?: string }
+      if (!res.ok || body.ok === false) {
+        setMegasheetRebuildStatus(body.message ?? `rebuild failed (${res.status})`)
+        return
+      }
+      setReplacesSinceRebuild(clearReplacesSinceRebuild())
+      setMegasheetRebuildStatus("Megasheet rebuilt — hard-reload /game to refresh textures.")
+    } catch (error) {
+      setMegasheetRebuildStatus(error instanceof Error ? error.message : "rebuild failed")
+    } finally {
+      setMegasheetRebuildBusy(false)
+    }
+  }, [])
+
   const markerCopy =
     actionConfig.type === "spell"
       ? actionConfig.effectTiming === "before"
@@ -932,7 +1068,29 @@ export function AnimationToolClient() {
             fixed ticks at the first tick at or after the configured ms.
           </p>
         </div>
-        <div className="flex shrink-0 flex-col gap-2 md:min-w-60 md:items-end">
+        <div className="flex shrink-0 flex-col gap-2 md:min-w-72 md:items-end">
+          <div className="flex w-full flex-wrap items-center justify-end gap-2">
+            {replacesSinceRebuild > 0 ? (
+              <span
+                className="rounded-full border border-red-600/80 bg-red-950/50 px-3 py-1 font-mono text-xs text-red-200"
+                data-testid="animation-tool-megasheet-stale"
+              >
+                🔴 megasheet stale ({replacesSinceRebuild})
+              </span>
+            ) : null}
+            <button
+              type="button"
+              className="rounded-xl border border-amber-600/70 bg-amber-950/60 px-4 py-2 font-mono text-xs font-bold text-amber-100 hover:bg-amber-900/70 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={megasheetRebuildBusy}
+              data-testid="animation-tool-rebuild-megasheet"
+              onClick={() => void handleRebuildMegasheet()}
+            >
+              {megasheetRebuildBusy ? "Rebuilding…" : "Rebuild megasheet"}
+            </button>
+          </div>
+          {megasheetRebuildStatus ? (
+            <p className="max-w-72 text-right font-mono text-[11px] text-amber-200/90">{megasheetRebuildStatus}</p>
+          ) : null}
           <button
             type="button"
             className="rounded-xl bg-lime-500 px-5 py-3 font-mono text-sm font-bold text-stone-950 hover:bg-lime-400 disabled:cursor-not-allowed disabled:bg-stone-700 disabled:text-stone-400"
@@ -952,6 +1110,13 @@ export function AnimationToolClient() {
 
       <section className="grid gap-4 lg:grid-cols-[320px_1fr]">
         <aside className="flex flex-col gap-4 rounded-2xl border border-stone-700 bg-stone-900/80 p-4">
+          <p
+            className="rounded-lg border border-sky-800/60 bg-sky-950/40 p-3 font-mono text-[11px] leading-relaxed text-sky-100"
+            data-testid="animation-tool-shared-art-banner"
+          >
+            Sprite art is shared across all heroes today (lady-wizard strips). Replacing a strip affects every hero
+            using that clip.
+          </p>
           <CollapsiblePanel title="Hero">
             <div className="flex flex-col gap-2" data-testid="animation-tool-hero-select">
               {VALID_HERO_IDS.map((id) => {
@@ -1356,18 +1521,29 @@ export function AnimationToolClient() {
             className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
             data-testid="animation-tool-preview-grid"
           >
-            {orderedCells.map((cell) => (
-              <DirectionPreview
-                key={cell.direction}
-                cell={cell}
-                action={action}
-                config={actionConfig}
-                timeMs={timeMs}
-                frameIndex={Math.min(currentFrame, Math.max(0, (cell.frameCount || frameCount) - 1))}
-                frameCount={cell.frameCount || cell.expectedFrames || frameCount}
-                toggles={toggles}
-              />
-            ))}
+            {orderedCells.map((cell) => {
+              const rk = replaceStripCacheKey(cell.atlasClipId, cell.direction)
+              const stripDisplayUrl = withStripCacheBust(cell.stripUrl, stripVersionByKey[rk])
+              const expectedFrames = cell.frameCount || cell.expectedFrames || frameCount
+              return (
+                <DirectionPreview
+                  key={cell.direction}
+                  cell={cell}
+                  action={action}
+                  config={actionConfig}
+                  timeMs={timeMs}
+                  frameIndex={Math.min(currentFrame, Math.max(0, (cell.frameCount || frameCount) - 1))}
+                  frameCount={expectedFrames}
+                  toggles={toggles}
+                  stripDisplayUrl={stripDisplayUrl}
+                  replaceBusy={replaceUploadingKey === rk}
+                  replaceError={replaceErrorByKey[rk] || null}
+                  onReplaceFile={(file) =>
+                    void handleReplaceStrip(cell.atlasClipId, cell.direction, expectedFrames, file)
+                  }
+                />
+              )
+            })}
           </section>
         </div>
       </section>

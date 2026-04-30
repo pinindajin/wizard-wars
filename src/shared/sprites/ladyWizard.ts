@@ -149,3 +149,51 @@ export function ladyWizardStripPublicPath(atlasClipId: string, direction: string
 export function ladyWizardAtlasPublicPath(): string {
   return `${LADY_WIZARD_SHEETS_PUBLIC_DIR}/atlas.json`
 }
+
+/** Repo-relative directory of the lady-wizard hero asset root, under `public/`. */
+export const LADY_WIZARD_PUBLIC_HERO_DIR =
+  "public/assets/sprites/heroes/lady-wizard"
+
+/**
+ * Absolute on-disk path of a per-clip-direction strip PNG. Used by dev-only
+ * endpoints that mutate strip files. `cwd` defaults to `process.cwd()`.
+ */
+export function ladyWizardStripFsPath(
+  atlasClipId: string,
+  direction: string,
+  cwd: string = process.cwd(),
+): string {
+  return `${cwd}/${LADY_WIZARD_PUBLIC_HERO_DIR}/sheets/${atlasClipId}-${direction}.png`
+}
+
+/** Absolute on-disk dir of per-frame source PNGs for a clip+direction. */
+export function ladyWizardAnimationsFramesFsDir(
+  atlasClipId: string,
+  direction: string,
+  cwd: string = process.cwd(),
+): string {
+  return `${cwd}/${LADY_WIZARD_PUBLIC_HERO_DIR}/animations/${atlasClipId}/${direction}`
+}
+
+/** Absolute on-disk dir for archived strips. */
+export function ladyWizardSheetsArchiveFsDir(cwd: string = process.cwd()): string {
+  return `${cwd}/${LADY_WIZARD_PUBLIC_HERO_DIR}/sheets/old`
+}
+
+/** Absolute on-disk dir for archived animation frame folders, namespaced by clip. */
+export function ladyWizardAnimationsArchiveFsDir(
+  atlasClipId: string,
+  cwd: string = process.cwd(),
+): string {
+  return `${cwd}/${LADY_WIZARD_PUBLIC_HERO_DIR}/animations/old/${atlasClipId}`
+}
+
+/** Absolute on-disk dir of `sheets/`. */
+export function ladyWizardSheetsFsDir(cwd: string = process.cwd()): string {
+  return `${cwd}/${LADY_WIZARD_PUBLIC_HERO_DIR}/sheets`
+}
+
+/** Absolute on-disk path of atlas.json. */
+export function ladyWizardAtlasFsPath(cwd: string = process.cwd()): string {
+  return `${cwd}/${LADY_WIZARD_PUBLIC_HERO_DIR}/sheets/atlas.json`
+}

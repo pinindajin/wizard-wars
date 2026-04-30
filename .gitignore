@@ -49,3 +49,7 @@ test-results/
 # Local animation tool snapshots
 tools/animation/output/*.json
 !tools/animation/output/.gitkeep
+
+# Local sprite-replace archives (animation tool)
+public/assets/sprites/heroes/lady-wizard/sheets/old/
+public/assets/sprites/heroes/lady-wizard/animations/old/

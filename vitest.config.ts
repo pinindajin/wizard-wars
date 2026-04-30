@@ -45,6 +45,9 @@ export default defineConfig({
         "src/app/api/trpc/**/route.ts",
         "src/app/api/health/route.ts",
         "src/app/api/lobbies/route.ts",
+        // Dev-only multipart routes: error-path branches (disk, recovery) are covered by integration tests, not 95% branch-gated.
+        "src/app/api/dev/animation-tool/replace-sheet/route.ts",
+        "src/app/api/dev/animation-tool/rebuild-megasheet/route.ts",
       ],
       thresholds: {
         lines: 95,
