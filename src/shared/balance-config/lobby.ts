@@ -31,6 +31,15 @@ export const MATCH_MAX_DURATION_MS = 1_800_000
 /** Lobby auto-closes after this many ms of idle time. */
 export const LOBBY_IDLE_TIMEOUT_MS = 300_000
 
+/**
+ * When remaining lobby idle time is at or below this threshold, the client
+ * shows a red warning countdown (see `LobbyIdlePill`).
+ */
+export const LOBBY_IDLE_WARNING_THRESHOLD_MS = 60_000
+
+/** Fade duration (ms) when exiting the green “Lobby AFK Time” preview pill. */
+export const LOBBY_IDLE_INFO_FADE_MS = 500
+
 /** Buffer of lobby chat messages retained for new joiners. */
 export const LOBBY_CHAT_BUFFER_MAX = 50
 

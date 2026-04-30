@@ -69,6 +69,25 @@ function resolveClientReadyTimeoutMs(): number {
   return Math.min(15_000, Math.max(100, parsed))
 }
 
+/**
+ * Lobby idle duration. Under Vitest, `WIZARD_WARS_TEST_LOBBY_IDLE_MS` may shorten
+ * the window for integration tests (clamped 100..LOBBY_IDLE_TIMEOUT_MS).
+ */
+function resolveLobbyIdleTimeoutMs(): number {
+  if (process.env.VITEST !== "true") {
+    return LOBBY_IDLE_TIMEOUT_MS
+  }
+  const raw = process.env.WIZARD_WARS_TEST_LOBBY_IDLE_MS
+  if (raw === undefined || raw === "") {
+    return LOBBY_IDLE_TIMEOUT_MS
+  }
+  const parsed = Number.parseInt(raw, 10)
+  if (!Number.isFinite(parsed)) {
+    return LOBBY_IDLE_TIMEOUT_MS
+  }
+  return Math.min(LOBBY_IDLE_TIMEOUT_MS, Math.max(100, parsed))
+}
+
 /** Max lobby chat messages per player per rate-limit window. */
 const CHAT_RATE_LIMIT = 3
 /** Duration of the chat rate-limit window in ms. */
@@ -179,8 +198,15 @@ export class GameLobbyRoom extends Room {
   /** Per-player chat rate-limit bookkeeping: `playerId → { count, windowStart }`. */
   private chatRateMap = new Map<string, { count: number; windowStart: number }>()
 
-  /** Inactivity timeout → `dissolveLobby("lobby_expired")`. */
+  /** Inactivity timeout → `dissolveLobby("lobby_expired")` (only armed in `LOBBY`). */
   private inactivityTimer: { clear: () => void } | null = null
+
+  /**
+   * When the current lobby idle timer will fire (`Date.now()` + duration);
+   * surfaced to clients as `lobbyIdleExpiresAtServerMs`. Cleared when not in
+   * `LOBBY` or when idle is cleared.
+   */
+  private lobbyIdleDeadlineMs: number | null = null
 
   /** Pre-game countdown timer (per-tick during `COUNTDOWN` phase). */
   private countdownTimer: { clear: () => void } | null = null
@@ -472,7 +498,7 @@ export class GameLobbyRoom extends Room {
         playerLobbyIndex.delete(playerId)
       }
     }
-    this.inactivityTimer?.clear()
+    this.clearLobbyIdleTimer()
     this.countdownTimer?.clear()
     this.clientReadyTimer?.clear()
     this.scoreboardTimer?.clear()
@@ -540,6 +566,8 @@ export class GameLobbyRoom extends Room {
     }
 
     if (this.clients.length === 0 && this.lobbyPhase === "LOBBY") {
+      // No players remain; idle kick is meaningless and would fire on a ghost room.
+      this.clearLobbyIdleTimer()
       this.disposalGraceTimer = nativeSetTimeout(() => {
         if (this.clients.length === 0) {
           this.disconnect()
@@ -559,7 +587,9 @@ export class GameLobbyRoom extends Room {
 
   /**
    * Registers all `onMessage` handlers for lobby and game events.
-   * A wildcard handler bumps the inactivity timer on any incoming message.
+   * Typed handlers bump the lobby idle timer where they call
+   * {@link GameLobbyRoom.resetInactivityTimer}. The `"*"` handler bumps idle
+   * for message types without a dedicated handler (Colyseus-specific routing).
    */
   private registerLobbyHandlers(): void {
     this.onMessage(RoomEvent.LobbyChat, (client: Client, payload: unknown) => {
@@ -982,6 +1012,7 @@ export class GameLobbyRoom extends Room {
    * `CLIENT_READY_TIMEOUT_MS` deadline.
    */
   private beginWaitingForClients(): void {
+    this.clearLobbyIdleTimer()
     this.lobbyPhase = "WAITING_FOR_CLIENTS"
     this.clientReadySet.clear()
 
@@ -1376,17 +1407,38 @@ export class GameLobbyRoom extends Room {
 
   // ---------------------------------------------------------------------------
   // Timers
+  // ---------------------------------------------------------------------------
 
   /**
-   * Resets the idle inactivity timer to `LOBBY_IDLE_TIMEOUT_MS`.
-   * Any incoming message (via the `"*"` handler) and player joins bump it.
-   * When it fires the lobby is dissolved with reason `"lobby_expired"`.
+   * Clears the lobby idle timeout and client-visible idle deadline without
+   * rescheduling (used when leaving `LOBBY` or disposing the room).
+   */
+  private clearLobbyIdleTimer(): void {
+    this.inactivityTimer?.clear()
+    this.inactivityTimer = null
+    this.lobbyIdleDeadlineMs = null
+  }
+
+  /**
+   * Resets the lobby idle timer when `lobbyPhase === "LOBBY"`: clears any prior
+   * deadline, arms idle for `resolveLobbyIdleTimeoutMs()`, updates
+   * `lobbyIdleDeadlineMs`, and broadcasts `LobbyState` so clients refresh
+   * `lobbyIdleExpiresAtServerMs`. Outside `LOBBY`, only clears any stale timer.
    */
   private resetInactivityTimer(): void {
-    this.inactivityTimer?.clear()
+    this.clearLobbyIdleTimer()
+    if (this.lobbyPhase !== "LOBBY") {
+      return
+    }
+    const durationMs = resolveLobbyIdleTimeoutMs()
+    this.lobbyIdleDeadlineMs = Date.now() + durationMs
     this.inactivityTimer = nativeSetTimeout(() => {
+      if (this.lobbyPhase !== "LOBBY") {
+        return
+      }
       this.dissolveLobby("lobby_expired")
-    }, LOBBY_IDLE_TIMEOUT_MS)
+    }, durationMs)
+    this.broadcast(RoomEvent.LobbyState, this.buildLobbyState())
   }
 
   // ---------------------------------------------------------------------------
@@ -1443,6 +1495,9 @@ export class GameLobbyRoom extends Room {
       players,
       hostPlayerId: this.hostPlayerId,
       maxPlayers: MAX_PLAYERS_PER_MATCH,
+      ...(this.lobbyPhase === "LOBBY" && this.lobbyIdleDeadlineMs !== null
+        ? { lobbyIdleExpiresAtServerMs: this.lobbyIdleDeadlineMs }
+        : {}),
     }
   }
 

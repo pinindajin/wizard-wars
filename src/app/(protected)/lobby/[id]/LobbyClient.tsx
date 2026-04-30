@@ -10,6 +10,7 @@ import {
   LobbyShell,
   LobbyStatusPill,
 } from "@/components/lobby/LobbyChrome"
+import { LobbyIdlePill } from "@/components/lobby/LobbyIdlePill"
 import { HeroCard, HERO_CARD_CONFIGS } from "@/components/lobby/HeroCard"
 import { HERO_CONFIGS } from "@/shared/balance-config/heroes"
 import { MATCH_COUNTDOWN_DURATION_MS } from "@/shared/balance-config/lobby"
@@ -308,6 +309,10 @@ export default function LobbyClient() {
               />
               {isConnected ? phase.replaceAll("_", " ") : "Connecting…"}
             </LobbyStatusPill>
+            <LobbyIdlePill
+              phase={phase}
+              lobbyIdleExpiresAtServerMs={lobbyState?.lobbyIdleExpiresAtServerMs}
+            />
             <button
               className={btnGhostCompact}
               onClick={toggleMute}
