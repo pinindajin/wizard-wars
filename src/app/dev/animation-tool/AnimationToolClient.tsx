@@ -107,6 +107,14 @@ function frameEndMs(frameIndex: number, durationMs: number, frameCount: number):
   return frameIndex >= frameCount - 1 ? durationMs : frameStartMs(frameIndex + 1, durationMs, frameCount)
 }
 
+function frameClickTargetMs(frameIndex: number, durationMs: number, frameCount: number): number {
+  if (frameIndex <= 0) return 0
+  if (frameIndex >= frameCount - 1) return Math.max(0, durationMs - 1)
+  const start = frameStartMs(frameIndex, durationMs, frameCount)
+  const end = frameEndMs(frameIndex, durationMs, frameCount)
+  return Math.min(durationMs - 1, Math.floor((start + end) / 2))
+}
+
 function LegendTipRow(props: { label: ReactNode; testId?: string; children: ReactNode }) {
   const { label, testId, children } = props
   const [open, setOpen] = useState(false)
@@ -233,7 +241,7 @@ function FrameTimeline(props: {
 
   function jumpToFrame(frameIndex: number) {
     setPlaying(false)
-    setTimeMs(Math.min(frameStartMs(frameIndex, config.durationMs, frameCount), config.durationMs - 1))
+    setTimeMs(frameClickTargetMs(frameIndex, config.durationMs, frameCount))
   }
 
   return (
