@@ -45,3 +45,7 @@ next-env.d.ts
 
 # Test results
 test-results/
+
+# Local animation tool snapshots
+tools/animation/output/*.json
+!tools/animation/output/.gitkeep

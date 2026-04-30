@@ -10,6 +10,7 @@ import {
   type PrimaryMeleeAttackConfig,
   type PrimaryMeleeAttackId,
 } from "@/shared/balance-config/equipment"
+import { getPrimaryAttackAnimationConfigByAttackId } from "@/shared/balance-config/animationConfig"
 import {
   LADY_WIZARD_DIRECTIONS,
   LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y,
@@ -153,7 +154,8 @@ export function spriteViewerAttackHurtbox(
   fps: number,
 ): SpriteViewerHurtboxOverlay {
   const cfg = PRIMARY_MELEE_ATTACK_CONFIGS[attackId]
-  const [start, end] = spriteViewerDangerousFrameRange(cfg, fps)
+  const timing = getPrimaryAttackAnimationConfigByAttackId(attackId)
+  const [start, end] = spriteViewerDangerousFrameRange(timing, fps)
   return {
     radiusPx: cfg.hurtboxRadiusPx,
     arcDeg: cfg.hurtboxArcDeg,

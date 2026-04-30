@@ -3,13 +3,20 @@ import type Phaser from "phaser"
 import type { PlayerAnimState } from "@/shared/types"
 import {
   LADY_WIZARD_CLIP_BASE_FRAME,
-  LADY_WIZARD_CLIP_FPS,
   LADY_WIZARD_CLIP_FRAMES,
   LADY_WIZARD_DIRECTIONS,
   LADY_WIZARD_FRAMES_PER_DIRECTION_ROW,
   LADY_WIZARD_MEGASHEET_CLIP_ORDER,
+  type LadyWizardMegasheetClip,
   type LadyWizardDirection,
 } from "@/shared/sprites/ladyWizard"
+import {
+  frameRateForDuration,
+  getBehaviorAnimationConfig,
+  getPrimaryAttackAnimationConfig,
+  getSpellAnimationConfig,
+} from "@/shared/balance-config/animationConfig"
+import { DEFAULT_HERO_ID, HERO_CONFIGS } from "@/shared/balance-config/heroes"
 
 /**
  * 8 directions for the lady-wizard sprite sheet, in the order used for all animation keys.
@@ -75,6 +82,26 @@ export const getDirectionFromAngle = (angle: number): Direction => {
   return remap[index] ?? "south"
 }
 
+function clipDurationMs(clip: LadyWizardMegasheetClip): number {
+  switch (clip) {
+    case "breathing_idle":
+      return getBehaviorAnimationConfig(DEFAULT_HERO_ID, "idle").durationMs
+    case "walk":
+      return getBehaviorAnimationConfig(DEFAULT_HERO_ID, "walk").durationMs
+    case "death":
+      return getBehaviorAnimationConfig(DEFAULT_HERO_ID, "death").durationMs
+    case "light_spell_cast":
+      return getSpellAnimationConfig(DEFAULT_HERO_ID, "fireball").durationMs
+    case "heavy_spell_cast":
+      return getSpellAnimationConfig(DEFAULT_HERO_ID, "lightning_bolt").durationMs
+    case "summoned_axe_swing":
+      return getPrimaryAttackAnimationConfig(
+        DEFAULT_HERO_ID,
+        HERO_CONFIGS[DEFAULT_HERO_ID].primaryMeleeAttackId,
+      ).durationMs
+  }
+}
+
 /**
  * Defines per-direction frame ranges for all lady-wizard animation clips on the shared
  * sprite sheet. Each direction-clip combination becomes one Phaser AnimationConfig.
@@ -104,7 +131,7 @@ export const registerLadyWizardAnims = (animManager: Phaser.Animations.Animation
   for (const clip of LADY_WIZARD_MEGASHEET_CLIP_ORDER) {
     const frameCount = LADY_WIZARD_CLIP_FRAMES[clip]
     const baseFrame = LADY_WIZARD_CLIP_BASE_FRAME[clip]
-    const fps = LADY_WIZARD_CLIP_FPS[clip]
+    const fps = frameRateForDuration(frameCount, clipDurationMs(clip))
     const repeat = LOOP_CLIPS.has(clip) ? -1 : 0
 
     for (const direction of DIRECTIONS) {

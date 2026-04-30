@@ -33,6 +33,7 @@ import {
   PRIMARY_MELEE_ATTACK_IDS,
   type PrimaryMeleeAttackId,
 } from "../../../shared/balance-config/equipment"
+import { getPrimaryAttackAnimationConfigByAttackId } from "../../../shared/balance-config/animationConfig"
 import { TICK_MS } from "../../../shared/balance-config"
 import { characterHitboxForCenter } from "../../../shared/collision/characterHitbox"
 import { swingConeIntersectsCharacterHitbox } from "./swingConeGeometry"
@@ -59,6 +60,7 @@ export function primaryMeleeAttackSystem(ctx: SimCtx): void {
 
     const attackId = PRIMARY_MELEE_ATTACK_IDS[idx] as PrimaryMeleeAttackId
     const cfg = PRIMARY_MELEE_ATTACK_CONFIGS[attackId]
+    const timing = getPrimaryAttackAnimationConfigByAttackId(attackId)
 
     if (PlayerInput.weaponPrimary[eid] !== 1) continue
     if (hasComponent(world, eid, SwingingWeapon)) continue
@@ -67,7 +69,7 @@ export function primaryMeleeAttackSystem(ctx: SimCtx): void {
     if (hasComponent(world, eid, DeadTag)) continue
     if (hasComponent(world, eid, SpectatorTag)) continue
 
-    const swingTicks = Math.ceil(cfg.durationMs / TICK_MS)
+    const swingTicks = Math.ceil(timing.durationMs / TICK_MS)
 
     addComponent(world, eid, SwingingWeapon)
     Cooldown.primaryMelee[eid] = currentTick + swingTicks
@@ -92,9 +94,9 @@ export function primaryMeleeAttackSystem(ctx: SimCtx): void {
       damage: cfg.damage,
       hurtboxRadiusPx: cfg.hurtboxRadiusPx,
       hurtboxArcDeg: cfg.hurtboxArcDeg,
-      durationMs: cfg.durationMs,
-      dangerousWindowStartMs: cfg.dangerousWindowStartMs,
-      dangerousWindowEndMs: cfg.dangerousWindowEndMs,
+      durationMs: timing.durationMs,
+      dangerousWindowStartMs: timing.dangerousWindowStartMs,
+      dangerousWindowEndMs: timing.dangerousWindowEndMs,
     })
   }
 }
@@ -110,14 +112,15 @@ function resolveActiveSwings(ctx: SimCtx): void {
 
   for (const [casterEid, atk] of activeMeleeAttacks) {
     const cfg = PRIMARY_MELEE_ATTACK_CONFIGS[atk.attackId]
+    const timing = getPrimaryAttackAnimationConfigByAttackId(atk.attackId)
     const elapsedMs = (currentTick - atk.startTick) * TICK_MS
 
-    if (elapsedMs >= cfg.durationMs) {
+    if (elapsedMs >= timing.durationMs) {
       activeMeleeAttacks.delete(casterEid)
       continue
     }
-    if (elapsedMs < cfg.dangerousWindowStartMs) continue
-    if (elapsedMs >= cfg.dangerousWindowEndMs) continue
+    if (elapsedMs < timing.dangerousWindowStartMs) continue
+    if (elapsedMs >= timing.dangerousWindowEndMs) continue
     if (hasComponent(world, casterEid, DeadTag)) continue
     if (hasComponent(world, casterEid, SpectatorTag)) continue
 

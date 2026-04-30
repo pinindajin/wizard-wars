@@ -49,7 +49,10 @@ export const DAMAGE_FLASH_MS = 150
 /** Total respawn delay in ms (includes death animation). */
 export const RESPAWN_DELAY_MS = 3000
 
-/** Duration of the death animation in ms. */
+/**
+ * Fallback duration of the death animation in ms.
+ * Runtime death animation timing is loaded from `src/shared/balance-config/animation-config.json`.
+ */
 export const DEATH_ANIM_MS = 800
 
 /** Duration of the invulnerability window after respawn, in ms. */
@@ -76,7 +79,10 @@ export const FIREBALL_DAMAGE_PROPERTIES = combineDamageProperties(
 )
 /** Fireball projectile speed in px/s. */
 export const FIREBALL_SPEED_PX_PER_SEC = 400
-/** Fireball cast animation lock duration (non-Quick). */
+/**
+ * Default fireball cast animation lock duration.
+ * Runtime cast timing is loaded from `src/shared/balance-config/animation-config.json`.
+ */
 export const FIREBALL_CAST_MS = 500
 /** Fireball cooldown after cast animation finishes. */
 export const FIREBALL_COOLDOWN_MS = 800
@@ -92,7 +98,10 @@ export const LIGHTNING_BOLT_DAMAGE_PROPERTIES = combineDamageProperties(
 export const LIGHTNING_BOLT_ARC_PX = 350
 /** Hit radius around the main arc for AOE damage. */
 export const LIGHTNING_HIT_RADIUS_PX = 40
-/** Lightning cast animation lock duration (non-Quick). */
+/**
+ * Default lightning cast animation lock duration.
+ * Runtime cast timing is loaded from `src/shared/balance-config/animation-config.json`.
+ */
 export const LIGHTNING_CAST_MS = 700
 /** Lightning cooldown after cast animation finishes. */
 export const LIGHTNING_COOLDOWN_MS = 4000
@@ -108,11 +117,20 @@ export const AXE_DAMAGE_PROPERTIES = combineDamageProperties(
 export const AXE_HURTBOX_RADIUS_PX = 45
 /** Hurtbox arc width in degrees. 180 = half-circle (flat side at character, curve facing forward). */
 export const AXE_HURTBOX_ARC_DEG = 180
-/** Axe swing animation duration in ms = cooldown. Matches lady-wizard summoned_axe_swing: 17 frames @ 12 fps ≈ 1417ms. */
+/**
+ * Default axe swing animation duration in ms.
+ * Runtime primary-attack timing is loaded from `src/shared/balance-config/animation-config.json`.
+ */
 export const AXE_SWING_DURATION_MS = 1417
-/** Start of the dangerous-frames window (ms since swing start) during which the hurtbox can deal damage. */
+/**
+ * Default dangerous-window start.
+ * Runtime primary-attack timing is loaded from `src/shared/balance-config/animation-config.json`.
+ */
 export const AXE_DANGEROUS_WINDOW_START_MS = 500
-/** End of the dangerous-frames window (ms since swing start, exclusive). */
+/**
+ * Default dangerous-window end.
+ * Runtime primary-attack timing is loaded from `src/shared/balance-config/animation-config.json`.
+ */
 export const AXE_DANGEROUS_WINDOW_END_MS = 900
 
 // --- Healing Potion ---

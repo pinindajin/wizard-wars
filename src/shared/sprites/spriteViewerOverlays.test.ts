@@ -78,6 +78,10 @@ describe("primary-attack hurtbox overlay helpers", () => {
     expect(spriteViewerDirectionToFacingRad("north-west")).toBeCloseTo(-(3 * Math.PI) / 4)
   })
 
+  it("falls back to east for an unknown direction", () => {
+    expect(spriteViewerDirectionToFacingRad("bogus" as never)).toBe(0)
+  })
+
   it("maps ms dangerous window to half-open frame range", () => {
     const cfg = { dangerousWindowStartMs: 500, dangerousWindowEndMs: 900 }
     expect(spriteViewerDangerousFrameRange(cfg, 12)).toEqual([6, 11])
