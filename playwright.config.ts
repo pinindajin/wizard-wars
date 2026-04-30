@@ -1,5 +1,14 @@
 import { defineConfig, devices } from "@playwright/test"
 
+/**
+ * Production server (`bun run start`) only serves a pre-built `.next` tree.
+ * CI runs `bun run build` in a prior workflow step; locally, developers often run
+ * `bun run test:e2e` without rebuilding, which would leave stale bundles and fail
+ * specs that assert on the current UI (e.g. sprite viewer).
+ */
+const e2eWebServerCommand =
+  process.env.CI === "true" || process.env.CI === "1" ? "bun run start" : "bun run build && bun run start"
+
 export default defineConfig({
   testDir: "./tests/e2e",
   testMatch: /.*\.spec\.ts/,
@@ -14,7 +23,7 @@ export default defineConfig({
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
-    command: "bun run start",
+    command: e2eWebServerCommand,
     url: "http://localhost:3000",
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
