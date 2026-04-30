@@ -229,6 +229,7 @@ function FrameTimeline(props: {
     config.type === "spell" && config.effectTiming === "during"
       ? msToFrameIndex(config.effectAtMs ?? 0, config.durationMs, frameCount)
       : null
+  const castsAfterAnimation = config.type === "spell" && config.effectTiming === "after"
 
   function jumpToFrame(frameIndex: number) {
     setPlaying(false)
@@ -285,7 +286,11 @@ function FrameTimeline(props: {
 
       <div
         className="mt-3 grid gap-0.5"
-        style={{ gridTemplateColumns: `repeat(${frameCount}, minmax(0, 1fr))` }}
+        style={{
+          gridTemplateColumns: `${Array.from({ length: frameCount }, () => "minmax(0, 1fr)").join(" ")}${
+            castsAfterAnimation ? " 8px" : ""
+          }`,
+        }}
         data-testid="animation-tool-frame-strip"
       >
         {Array.from({ length: frameCount }, (_, frameIndex) => {
@@ -324,11 +329,27 @@ function FrameTimeline(props: {
             </button>
           )
         })}
+        {castsAfterAnimation ? (
+          <div
+            className="relative h-9 rounded-sm border border-amber-500 bg-amber-500/60"
+            data-testid="animation-tool-cast-after-marker"
+            aria-label="Spell effect casts after animation"
+            role="img"
+          >
+            <span className="absolute -top-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] font-bold text-amber-300">
+              cast
+            </span>
+          </div>
+        ) : null}
       </div>
 
       <div
         className="mt-2 grid gap-0.5 text-center text-[10px] text-stone-600"
-        style={{ gridTemplateColumns: `repeat(${frameCount}, minmax(0, 1fr))` }}
+        style={{
+          gridTemplateColumns: `${Array.from({ length: frameCount }, () => "minmax(0, 1fr)").join(" ")}${
+            castsAfterAnimation ? " 8px" : ""
+          }`,
+        }}
         aria-hidden
       >
         {Array.from({ length: frameCount }, (_, frameIndex) => (
@@ -338,6 +359,7 @@ function FrameTimeline(props: {
               : ""}
           </span>
         ))}
+        {castsAfterAnimation ? <span>{config.durationMs}</span> : null}
       </div>
 
       <div className="mt-2 flex flex-wrap gap-4 text-[11px] text-stone-500">
@@ -352,6 +374,11 @@ function FrameTimeline(props: {
         {castFrame != null ? (
           <span className="inline-flex items-center gap-1.5">
             <span className="h-3 w-3 rounded bg-amber-500" /> cast frame
+          </span>
+        ) : null}
+        {castsAfterAnimation ? (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-3 w-1.5 rounded-sm bg-amber-500" /> cast after animation
           </span>
         ) : null}
       </div>
