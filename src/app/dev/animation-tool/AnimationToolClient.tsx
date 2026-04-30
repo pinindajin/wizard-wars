@@ -57,9 +57,40 @@ function cloneConfig(config: AnimationConfig): AnimationConfig {
   return parseAnimationConfig(JSON.parse(JSON.stringify(config)) as unknown)
 }
 
-function finiteNumber(raw: string, fallback: number): number {
+type TimingDraft = {
+  readonly durationMs: string
+  readonly dangerousWindowStartMs: string
+  readonly dangerousWindowEndMs: string
+}
+
+type TimingValidation = {
+  durationMs?: string
+  dangerousWindowStartMs?: string
+  dangerousWindowEndMs?: string
+}
+
+function timingDraftFromConfig(config: AnimationActionConfig): TimingDraft {
+  return {
+    durationMs: String(config.durationMs),
+    dangerousWindowStartMs:
+      config.type === "primaryAttack" ? String(config.dangerousWindowStartMs) : "",
+    dangerousWindowEndMs:
+      config.type === "primaryAttack" ? String(config.dangerousWindowEndMs) : "",
+  }
+}
+
+function wholePositiveInteger(raw: string): number | null {
+  if (!/^[1-9]\d*$/.test(raw)) return null
   const value = Number(raw)
-  return Number.isFinite(value) ? Math.trunc(value) : fallback
+  return Number.isSafeInteger(value) ? value : null
+}
+
+function savedActionConfig(
+  config: AnimationConfig,
+  heroId: string,
+  actionId: AnimationActionId,
+): AnimationActionConfig | null {
+  return config.heroes[heroId]?.actions[actionId] ?? null
 }
 
 function outlineCacheKey(stripUrl: string, frameIndex: number): string {
@@ -257,11 +288,13 @@ export function AnimationToolClient() {
   const [atlas, setAtlas] = useState<LadyWizardAtlasJson | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [config, setConfig] = useState<AnimationConfig>(() => cloneConfig(ANIMATION_CONFIG))
+  const [savedConfig, setSavedConfig] = useState<AnimationConfig>(() => cloneConfig(ANIMATION_CONFIG))
   const [heroId, setHeroId] = useState(VALID_HERO_IDS[0] ?? "red_wizard")
   const [actionId, setActionId] = useState<AnimationActionId>("idle")
   const [timeMs, setTimeMs] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [saveStatus, setSaveStatus] = useState<string>("")
+  const [timingDrafts, setTimingDrafts] = useState<Record<string, TimingDraft>>({})
   const [toggles, setToggles] = useState<OverlayToggles>({
     collision: true,
     alpha: true,
@@ -290,6 +323,9 @@ export function AnimationToolClient() {
   const actions = useMemo(() => getAnimationToolActions(heroId, config), [config, heroId])
   const action = actions.find((candidate) => candidate.id === actionId) ?? actions[0]!
   const actionConfig = action.config
+  const savedConfigForAction = savedActionConfig(savedConfig, heroId, action.id)
+  const timingDraftKey = `${heroId}:${action.id}`
+  const timingDraft = timingDrafts[timingDraftKey] ?? timingDraftFromConfig(actionConfig)
   const cells = useMemo(() => {
     if (!atlas) return []
     return buildLadyWizardViewerCells(atlas).filter((cell) => cell.atlasClipId === action.atlasClipId)
@@ -342,7 +378,115 @@ export function AnimationToolClient() {
     })
   }, [action.id, heroId])
 
+  const timingValidation = useMemo<TimingValidation>(() => {
+    const durationMs = wholePositiveInteger(timingDraft.durationMs)
+    const errors: TimingValidation = {}
+    if (durationMs == null) {
+      errors.durationMs = "Enter a whole number greater than 0."
+    }
+
+    if (actionConfig.type === "primaryAttack") {
+      const dangerousWindowStartMs = wholePositiveInteger(timingDraft.dangerousWindowStartMs)
+      const dangerousWindowEndMs = wholePositiveInteger(timingDraft.dangerousWindowEndMs)
+      if (dangerousWindowStartMs == null) {
+        errors.dangerousWindowStartMs = "Enter a whole number greater than 0."
+      }
+      if (dangerousWindowEndMs == null) {
+        errors.dangerousWindowEndMs = "Enter a whole number greater than 0."
+      }
+      if (durationMs != null && dangerousWindowStartMs != null && dangerousWindowStartMs >= durationMs) {
+        errors.dangerousWindowStartMs = "Start must be less than duration."
+      }
+      if (durationMs != null && dangerousWindowEndMs != null && dangerousWindowEndMs > durationMs) {
+        errors.dangerousWindowEndMs = "End must be no greater than duration."
+      }
+      if (
+        dangerousWindowStartMs != null &&
+        dangerousWindowEndMs != null &&
+        dangerousWindowStartMs >= dangerousWindowEndMs
+      ) {
+        errors.dangerousWindowEndMs = "End must be greater than start."
+      }
+    }
+
+    return errors
+  }, [actionConfig.type, timingDraft])
+
+  const timingHasErrors = Object.keys(timingValidation).length > 0
+
+  function setTimingDraft(next: TimingDraft) {
+    setTimingDrafts((prev) => ({ ...prev, [timingDraftKey]: next }))
+  }
+
+  function commitDuration(raw: string) {
+    setTimingDraft({ ...timingDraft, durationMs: raw })
+    const durationMs = wholePositiveInteger(raw)
+    if (durationMs == null) return
+    if (actionConfig.type === "primaryAttack") {
+      const dangerousWindowStartMs = wholePositiveInteger(timingDraft.dangerousWindowStartMs)
+      const dangerousWindowEndMs = wholePositiveInteger(timingDraft.dangerousWindowEndMs)
+      if (
+        dangerousWindowStartMs == null ||
+        dangerousWindowEndMs == null ||
+        dangerousWindowStartMs >= dangerousWindowEndMs ||
+        dangerousWindowStartMs >= durationMs ||
+        dangerousWindowEndMs > durationMs
+      ) {
+        return
+      }
+      updateActionConfig({ ...actionConfig, durationMs })
+    } else if (actionConfig.type === "spell" && actionConfig.effectTiming === "during") {
+      if ((actionConfig.effectAtMs ?? 1) >= durationMs) return
+      updateActionConfig({ ...actionConfig, durationMs })
+    } else {
+      updateActionConfig({ ...actionConfig, durationMs })
+    }
+    setTimeMs((value) => Math.min(value, durationMs - 1))
+  }
+
+  function commitDangerousStart(raw: string) {
+    setTimingDraft({ ...timingDraft, dangerousWindowStartMs: raw })
+    if (actionConfig.type !== "primaryAttack") return
+    const dangerousWindowStartMs = wholePositiveInteger(raw)
+    const dangerousWindowEndMs = wholePositiveInteger(timingDraft.dangerousWindowEndMs)
+    const durationMs = wholePositiveInteger(timingDraft.durationMs)
+    if (
+      dangerousWindowStartMs == null ||
+      dangerousWindowEndMs == null ||
+      durationMs == null ||
+      dangerousWindowStartMs >= dangerousWindowEndMs ||
+      dangerousWindowStartMs >= durationMs ||
+      dangerousWindowEndMs > durationMs
+    ) {
+      return
+    }
+    updateActionConfig({ ...actionConfig, dangerousWindowStartMs })
+  }
+
+  function commitDangerousEnd(raw: string) {
+    setTimingDraft({ ...timingDraft, dangerousWindowEndMs: raw })
+    if (actionConfig.type !== "primaryAttack") return
+    const dangerousWindowStartMs = wholePositiveInteger(timingDraft.dangerousWindowStartMs)
+    const dangerousWindowEndMs = wholePositiveInteger(raw)
+    const durationMs = wholePositiveInteger(timingDraft.durationMs)
+    if (
+      dangerousWindowStartMs == null ||
+      dangerousWindowEndMs == null ||
+      durationMs == null ||
+      dangerousWindowStartMs >= dangerousWindowEndMs ||
+      dangerousWindowStartMs >= durationMs ||
+      dangerousWindowEndMs > durationMs
+    ) {
+      return
+    }
+    updateActionConfig({ ...actionConfig, dangerousWindowEndMs })
+  }
+
   async function save() {
+    if (timingHasErrors) {
+      setSaveStatus("fix timing validation before saving")
+      return
+    }
     setSaveStatus("saving...")
     try {
       const res = await fetch("/api/dev/animation-tool/save", {
@@ -352,6 +496,7 @@ export function AnimationToolClient() {
       })
       const body = (await res.json()) as { savedAt?: string; error?: string }
       if (!res.ok) throw new Error(body.error ?? `save failed ${res.status}`)
+      setSavedConfig(cloneConfig(config))
       setSaveStatus(`saved ${body.savedAt ?? ""}`)
     } catch (error) {
       setSaveStatus(error instanceof Error ? error.message : "save failed")
@@ -429,44 +574,19 @@ export function AnimationToolClient() {
             <label className="mt-3 flex flex-col gap-1 font-mono text-xs text-stone-300">
               Duration ms
               <input
-                type="number"
-                min={1}
+                type="text"
+                inputMode="numeric"
+                pattern="[1-9][0-9]*"
                 className="rounded border border-stone-700 bg-stone-950 p-2"
-                value={actionConfig.durationMs}
-                onChange={(event) => {
-                  const requested = Math.max(
-                    1,
-                    finiteNumber(event.target.value, actionConfig.durationMs),
-                  )
-                  const durationMs =
-                    actionConfig.type === "spell" && actionConfig.effectTiming === "during"
-                      ? Math.max(2, requested)
-                      : requested
-                  const next =
-                    actionConfig.type === "spell" && actionConfig.effectTiming === "during"
-                      ? {
-                          ...actionConfig,
-                          durationMs,
-                          effectAtMs: Math.min(actionConfig.effectAtMs ?? 1, durationMs - 1),
-                        }
-                      : actionConfig.type === "primaryAttack"
-                        ? {
-                            ...actionConfig,
-                            durationMs,
-                            dangerousWindowStartMs: Math.min(
-                              actionConfig.dangerousWindowStartMs,
-                              Math.max(0, durationMs - 1),
-                            ),
-                            dangerousWindowEndMs: Math.min(
-                              Math.max(actionConfig.dangerousWindowEndMs, 1),
-                              durationMs,
-                            ),
-                          }
-                        : { ...actionConfig, durationMs }
-                  updateActionConfig(next as AnimationActionConfig)
-                  setTimeMs((value) => Math.min(value, durationMs - 1))
-                }}
+                value={timingDraft.durationMs}
+                onChange={(event) => commitDuration(event.target.value)}
               />
+              {timingValidation.durationMs ? (
+                <span className="text-[11px] text-red-300">{timingValidation.durationMs}</span>
+              ) : null}
+              <span className="text-[11px] text-stone-500">
+                saved: {savedConfigForAction?.durationMs ?? "unknown"}ms
+              </span>
             </label>
 
             {actionConfig.type === "spell" ? (
@@ -504,10 +624,7 @@ export function AnimationToolClient() {
                       className="rounded border border-stone-700 bg-stone-950 p-2"
                       value={actionConfig.effectAtMs ?? 1}
                       onChange={(event) => {
-                        const requested = finiteNumber(
-                          event.target.value,
-                          actionConfig.effectAtMs ?? 1,
-                        )
+                        const requested = wholePositiveInteger(event.target.value) ?? actionConfig.effectAtMs ?? 1
                         const effectAtMs = Math.max(
                           1,
                           Math.min(actionConfig.durationMs - 1, requested),
@@ -525,44 +642,44 @@ export function AnimationToolClient() {
                 <label className="flex flex-col gap-1 font-mono text-xs text-stone-300">
                   Dangerous start
                   <input
-                    type="number"
-                    min={0}
-                    max={actionConfig.durationMs - 1}
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[1-9][0-9]*"
                     className="rounded border border-stone-700 bg-stone-950 p-2"
-                    value={actionConfig.dangerousWindowStartMs}
-                    onChange={(event) => {
-                      const requested = finiteNumber(
-                        event.target.value,
-                        actionConfig.dangerousWindowStartMs,
-                      )
-                      const dangerousWindowStartMs = Math.max(
-                        0,
-                        Math.min(requested, actionConfig.dangerousWindowEndMs - 1),
-                      )
-                      updateActionConfig({ ...actionConfig, dangerousWindowStartMs })
-                    }}
+                    value={timingDraft.dangerousWindowStartMs}
+                    onChange={(event) => commitDangerousStart(event.target.value)}
                   />
+                  {timingValidation.dangerousWindowStartMs ? (
+                    <span className="text-[11px] text-red-300">
+                      {timingValidation.dangerousWindowStartMs}
+                    </span>
+                  ) : null}
+                  <span className="text-[11px] text-stone-500">
+                    saved:{" "}
+                    {savedConfigForAction?.type === "primaryAttack"
+                      ? `${savedConfigForAction.dangerousWindowStartMs}ms`
+                      : "n/a"}
+                  </span>
                 </label>
                 <label className="flex flex-col gap-1 font-mono text-xs text-stone-300">
                   Dangerous end
                   <input
-                    type="number"
-                    min={1}
-                    max={actionConfig.durationMs}
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[1-9][0-9]*"
                     className="rounded border border-stone-700 bg-stone-950 p-2"
-                    value={actionConfig.dangerousWindowEndMs}
-                    onChange={(event) => {
-                      const requested = finiteNumber(
-                        event.target.value,
-                        actionConfig.dangerousWindowEndMs,
-                      )
-                      const dangerousWindowEndMs = Math.min(
-                        actionConfig.durationMs,
-                        Math.max(actionConfig.dangerousWindowStartMs + 1, requested),
-                      )
-                      updateActionConfig({ ...actionConfig, dangerousWindowEndMs })
-                    }}
+                    value={timingDraft.dangerousWindowEndMs}
+                    onChange={(event) => commitDangerousEnd(event.target.value)}
                   />
+                  {timingValidation.dangerousWindowEndMs ? (
+                    <span className="text-[11px] text-red-300">{timingValidation.dangerousWindowEndMs}</span>
+                  ) : null}
+                  <span className="text-[11px] text-stone-500">
+                    saved:{" "}
+                    {savedConfigForAction?.type === "primaryAttack"
+                      ? `${savedConfigForAction.dangerousWindowEndMs}ms`
+                      : "n/a"}
+                  </span>
                 </label>
               </div>
             ) : null}
@@ -592,6 +709,7 @@ export function AnimationToolClient() {
             type="button"
             className="rounded-xl bg-lime-500 px-4 py-3 font-mono text-sm font-bold text-stone-950 hover:bg-lime-400"
             onClick={() => void save()}
+            disabled={timingHasErrors}
             data-testid="animation-tool-save"
           >
             Save snapshot
