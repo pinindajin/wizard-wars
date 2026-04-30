@@ -6,6 +6,7 @@ import {
   AbilitySlots,
   Casting,
   Cooldown,
+  DyingTag,
   Facing,
   Hero,
   PlayerInput,
@@ -52,6 +53,8 @@ function emptyCtx(overrides: Partial<SimCtx> = {}): SimCtx {
     fireballRemovedIds: [],
     lightningBolts: [],
     primaryMeleeAttacks: [],
+    combatTelegraphStarts: [],
+    combatTelegraphEnds: [],
     damageFloats: [],
     goldUpdates: [],
     matchEnded: null,
@@ -60,6 +63,7 @@ function emptyCtx(overrides: Partial<SimCtx> = {}): SimCtx {
     prevFireballStates: new Map(),
     killStats: new Map(),
     activeMeleeAttacks: new Map(),
+    activeCombatTelegraphs: new Map(),
     playerDeltas: [],
     fireballDeltas: [],
     ...overrides,
@@ -160,7 +164,7 @@ describe("castingSystem animation timing", () => {
     expect(Casting.animationEndsAtTick[caster]).toBe(10 + msToTickOffset(500))
   })
 
-  it("queues lightning with press-time target even if input changes before release", () => {
+  it("queues lightning with press-time direction even if input changes before release", () => {
     const world = createWorld()
     const caster = addCaster(world)
     PlayerInput.abilitySlot[caster] = 1
@@ -173,6 +177,9 @@ describe("castingSystem animation timing", () => {
     })
 
     castingSystem(ctx)
+    expect(ctx.combatTelegraphStarts).toHaveLength(1)
+    expect(ctx.combatTelegraphStarts[0]!.sourceId).toBe("lightning_bolt")
+    expect(ctx.combatTelegraphStarts[0]!.shape.type).toBe("capsule")
     PlayerInput.abilitySlot[caster] = -1
     PlayerInput.abilityTargetX[caster] = 999
     PlayerInput.abilityTargetY[caster] = 999
@@ -182,7 +189,34 @@ describe("castingSystem animation timing", () => {
     castingSystem(ctx)
 
     expect(ctx.pendingLightningBolts).toHaveLength(1)
-    expect(ctx.pendingLightningBolts[0]!.targetX).toBe(300)
-    expect(ctx.pendingLightningBolts[0]!.targetY).toBe(250)
+    expect(ctx.pendingLightningBolts[0]!.directionRad).toBeCloseTo(Math.atan2(150, 200))
+    expect(ctx.combatTelegraphEnds).toContainEqual({
+      id: ctx.combatTelegraphStarts[0]!.id,
+      reason: "expired",
+    })
+    expect(ctx.activeCombatTelegraphs.size).toBe(0)
+  })
+
+  it("cancels a lightning telegraph without firing when the caster dies", () => {
+    const world = createWorld()
+    const caster = addCaster(world)
+    PlayerInput.abilitySlot[caster] = 1
+    const ctx = emptyCtx({
+      world,
+      currentTick: 10,
+      entityPlayerMap: new Map([[caster, "caster"]]),
+    })
+
+    castingSystem(ctx)
+    addComponent(world, caster, DyingTag)
+    PlayerInput.abilitySlot[caster] = -1
+    ctx.currentTick = 11
+    castingSystem(ctx)
+
+    expect(ctx.pendingLightningBolts).toHaveLength(0)
+    expect(ctx.combatTelegraphEnds).toContainEqual({
+      id: ctx.combatTelegraphStarts[0]!.id,
+      reason: "caster_dead",
+    })
   })
 })

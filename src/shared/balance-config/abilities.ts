@@ -44,7 +44,7 @@ export const ABILITY_CONFIGS: Record<string, AbilityConfig> = {
     cooldownMs: LIGHTNING_COOLDOWN_MS,
     damageProperties: combineDamageProperties(DamageProperty.Magic, DamageProperty.Electric),
     castSfxKey: "sfx-lightning-cast",
-    castMoveSpeedMultiplier: 1.0,
+    castMoveSpeedMultiplier: 0,
   },
 }
 

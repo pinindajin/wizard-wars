@@ -192,6 +192,8 @@ export type GameStateSyncPayload = {
   readonly players: readonly PlayerSnapshot[]
   /** Active fireball projectiles (empty when none). */
   readonly fireballs: readonly FireballSnapshot[]
+  /** Active combat telegraphs that should be reconstructed by reconnecting clients. */
+  readonly activeTelegraphs?: readonly CombatTelegraphStartPayload[]
   readonly seq: number
   /** Server wall-clock time (ms) when the snapshot was built. */
   readonly serverTimeMs: number
@@ -267,6 +269,45 @@ export type PrimaryMeleeAttackPayload = {
   readonly durationMs: number
   readonly dangerousWindowStartMs: number
   readonly dangerousWindowEndMs: number
+}
+
+/** Cone-shaped combat hurtbox/telegraph descriptor. */
+export type CombatTelegraphConeShape = {
+  readonly type: "cone"
+  readonly radiusPx: number
+  readonly arcDeg: number
+}
+
+/** Capsule-shaped combat hurtbox/telegraph descriptor. */
+export type CombatTelegraphCapsuleShape = {
+  readonly type: "capsule"
+  readonly lengthPx: number
+  readonly radiusPx: number
+}
+
+/** Supported ground telegraph shape descriptors. */
+export type CombatTelegraphShape =
+  | CombatTelegraphConeShape
+  | CombatTelegraphCapsuleShape
+
+/** Server → clients: start or reconstruct a client-rendered combat telegraph. */
+export type CombatTelegraphStartPayload = {
+  readonly id: string
+  readonly casterId: string
+  readonly sourceId: string
+  readonly anchor: "caster"
+  readonly directionRad: number
+  readonly shape: CombatTelegraphShape
+  readonly startsAtServerTimeMs: number
+  readonly dangerStartsAtServerTimeMs: number
+  readonly dangerEndsAtServerTimeMs: number
+  readonly endsAtServerTimeMs: number
+}
+
+/** Server → clients: remove a client-rendered combat telegraph before/at expiry. */
+export type CombatTelegraphEndPayload = {
+  readonly id: string
+  readonly reason: "expired" | "cancelled" | "caster_dead" | "spectator"
 }
 
 /** Player death event. */

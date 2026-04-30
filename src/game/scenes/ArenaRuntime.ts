@@ -10,6 +10,8 @@ import type {
   FireballImpactPayload,
   LightningBoltPayload,
   PrimaryMeleeAttackPayload,
+  CombatTelegraphStartPayload,
+  CombatTelegraphEndPayload,
   PlayerDeathPayload,
   PlayerRespawnPayload,
   DamageFloatPayload,
@@ -23,6 +25,7 @@ import { PlayerRenderSystem } from "../ecs/systems/PlayerRenderSystem"
 import { ProjectileRenderSystem } from "../ecs/systems/ProjectileRenderSystem"
 import { LightningBoltRenderSystem } from "../ecs/systems/LightningBoltRenderSystem"
 import { PrimaryMeleeAttackRenderSystem } from "../ecs/systems/PrimaryMeleeAttackRenderSystem"
+import { CombatTelegraphRenderSystem } from "../ecs/systems/CombatTelegraphRenderSystem"
 import { DamageFloatersSystem } from "../ecs/systems/DamageFloatersSystem"
 import { NetworkSyncSystem } from "../ecs/systems/NetworkSyncSystem"
 import { KeyboardController } from "../input/KeyboardController"
@@ -73,6 +76,7 @@ export class ArenaRuntime {
   private projectileRenderSystem!: ProjectileRenderSystem
   private lightningBoltRenderSystem!: LightningBoltRenderSystem
   private primaryMeleeAttackRenderSystem!: PrimaryMeleeAttackRenderSystem
+  private combatTelegraphRenderSystem!: CombatTelegraphRenderSystem
   private damageFloatersSystem!: DamageFloatersSystem
   private networkSyncSystem!: NetworkSyncSystem
 
@@ -158,6 +162,7 @@ export class ArenaRuntime {
     this.projectileRenderSystem = new ProjectileRenderSystem(this.scene)
     this.lightningBoltRenderSystem = new LightningBoltRenderSystem(this.scene)
     this.primaryMeleeAttackRenderSystem = new PrimaryMeleeAttackRenderSystem(this.scene)
+    this.combatTelegraphRenderSystem = new CombatTelegraphRenderSystem(this.scene)
     this.damageFloatersSystem = new DamageFloatersSystem(this.scene)
     this.keyboardController = new KeyboardController(this.scene)
     this.mouseController = new MouseController(this.scene)
@@ -233,6 +238,7 @@ export class ArenaRuntime {
           this.networkSyncSystem.applyFullSync(payload)
           this.playerRenderSystem.applyFullSync(payload)
           this.projectileRenderSystem.applyFullSyncFireballs(payload.fireballs)
+          this.combatTelegraphRenderSystem.applyFullSync(payload.activeTelegraphs ?? [])
           this._ensureMatchLive()
           break
         }
@@ -260,6 +266,16 @@ export class ArenaRuntime {
             message.payload as PrimaryMeleeAttackPayload,
           )
           this.soundManager.play("sfx-axe-swing")
+          break
+        case WsEvent.CombatTelegraphStart:
+          this.combatTelegraphRenderSystem.start(
+            message.payload as CombatTelegraphStartPayload,
+          )
+          break
+        case WsEvent.CombatTelegraphEnd:
+          this.combatTelegraphRenderSystem.end(
+            message.payload as CombatTelegraphEndPayload,
+          )
           break
         case WsEvent.PlayerDeath:
           this.playerRenderSystem.onPlayerDeath(message.payload as PlayerDeathPayload)
@@ -328,6 +344,9 @@ export class ArenaRuntime {
       this.connection.sendPlayerInput(fullInput)
     })
     this.projectileRenderSystem.update(delta)
+    this.combatTelegraphRenderSystem.update(
+      this.playerRenderSystem.getEstimatedServerTimeMs(),
+    )
     this.lightningBoltRenderSystem.update(delta)
     this.primaryMeleeAttackRenderSystem.update(delta)
     this.damageFloatersSystem.update(delta)

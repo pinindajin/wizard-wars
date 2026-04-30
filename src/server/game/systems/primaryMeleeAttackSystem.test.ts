@@ -42,6 +42,8 @@ function emptyCtx(overrides: Partial<SimCtx> = {}): SimCtx {
     fireballRemovedIds: [],
     lightningBolts: [],
     primaryMeleeAttacks: [],
+    combatTelegraphStarts: [],
+    combatTelegraphEnds: [],
     damageFloats: [],
     goldUpdates: [],
     matchEnded: null,
@@ -50,6 +52,7 @@ function emptyCtx(overrides: Partial<SimCtx> = {}): SimCtx {
     prevFireballStates: new Map(),
     killStats: new Map(),
     activeMeleeAttacks: new Map(),
+    activeCombatTelegraphs: new Map(),
     playerDeltas: [],
     fireballDeltas: [],
     ...overrides,
@@ -95,6 +98,9 @@ describe("primaryMeleeAttackSystem", () => {
     primaryMeleeAttackSystem(ctx)
 
     expect(ctx.primaryMeleeAttacks).toHaveLength(1)
+    expect(ctx.combatTelegraphStarts).toHaveLength(1)
+    expect(ctx.combatTelegraphStarts[0]!.casterId).toBe("attacker")
+    expect(ctx.combatTelegraphStarts[0]!.shape.type).toBe("cone")
     const swing = ctx.primaryMeleeAttacks[0]!
     expect(swing.casterId).toBe("attacker")
     expect(swing.attackId).toBe("red_wizard_cleaver")
@@ -149,6 +155,7 @@ describe("primaryMeleeAttackSystem", () => {
       startTick,
       facingAngle: 0,
       casterUserId: "a",
+      telegraphId: "t",
       hitTargets: new Set(),
     }
     const activeMeleeAttacks = new Map<number, ActiveMeleeAttack>([[attacker, active]])
@@ -189,6 +196,7 @@ describe("primaryMeleeAttackSystem", () => {
       startTick: 0,
       facingAngle: Math.PI,
       casterUserId: "a",
+      telegraphId: "t",
       hitTargets: new Set(),
     }
     const activeMeleeAttacks = new Map<number, ActiveMeleeAttack>([[attacker, active]])
@@ -215,6 +223,7 @@ describe("primaryMeleeAttackSystem", () => {
       startTick: 0,
       facingAngle: 0,
       casterUserId: "a",
+      telegraphId: "t",
       hitTargets: new Set(),
     }
     const activeMeleeAttacks = new Map<number, ActiveMeleeAttack>([[attacker, active]])
@@ -246,7 +255,8 @@ describe("primaryMeleeAttackSystem", () => {
             startTick: 0,
             facingAngle: 0,
             casterUserId: "a",
-            hitTargets: new Set(),
+      telegraphId: "t",
+      hitTargets: new Set(),
           },
         ],
       ])

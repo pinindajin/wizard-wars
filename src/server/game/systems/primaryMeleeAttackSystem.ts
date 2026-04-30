@@ -37,6 +37,11 @@ import { getPrimaryAttackAnimationConfigByAttackId } from "../../../shared/balan
 import { TICK_MS } from "../../../shared/balance-config"
 import { characterHitboxForCenter } from "../../../shared/collision/characterHitbox"
 import { swingConeIntersectsCharacterHitbox } from "./swingConeGeometry"
+import {
+  combatTelegraphId,
+  endCombatTelegraph,
+  startCombatTelegraph,
+} from "../combatTelegraphs"
 
 /**
  * Runs the primary melee attack system for one tick.
@@ -76,13 +81,32 @@ export function primaryMeleeAttackSystem(ctx: SimCtx): void {
 
     const facing = Facing.angle[eid]
     const casterUserId = entityPlayerMap.get(eid) ?? ""
+    const telegraphId = combatTelegraphId("primary", casterUserId, attackId, currentTick)
 
     activeMeleeAttacks.set(eid, {
       attackId,
       startTick: currentTick,
       facingAngle: facing,
       casterUserId,
+      telegraphId,
       hitTargets: new Set<number>(),
+    })
+
+    startCombatTelegraph(ctx, {
+      id: telegraphId,
+      casterId: casterUserId,
+      sourceId: attackId,
+      anchor: "caster",
+      directionRad: facing,
+      shape: {
+        type: "cone",
+        radiusPx: cfg.hurtboxRadiusPx,
+        arcDeg: cfg.hurtboxArcDeg,
+      },
+      startsAtServerTimeMs: ctx.serverTimeMs,
+      dangerStartsAtServerTimeMs: ctx.serverTimeMs + timing.dangerousWindowStartMs,
+      dangerEndsAtServerTimeMs: ctx.serverTimeMs + timing.dangerousWindowEndMs,
+      endsAtServerTimeMs: ctx.serverTimeMs + timing.dangerousWindowEndMs,
     })
 
     primaryMeleeAttacks.push({
@@ -115,14 +139,30 @@ function resolveActiveSwings(ctx: SimCtx): void {
     const timing = getPrimaryAttackAnimationConfigByAttackId(atk.attackId)
     const elapsedMs = (currentTick - atk.startTick) * TICK_MS
 
+    if (
+      hasComponent(world, casterEid, DyingTag) ||
+      hasComponent(world, casterEid, DeadTag) ||
+      hasComponent(world, casterEid, SpectatorTag)
+    ) {
+      endCombatTelegraph(
+        ctx,
+        atk.telegraphId,
+        hasComponent(world, casterEid, SpectatorTag) ? "spectator" : "caster_dead",
+      )
+      activeMeleeAttacks.delete(casterEid)
+      continue
+    }
+
+    if (elapsedMs >= timing.dangerousWindowEndMs) {
+      endCombatTelegraph(ctx, atk.telegraphId, "expired")
+    }
+
     if (elapsedMs >= timing.durationMs) {
       activeMeleeAttacks.delete(casterEid)
       continue
     }
     if (elapsedMs < timing.dangerousWindowStartMs) continue
     if (elapsedMs >= timing.dangerousWindowEndMs) continue
-    if (hasComponent(world, casterEid, DeadTag)) continue
-    if (hasComponent(world, casterEid, SpectatorTag)) continue
 
     const cx = Position.x[casterEid]
     const cy = Position.y[casterEid]
