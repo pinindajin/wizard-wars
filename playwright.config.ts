@@ -30,6 +30,7 @@ export default defineConfig({
         "postgresql://ww_user:ww_pass@127.0.0.1:5436/wizardwars",
       WIZARD_WARS_E2E: "1",
       E2E_CLIENT_READY_TIMEOUT_MS: "800",
+      ADMIN_PREFIX: process.env.ADMIN_PREFIX ?? "e2eadm",
     },
   },
 })
