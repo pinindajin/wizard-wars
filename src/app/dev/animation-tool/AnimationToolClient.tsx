@@ -221,6 +221,81 @@ function actionGroupTitle(category: AnimationToolAction["category"]): string {
   }
 }
 
+function TimeScrubber(props: {
+  readonly durationMs: number
+  readonly timeMs: number
+  readonly setPlaying: (playing: boolean) => void
+  readonly setTimeMs: (timeMs: number) => void
+}) {
+  const { durationMs, timeMs, setPlaying, setTimeMs } = props
+  const trackRef = useRef<HTMLDivElement | null>(null)
+  const max = Math.max(0, durationMs - 1)
+  const value = Math.min(timeMs, max)
+  const percent = max > 0 ? (value / max) * 100 : 0
+
+  function scrub(clientX: number) {
+    const rect = trackRef.current?.getBoundingClientRect()
+    if (!rect || rect.width <= 0) return
+    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width))
+    setPlaying(false)
+    setTimeMs(Math.round(ratio * max))
+  }
+
+  function nudge(delta: number) {
+    setPlaying(false)
+    setTimeMs(Math.min(max, Math.max(0, value + delta)))
+  }
+
+  return (
+    <div
+      ref={trackRef}
+      role="slider"
+      tabIndex={0}
+      aria-label="Animation time"
+      aria-valuemin={0}
+      aria-valuemax={max}
+      aria-valuenow={Math.round(value)}
+      className="relative h-8 min-w-[180px] flex-1 cursor-pointer rounded-xl focus-visible:outline focus-visible:outline-4 focus-visible:outline-violet-950"
+      onPointerDown={(event) => {
+        event.currentTarget.setPointerCapture(event.pointerId)
+        scrub(event.clientX)
+      }}
+      onPointerMove={(event) => {
+        if (event.buttons !== 1) return
+        scrub(event.clientX)
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "ArrowLeft") {
+          event.preventDefault()
+          nudge(-1)
+        } else if (event.key === "ArrowRight") {
+          event.preventDefault()
+          nudge(1)
+        } else if (event.key === "Home") {
+          event.preventDefault()
+          setPlaying(false)
+          setTimeMs(0)
+        } else if (event.key === "End") {
+          event.preventDefault()
+          setPlaying(false)
+          setTimeMs(max)
+        }
+      }}
+      data-testid="animation-tool-scrub"
+    >
+      <div className="absolute left-0 right-0 top-1/2 h-2 -translate-y-1/2 rounded-full border border-stone-500 bg-stone-700" />
+      <div
+        className="absolute left-0 top-1/2 h-2 -translate-y-1/2 rounded-full bg-lime-400"
+        style={{ width: `${percent}%` }}
+      />
+      <div
+        className="absolute top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full bg-lime-400 shadow-[0_0_12px_rgba(163,230,53,0.5)]"
+        style={{ left: `${percent}%` }}
+      />
+    </div>
+  )
+}
+
 function FrameTimeline(props: {
   readonly config: AnimationActionConfig
   readonly frameCount: number
@@ -1238,18 +1313,12 @@ export function AnimationToolClient() {
                 {playing ? "Pause" : "Play"}
               </button>
               <label className="flex flex-1 items-center gap-3 font-mono text-xs text-stone-300">
-                Time
-                <input
-                  className="min-w-[180px] flex-1 accent-lime-400"
-                  type="range"
-                  min={0}
-                  max={Math.max(0, actionConfig.durationMs - 1)}
-                  value={Math.min(timeMs, actionConfig.durationMs - 1)}
-                  onChange={(event) => {
-                    setPlaying(false)
-                    setTimeMs(Number(event.target.value))
-                  }}
-                  data-testid="animation-tool-scrub"
+                <span>Time</span>
+                <TimeScrubber
+                  durationMs={actionConfig.durationMs}
+                  timeMs={timeMs}
+                  setPlaying={setPlaying}
+                  setTimeMs={setTimeMs}
                 />
                 <span className="w-28 text-right">
                   {Math.round(timeMs)}ms f{currentFrame + 1}/{frameCount}
