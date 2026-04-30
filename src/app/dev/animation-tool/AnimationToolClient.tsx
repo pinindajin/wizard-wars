@@ -39,7 +39,6 @@ import {
   spriteViewerAttackHurtbox,
   spriteViewerCharacterHitbox,
   spriteViewerCenterpoint,
-  spriteViewerFrameIsDangerous,
   spriteViewerMovementOvalRadii,
 } from "@/shared/sprites/spriteViewerOverlays"
 
@@ -114,11 +113,12 @@ function DirectionPreview(props: {
   readonly cell: LadyWizardViewerCell
   readonly action: AnimationToolAction
   readonly config: AnimationActionConfig
+  readonly timeMs: number
   readonly frameIndex: number
   readonly frameCount: number
   readonly toggles: OverlayToggles
 }) {
-  const { cell, action, config, frameIndex, frameCount, toggles } = props
+  const { cell, action, config, timeMs, frameIndex, frameCount, toggles } = props
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const imageRef = useRef<HTMLImageElement | null>(null)
   const outlineCacheRef = useRef<Map<string, AlphaOutlineSegment[]>>(new Map())
@@ -242,7 +242,8 @@ function DirectionPreview(props: {
         cell.direction as LadyWizardDirection,
         fps,
       )
-      const dangerous = spriteViewerFrameIsDangerous(displayFrame, overlay)
+      const dangerous =
+        timeMs >= config.dangerousWindowStartMs && timeMs < config.dangerousWindowEndMs
       const halfArcRad = (overlay.arcDeg * Math.PI) / 360
       ctx.strokeStyle = dangerous ? "rgba(239, 68, 68, 0.98)" : "rgba(255, 255, 255, 0.75)"
       ctx.lineWidth = 1.5 / PREVIEW_SCALE
@@ -259,7 +260,7 @@ function DirectionPreview(props: {
     }
 
     ctx.restore()
-  }, [action.id, broken, cell, config, frameCount, frameIndex, getOutline, loaded, toggles])
+  }, [action.id, broken, cell, config, frameCount, frameIndex, getOutline, loaded, timeMs, toggles])
 
   return (
     <div
@@ -774,6 +775,7 @@ export function AnimationToolClient() {
                 cell={cell}
                 action={action}
                 config={actionConfig}
+                timeMs={timeMs}
                 frameIndex={Math.min(currentFrame, Math.max(0, (cell.frameCount || frameCount) - 1))}
                 frameCount={cell.frameCount || cell.expectedFrames || frameCount}
                 toggles={toggles}
