@@ -69,6 +69,12 @@ type TimingValidation = {
   dangerousWindowEndMs?: string
 }
 
+const HERO_SELECTION_COLORS: Record<string, string> = {
+  red_wizard: "bg-red-400 shadow-[0_0_18px_rgba(248,113,113,0.8)]",
+  barbarian: "bg-orange-400 shadow-[0_0_18px_rgba(251,146,60,0.65)]",
+  ranger: "bg-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.65)]",
+}
+
 function timingDraftFromConfig(config: AnimationActionConfig): TimingDraft {
   return {
     durationMs: String(config.durationMs),
@@ -132,6 +138,79 @@ function LegendTipRow(props: { label: ReactNode; testId?: string; children: Reac
       ) : null}
     </div>
   )
+}
+
+function CollapsiblePanel(props: {
+  readonly title: string
+  readonly defaultOpen?: boolean
+  readonly children: ReactNode
+}) {
+  const { title, defaultOpen = true, children } = props
+  const [open, setOpen] = useState(defaultOpen)
+  const panelId = useId().replace(/:/g, "")
+  return (
+    <section className="border-b border-stone-800 pb-4 last:border-b-0 last:pb-0">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between font-mono text-xs uppercase tracking-[0.3em] text-stone-500 hover:text-lime-200"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <span>{title}</span>
+        <span aria-hidden className="text-base tracking-normal text-stone-600">
+          {open ? "−" : "+"}
+        </span>
+      </button>
+      {open ? (
+        <div id={panelId} className="mt-3">
+          {children}
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
+function actionTone(category: AnimationToolAction["category"]): {
+  readonly badge: string
+  readonly selected: string
+  readonly unselected: string
+  readonly label: string
+} {
+  switch (category) {
+    case "Spell":
+      return {
+        badge: "border-violet-500/70 bg-violet-950/50 text-violet-200",
+        selected: "border-violet-500 bg-violet-950/55 text-stone-50",
+        unselected: "border-transparent text-stone-500 hover:border-violet-700/70 hover:bg-violet-950/25 hover:text-stone-200",
+        label: "SPELL",
+      }
+    case "Attack":
+      return {
+        badge: "border-red-500/70 bg-red-950/40 text-red-200",
+        selected: "border-red-500 bg-red-950/45 text-stone-50",
+        unselected: "border-transparent text-stone-500 hover:border-red-700/70 hover:bg-red-950/20 hover:text-stone-200",
+        label: "ATTACK",
+      }
+    case "Behavior":
+      return {
+        badge: "border-sky-500/70 bg-sky-950/40 text-sky-200",
+        selected: "border-sky-500 bg-sky-950/45 text-stone-50",
+        unselected: "border-transparent text-stone-500 hover:border-sky-700/70 hover:bg-sky-950/20 hover:text-stone-200",
+        label: "ANIM",
+      }
+  }
+}
+
+function actionGroupTitle(category: AnimationToolAction["category"]): string {
+  switch (category) {
+    case "Spell":
+      return "Spells"
+    case "Attack":
+      return "Attack"
+    case "Behavior":
+      return "Movement & Other"
+  }
 }
 
 function FrameTimeline(props: {
@@ -512,6 +591,14 @@ export function AnimationToolClient() {
   const actions = useMemo(() => getAnimationToolActions(heroId, config), [config, heroId])
   const action = actions.find((candidate) => candidate.id === actionId) ?? actions[0]!
   const actionConfig = action.config
+  const groupedActions = useMemo(
+    () =>
+      (["Spell", "Attack", "Behavior"] as const).map((category) => ({
+        category,
+        actions: actions.filter((candidate) => candidate.category === category),
+      })),
+    [actions],
+  )
   const savedConfigForAction = savedActionConfig(savedConfig, heroId, action.id)
   const timingDraftKey = `${heroId}:${action.id}`
   const timingDraft = timingDrafts[timingDraftKey] ?? timingDraftFromConfig(actionConfig)
@@ -718,45 +805,86 @@ export function AnimationToolClient() {
 
       <section className="grid gap-4 lg:grid-cols-[320px_1fr]">
         <aside className="flex flex-col gap-4 rounded-2xl border border-stone-700 bg-stone-900/80 p-4">
-          <label className="flex flex-col gap-1 font-mono text-xs text-stone-300">
-            Hero
-            <select
-              className="rounded border border-stone-700 bg-stone-950 p-2 text-stone-100"
-              value={heroId}
-              onChange={(event) => {
-                setHeroId(event.target.value)
-                setTimeMs(0)
-                setPlaying(false)
-              }}
-              data-testid="animation-tool-hero-select"
-            >
-              {VALID_HERO_IDS.map((id) => (
-                <option key={id} value={id}>
-                  {HERO_CONFIGS[id]?.displayName ?? id}
-                </option>
-              ))}
-            </select>
-          </label>
+          <CollapsiblePanel title="Hero">
+            <div className="flex flex-col gap-2" data-testid="animation-tool-hero-select">
+              {VALID_HERO_IDS.map((id) => {
+                const selected = id === heroId
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    className={[
+                      "flex items-center gap-3 rounded-xl border px-3 py-3 text-left font-mono text-sm transition-colors",
+                      selected
+                        ? "border-red-500 bg-red-950/35 text-stone-50"
+                        : "border-stone-700 bg-stone-950/50 text-stone-500 hover:border-stone-500 hover:text-stone-200",
+                    ].join(" ")}
+                    onClick={() => {
+                      setHeroId(id)
+                      setTimeMs(0)
+                      setPlaying(false)
+                    }}
+                    data-testid={`animation-tool-hero-${id}`}
+                    aria-pressed={selected}
+                  >
+                    <span
+                      className={[
+                        "h-3 w-3 rounded-full",
+                        HERO_SELECTION_COLORS[id] ?? "bg-stone-400",
+                      ].join(" ")}
+                    />
+                    <span className="flex-1">{HERO_CONFIGS[id]?.displayName ?? id}</span>
+                    {selected ? <span className="h-2 w-2 rounded-full bg-red-400" /> : null}
+                  </button>
+                )
+              })}
+            </div>
+          </CollapsiblePanel>
 
-          <label className="flex flex-col gap-1 font-mono text-xs text-stone-300">
-            Action
-            <select
-              className="rounded border border-stone-700 bg-stone-950 p-2 text-stone-100"
-              value={action.id}
-              onChange={(event) => {
-                setActionId(event.target.value as AnimationActionId)
-                setTimeMs(0)
-                setPlaying(false)
-              }}
-              data-testid="animation-tool-action-select"
-            >
-              {actions.map((candidate) => (
-                <option key={candidate.id} value={candidate.id}>
-                  {candidate.category}: {candidate.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <CollapsiblePanel title="Action">
+            <div className="flex flex-col gap-5" data-testid="animation-tool-action-select">
+              {groupedActions.map((group) =>
+                group.actions.length > 0 ? (
+                  <div key={group.category} className="flex flex-col gap-2">
+                    <div className="font-mono text-xs text-stone-500">{actionGroupTitle(group.category)}</div>
+                    <div className="flex flex-col gap-1">
+                      {group.actions.map((candidate) => {
+                        const selected = candidate.id === action.id
+                        const tone = actionTone(candidate.category)
+                        return (
+                          <button
+                            key={candidate.id}
+                            type="button"
+                            className={[
+                              "flex items-center gap-3 rounded-lg border px-3 py-2 text-left font-mono text-sm transition-colors",
+                              selected ? tone.selected : tone.unselected,
+                            ].join(" ")}
+                            onClick={() => {
+                              setActionId(candidate.id)
+                              setTimeMs(0)
+                              setPlaying(false)
+                            }}
+                            data-testid={`animation-tool-action-${candidate.id.replace(/[^a-z0-9_-]/gi, "-")}`}
+                            aria-pressed={selected}
+                          >
+                            <span
+                              className={[
+                                "rounded border px-2 py-0.5 text-[10px] font-bold tracking-widest",
+                                tone.badge,
+                              ].join(" ")}
+                            >
+                              {tone.label}
+                            </span>
+                            <span>{candidate.label}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ) : null,
+              )}
+            </div>
+          </CollapsiblePanel>
 
           <div className="rounded-xl border border-stone-700 bg-stone-950/70 p-3">
             <div className="font-mono text-xs text-lime-200">Timing</div>
