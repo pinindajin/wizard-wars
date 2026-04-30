@@ -38,6 +38,7 @@ function emptyCtx(overrides: Partial<SimCtx> = {}): SimCtx {
     entityUsernameMap: new Map(),
     playerHeroIdMap: new Map(),
     fireballOwnerMap: new Map(),
+    fireballCreatedAtTickMap: new Map(),
     inputMap: new Map(),
     lastProcessedInputSeqByPlayer: new Map(),
     commandBuffer: createCommandBuffer(),
@@ -130,6 +131,9 @@ describe("castingSystem animation timing", () => {
     expect(ctx.fireballLaunches[0]!.x).toBeCloseTo(125)
     expect(ctx.fireballLaunches[0]!.y).toBeCloseTo(100)
     expect(ctx.fireballLaunches[0]!.vx).toBeGreaterThan(0)
+    expect(ctx.fireballCreatedAtTickMap.get(ctx.fireballLaunches[0]!.id)).toBe(
+      ctx.currentTick,
+    )
   })
 
   it("can fire a spell effect before the animation finishes", () => {

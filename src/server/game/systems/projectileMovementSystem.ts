@@ -6,9 +6,9 @@
  * Despawn condition: the fireball centre is more than FIREBALL_DESPAWN_OVERSHOOT_PX
  * pixels outside any arena edge.
  */
-import { query, removeComponent, addComponent } from "bitecs"
+import { query } from "bitecs"
 
-import { Position, Velocity, FireballTag, ProjectileTag } from "../components"
+import { Position, Velocity, FireballTag } from "../components"
 import type { SimCtx } from "../simulation"
 import {
   ARENA_WIDTH,
@@ -25,7 +25,13 @@ const OVER = FIREBALL_DESPAWN_OVERSHOOT_PX
  * @param ctx - Shared simulation context.
  */
 export function projectileMovementSystem(ctx: SimCtx): void {
-  const { world, commandBuffer, fireballOwnerMap, fireballRemovedIds } = ctx
+  const {
+    world,
+    commandBuffer,
+    fireballOwnerMap,
+    fireballCreatedAtTickMap,
+    fireballRemovedIds,
+  } = ctx
 
   for (const eid of query(world, [FireballTag])) {
     // Advance position
@@ -42,6 +48,7 @@ export function projectileMovementSystem(ctx: SimCtx): void {
     if (outOfBounds) {
       fireballRemovedIds.push(eid)
       fireballOwnerMap.delete(eid)
+      fireballCreatedAtTickMap.delete(eid)
       commandBuffer.enqueue({ type: "removeEntity", eid })
     }
   }

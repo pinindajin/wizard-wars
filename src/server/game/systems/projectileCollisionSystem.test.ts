@@ -11,7 +11,15 @@ import {
 } from "../components"
 import { createCommandBuffer } from "../commandBuffer"
 import type { SimCtx } from "../simulation"
+import {
+  FIREBALL_OWNER_SELF_DAMAGE_GRACE_MS,
+  TICK_MS,
+} from "../../../shared/balance-config"
 import { projectileCollisionSystem } from "./projectileCollisionSystem"
+
+const FIREBALL_OWNER_SELF_DAMAGE_GRACE_TICKS = Math.ceil(
+  FIREBALL_OWNER_SELF_DAMAGE_GRACE_MS / TICK_MS,
+)
 
 function emptyCtx(overrides: Partial<SimCtx> = {}): SimCtx {
   return {
@@ -24,6 +32,7 @@ function emptyCtx(overrides: Partial<SimCtx> = {}): SimCtx {
     entityUsernameMap: new Map(),
     playerHeroIdMap: new Map(),
     fireballOwnerMap: new Map(),
+    fireballCreatedAtTickMap: new Map(),
     inputMap: new Map(),
     lastProcessedInputSeqByPlayer: new Map(),
     commandBuffer: createCommandBuffer(),
@@ -75,6 +84,86 @@ function addFireball(world: ReturnType<typeof createWorld>, x: number, y: number
 }
 
 describe("projectileCollisionSystem", () => {
+  it("does not damage the fireball owner during the launch grace window", () => {
+    const world = createWorld()
+    const owner = addPlayer(world, 100, 100)
+    const fireball = addFireball(world, 100, 75)
+    const ctx = emptyCtx({
+      world,
+      currentTick: 20,
+      entityPlayerMap: new Map([[owner, "caster"]]),
+      fireballOwnerMap: new Map([[fireball, "caster"]]),
+      fireballCreatedAtTickMap: new Map([[fireball, 20]]),
+    })
+
+    projectileCollisionSystem(ctx)
+
+    expect(ctx.damageRequests).toHaveLength(0)
+    expect(ctx.fireballImpacts).toHaveLength(0)
+    expect(ctx.fireballRemovedIds).toHaveLength(0)
+    expect(ctx.fireballOwnerMap.get(fireball)).toBe("caster")
+  })
+
+  it("damages other players during the owner's launch grace window", () => {
+    const world = createWorld()
+    const target = addPlayer(world, 100, 100)
+    const fireball = addFireball(world, 100, 75)
+    const ctx = emptyCtx({
+      world,
+      currentTick: 20,
+      entityPlayerMap: new Map([[target, "target"]]),
+      fireballOwnerMap: new Map([[fireball, "caster"]]),
+      fireballCreatedAtTickMap: new Map([[fireball, 20]]),
+    })
+
+    projectileCollisionSystem(ctx)
+
+    expect(ctx.damageRequests).toHaveLength(1)
+    expect(ctx.damageRequests[0]!.targetEid).toBe(target)
+    expect(ctx.fireballImpacts[0]!.targetId).toBe("target")
+  })
+
+  it("damages the fireball owner after the launch grace window expires", () => {
+    const world = createWorld()
+    const owner = addPlayer(world, 100, 100)
+    const fireball = addFireball(world, 100, 75)
+    const ctx = emptyCtx({
+      world,
+      currentTick: 20,
+      entityPlayerMap: new Map([[owner, "caster"]]),
+      fireballOwnerMap: new Map([[fireball, "caster"]]),
+      fireballCreatedAtTickMap: new Map([
+        [fireball, 20 - FIREBALL_OWNER_SELF_DAMAGE_GRACE_TICKS],
+      ]),
+    })
+
+    projectileCollisionSystem(ctx)
+
+    expect(ctx.damageRequests).toHaveLength(1)
+    expect(ctx.damageRequests[0]!.targetEid).toBe(owner)
+    expect(ctx.fireballImpacts[0]!.targetId).toBe("caster")
+    expect(ctx.fireballRemovedIds).toEqual([fireball])
+    expect(ctx.fireballOwnerMap.has(fireball)).toBe(false)
+    expect(ctx.fireballCreatedAtTickMap.has(fireball)).toBe(false)
+  })
+
+  it("keeps existing collision behavior when the fireball launch tick is missing", () => {
+    const world = createWorld()
+    const owner = addPlayer(world, 100, 100)
+    const fireball = addFireball(world, 100, 75)
+    const ctx = emptyCtx({
+      world,
+      currentTick: 20,
+      entityPlayerMap: new Map([[owner, "caster"]]),
+      fireballOwnerMap: new Map([[fireball, "caster"]]),
+    })
+
+    projectileCollisionSystem(ctx)
+
+    expect(ctx.damageRequests).toHaveLength(1)
+    expect(ctx.damageRequests[0]!.targetEid).toBe(owner)
+  })
+
   it("hits the character hitbox even when the old player circle would miss", () => {
     const world = createWorld()
     const target = addPlayer(world, 100, 100)
