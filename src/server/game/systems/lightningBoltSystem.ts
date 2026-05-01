@@ -40,17 +40,13 @@ export function lightningBoltSystem(ctx: SimCtx): void {
   const { world, currentTick, pendingLightningBolts, damageRequests, lightningBolts, entityPlayerMap } = ctx
 
   for (const pending of pendingLightningBolts) {
-    const { casterEid, casterUserId, targetX, targetY } = pending
+    const { casterEid, casterUserId, directionRad } = pending
 
     const originX = Position.x[casterEid]
     const originY = Position.y[casterEid]
 
-    // Compute arc endpoint: ARC_PX in direction of target
-    const dx = targetX - originX
-    const dy = targetY - originY
-    const len = Math.sqrt(dx * dx + dy * dy) || 1
-    const endX = originX + (dx / len) * LIGHTNING_BOLT_ARC_PX
-    const endY = originY + (dy / len) * LIGHTNING_BOLT_ARC_PX
+    const endX = originX + Math.cos(directionRad) * LIGHTNING_BOLT_ARC_PX
+    const endY = originY + Math.sin(directionRad) * LIGHTNING_BOLT_ARC_PX
 
     const hitPlayerIds: string[] = []
 

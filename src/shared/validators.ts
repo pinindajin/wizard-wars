@@ -137,10 +137,39 @@ export const fireballSnapshotSchema = z.object({
   vy: z.number().finite(),
 })
 
+/** Shared combat telegraph shape schema. */
+export const combatTelegraphShapeSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("cone"),
+    radiusPx: z.number().finite().positive(),
+    arcDeg: z.number().finite().positive(),
+  }),
+  z.object({
+    type: z.literal("capsule"),
+    lengthPx: z.number().finite().positive(),
+    radiusPx: z.number().finite().positive(),
+  }),
+])
+
+/** Active combat telegraph row in `GameStateSync`. */
+export const combatTelegraphStartPayloadSchema = z.object({
+  id: z.string().min(1).max(512),
+  casterId: z.string().min(1).max(256),
+  sourceId: z.string().min(1).max(128),
+  anchor: z.literal("caster"),
+  directionRad: z.number().finite(),
+  shape: combatTelegraphShapeSchema,
+  startsAtServerTimeMs: z.number().finite().nonnegative(),
+  dangerStartsAtServerTimeMs: z.number().finite().nonnegative(),
+  dangerEndsAtServerTimeMs: z.number().finite().nonnegative(),
+  endsAtServerTimeMs: z.number().finite().nonnegative(),
+})
+
 /** Full `game_state_sync` payload (server + client). */
 export const gameStateSyncPayloadSchema = z.object({
   players: z.array(playerSnapshotSchema).max(MAX_PLAYERS_PER_MATCH),
   fireballs: z.array(fireballSnapshotSchema).max(MAX_FIREBALLS_IN_SYNC),
+  activeTelegraphs: z.array(combatTelegraphStartPayloadSchema).max(64).optional(),
   seq: z.number().int().nonnegative(),
   serverTimeMs: z.number().finite().nonnegative(),
 })

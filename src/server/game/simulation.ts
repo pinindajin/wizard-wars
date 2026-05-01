@@ -54,6 +54,8 @@ import type {
   PlayerDeathPayload,
   PlayerRespawnPayload,
   DamageFloatPayload,
+  CombatTelegraphStartPayload,
+  CombatTelegraphEndPayload,
   ScoreboardEntry,
   GameStateSyncPayload,
   PlayerSnapshot,
@@ -126,8 +128,7 @@ export type DeathEvent = {
 export type PendingLightningBolt = {
   casterEid: number
   casterUserId: string
-  targetX: number
-  targetY: number
+  directionRad: number
 }
 
 /**
@@ -146,6 +147,8 @@ export type ActiveMeleeAttack = {
   facingAngle: number
   /** Caster userId at swing start (kept for damage attribution if entityPlayerMap drifts). */
   casterUserId: string
+  /** Active telegraph id for the warning shown until the dangerous window ends. */
+  telegraphId: string
   /** Target eids already damaged by this attack instance. */
   hitTargets: Set<number>
 }
@@ -229,6 +232,8 @@ export type SimCtx = {
   fireballRemovedIds: number[]
   lightningBolts: LightningBoltPayload[]
   primaryMeleeAttacks: PrimaryMeleeAttackPayload[]
+  combatTelegraphStarts: CombatTelegraphStartPayload[]
+  combatTelegraphEnds: CombatTelegraphEndPayload[]
   damageFloats: DamageFloatPayload[]
   goldUpdates: { userId: string; gold: number }[]
   /** One-shot ability sounds to broadcast this tick (jump, etc.). */
@@ -248,6 +253,8 @@ export type SimCtx = {
    * tick to gate damage application to the dangerous-frames window.
    */
   activeMeleeAttacks: Map<number, ActiveMeleeAttack>
+  /** Active combat telegraphs keyed by telegraph id for reconnect/full sync. */
+  activeCombatTelegraphs: Map<string, CombatTelegraphStartPayload>
 
   // ── Written by playerDeltaSystem and projectileDeltaSystem ──
   playerDeltas: PlayerDelta[]
@@ -267,6 +274,8 @@ export type SimOutput = {
   fireballImpacts: FireballImpactPayload[]
   lightningBolts: LightningBoltPayload[]
   primaryMeleeAttacks: PrimaryMeleeAttackPayload[]
+  combatTelegraphStarts: CombatTelegraphStartPayload[]
+  combatTelegraphEnds: CombatTelegraphEndPayload[]
   damageFloats: DamageFloatPayload[]
   goldUpdates: { userId: string; gold: number }[]
   abilitySfxEvents: AbilitySfxPayload[]
@@ -340,6 +349,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
   const killStats = new Map<string, KillStats>()
   const lastProcessedInputSeqByPlayer = new Map<string, number>()
   const activeMeleeAttacks = new Map<number, ActiveMeleeAttack>()
+  const activeCombatTelegraphs = new Map<string, CombatTelegraphStartPayload>()
 
   let currentTick = 0
   let hostEndSignal = false
@@ -496,6 +506,9 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     prevPlayerStates.delete(eid)
     lastProcessedInputSeqByPlayer.delete(userId)
     activeMeleeAttacks.delete(eid)
+    for (const [id, telegraph] of activeCombatTelegraphs) {
+      if (telegraph.casterId === userId) activeCombatTelegraphs.delete(id)
+    }
   }
 
   // ── requestHostEnd ───────────────────────────────────────────────────
@@ -588,7 +601,11 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       })
     }
 
-    return { players, fireballs, seq: 0, serverTimeMs }
+    const activeTelegraphs = [...activeCombatTelegraphs.values()].filter(
+      (telegraph) => telegraph.endsAtServerTimeMs > serverTimeMs,
+    )
+
+    return { players, fireballs, activeTelegraphs, seq: 0, serverTimeMs }
   }
 
   // ── tick ─────────────────────────────────────────────────────────────
@@ -652,6 +669,8 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       fireballRemovedIds: [],
       lightningBolts: [],
       primaryMeleeAttacks: [],
+      combatTelegraphStarts: [],
+      combatTelegraphEnds: [],
       damageFloats: [],
       goldUpdates: [],
       abilitySfxEvents: [],
@@ -661,6 +680,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       prevFireballStates,
       killStats,
       activeMeleeAttacks,
+      activeCombatTelegraphs,
       playerDeltas: [],
       fireballDeltas: [],
     }
@@ -700,6 +720,8 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       fireballImpacts: ctx.fireballImpacts,
       lightningBolts: ctx.lightningBolts,
       primaryMeleeAttacks: ctx.primaryMeleeAttacks,
+      combatTelegraphStarts: ctx.combatTelegraphStarts,
+      combatTelegraphEnds: ctx.combatTelegraphEnds,
       damageFloats: ctx.damageFloats,
       goldUpdates: ctx.goldUpdates,
       abilitySfxEvents: ctx.abilitySfxEvents,

@@ -42,10 +42,13 @@ import {
   FIREBALL_SPEED_PX_PER_SEC,
   FIREBALL_COOLDOWN_MS,
   LIGHTNING_COOLDOWN_MS,
+  LIGHTNING_BOLT_ARC_PX,
+  LIGHTNING_HIT_RADIUS_PX,
   HEALING_POTION_CAST_MS,
   HEALING_POTION_HP,
   DEFAULT_PLAYER_HEALTH,
   TICK_MS,
+  LIGHTNING_TELEGRAPH_DANGER_LEAD_MS,
   JUMP_COOLDOWN_MS,
   JUMP_INITIAL_VZ_PX_PER_SEC,
   JUMP_LIFT_MS,
@@ -56,6 +59,11 @@ import {
   getSpellAnimationConfig,
   msToTickOffset,
 } from "../../../shared/balance-config/animationConfig"
+import {
+  combatTelegraphId,
+  endCombatTelegraph,
+  startCombatTelegraph,
+} from "../combatTelegraphs"
 
 /** Returns true when quick items and new melee swings must be blocked (airborne). */
 function isAirborneForAirLock(world: World, eid: number): boolean {
@@ -189,18 +197,71 @@ function launchFireball(
 function queueLightningBolt(
   ctx: SimCtx,
   casterEid: number,
-  capturedTargetX: number,
-  capturedTargetY: number,
+  directionRad: number,
 ): void {
   const casterUserId = ctx.entityPlayerMap.get(casterEid) ?? ""
 
   const pending: PendingLightningBolt = {
     casterEid,
     casterUserId,
-    targetX: capturedTargetX,
-    targetY: capturedTargetY,
+    directionRad,
   }
   ctx.pendingLightningBolts.push(pending)
+}
+
+/**
+ * Starts the client-rendered Lightning Bolt capsule telegraph.
+ *
+ * @param ctx - Simulation context.
+ * @param eid - Caster entity id.
+ * @param casterUserId - Caster user id.
+ * @param directionRad - Locked world-space lightning direction.
+ */
+function startLightningTelegraph(
+  ctx: SimCtx,
+  eid: number,
+  casterUserId: string,
+  directionRad: number,
+): void {
+  const effectAtServerTimeMs =
+    ctx.serverTimeMs + (Casting.effectFiresAtTick[eid] - ctx.currentTick) * TICK_MS
+  const id = combatTelegraphId("spell", casterUserId, "lightning_bolt", Casting.startedAtTick[eid])
+  startCombatTelegraph(ctx, {
+    id,
+    casterId: casterUserId,
+    sourceId: "lightning_bolt",
+    anchor: "caster",
+    directionRad,
+    shape: {
+      type: "capsule",
+      lengthPx: LIGHTNING_BOLT_ARC_PX,
+      radiusPx: LIGHTNING_HIT_RADIUS_PX,
+    },
+    startsAtServerTimeMs: ctx.serverTimeMs,
+    dangerStartsAtServerTimeMs: Math.max(
+      ctx.serverTimeMs,
+      effectAtServerTimeMs - LIGHTNING_TELEGRAPH_DANGER_LEAD_MS,
+    ),
+    dangerEndsAtServerTimeMs: effectAtServerTimeMs,
+    endsAtServerTimeMs: effectAtServerTimeMs,
+  })
+}
+
+/**
+ * Ends the active lightning telegraph for a caster if one exists.
+ *
+ * @param ctx - Simulation context.
+ * @param eid - Caster entity id.
+ * @param reason - Client-visible removal reason.
+ */
+function endLightningTelegraphForCaster(
+  ctx: SimCtx,
+  eid: number,
+  reason: Parameters<typeof endCombatTelegraph>[2],
+): void {
+  const casterUserId = ctx.entityPlayerMap.get(eid) ?? ""
+  const id = combatTelegraphId("spell", casterUserId, "lightning_bolt", Casting.startedAtTick[eid])
+  endCombatTelegraph(ctx, id, reason)
 }
 
 /** Applies healing-potion HP restoration to the caster. */
@@ -229,6 +290,14 @@ export function castingSystem(ctx: SimCtx): void {
       hasComponent(world, eid, DeadTag) ||
       hasComponent(world, eid, SpectatorTag)
     ) {
+      const abilityId = ABILITY_INDEX_TO_ID[Casting.abilityIndex[eid]] ?? ""
+      if (abilityId === "lightning_bolt") {
+        endLightningTelegraphForCaster(
+          ctx,
+          eid,
+          hasComponent(world, eid, SpectatorTag) ? "spectator" : "caster_dead",
+        )
+      }
       removeComponent(world, eid, Casting)
       continue
     }
@@ -251,9 +320,9 @@ export function castingSystem(ctx: SimCtx): void {
           queueLightningBolt(
             ctx,
             eid,
-            Casting.capturedTargetX[eid],
-            Casting.capturedTargetY[eid],
+            Casting.capturedFacingAngle[eid],
           )
+          endLightningTelegraphForCaster(ctx, eid, "expired")
           break
         case "healing_potion":
           applyHealingPotion(ctx, eid)
@@ -325,6 +394,12 @@ export function castingSystem(ctx: SimCtx): void {
     const targetDy = Casting.capturedTargetY[eid] - Casting.capturedPositionY[eid]
     Casting.capturedFacingAngle[eid] =
       targetDx !== 0 || targetDy !== 0 ? Math.atan2(targetDy, targetDx) : Facing.angle[eid]
+    Facing.angle[eid] = Casting.capturedFacingAngle[eid]
+
+    if (abilityId === "lightning_bolt") {
+      const casterUserId = ctx.entityPlayerMap.get(eid) ?? ""
+      startLightningTelegraph(ctx, eid, casterUserId, Casting.capturedFacingAngle[eid])
+    }
   }
 
   // ── 3. Quick-item usage (healing potion etc.) ────────────────────────

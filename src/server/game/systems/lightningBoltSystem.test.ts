@@ -32,6 +32,8 @@ function emptyCtx(overrides: Partial<SimCtx> = {}): SimCtx {
     fireballRemovedIds: [],
     lightningBolts: [],
     primaryMeleeAttacks: [],
+    combatTelegraphStarts: [],
+    combatTelegraphEnds: [],
     damageFloats: [],
     goldUpdates: [],
     abilitySfxEvents: [],
@@ -41,6 +43,7 @@ function emptyCtx(overrides: Partial<SimCtx> = {}): SimCtx {
     prevFireballStates: new Map(),
     killStats: new Map(),
     activeMeleeAttacks: new Map(),
+    activeCombatTelegraphs: new Map(),
     playerDeltas: [],
     fireballDeltas: [],
     ...overrides,
@@ -64,7 +67,7 @@ describe("lightningBoltSystem", () => {
     const ctx = emptyCtx({
       world,
       entityPlayerMap: new Map([[target, "target"]]),
-      pendingLightningBolts: [{ casterEid: caster, casterUserId: "caster", targetX: 200, targetY: 0 }],
+      pendingLightningBolts: [{ casterEid: caster, casterUserId: "caster", directionRad: 0 }],
     })
 
     lightningBoltSystem(ctx)
@@ -81,7 +84,7 @@ describe("lightningBoltSystem", () => {
     const ctx = emptyCtx({
       world,
       entityPlayerMap: new Map([[target, "target"]]),
-      pendingLightningBolts: [{ casterEid: caster, casterUserId: "caster", targetX: 200, targetY: 0 }],
+      pendingLightningBolts: [{ casterEid: caster, casterUserId: "caster", directionRad: 0 }],
     })
 
     lightningBoltSystem(ctx)
@@ -95,11 +98,27 @@ describe("lightningBoltSystem", () => {
     const caster = addPlayer(world, 0, 0)
     const ctx = emptyCtx({
       world,
-      pendingLightningBolts: [{ casterEid: caster, casterUserId: "caster", targetX: 200, targetY: 0 }],
+      pendingLightningBolts: [{ casterEid: caster, casterUserId: "caster", directionRad: 0 }],
     })
 
     lightningBoltSystem(ctx)
 
     expect(ctx.damageRequests).toHaveLength(0)
+  })
+
+  it("uses the caster's current position with the locked direction", () => {
+    const world = createWorld()
+    const caster = addPlayer(world, 50, 0)
+    addPlayer(world, 150, 80)
+    const ctx = emptyCtx({
+      world,
+      pendingLightningBolts: [{ casterEid: caster, casterUserId: "caster", directionRad: 0 }],
+    })
+
+    lightningBoltSystem(ctx)
+
+    expect(ctx.lightningBolts[0]!.originX).toBe(50)
+    expect(ctx.lightningBolts[0]!.originY).toBe(0)
+    expect(ctx.lightningBolts[0]!.targetX).toBeGreaterThan(350)
   })
 })

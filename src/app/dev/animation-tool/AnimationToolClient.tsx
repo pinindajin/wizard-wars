@@ -21,6 +21,7 @@ import {
   type AnimationConfig,
   type AnimationToolAction,
 } from "@/shared/balance-config/animationConfig"
+import { LIGHTNING_TELEGRAPH_DANGER_LEAD_MS } from "@/shared/balance-config/telegraphs"
 import { HERO_CONFIGS, VALID_HERO_IDS } from "@/shared/balance-config/heroes"
 import {
   LADY_WIZARD_DIRECTIONS,
@@ -304,6 +305,7 @@ function TimeScrubber(props: {
 }
 
 function FrameTimeline(props: {
+  readonly actionId: AnimationActionId
   readonly config: AnimationActionConfig
   readonly frameCount: number
   readonly currentFrame: number
@@ -312,7 +314,7 @@ function FrameTimeline(props: {
   readonly setTimeMs: (timeMs: number) => void
   readonly playing: boolean
 }) {
-  const { config, frameCount, currentFrame, timeMs, setPlaying, setTimeMs, playing } = props
+  const { actionId, config, frameCount, currentFrame, timeMs, setPlaying, setTimeMs, playing } = props
   const fps = frameRateForDuration(frameCount, config.durationMs)
   const labelStride = Math.max(1, Math.ceil(frameCount / 8))
   const castFrame =
@@ -321,6 +323,16 @@ function FrameTimeline(props: {
       : null
   const castsBeforeAnimation = config.type === "spell" && config.effectTiming === "before"
   const castsAfterAnimation = config.type === "spell" && config.effectTiming === "after"
+  const lightningTelegraph = actionId === "spell:lightning_bolt" && config.type === "spell"
+  const lightningEffectMs =
+    lightningTelegraph
+      ? config.effectTiming === "before"
+        ? 0
+        : config.effectTiming === "after"
+          ? config.durationMs
+          : config.effectAtMs ?? config.durationMs
+      : 0
+  const lightningDangerStartMs = Math.max(0, lightningEffectMs - LIGHTNING_TELEGRAPH_DANGER_LEAD_MS)
   const markerColumn = castsBeforeAnimation || castsAfterAnimation ? "8px " : ""
   const markerAfterColumn = castsAfterAnimation ? " 8px" : ""
 
@@ -401,9 +413,15 @@ function FrameTimeline(props: {
           const end = frameEndMs(frameIndex, config.durationMs, frameCount)
           const isCurrent = frameIndex === currentFrame
           const isDangerous =
-            config.type === "primaryAttack" &&
-            end > config.dangerousWindowStartMs &&
-            start < config.dangerousWindowEndMs
+            (config.type === "primaryAttack" &&
+              end > config.dangerousWindowStartMs &&
+              start < config.dangerousWindowEndMs) ||
+            (lightningTelegraph &&
+              end > lightningDangerStartMs &&
+              start < lightningEffectMs)
+          const isTelegraphVisible =
+            (config.type === "primaryAttack" && start < config.dangerousWindowEndMs) ||
+            (lightningTelegraph && start < lightningEffectMs)
           const isCast = castFrame === frameIndex
           const classes = [
             "relative h-9 rounded border transition-colors",
@@ -413,7 +431,9 @@ function FrameTimeline(props: {
                 ? "border-amber-500 bg-amber-500/40 hover:bg-amber-500/55"
                 : isDangerous
                   ? "border-red-500 bg-red-900/70 hover:bg-red-800/80"
-                  : "border-stone-700 bg-stone-900/80 hover:border-violet-700 hover:bg-stone-800",
+                  : isTelegraphVisible
+                    ? "border-amber-500 bg-amber-900/60 hover:bg-amber-800/70"
+                    : "border-stone-700 bg-stone-900/80 hover:border-violet-700 hover:bg-stone-800",
           ].join(" ")
           return (
             <button
@@ -471,6 +491,16 @@ function FrameTimeline(props: {
         {config.type === "primaryAttack" ? (
           <span className="inline-flex items-center gap-1.5">
             <span className="h-3 w-3 rounded bg-red-700" /> dangerous window
+          </span>
+        ) : null}
+        {(config.type === "primaryAttack" || lightningTelegraph) ? (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-3 w-3 rounded bg-amber-900" /> telegraph visible
+          </span>
+        ) : null}
+        {lightningTelegraph ? (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-3 w-3 rounded bg-red-700" /> lightning danger lead
           </span>
         ) : null}
         {castFrame != null ? (
@@ -1497,6 +1527,7 @@ export function AnimationToolClient() {
               </label>
             </div>
             <FrameTimeline
+              actionId={action.id}
               config={actionConfig}
               frameCount={frameCount}
               currentFrame={currentFrame}

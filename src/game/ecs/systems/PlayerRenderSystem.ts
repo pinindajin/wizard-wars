@@ -1092,6 +1092,15 @@ export class PlayerRenderSystem {
     return null
   }
 
+  /**
+   * Estimates current server time from latest authoritative batches.
+   *
+   * @returns Current local wall time adjusted by server offset.
+   */
+  getEstimatedServerTimeMs(): number {
+    return Date.now() + this.serverTimeOffsetMs
+  }
+
   /** Removes all player sprites and entries. Call on scene shutdown. */
   destroy(): void {
     for (const [id] of this.entries) {

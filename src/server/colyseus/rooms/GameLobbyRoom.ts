@@ -1596,6 +1596,12 @@ export class GameLobbyRoom extends Room {
     for (const swing of output.primaryMeleeAttacks) {
       this.broadcast(RoomEvent.PrimaryMeleeAttack, swing)
     }
+    for (const telegraph of output.combatTelegraphStarts) {
+      this.broadcast(RoomEvent.CombatTelegraphStart, telegraph)
+    }
+    for (const telegraph of output.combatTelegraphEnds) {
+      this.broadcast(RoomEvent.CombatTelegraphEnd, telegraph)
+    }
     for (const sfx of output.abilitySfxEvents) {
       this.broadcast(RoomEvent.AbilitySfx, sfx)
     }
