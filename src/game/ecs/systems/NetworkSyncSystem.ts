@@ -1,4 +1,5 @@
 import type { GameStateSyncPayload, PlayerBatchUpdatePayload } from "@/shared/types"
+import { clientLogger } from "@/lib/clientLogger"
 import {
   ClientPosition,
   ClientPlayerState,
@@ -56,6 +57,7 @@ export class NetworkSyncSystem {
   private readonly onRemoteSnapshot?: NetworkSyncHooks["onRemoteSnapshot"]
   private readonly onLocalAck?: NetworkSyncHooks["onLocalAck"]
   private readonly onServerTime?: NetworkSyncHooks["onServerTime"]
+  private readonly log = clientLogger.child({ area: "netcode" })
 
   /** Set by Arena once the local playerId is known; used to route acks. */
   localPlayerId: string | null = null
@@ -83,11 +85,13 @@ export class NetworkSyncSystem {
   applyFullSync(payload: GameStateSyncPayload): void {
     this.onServerTime?.(payload.serverTimeMs)
     const keep = new Set(payload.players.map((p) => p.id))
+    let removedCount = 0
     for (const id of [...clientEntities]) {
       if (!keep.has(id)) {
         removeEntity(id)
         delete ClientPosition[id]
         delete ClientPlayerState[id]
+        removedCount++
       }
     }
     for (const snap of payload.players) {
@@ -104,13 +108,25 @@ export class NetworkSyncSystem {
         maxHealth: snap.maxHealth,
         lives: snap.lives,
         animState: snap.animState,
+        moveState: snap.moveState,
         castingAbilityId: snap.castingAbilityId,
         facingAngle: snap.facingAngle,
         moveFacingAngle: snap.moveFacingAngle,
         invulnerable: snap.invulnerable,
+        jumpZ: snap.jumpZ,
       }
       this.lastAckByPlayer.set(snap.playerId, snap.lastProcessedInputSeq)
     }
+    this.log.debug(
+      {
+        event: "net.sync.full.applied",
+        playerCount: payload.players.length,
+        fireballCount: payload.fireballs.length,
+        removedCount,
+        serverTimeMs: payload.serverTimeMs,
+      },
+      "Applied full game state sync",
+    )
   }
 
   /**
@@ -159,8 +175,32 @@ export class NetworkSyncSystem {
         if (delta.health !== undefined) state.health = delta.health
         if (delta.lives !== undefined) state.lives = delta.lives
         if (delta.animState !== undefined) state.animState = delta.animState
+        if (delta.moveState !== undefined) state.moveState = delta.moveState
         if (delta.castingAbilityId !== undefined) state.castingAbilityId = delta.castingAbilityId
         if (delta.invulnerable !== undefined) state.invulnerable = delta.invulnerable
+        if (delta.jumpZ !== undefined) state.jumpZ = delta.jumpZ
+      }
+      if (!pos && (delta.x !== undefined || delta.y !== undefined)) {
+        this.log.debug(
+          {
+            event: "net.sync.delta.missing_position",
+            reason: "position_missing_before_delta",
+            entityId: delta.id,
+            seq: payload.seq,
+          },
+          "Batch delta created missing position",
+        )
+      }
+      if (!state) {
+        this.log.debug(
+          {
+            event: "net.sync.delta.missing_state",
+            reason: "state_missing_before_delta",
+            entityId: delta.id,
+            seq: payload.seq,
+          },
+          "Batch delta referenced missing player state",
+        )
       }
 
       // Remote vs local routing.
@@ -192,6 +232,17 @@ export class NetworkSyncSystem {
         nextY !== undefined
       ) {
         const prev = this.lastAckByPlayer.get(playerId!) ?? -1
+        if (delta.lastProcessedInputSeq < prev) {
+          this.log.warn(
+            {
+              event: "net.sync.ack.regressed",
+              playerId,
+              previousSeq: prev,
+              seq: delta.lastProcessedInputSeq,
+            },
+            "Local input ack regressed",
+          )
+        }
         if (delta.lastProcessedInputSeq > prev) {
           this.lastAckByPlayer.set(playerId!, delta.lastProcessedInputSeq)
           this.onLocalAck?.({

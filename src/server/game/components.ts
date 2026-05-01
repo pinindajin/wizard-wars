@@ -70,14 +70,26 @@ export const Hero = {
 
 /**
  * Active cast state.
- * @field abilityIndex - Index into {@link ABILITY_INDEX_TO_ID}
- * @field endsAtTick   - Simulation tick when the cast animation completes
- * @field quick        - 1 = caster may move during cast; 0 = movement locked
+ * @field abilityIndex          - Index into {@link ABILITY_INDEX_TO_ID}
+ * @field startedAtTick         - Simulation tick when the cast input was accepted
+ * @field animationEndsAtTick   - First simulation tick at/after configured animation duration
+ * @field effectFiresAtTick     - First simulation tick at/after configured effect timing
+ * @field effectFired           - 1 once the spell/consumable effect has been applied
+ * @field quick                 - 1 = caster may move during cast; 0 = movement locked
+ * @field captured*             - Aim/position snapshot captured at cast press for deterministic release
  */
 export const Casting = {
   abilityIndex: new Int32Array(MAX_ENTITIES),
-  endsAtTick: new Uint32Array(MAX_ENTITIES),
+  startedAtTick: new Uint32Array(MAX_ENTITIES),
+  animationEndsAtTick: new Uint32Array(MAX_ENTITIES),
+  effectFiresAtTick: new Uint32Array(MAX_ENTITIES),
+  effectFired: new Uint8Array(MAX_ENTITIES),
   quick: new Uint8Array(MAX_ENTITIES),
+  capturedPositionX: new Float32Array(MAX_ENTITIES),
+  capturedPositionY: new Float32Array(MAX_ENTITIES),
+  capturedFacingAngle: new Float32Array(MAX_ENTITIES),
+  capturedTargetX: new Float32Array(MAX_ENTITIES),
+  capturedTargetY: new Float32Array(MAX_ENTITIES),
 }
 
 /** Applied knockback impulse; decremented each tick until exhausted. */
@@ -85,6 +97,16 @@ export const Knockback = {
   impulseX: new Float32Array(MAX_ENTITIES),
   impulseY: new Float32Array(MAX_ENTITIES),
   remainingPx: new Float32Array(MAX_ENTITIES),
+}
+
+/**
+ * Active jump arc: simulated height `z` (world px), vertical velocity, and first tick
+ * where horizontal control returns after the lift/root phase.
+ */
+export const JumpArc = {
+  z: new Float32Array(MAX_ENTITIES),
+  vz: new Float32Array(MAX_ENTITIES),
+  liftEndsAtTick: new Uint32Array(MAX_ENTITIES),
 }
 
 /**
@@ -97,6 +119,7 @@ export const Cooldown = {
   /** Primary melee swing end tick (was legacy `axe` cooldown array). */
   primaryMelee: new Uint32Array(MAX_ENTITIES),
   healingPotion: new Uint32Array(MAX_ENTITIES),
+  jump: new Uint32Array(MAX_ENTITIES),
 }
 
 /** Post-respawn invulnerability; expires at this simulation tick. */
@@ -230,6 +253,7 @@ export const ABILITY_INDEX = {
   lightning_bolt: 1,
   axe: 2,
   healing_potion: 3,
+  jump: 4,
 } as const
 
 /** Reverse lookup: abilityIndex → ability ID string. */
@@ -238,6 +262,7 @@ export const ABILITY_INDEX_TO_ID: readonly string[] = [
   "lightning_bolt",
   "axe",
   "healing_potion",
+  "jump",
 ]
 
 /** Maps hero string IDs to the integer stored in {@link Hero}.typeIndex. */

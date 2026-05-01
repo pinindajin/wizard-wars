@@ -13,13 +13,13 @@ import {
 import {
   ARENA_HEIGHT,
   ARENA_WIDTH,
-  ARENA_WORLD_COLLIDERS,
 } from "@/shared/balance-config/arena"
 import {
   BASE_MOVE_SPEED_PX_PER_SEC,
   DAMAGE_FLASH_MS,
   PLAYER_WORLD_COLLISION_FOOTPRINT,
   SWING_MOVE_SPEED_MULTIPLIER,
+  JUMP_SPRITE_Y_PIXELS_PER_SIM_Z,
 } from "@/shared/balance-config/combat"
 import type {
   GameStateSyncPayload,
@@ -33,6 +33,7 @@ import {
   worldStepFromIntent,
 } from "@/shared/movementIntent"
 import { moveWithinWorld } from "@/shared/collision/worldCollision"
+import { worldCollidersForJumpZ } from "@/shared/collision/worldCollidersForPlayer"
 import {
   ClientPosition,
   ClientPlayerState,
@@ -96,10 +97,11 @@ export {
   LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y,
 } from "@/shared/sprites/ladyWizard"
 
-function ladyWizardSpriteDisplayPos(footX: number, footY: number) {
+function ladyWizardSpriteDisplayPos(footX: number, footY: number, jumpZ = 0) {
+  const liftPx = jumpZ * JUMP_SPRITE_Y_PIXELS_PER_SIM_Z
   return {
     x: footX + LADY_WIZARD_SPRITE_DISPLAY_OFFSET_X,
-    y: footY + LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y,
+    y: footY + LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y - liftPx,
   }
 }
 
@@ -280,10 +282,12 @@ export class PlayerRenderSystem {
         maxHealth: snap.maxHealth,
         lives: snap.lives,
         animState: snap.animState,
+        moveState: snap.moveState,
         castingAbilityId: snap.castingAbilityId,
         facingAngle: snap.facingAngle,
         moveFacingAngle: snap.moveFacingAngle,
         invulnerable: snap.invulnerable,
+        jumpZ: snap.jumpZ,
       }
       this.onAuthoritativePosition(snap.id, snap.x, snap.y, "full_sync")
 
@@ -410,6 +414,8 @@ export class PlayerRenderSystem {
       isSwinging: state.animState === "primary_melee_attack",
       hasSwiftBoots: false,
       castingAbilityId: state.castingAbilityId,
+      jumpZ: state.jumpZ ?? 0,
+      moveState: state.moveState,
     }
     const simCurr = { x: entry.simCurrX, y: entry.simCurrY }
     const result = reconcileLocal(ack, this.localInputHistory, simCurr, ctx)
@@ -741,8 +747,9 @@ export class PlayerRenderSystem {
         state.animState === "primary_melee_attack"
           ? SWING_MOVE_SPEED_MULTIPLIER
           : 1
+      const colliders = worldCollidersForJumpZ(state.jumpZ ?? 0)
       if (
-        this._canPredictMovement(state.animState, localMoveIntent, castMoveMult)
+        this._canPredictMovement(state, localMoveIntent, castMoveMult)
       ) {
         const { dx, dy } = normalizedMoveFromWASD(localMoveIntent)
         const step = worldStepFromIntent(
@@ -759,7 +766,7 @@ export class PlayerRenderSystem {
           step.y,
           PLAYER_WORLD_COLLISION_FOOTPRINT,
           ARENA_BOUNDS,
-          ARENA_WORLD_COLLIDERS,
+          colliders,
         )
         entry.simCurrX = moved.x
         entry.simCurrY = moved.y
@@ -782,7 +789,7 @@ export class PlayerRenderSystem {
           targetStepY,
           PLAYER_WORLD_COLLISION_FOOTPRINT,
           ARENA_BOUNDS,
-          ARENA_WORLD_COLLIDERS,
+          colliders,
         )
         entry.simCurrX = moved.x
         entry.simCurrY = moved.y
@@ -845,7 +852,7 @@ export class PlayerRenderSystem {
         )
       }
 
-      const sp = ladyWizardSpriteDisplayPos(renderPos.x, renderPos.y)
+      const sp = ladyWizardSpriteDisplayPos(renderPos.x, renderPos.y, state.jumpZ ?? 0)
       entry.sprite.setPosition(sp.x, sp.y)
       entry.sprite.setDepth(renderPos.y + LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y)
 
@@ -1045,19 +1052,20 @@ export class PlayerRenderSystem {
 
   /** Returns whether local client prediction should run for this frame. */
   private _canPredictMovement(
-    animState: PlayerAnimState,
+    state: (typeof ClientPlayerState)[number],
     moveIntent: MoveIntent,
     castMoveMult: number,
   ): boolean {
     const { dx, dy } = normalizedMoveFromWASD(moveIntent)
     if (dx === 0 && dy === 0) return false
     if (
-      animState === "dying" ||
-      animState === "dead"
+      state.animState === "dying" ||
+      state.animState === "dead"
     ) {
       return false
     }
-    if (animState === "light_cast" || animState === "heavy_cast") {
+    if (state.moveState === "rooted") return false
+    if (state.animState === "light_cast" || state.animState === "heavy_cast") {
       return castMoveMult > 0
     }
     return true
@@ -1082,6 +1090,15 @@ export class PlayerRenderSystem {
       }
     }
     return null
+  }
+
+  /**
+   * Estimates current server time from latest authoritative batches.
+   *
+   * @returns Current local wall time adjusted by server offset.
+   */
+  getEstimatedServerTimeMs(): number {
+    return Date.now() + this.serverTimeOffsetMs
   }
 
   /** Removes all player sprites and entries. Call on scene shutdown. */

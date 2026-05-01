@@ -69,6 +69,25 @@ function resolveClientReadyTimeoutMs(): number {
   return Math.min(15_000, Math.max(100, parsed))
 }
 
+/**
+ * Lobby idle duration. Under Vitest, `WIZARD_WARS_TEST_LOBBY_IDLE_MS` may shorten
+ * the window for integration tests (clamped 100..LOBBY_IDLE_TIMEOUT_MS).
+ */
+function resolveLobbyIdleTimeoutMs(): number {
+  if (process.env.VITEST !== "true") {
+    return LOBBY_IDLE_TIMEOUT_MS
+  }
+  const raw = process.env.WIZARD_WARS_TEST_LOBBY_IDLE_MS
+  if (raw === undefined || raw === "") {
+    return LOBBY_IDLE_TIMEOUT_MS
+  }
+  const parsed = Number.parseInt(raw, 10)
+  if (!Number.isFinite(parsed)) {
+    return LOBBY_IDLE_TIMEOUT_MS
+  }
+  return Math.min(LOBBY_IDLE_TIMEOUT_MS, Math.max(100, parsed))
+}
+
 /** Max lobby chat messages per player per rate-limit window. */
 const CHAT_RATE_LIMIT = 3
 /** Duration of the chat rate-limit window in ms. */
@@ -179,8 +198,15 @@ export class GameLobbyRoom extends Room {
   /** Per-player chat rate-limit bookkeeping: `playerId → { count, windowStart }`. */
   private chatRateMap = new Map<string, { count: number; windowStart: number }>()
 
-  /** Inactivity timeout → `dissolveLobby("lobby_expired")`. */
+  /** Inactivity timeout → `dissolveLobby("lobby_expired")` (only armed in `LOBBY`). */
   private inactivityTimer: { clear: () => void } | null = null
+
+  /**
+   * When the current lobby idle timer will fire (`Date.now()` + duration);
+   * surfaced to clients as `lobbyIdleExpiresAtServerMs`. Cleared when not in
+   * `LOBBY` or when idle is cleared.
+   */
+  private lobbyIdleDeadlineMs: number | null = null
 
   /** Pre-game countdown timer (per-tick during `COUNTDOWN` phase). */
   private countdownTimer: { clear: () => void } | null = null
@@ -247,6 +273,8 @@ export class GameLobbyRoom extends Room {
     logger.error(
       {
         event: "room.uncaught",
+        area: "netcode",
+        side: "server",
         roomId: this.roomId,
         phase: this.lobbyPhase,
         clients: this.clients.length,
@@ -277,7 +305,7 @@ export class GameLobbyRoom extends Room {
     this.registerLobbyHandlers()
 
     logger.info(
-      { event: "room.created", roomId: this.roomId },
+      { event: "room.created", area: "netcode", side: "server", roomId: this.roomId },
       "[GameLobbyRoom] created",
     )
   }
@@ -298,23 +326,73 @@ export class GameLobbyRoom extends Room {
     options: { token?: string },
   ): Promise<AuthUser> {
     const token = options?.token
-    if (!token) throw new Error("missing token")
+    if (!token) {
+      logger.warn(
+        { event: "room.auth.rejected", area: "netcode", side: "server", roomId: this.roomId, reason: "missing_token" },
+        "[GameLobbyRoom] auth rejected",
+      )
+      throw new Error("missing token")
+    }
 
-    const auth = await verifyToken(token)
+    let auth: AuthUser
+    try {
+      auth = await verifyToken(token)
+    } catch (err) {
+      logger.warn(
+        { event: "room.auth.rejected", area: "netcode", side: "server", roomId: this.roomId, reason: "invalid_token", err },
+        "[GameLobbyRoom] auth rejected",
+      )
+      throw err
+    }
 
     for (const c of this.clients) {
       const pd = c.userData as PlayerData | undefined
       if (pd?.playerId === auth.sub) {
+        logger.warn(
+          {
+            event: "room.auth.rejected",
+            area: "netcode",
+            side: "server",
+            roomId: this.roomId,
+            playerId: auth.sub,
+            reason: "duplicate_session",
+          },
+          "[GameLobbyRoom] auth rejected",
+        )
         throw new Error("duplicate session")
       }
     }
 
     if (this.clients.length >= this.maxClients) {
+      logger.warn(
+        {
+          event: "room.auth.rejected",
+          area: "netcode",
+          side: "server",
+          roomId: this.roomId,
+          playerId: auth.sub,
+          reason: "lobby_full",
+          clients: this.clients.length,
+        },
+        "[GameLobbyRoom] auth rejected",
+      )
       throw new Error("lobby is full")
     }
 
     const existingRoom = playerLobbyIndex.get(auth.sub)
     if (existingRoom && existingRoom !== this.roomId) {
+      logger.warn(
+        {
+          event: "room.auth.rejected",
+          area: "netcode",
+          side: "server",
+          roomId: this.roomId,
+          playerId: auth.sub,
+          reason: "already_in_another_lobby",
+          existingRoom,
+        },
+        "[GameLobbyRoom] auth rejected",
+      )
       throw new Error("already in another lobby")
     }
 
@@ -372,7 +450,15 @@ export class GameLobbyRoom extends Room {
     }
 
     logger.info(
-      { event: "player.join", roomId: this.roomId, playerId: auth.sub },
+      {
+        event: "room.player.join",
+        area: "netcode",
+        side: "server",
+        roomId: this.roomId,
+        playerId: auth.sub,
+        sessionId: client.sessionId,
+        phase: this.lobbyPhase,
+      },
       "[GameLobbyRoom] player joined",
     )
   }
@@ -401,7 +487,16 @@ export class GameLobbyRoom extends Room {
       void this.allowReconnection(client, RECONNECT_WINDOW_MS / 1000).catch(
         (err) => {
           logger.warn(
-            { event: "room.reconnect.timeout", roomId: this.roomId, playerId: pd.playerId, err },
+            {
+              event: "room.reconnect.timeout",
+              area: "netcode",
+              side: "server",
+              roomId: this.roomId,
+              playerId: pd.playerId,
+              sessionId: client.sessionId,
+              phase: this.lobbyPhase,
+              err,
+            },
             "[GameLobbyRoom] reconnection window expired",
           )
           this.handlePlayerGone(pd)
@@ -444,7 +539,15 @@ export class GameLobbyRoom extends Room {
     }
 
     logger.info(
-      { event: "player.reconnect", roomId: this.roomId, playerId: pd.playerId },
+      {
+        event: "room.player.reconnect",
+        area: "netcode",
+        side: "server",
+        roomId: this.roomId,
+        playerId: pd.playerId,
+        sessionId: client.sessionId,
+        phase: this.lobbyPhase,
+      },
       "[GameLobbyRoom] player reconnected",
     )
   }
@@ -472,14 +575,14 @@ export class GameLobbyRoom extends Room {
         playerLobbyIndex.delete(playerId)
       }
     }
-    this.inactivityTimer?.clear()
+    this.clearLobbyIdleTimer()
     this.countdownTimer?.clear()
     this.clientReadyTimer?.clear()
     this.scoreboardTimer?.clear()
     this.disposalGraceTimer?.clear()
 
     logger.info(
-      { event: "room.disposed", roomId: this.roomId },
+      { event: "room.disposed", area: "netcode", side: "server", roomId: this.roomId },
       "[GameLobbyRoom] disposed",
     )
   }
@@ -540,6 +643,8 @@ export class GameLobbyRoom extends Room {
     }
 
     if (this.clients.length === 0 && this.lobbyPhase === "LOBBY") {
+      // No players remain; idle kick is meaningless and would fire on a ghost room.
+      this.clearLobbyIdleTimer()
       this.disposalGraceTimer = nativeSetTimeout(() => {
         if (this.clients.length === 0) {
           this.disconnect()
@@ -548,7 +653,14 @@ export class GameLobbyRoom extends Room {
     }
 
     logger.info(
-      { event: "player.gone", roomId: this.roomId, playerId: pd.playerId },
+      {
+        event: "room.player.gone",
+        area: "netcode",
+        side: "server",
+        roomId: this.roomId,
+        playerId: pd.playerId,
+        phase: this.lobbyPhase,
+      },
       "[GameLobbyRoom] player gone",
     )
   }
@@ -559,7 +671,9 @@ export class GameLobbyRoom extends Room {
 
   /**
    * Registers all `onMessage` handlers for lobby and game events.
-   * A wildcard handler bumps the inactivity timer on any incoming message.
+   * Typed handlers bump the lobby idle timer where they call
+   * {@link GameLobbyRoom.resetInactivityTimer}. The `"*"` handler bumps idle
+   * for message types without a dedicated handler (Colyseus-specific routing).
    */
   private registerLobbyHandlers(): void {
     this.onMessage(RoomEvent.LobbyChat, (client: Client, payload: unknown) => {
@@ -621,13 +735,61 @@ export class GameLobbyRoom extends Room {
    * @param payload - Raw inbound payload; validated with playerInputPayloadSchema.
    */
   private handlePlayerInput(client: Client, payload: unknown): void {
-    if (this.lobbyPhase !== "IN_PROGRESS" || !this.simulation) return
+    if (this.lobbyPhase !== "IN_PROGRESS" || !this.simulation) {
+      const pd = client.userData as PlayerData | undefined
+      logger.debug(
+        {
+          event: "room.player_input.rejected",
+          area: "netcode",
+          side: "server",
+          roomId: this.roomId,
+          playerId: pd?.playerId,
+          sessionId: client.sessionId,
+          phase: this.lobbyPhase,
+          reason: "wrong_phase",
+        },
+        "[GameLobbyRoom] player input rejected",
+      )
+      return
+    }
     const pd = client.userData as PlayerData
     const result = playerInputPayloadSchema.safeParse(payload)
-    if (!result.success) return
+    if (!result.success) {
+      logger.debug(
+        {
+          event: "room.player_input.rejected",
+          area: "netcode",
+          side: "server",
+          roomId: this.roomId,
+          playerId: pd.playerId,
+          sessionId: client.sessionId,
+          phase: this.lobbyPhase,
+          reason: "invalid_payload",
+        },
+        "[GameLobbyRoom] player input rejected",
+      )
+      return
+    }
 
     const highest = this.highestAcceptedSeqByPlayer.get(pd.playerId) ?? -1
-    if (result.data.seq <= highest) return
+    if (result.data.seq <= highest) {
+      logger.debug(
+        {
+          event: "room.player_input.dropped_duplicate",
+          area: "netcode",
+          side: "server",
+          roomId: this.roomId,
+          playerId: pd.playerId,
+          sessionId: client.sessionId,
+          phase: this.lobbyPhase,
+          seq: result.data.seq,
+          highest,
+          reason: "stale_or_duplicate_seq",
+        },
+        "[GameLobbyRoom] player input dropped",
+      )
+      return
+    }
 
     let queue = this.inputQueue.get(pd.playerId)
     if (!queue) {
@@ -640,6 +802,21 @@ export class GameLobbyRoom extends Room {
     // Cap queue: drop from the front if it grows unbounded.
     while (queue.length > INPUT_QUEUE_CAP_PER_PLAYER) {
       queue.shift()
+      logger.warn(
+        {
+          event: "room.player_input.queue_cap_drop",
+          area: "netcode",
+          side: "server",
+          roomId: this.roomId,
+          playerId: pd.playerId,
+          sessionId: client.sessionId,
+          phase: this.lobbyPhase,
+          seq: result.data.seq,
+          queueLength: queue.length,
+          reason: "input_queue_cap",
+        },
+        "[GameLobbyRoom] player input queue capped",
+      )
     }
   }
 
@@ -810,10 +987,54 @@ export class GameLobbyRoom extends Room {
    */
   private handleStartGame(client: Client): void {
     const pd = client.userData as PlayerData
-    if (pd.playerId !== this.hostPlayerId) return
-    if (this.lobbyPhase !== "LOBBY") return
+    if (pd.playerId !== this.hostPlayerId) {
+      logger.debug(
+        {
+          event: "room.start_game.rejected",
+          area: "netcode",
+          side: "server",
+          roomId: this.roomId,
+          playerId: pd.playerId,
+          sessionId: client.sessionId,
+          phase: this.lobbyPhase,
+          reason: "not_host",
+        },
+        "[GameLobbyRoom] start game rejected",
+      )
+      return
+    }
+    if (this.lobbyPhase !== "LOBBY") {
+      logger.debug(
+        {
+          event: "room.start_game.rejected",
+          area: "netcode",
+          side: "server",
+          roomId: this.roomId,
+          playerId: pd.playerId,
+          sessionId: client.sessionId,
+          phase: this.lobbyPhase,
+          reason: "wrong_phase",
+        },
+        "[GameLobbyRoom] start game rejected",
+      )
+      return
+    }
     if (this.clients.length < MIN_PLAYERS_PER_MATCH) {
       client.send(RoomEvent.LobbyError, { message: "not enough players" })
+      logger.debug(
+        {
+          event: "room.start_game.rejected",
+          area: "netcode",
+          side: "server",
+          roomId: this.roomId,
+          playerId: pd.playerId,
+          sessionId: client.sessionId,
+          phase: this.lobbyPhase,
+          reason: "not_enough_players",
+          clients: this.clients.length,
+        },
+        "[GameLobbyRoom] start game rejected",
+      )
       return
     }
     this.beginWaitingForClients()
@@ -907,6 +1128,19 @@ export class GameLobbyRoom extends Room {
    * @param client - The requesting client.
    */
   private handleRequestResync(client: Client): void {
+    const pd = client.userData as PlayerData | undefined
+    logger.debug(
+      {
+        event: "room.resync.requested",
+        area: "netcode",
+        side: "server",
+        roomId: this.roomId,
+        playerId: pd?.playerId,
+        sessionId: client.sessionId,
+        phase: this.lobbyPhase,
+      },
+      "[GameLobbyRoom] resync requested",
+    )
     this.sendInProgressHydrationToClient(client, { includeLobbyState: true })
   }
 
@@ -982,6 +1216,7 @@ export class GameLobbyRoom extends Room {
    * `CLIENT_READY_TIMEOUT_MS` deadline.
    */
   private beginWaitingForClients(): void {
+    this.clearLobbyIdleTimer()
     this.lobbyPhase = "WAITING_FOR_CLIENTS"
     this.clientReadySet.clear()
 
@@ -997,14 +1232,14 @@ export class GameLobbyRoom extends Room {
     this.clientReadyTimer = nativeSetTimeout(() => {
       if (this.lobbyPhase !== "WAITING_FOR_CLIENTS") return
       logger.warn(
-        { event: "room.client_ready.timeout", roomId: this.roomId },
+        { event: "room.client_ready.timeout", area: "netcode", side: "server", roomId: this.roomId, phase: this.lobbyPhase },
         "[GameLobbyRoom] client_scene_ready timeout — proceeding with available clients",
       )
       this.beginCountdown()
     }, resolveClientReadyTimeoutMs())
 
     logger.info(
-      { event: "room.waiting_for_clients", roomId: this.roomId },
+      { event: "room.phase.waiting_for_clients", area: "netcode", side: "server", roomId: this.roomId, phase: this.lobbyPhase },
       "[GameLobbyRoom] waiting for clients",
     )
   }
@@ -1056,7 +1291,10 @@ export class GameLobbyRoom extends Room {
     logger.info(
       {
         event: "room.countdown",
+        area: "netcode",
+        side: "server",
         roomId: this.roomId,
+        phase: this.lobbyPhase,
         startAtServerTimeMs,
         durationMs: MATCH_COUNTDOWN_DURATION_MS,
       },
@@ -1104,7 +1342,14 @@ export class GameLobbyRoom extends Room {
     }, TICK_MS)
 
     logger.info(
-      { event: "room.in_progress", roomId: this.roomId },
+      {
+        event: "room.phase.in_progress",
+        area: "netcode",
+        side: "server",
+        roomId: this.roomId,
+        phase: this.lobbyPhase,
+        players: this.clients.length,
+      },
       "[GameLobbyRoom] match in progress",
     )
   }
@@ -1150,7 +1395,15 @@ export class GameLobbyRoom extends Room {
     }, 1000)
 
     logger.info(
-      { event: "room.scoreboard", roomId: this.roomId, endReason },
+      {
+        event: "room.phase.scoreboard",
+        area: "netcode",
+        side: "server",
+        roomId: this.roomId,
+        phase: this.lobbyPhase,
+        endReason,
+        entries: entries.length,
+      },
       "[GameLobbyRoom] scoreboard phase",
     )
   }
@@ -1182,7 +1435,7 @@ export class GameLobbyRoom extends Room {
     this.resetInactivityTimer()
 
     logger.info(
-      { event: "room.return_to_lobby", roomId: this.roomId },
+      { event: "room.phase.lobby", area: "netcode", side: "server", roomId: this.roomId, phase: this.lobbyPhase },
       "[GameLobbyRoom] returned to lobby",
     )
   }
@@ -1261,7 +1514,7 @@ export class GameLobbyRoom extends Room {
     this.setMetadata({ hostPlayerId: newHostId, hostName: newHostUsername })
 
     logger.info(
-      { event: "room.host_transfer", roomId: this.roomId, newHostId },
+      { event: "room.host_transfer", area: "netcode", side: "server", roomId: this.roomId, newHostId, phase: this.lobbyPhase },
       "[GameLobbyRoom] host transferred",
     )
   }
@@ -1285,7 +1538,7 @@ export class GameLobbyRoom extends Room {
     this.disconnect()
 
     logger.info(
-      { event: "room.dissolved", roomId: this.roomId, reason },
+      { event: "room.dissolved", area: "netcode", side: "server", roomId: this.roomId, reason, phase: this.lobbyPhase },
       "[GameLobbyRoom] dissolved",
     )
   }
@@ -1343,6 +1596,15 @@ export class GameLobbyRoom extends Room {
     for (const swing of output.primaryMeleeAttacks) {
       this.broadcast(RoomEvent.PrimaryMeleeAttack, swing)
     }
+    for (const telegraph of output.combatTelegraphStarts) {
+      this.broadcast(RoomEvent.CombatTelegraphStart, telegraph)
+    }
+    for (const telegraph of output.combatTelegraphEnds) {
+      this.broadcast(RoomEvent.CombatTelegraphEnd, telegraph)
+    }
+    for (const sfx of output.abilitySfxEvents) {
+      this.broadcast(RoomEvent.AbilitySfx, sfx)
+    }
     for (const death of output.playerDeaths) {
       this.broadcast(RoomEvent.PlayerDeath, parsePlayerDeathPayload(death))
     }
@@ -1376,17 +1638,38 @@ export class GameLobbyRoom extends Room {
 
   // ---------------------------------------------------------------------------
   // Timers
+  // ---------------------------------------------------------------------------
 
   /**
-   * Resets the idle inactivity timer to `LOBBY_IDLE_TIMEOUT_MS`.
-   * Any incoming message (via the `"*"` handler) and player joins bump it.
-   * When it fires the lobby is dissolved with reason `"lobby_expired"`.
+   * Clears the lobby idle timeout and client-visible idle deadline without
+   * rescheduling (used when leaving `LOBBY` or disposing the room).
+   */
+  private clearLobbyIdleTimer(): void {
+    this.inactivityTimer?.clear()
+    this.inactivityTimer = null
+    this.lobbyIdleDeadlineMs = null
+  }
+
+  /**
+   * Resets the lobby idle timer when `lobbyPhase === "LOBBY"`: clears any prior
+   * deadline, arms idle for `resolveLobbyIdleTimeoutMs()`, updates
+   * `lobbyIdleDeadlineMs`, and broadcasts `LobbyState` so clients refresh
+   * `lobbyIdleExpiresAtServerMs`. Outside `LOBBY`, only clears any stale timer.
    */
   private resetInactivityTimer(): void {
-    this.inactivityTimer?.clear()
+    this.clearLobbyIdleTimer()
+    if (this.lobbyPhase !== "LOBBY") {
+      return
+    }
+    const durationMs = resolveLobbyIdleTimeoutMs()
+    this.lobbyIdleDeadlineMs = Date.now() + durationMs
     this.inactivityTimer = nativeSetTimeout(() => {
+      if (this.lobbyPhase !== "LOBBY") {
+        return
+      }
       this.dissolveLobby("lobby_expired")
-    }, LOBBY_IDLE_TIMEOUT_MS)
+    }, durationMs)
+    this.broadcast(RoomEvent.LobbyState, this.buildLobbyState())
   }
 
   // ---------------------------------------------------------------------------
@@ -1443,6 +1726,9 @@ export class GameLobbyRoom extends Room {
       players,
       hostPlayerId: this.hostPlayerId,
       maxPlayers: MAX_PLAYERS_PER_MATCH,
+      ...(this.lobbyPhase === "LOBBY" && this.lobbyIdleDeadlineMs !== null
+        ? { lobbyIdleExpiresAtServerMs: this.lobbyIdleDeadlineMs }
+        : {}),
     }
   }
 

@@ -18,6 +18,8 @@ import {
   DeadTag,
   DyingTag,
   Equipment,
+  ABILITY_INDEX,
+  AbilitySlots,
   Health,
   InvulnerableTag,
   Position,
@@ -123,6 +125,32 @@ describe("movement system", () => {
     }
 
     expect(lastY).toBeLessThan(spawnY)
+  })
+
+  it("roots lightning caster movement and includes its active telegraph in full sync", () => {
+    const sim = createGameSimulation(Date.now())
+    const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    AbilitySlots.slot1[eid] = ABILITY_INDEX.lightning_bolt
+    const spawn = ARENA_SPAWN_POINTS[0]
+
+    sim.tick(
+      queueMap([[
+        "user1",
+        emptyInput({
+          up: true,
+          abilitySlot: 1,
+          abilityTargetX: spawn.x + 200,
+          abilityTargetY: spawn.y,
+        }),
+      ]]),
+      Date.now(),
+    )
+
+    const sync = sim.buildGameStateSyncPayload(Date.now())
+    expect(sync.players[0]!.x).toBe(spawn.x)
+    expect(sync.players[0]!.y).toBe(spawn.y)
+    expect(sync.activeTelegraphs).toHaveLength(1)
+    expect(sync.activeTelegraphs![0]!.sourceId).toBe("lightning_bolt")
   })
 
   it("player cannot leave arena bounds", () => {
@@ -360,6 +388,7 @@ describe("buildGameStateSyncPayload", () => {
     sim.addPlayer("user1", "Alice", "red_wizard", 0)
     const snap = sim.buildGameStateSyncPayload(Date.now()).players[0]!
     expect(snap.lastProcessedInputSeq).toBe(0)
+    expect(snap.jumpZ).toBe(0)
   })
 
   it("spawns with -1 seed; seq 0 and seq 1 are both applied in order", () => {

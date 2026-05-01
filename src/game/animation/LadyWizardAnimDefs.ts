@@ -3,13 +3,20 @@ import type Phaser from "phaser"
 import type { PlayerAnimState } from "@/shared/types"
 import {
   LADY_WIZARD_CLIP_BASE_FRAME,
-  LADY_WIZARD_CLIP_FPS,
   LADY_WIZARD_CLIP_FRAMES,
   LADY_WIZARD_DIRECTIONS,
   LADY_WIZARD_FRAMES_PER_DIRECTION_ROW,
   LADY_WIZARD_MEGASHEET_CLIP_ORDER,
+  type LadyWizardMegasheetClip,
   type LadyWizardDirection,
 } from "@/shared/sprites/ladyWizard"
+import {
+  frameRateForDuration,
+  getBehaviorAnimationConfig,
+  getPrimaryAttackAnimationConfig,
+  getSpellAnimationConfig,
+} from "@/shared/balance-config/animationConfig"
+import { DEFAULT_HERO_ID, HERO_CONFIGS } from "@/shared/balance-config/heroes"
 
 /**
  * 8 directions for the lady-wizard sprite sheet, in the order used for all animation keys.
@@ -31,6 +38,7 @@ const ANIM_CLIPS: Record<PlayerAnimState, string> = {
   light_cast: "light_spell_cast",
   heavy_cast: "heavy_spell_cast",
   primary_melee_attack: "summoned_axe_swing",
+  jump: "jump",
 }
 
 /**
@@ -72,7 +80,29 @@ export const getDirectionFromAngle = (angle: number): Direction => {
     "north",
     "north-east",
   ]
-  return remap[index] ?? "south"
+  return remap[index]!
+}
+
+function clipDurationMs(clip: LadyWizardMegasheetClip): number {
+  switch (clip) {
+    case "breathing_idle":
+      return getBehaviorAnimationConfig(DEFAULT_HERO_ID, "idle").durationMs
+    case "walk":
+      return getBehaviorAnimationConfig(DEFAULT_HERO_ID, "walk").durationMs
+    case "death":
+      return getBehaviorAnimationConfig(DEFAULT_HERO_ID, "death").durationMs
+    case "light_spell_cast":
+      return getSpellAnimationConfig(DEFAULT_HERO_ID, "fireball").durationMs
+    case "heavy_spell_cast":
+      return getSpellAnimationConfig(DEFAULT_HERO_ID, "lightning_bolt").durationMs
+    case "summoned_axe_swing":
+      return getPrimaryAttackAnimationConfig(
+        DEFAULT_HERO_ID,
+        HERO_CONFIGS[DEFAULT_HERO_ID].primaryMeleeAttackId,
+      ).durationMs
+    case "jump":
+      return getSpellAnimationConfig(DEFAULT_HERO_ID, "jump").durationMs
+  }
 }
 
 /**
@@ -104,7 +134,7 @@ export const registerLadyWizardAnims = (animManager: Phaser.Animations.Animation
   for (const clip of LADY_WIZARD_MEGASHEET_CLIP_ORDER) {
     const frameCount = LADY_WIZARD_CLIP_FRAMES[clip]
     const baseFrame = LADY_WIZARD_CLIP_BASE_FRAME[clip]
-    const fps = LADY_WIZARD_CLIP_FPS[clip]
+    const fps = frameRateForDuration(frameCount, clipDurationMs(clip))
     const repeat = LOOP_CLIPS.has(clip) ? -1 : 0
 
     for (const direction of DIRECTIONS) {

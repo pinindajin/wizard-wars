@@ -1,4 +1,10 @@
-import { FIREBALL_COOLDOWN_MS, LIGHTNING_COOLDOWN_MS, FIREBALL_CAST_MS, LIGHTNING_CAST_MS } from "./combat"
+import {
+  FIREBALL_COOLDOWN_MS,
+  LIGHTNING_COOLDOWN_MS,
+  FIREBALL_CAST_MS,
+  LIGHTNING_CAST_MS,
+  JUMP_COOLDOWN_MS,
+} from "./combat"
 import { DamageProperty, combineDamageProperties } from "./damage"
 
 /** Configuration shape for a castable ability. */
@@ -7,7 +13,10 @@ export type AbilityConfig = {
   readonly displayName: string
   /** If true, the caster can keep moving during the cast animation. */
   readonly quick: boolean
-  /** Cast animation lock duration in ms. */
+  /**
+   * Default cast animation lock duration in ms.
+   * Runtime cast timing is loaded from `src/shared/balance-config/animation-config.json`.
+   */
   readonly castMs: number
   /** Cooldown after cast animation completes, in ms. */
   readonly cooldownMs: number
@@ -41,6 +50,17 @@ export const ABILITY_CONFIGS: Record<string, AbilityConfig> = {
     cooldownMs: LIGHTNING_COOLDOWN_MS,
     damageProperties: combineDamageProperties(DamageProperty.Magic, DamageProperty.Electric),
     castSfxKey: "sfx-lightning-cast",
+    castMoveSpeedMultiplier: 0,
+  },
+  jump: {
+    id: "jump",
+    displayName: "Jump",
+    /** Jump does not use `Casting`; lift/air movement is handled by `JumpArc` + movementSystem. */
+    quick: true,
+    castMs: 0,
+    cooldownMs: JUMP_COOLDOWN_MS,
+    damageProperties: 0,
+    castSfxKey: "sfx-jump",
     castMoveSpeedMultiplier: 1.0,
   },
 }

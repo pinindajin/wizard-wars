@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "heroes": {
+    "red_wizard": {
+      "actions": {
+        "idle": {
+          "type": "behavior",
+          "durationMs": 667
+        },
+        "walk": {
+          "type": "behavior",
+          "durationMs": 1500
+        },
+        "death": {
+          "type": "behavior",
+          "durationMs": 800
+        },
+        "spell:fireball": {
+          "type": "spell",
+          "durationMs": 500,
+          "effectTiming": "after"
+        },
+        "spell:lightning_bolt": {
+          "type": "spell",
+          "durationMs": 700,
+          "effectTiming": "after"
+        },
+        "spell:jump": {
+          "type": "spell",
+          "durationMs": 500,
+          "effectTiming": "before"
+        },
+        "primary:red_wizard_cleaver": {
+          "type": "primaryAttack",
+          "durationMs": 1417,
+          "dangerousWindowStartMs": 500,
+          "dangerousWindowEndMs": 900
+        }
+      }
+    },
+    "barbarian": {
+      "actions": {
+        "idle": {
+          "type": "behavior",
+          "durationMs": 667
+        },
+        "walk": {
+          "type": "behavior",
+          "durationMs": 1500
+        },
+        "death": {
+          "type": "behavior",
+          "durationMs": 800
+        },
+        "spell:fireball": {
+          "type": "spell",
+          "durationMs": 500,
+          "effectTiming": "after"
+        },
+        "spell:lightning_bolt": {
+          "type": "spell",
+          "durationMs": 700,
+          "effectTiming": "after"
+        },
+        "spell:jump": {
+          "type": "spell",
+          "durationMs": 500,
+          "effectTiming": "before"
+        },
+        "primary:barbarian_cleaver": {
+          "type": "primaryAttack",
+          "durationMs": 1417,
+          "dangerousWindowStartMs": 500,
+          "dangerousWindowEndMs": 900
+        }
+      }
+    },
+    "ranger": {
+      "actions": {
+        "idle": {
+          "type": "behavior",
+          "durationMs": 667
+        },
+        "walk": {
+          "type": "behavior",
+          "durationMs": 1500
+        },
+        "death": {
+          "type": "behavior",
+          "durationMs": 800
+        },
+        "spell:fireball": {
+          "type": "spell",
+          "durationMs": 500,
+          "effectTiming": "after"
+        },
+        "spell:lightning_bolt": {
+          "type": "spell",
+          "durationMs": 700,
+          "effectTiming": "after"
+        },
+        "spell:jump": {
+          "type": "spell",
+          "durationMs": 500,
+          "effectTiming": "before"
+        },
+        "primary:ranger_cleaver": {
+          "type": "primaryAttack",
+          "durationMs": 1417,
+          "dangerousWindowStartMs": 500,
+          "dangerousWindowEndMs": 900
+        }
+      }
+    }
+  }
+}

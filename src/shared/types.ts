@@ -56,6 +56,8 @@ export type LobbyStatePayload = {
   readonly players: readonly LobbyPlayer[]
   readonly hostPlayerId: string | null
   readonly maxPlayers: number
+  /** Wall-clock ms (epoch) when the lobby idle timer will fire; only in `LOBBY`. */
+  readonly lobbyIdleExpiresAtServerMs?: number
   readonly startedAtServerTimeMs?: number
 }
 
@@ -140,6 +142,8 @@ export type PlayerSnapshot = {
   /** Active cast ability id while `Casting` is set on the server, else `null`. */
   readonly castingAbilityId: string | null
   readonly invulnerable: boolean
+  /** Server simulated jump height (world px); `0` when grounded. */
+  readonly jumpZ: number
   /**
    * Highest client input `seq` the server has processed for this player.
    * Used by the client to drive rewind-and-replay reconciliation.
@@ -162,6 +166,7 @@ export type PlayerDelta = {
   readonly moveState?: PlayerMoveState
   readonly castingAbilityId?: string | null
   readonly invulnerable?: boolean
+  readonly jumpZ?: number
   /** Highest client input `seq` the server has processed for this player. */
   readonly lastProcessedInputSeq?: number
 }
@@ -174,6 +179,7 @@ export type PlayerAnimState =
   | "light_cast"
   | "heavy_cast"
   | "primary_melee_attack"
+  | "jump"
   | "dead"
 
 /** Batch player state update payload. */
@@ -190,6 +196,8 @@ export type GameStateSyncPayload = {
   readonly players: readonly PlayerSnapshot[]
   /** Active fireball projectiles (empty when none). */
   readonly fireballs: readonly FireballSnapshot[]
+  /** Active combat telegraphs that should be reconstructed by reconnecting clients. */
+  readonly activeTelegraphs?: readonly CombatTelegraphStartPayload[]
   readonly seq: number
   /** Server wall-clock time (ms) when the snapshot was built. */
   readonly serverTimeMs: number
@@ -210,6 +218,11 @@ export type FireballBatchUpdatePayload = {
   readonly deltas: readonly { id: number; x: number; y: number }[]
   readonly removedIds: readonly number[]
   readonly seq: number
+}
+
+/** Server → all: play a one-shot ability sound by manifest key. */
+export type AbilitySfxPayload = {
+  readonly sfxKey: string
 }
 
 /** Server → all: fireball launched. */
@@ -265,6 +278,45 @@ export type PrimaryMeleeAttackPayload = {
   readonly durationMs: number
   readonly dangerousWindowStartMs: number
   readonly dangerousWindowEndMs: number
+}
+
+/** Cone-shaped combat hurtbox/telegraph descriptor. */
+export type CombatTelegraphConeShape = {
+  readonly type: "cone"
+  readonly radiusPx: number
+  readonly arcDeg: number
+}
+
+/** Capsule-shaped combat hurtbox/telegraph descriptor. */
+export type CombatTelegraphCapsuleShape = {
+  readonly type: "capsule"
+  readonly lengthPx: number
+  readonly radiusPx: number
+}
+
+/** Supported ground telegraph shape descriptors. */
+export type CombatTelegraphShape =
+  | CombatTelegraphConeShape
+  | CombatTelegraphCapsuleShape
+
+/** Server → clients: start or reconstruct a client-rendered combat telegraph. */
+export type CombatTelegraphStartPayload = {
+  readonly id: string
+  readonly casterId: string
+  readonly sourceId: string
+  readonly anchor: "caster"
+  readonly directionRad: number
+  readonly shape: CombatTelegraphShape
+  readonly startsAtServerTimeMs: number
+  readonly dangerStartsAtServerTimeMs: number
+  readonly dangerEndsAtServerTimeMs: number
+  readonly endsAtServerTimeMs: number
+}
+
+/** Server → clients: remove a client-rendered combat telegraph before/at expiry. */
+export type CombatTelegraphEndPayload = {
+  readonly id: string
+  readonly reason: "expired" | "cancelled" | "caster_dead" | "spectator"
 }
 
 /** Player death event. */

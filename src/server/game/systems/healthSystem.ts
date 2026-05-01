@@ -24,16 +24,13 @@ import {
   DamageFlash,
   DamageFlashTag,
   InvulnerableTag,
+  Hero,
+  HERO_INDEX_TO_ID,
+  JumpArc,
 } from "../components"
-import type { SimCtx, DamageRequest, DeathEvent } from "../simulation"
-import {
-  DAMAGE_FLASH_MS,
-  DEATH_ANIM_MS,
-  INVULNERABLE_WINDOW_MS,
-} from "../../../shared/balance-config"
-import { TICK_MS } from "../../../shared/balance-config"
-
-const INVULNERABLE_TICKS = Math.ceil(INVULNERABLE_WINDOW_MS / TICK_MS)
+import type { SimCtx, DeathEvent } from "../simulation"
+import { DAMAGE_FLASH_MS, JUMP_AIRBORNE_COLLIDER_EPSILON_PX } from "../../../shared/balance-config"
+import { getBehaviorAnimationConfig } from "../../../shared/balance-config/animationConfig"
 
 /**
  * Runs the health system for one tick.
@@ -41,7 +38,7 @@ const INVULNERABLE_TICKS = Math.ceil(INVULNERABLE_WINDOW_MS / TICK_MS)
  * @param ctx - Shared simulation context.
  */
 export function healthSystem(ctx: SimCtx): void {
-  const { world, serverTimeMs, currentTick, damageRequests, deathEvents, damageFloats, entityPlayerMap } = ctx
+  const { world, serverTimeMs, damageRequests, deathEvents, damageFloats, entityPlayerMap } = ctx
 
   // ── 1. Clear expired DamageFlash tags ────────────────────────────────
   for (const eid of query(world, [PlayerTag, DamageFlashTag])) {
@@ -71,8 +68,16 @@ export function healthSystem(ctx: SimCtx): void {
     addComponent(world, targetEid, DamageFlash)
     DamageFlash.expiresAtMs[targetEid] = serverTimeMs + DAMAGE_FLASH_MS
 
-    // Knockback
+    // Knockback (clear airborne jump before applying slide while hit mid-air)
     if (knockbackX !== undefined && knockbackY !== undefined && knockbackPx) {
+      if (
+        hasComponent(world, targetEid, JumpArc) &&
+        JumpArc.z[targetEid] > JUMP_AIRBORNE_COLLIDER_EPSILON_PX
+      ) {
+        removeComponent(world, targetEid, JumpArc)
+        JumpArc.z[targetEid] = 0
+        JumpArc.vz[targetEid] = 0
+      }
       addComponent(world, targetEid, Knockback)
       Knockback.impulseX[targetEid] = knockbackX
       Knockback.impulseY[targetEid] = knockbackY
@@ -91,7 +96,9 @@ export function healthSystem(ctx: SimCtx): void {
     // Death trigger
     if (Health.current[targetEid] <= 0) {
       addComponent(world, targetEid, DyingTag)
-      DyingTag.expiresAtMs[targetEid] = serverTimeMs + DEATH_ANIM_MS
+      const heroId = HERO_INDEX_TO_ID[Hero.typeIndex[targetEid]] ?? HERO_INDEX_TO_ID[0]!
+      DyingTag.expiresAtMs[targetEid] =
+        serverTimeMs + getBehaviorAnimationConfig(heroId, "death").durationMs
 
       const userId = entityPlayerMap.get(targetEid) ?? ""
       const death: DeathEvent = {

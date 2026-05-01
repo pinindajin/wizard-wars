@@ -45,10 +45,9 @@ export const BASE_TILE_SIZE_PX = 64
 export const TILEMAP_DEPTH = -1000
 
 /**
- * Main camera zoom in the Arena. The world tilemap is 1344×768, matching the
- * default game size, so at zoom 1 the visible area equals the map and scroll is
- * clamped to (0,0) — `centerOn` cannot follow the local player. Zooming in
- * (values &gt; 1) makes the visible world smaller than the map, giving the camera
- * scroll headroom to keep the player centered.
+ * Main camera zoom in the Arena. The Phaser canvas defaults to 1344×768
+ * (`src/game/config.ts`) while the playable world is `ARENA_WIDTH`×`ARENA_HEIGHT`
+ * (see `arena-layout.ts` / `arena.ts`). Zoom > 1 shrinks the visible world
+ * slice so follow cameras have scroll headroom to keep the player centered.
  */
 export const ARENA_CAMERA_FOLLOW_ZOOM = 1.2

@@ -2,15 +2,15 @@
  * castingSystem – manages the full lifecycle of castable abilities.
  *
  * On each tick:
- *  1. Completes active casts whose `endsAtTick` has passed:
+ *  1. Advances active casts:
  *     - Fireball: spawns a projectile entity via the command buffer.
  *     - Lightning Bolt: queues a PendingLightningBolt for lightningBoltSystem.
  *     - Healing Potion: heals the caster immediately.
- *     - Starts the appropriate cooldown.
+ *     - Effects fire at configured ms timing; cooldown starts when animation ends.
  *  2. Starts new casts from PlayerInput.abilitySlot.
  *  3. Processes quick-item (healing potion) usage from PlayerInput.useQuickItemSlot.
  */
-import { query, hasComponent, addComponent, removeComponent } from "bitecs"
+import { query, hasComponent, addComponent, removeComponent, type World } from "bitecs"
 
 import {
   PlayerTag,
@@ -23,43 +23,81 @@ import {
   Position,
   Velocity,
   Facing,
+  Hero,
   Ownership,
   ProjectileTag,
   FireballTag,
   DyingTag,
   DeadTag,
   SpectatorTag,
-  ABILITY_INDEX,
   ABILITY_INDEX_TO_ID,
   ITEM_INDEX_TO_ID,
+  HERO_INDEX_TO_ID,
+  JumpArc,
+  SwingingWeapon,
+  Knockback,
 } from "../components"
 import type { SimCtx, PendingLightningBolt } from "../simulation"
 import {
   FIREBALL_SPEED_PX_PER_SEC,
   FIREBALL_COOLDOWN_MS,
-  FIREBALL_CAST_MS,
   LIGHTNING_COOLDOWN_MS,
-  LIGHTNING_CAST_MS,
+  LIGHTNING_BOLT_ARC_PX,
+  LIGHTNING_HIT_RADIUS_PX,
   HEALING_POTION_CAST_MS,
   HEALING_POTION_HP,
   DEFAULT_PLAYER_HEALTH,
   TICK_MS,
+  LIGHTNING_TELEGRAPH_DANGER_LEAD_MS,
+  JUMP_COOLDOWN_MS,
+  JUMP_INITIAL_VZ_PX_PER_SEC,
+  JUMP_LIFT_MS,
+  JUMP_AIRBORNE_COLLIDER_EPSILON_PX,
 } from "../../../shared/balance-config"
 import { ABILITY_CONFIGS } from "../../../shared/balance-config/abilities"
+import {
+  getSpellAnimationConfig,
+  msToTickOffset,
+} from "../../../shared/balance-config/animationConfig"
+import {
+  combatTelegraphId,
+  endCombatTelegraph,
+  startCombatTelegraph,
+} from "../combatTelegraphs"
 
-// ─── Helpers ─────────────────────────────────────────────────────────────
+/** Returns true when quick items and new melee swings must be blocked (airborne). */
+function isAirborneForAirLock(world: World, eid: number): boolean {
+  if (!hasComponent(world, eid, JumpArc)) return false
+  return JumpArc.z[eid] > JUMP_AIRBORNE_COLLIDER_EPSILON_PX
+}
 
 /** Tick duration equivalent for each ability cooldown. */
 const COOLDOWN_TICKS: Record<string, number> = {
   fireball: Math.ceil(FIREBALL_COOLDOWN_MS / TICK_MS),
   lightning_bolt: Math.ceil(LIGHTNING_COOLDOWN_MS / TICK_MS),
   healing_potion: Math.ceil(HEALING_POTION_CAST_MS / TICK_MS),
+  jump: Math.ceil(JUMP_COOLDOWN_MS / TICK_MS),
 }
 
-/** Returns the tick count for the cast duration of an ability. */
-function castTicks(abilityId: string): number {
-  const cfg = ABILITY_CONFIGS[abilityId]
-  return cfg ? Math.ceil(cfg.castMs / TICK_MS) : 0
+/** Returns the hero id stored on an entity, falling back to the default index. */
+function heroIdForCaster(eid: number): string {
+  return HERO_INDEX_TO_ID[Hero.typeIndex[eid]] ?? HERO_INDEX_TO_ID[0]!
+}
+
+/** Returns configured animation/effect ticks for a spell cast. */
+function spellCastTicks(heroId: string, abilityId: string): {
+  animationTicks: number
+  effectTicks: number
+} {
+  const cfg = getSpellAnimationConfig(heroId, abilityId)
+  const animationTicks = msToTickOffset(cfg.durationMs)
+  const effectTicks =
+    cfg.effectTiming === "before"
+      ? 0
+      : cfg.effectTiming === "after"
+      ? animationTicks
+      : msToTickOffset(cfg.effectAtMs ?? cfg.durationMs)
+  return { animationTicks, effectTicks }
 }
 
 /** Returns the AbilitySlots slot value for a given slot index. */
@@ -77,10 +115,11 @@ function slotAbilityIndex(eid: number, slot: number): number {
 /** Checks if an ability cooldown is ready for the given entity. */
 function isCooldownReady(eid: number, abilityId: string, currentTick: number): boolean {
   switch (abilityId) {
-    case "fireball":      return currentTick >= Cooldown.fireball[eid]
-    case "lightning_bolt":return currentTick >= Cooldown.lightningBolt[eid]
-    case "healing_potion":return currentTick >= Cooldown.healingPotion[eid]
-    default:              return false
+    case "fireball":       return currentTick >= Cooldown.fireball[eid]
+    case "lightning_bolt": return currentTick >= Cooldown.lightningBolt[eid]
+    case "healing_potion": return currentTick >= Cooldown.healingPotion[eid]
+    case "jump":           return currentTick >= Cooldown.jump[eid]
+    default:               return false
   }
 }
 
@@ -88,21 +127,36 @@ function isCooldownReady(eid: number, abilityId: string, currentTick: number): b
 function setCooldown(eid: number, abilityId: string, currentTick: number): void {
   const cd = COOLDOWN_TICKS[abilityId] ?? 0
   switch (abilityId) {
-    case "fireball":      Cooldown.fireball[eid]      = currentTick + cd; break
-    case "lightning_bolt":Cooldown.lightningBolt[eid] = currentTick + cd; break
-    case "healing_potion":Cooldown.healingPotion[eid] = currentTick + cd; break
+    case "fireball":       Cooldown.fireball[eid]       = currentTick + cd; break
+    case "lightning_bolt": Cooldown.lightningBolt[eid] = currentTick + cd; break
+    case "healing_potion": Cooldown.healingPotion[eid] = currentTick + cd; break
+    case "jump":           Cooldown.jump[eid]          = currentTick + cd; break
   }
 }
 
 // ─── Cast completion handlers ────────────────────────────────────────────
 
 /** Spawns a fireball projectile entity via the command buffer. */
-function launchFireball(ctx: SimCtx, casterEid: number): void {
-  const { world, commandBuffer, fireballOwnerMap, entityPlayerMap, fireballLaunches } = ctx
+function launchFireball(
+  ctx: SimCtx,
+  casterEid: number,
+  capturedX: number,
+  capturedY: number,
+  capturedAngle: number,
+): void {
+  const {
+    world,
+    commandBuffer,
+    currentTick,
+    fireballOwnerMap,
+    fireballCreatedAtTickMap,
+    entityPlayerMap,
+    fireballLaunches,
+  } = ctx
 
-  const cx = Position.x[casterEid]
-  const cy = Position.y[casterEid]
-  const angle = Facing.angle[casterEid]
+  const cx = capturedX
+  const cy = capturedY
+  const angle = capturedAngle
   const vx = Math.cos(angle) * FIREBALL_SPEED_PX_PER_SEC
   const vy = Math.sin(angle) * FIREBALL_SPEED_PX_PER_SEC
   // Spawn slightly in front of caster to avoid self-collision on tick 0
@@ -125,6 +179,7 @@ function launchFireball(ctx: SimCtx, casterEid: number): void {
       Velocity.vy[fbEid] = vy
       Ownership.ownerEid[fbEid] = casterEid
       fireballOwnerMap.set(fbEid, casterUserId)
+      fireballCreatedAtTickMap.set(fbEid, currentTick)
 
       fireballLaunches.push({
         id: fbEid,
@@ -139,18 +194,74 @@ function launchFireball(ctx: SimCtx, casterEid: number): void {
 }
 
 /** Queues a pending lightning bolt for lightningBoltSystem. */
-function queueLightningBolt(ctx: SimCtx, casterEid: number): void {
+function queueLightningBolt(
+  ctx: SimCtx,
+  casterEid: number,
+  directionRad: number,
+): void {
   const casterUserId = ctx.entityPlayerMap.get(casterEid) ?? ""
-  const targetX = PlayerInput.abilityTargetX[casterEid]
-  const targetY = PlayerInput.abilityTargetY[casterEid]
 
   const pending: PendingLightningBolt = {
     casterEid,
     casterUserId,
-    targetX,
-    targetY,
+    directionRad,
   }
   ctx.pendingLightningBolts.push(pending)
+}
+
+/**
+ * Starts the client-rendered Lightning Bolt capsule telegraph.
+ *
+ * @param ctx - Simulation context.
+ * @param eid - Caster entity id.
+ * @param casterUserId - Caster user id.
+ * @param directionRad - Locked world-space lightning direction.
+ */
+function startLightningTelegraph(
+  ctx: SimCtx,
+  eid: number,
+  casterUserId: string,
+  directionRad: number,
+): void {
+  const effectAtServerTimeMs =
+    ctx.serverTimeMs + (Casting.effectFiresAtTick[eid] - ctx.currentTick) * TICK_MS
+  const id = combatTelegraphId("spell", casterUserId, "lightning_bolt", Casting.startedAtTick[eid])
+  startCombatTelegraph(ctx, {
+    id,
+    casterId: casterUserId,
+    sourceId: "lightning_bolt",
+    anchor: "caster",
+    directionRad,
+    shape: {
+      type: "capsule",
+      lengthPx: LIGHTNING_BOLT_ARC_PX,
+      radiusPx: LIGHTNING_HIT_RADIUS_PX,
+    },
+    startsAtServerTimeMs: ctx.serverTimeMs,
+    dangerStartsAtServerTimeMs: Math.max(
+      ctx.serverTimeMs,
+      effectAtServerTimeMs - LIGHTNING_TELEGRAPH_DANGER_LEAD_MS,
+    ),
+    dangerEndsAtServerTimeMs: effectAtServerTimeMs,
+    endsAtServerTimeMs: effectAtServerTimeMs,
+  })
+}
+
+/**
+ * Ends the active lightning telegraph for a caster if one exists.
+ *
+ * @param ctx - Simulation context.
+ * @param eid - Caster entity id.
+ * @param reason - Client-visible removal reason.
+ */
+function endLightningTelegraphForCaster(
+  ctx: SimCtx,
+  eid: number,
+  reason: Parameters<typeof endCombatTelegraph>[2],
+): void {
+  const casterUserId = ctx.entityPlayerMap.get(eid) ?? ""
+  const id = combatTelegraphId("spell", casterUserId, "lightning_bolt", Casting.startedAtTick[eid])
+  endCombatTelegraph(ctx, id, reason)
 }
 
 /** Applies healing-potion HP restoration to the caster. */
@@ -174,25 +285,56 @@ export function castingSystem(ctx: SimCtx): void {
 
   // ── 1. Complete active casts ─────────────────────────────────────────
   for (const eid of query(world, [PlayerTag, Casting])) {
-    if (currentTick < Casting.endsAtTick[eid]) continue
+    if (
+      hasComponent(world, eid, DyingTag) ||
+      hasComponent(world, eid, DeadTag) ||
+      hasComponent(world, eid, SpectatorTag)
+    ) {
+      const abilityId = ABILITY_INDEX_TO_ID[Casting.abilityIndex[eid]] ?? ""
+      if (abilityId === "lightning_bolt") {
+        endLightningTelegraphForCaster(
+          ctx,
+          eid,
+          hasComponent(world, eid, SpectatorTag) ? "spectator" : "caster_dead",
+        )
+      }
+      removeComponent(world, eid, Casting)
+      continue
+    }
 
     const abilityIndex = Casting.abilityIndex[eid]
     const abilityId = ABILITY_INDEX_TO_ID[abilityIndex] ?? ""
 
-    switch (abilityId) {
-      case "fireball":
-        launchFireball(ctx, eid)
-        break
-      case "lightning_bolt":
-        queueLightningBolt(ctx, eid)
-        break
-      case "healing_potion":
-        applyHealingPotion(ctx, eid)
-        break
+    if (Casting.effectFired[eid] !== 1 && currentTick >= Casting.effectFiresAtTick[eid]) {
+      switch (abilityId) {
+        case "fireball":
+          launchFireball(
+            ctx,
+            eid,
+            Casting.capturedPositionX[eid],
+            Casting.capturedPositionY[eid],
+            Casting.capturedFacingAngle[eid],
+          )
+          break
+        case "lightning_bolt":
+          queueLightningBolt(
+            ctx,
+            eid,
+            Casting.capturedFacingAngle[eid],
+          )
+          endLightningTelegraphForCaster(ctx, eid, "expired")
+          break
+        case "healing_potion":
+          applyHealingPotion(ctx, eid)
+          break
+      }
+      Casting.effectFired[eid] = 1
     }
 
-    setCooldown(eid, abilityId, currentTick)
-    removeComponent(world, eid, Casting)
+    if (currentTick >= Casting.animationEndsAtTick[eid]) {
+      setCooldown(eid, abilityId, currentTick)
+      removeComponent(world, eid, Casting)
+    }
   }
 
   // ── 2. Start new ability-bar casts ───────────────────────────────────
@@ -211,15 +353,53 @@ export function castingSystem(ctx: SimCtx): void {
     const abilityId = ABILITY_INDEX_TO_ID[abilityIndex] ?? ""
     if (!abilityId) continue
 
+    if (isAirborneForAirLock(world, eid)) continue
+
+    if (abilityId === "jump") {
+      const jumpCfg = ABILITY_CONFIGS.jump
+      if (!jumpCfg) continue
+      if (hasComponent(world, eid, SwingingWeapon)) continue
+      if (hasComponent(world, eid, Knockback)) continue
+      if (!isCooldownReady(eid, "jump", currentTick)) continue
+
+      addComponent(world, eid, JumpArc)
+      JumpArc.z[eid] = JUMP_AIRBORNE_COLLIDER_EPSILON_PX + 1
+      JumpArc.vz[eid] = JUMP_INITIAL_VZ_PX_PER_SEC
+      JumpArc.liftEndsAtTick[eid] = currentTick + Math.ceil(JUMP_LIFT_MS / TICK_MS)
+      setCooldown(eid, "jump", currentTick)
+      ctx.abilitySfxEvents.push({ sfxKey: jumpCfg.castSfxKey })
+      continue
+    }
+
     const cfg = ABILITY_CONFIGS[abilityId]
     if (!cfg) continue
 
     if (!isCooldownReady(eid, abilityId, currentTick)) continue
 
+    const heroId = heroIdForCaster(eid)
+    const timing = spellCastTicks(heroId, abilityId)
+
     addComponent(world, eid, Casting)
     Casting.abilityIndex[eid] = abilityIndex
-    Casting.endsAtTick[eid] = currentTick + castTicks(abilityId)
+    Casting.startedAtTick[eid] = currentTick
+    Casting.animationEndsAtTick[eid] = currentTick + timing.animationTicks
+    Casting.effectFiresAtTick[eid] = currentTick + timing.effectTicks
+    Casting.effectFired[eid] = 0
     Casting.quick[eid] = cfg.quick ? 1 : 0
+    Casting.capturedPositionX[eid] = Position.x[eid]
+    Casting.capturedPositionY[eid] = Position.y[eid]
+    Casting.capturedTargetX[eid] = PlayerInput.abilityTargetX[eid]
+    Casting.capturedTargetY[eid] = PlayerInput.abilityTargetY[eid]
+    const targetDx = Casting.capturedTargetX[eid] - Casting.capturedPositionX[eid]
+    const targetDy = Casting.capturedTargetY[eid] - Casting.capturedPositionY[eid]
+    Casting.capturedFacingAngle[eid] =
+      targetDx !== 0 || targetDy !== 0 ? Math.atan2(targetDy, targetDx) : Facing.angle[eid]
+    Facing.angle[eid] = Casting.capturedFacingAngle[eid]
+
+    if (abilityId === "lightning_bolt") {
+      const casterUserId = ctx.entityPlayerMap.get(eid) ?? ""
+      startLightningTelegraph(ctx, eid, casterUserId, Casting.capturedFacingAngle[eid])
+    }
   }
 
   // ── 3. Quick-item usage (healing potion etc.) ────────────────────────
@@ -230,6 +410,8 @@ export function castingSystem(ctx: SimCtx): void {
 
     const qSlot = PlayerInput.useQuickItemSlot[eid]
     if (qSlot < 0) continue
+
+    if (isAirborneForAirLock(world, eid)) continue
 
     let itemIndex = -1
     let charges = 0

@@ -1,13 +1,18 @@
 /**
- * Scoped coverage for hero primary melee + shop weapon removal.
- * Enforces 100% lines/branches/functions/statements on these modules only.
- * (Large surfaces like `GameLobbyRoom` / `ArenaRuntime` stay covered via integration / E2E.)
+ * Scoped PR-change coverage.
+ * Enforces 100% lines/branches/functions/statements on the focused modules touched by
+ * the active feature work. Large React/Next visual surfaces stay covered by browser/manual QA.
  */
 import path from "node:path"
 
 import { defineConfig } from "vitest/config"
 
-const HERO_PRIMARY_MELEE_COVERAGE_INCLUDE = [
+const PR_CHANGE_COVERAGE_INCLUDE = [
+  "scripts/animation-sync.ts",
+  "scripts/check-animation-config.ts",
+  "src/app/api/dev/animation-tool/save/route.ts",
+  "src/game/animation/LadyWizardAnimDefs.ts",
+  "src/shared/balance-config/animationConfig.ts",
   "src/shared/balance-config/equipment.ts",
   "src/shared/balance-config/heroes.ts",
   "src/shared/balance-config/items.ts",
@@ -33,7 +38,7 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "text-summary"],
       all: true,
-      include: [...HERO_PRIMARY_MELEE_COVERAGE_INCLUDE],
+      include: [...PR_CHANGE_COVERAGE_INCLUDE],
       exclude: ["**/*.test.{ts,tsx}", "**/node_modules/**"],
       thresholds: {
         lines: 100,

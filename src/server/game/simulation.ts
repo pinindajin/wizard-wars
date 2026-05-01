@@ -2,7 +2,8 @@
  * Wizard Wars server-side game simulation.
  *
  * Owns the bitECS world, all entity maps, inter-system shared state, and runs
- * the full deterministic system pipeline on every 20 Hz tick.
+ * the full deterministic system pipeline once per server tick (`TICK_MS` /
+ * `TICK_RATE_HZ` in shared balance-config rendering).
  */
 import { createWorld, addEntity, addComponent, removeEntity, query, hasComponent, World } from "bitecs"
 
@@ -26,6 +27,7 @@ import {
   HERO_INDEX,
   ABILITY_INDEX,
   FireballTag,
+  JumpArc,
 } from "./components"
 import { createCommandBuffer, CommandBuffer } from "./commandBuffer"
 import {
@@ -52,12 +54,15 @@ import type {
   PlayerDeathPayload,
   PlayerRespawnPayload,
   DamageFloatPayload,
+  CombatTelegraphStartPayload,
+  CombatTelegraphEndPayload,
   ScoreboardEntry,
   GameStateSyncPayload,
   PlayerSnapshot,
   PlayerAnimState,
   PlayerMoveState,
   FireballSnapshot,
+  AbilitySfxPayload,
 } from "../../shared/types"
 
 import { inputSystem } from "./systems/inputSystem"
@@ -66,6 +71,7 @@ import { movementSystem } from "./systems/movementSystem"
 import { knockbackSystem } from "./systems/knockbackSystem"
 import { playerCollisionSystem } from "./systems/playerCollisionSystem"
 import { worldCollisionSystem } from "./systems/worldCollisionSystem"
+import { jumpPhysicsSystem } from "./systems/jumpPhysicsSystem"
 import { projectileMovementSystem } from "./systems/projectileMovementSystem"
 import { primaryMeleeAttackSystem } from "./systems/primaryMeleeAttackSystem"
 import { lightningBoltSystem } from "./systems/lightningBoltSystem"
@@ -122,8 +128,7 @@ export type DeathEvent = {
 export type PendingLightningBolt = {
   casterEid: number
   casterUserId: string
-  targetX: number
-  targetY: number
+  directionRad: number
 }
 
 /**
@@ -142,6 +147,8 @@ export type ActiveMeleeAttack = {
   facingAngle: number
   /** Caster userId at swing start (kept for damage attribution if entityPlayerMap drifts). */
   casterUserId: string
+  /** Active telegraph id for the warning shown until the dangerous window ends. */
+  telegraphId: string
   /** Target eids already damaged by this attack instance. */
   hitTargets: Set<number>
 }
@@ -168,6 +175,7 @@ export type PlayerPrevState = {
   /** Mirrors server `getCastingAbilityId`; `null` when not casting. */
   castingAbilityId: string | null
   invulnerable: boolean
+  jumpZ: number
   lastProcessedInputSeq: number
 }
 
@@ -199,6 +207,8 @@ export type SimCtx = {
   playerHeroIdMap: Map<string, string>
   /** fireball entity ID → owner userId */
   fireballOwnerMap: Map<number, string>
+  /** fireball entity ID → simulation tick when launched */
+  fireballCreatedAtTickMap: Map<number, number>
 
   inputMap: Map<string, PlayerInputPayload>
   /**
@@ -222,8 +232,12 @@ export type SimCtx = {
   fireballRemovedIds: number[]
   lightningBolts: LightningBoltPayload[]
   primaryMeleeAttacks: PrimaryMeleeAttackPayload[]
+  combatTelegraphStarts: CombatTelegraphStartPayload[]
+  combatTelegraphEnds: CombatTelegraphEndPayload[]
   damageFloats: DamageFloatPayload[]
   goldUpdates: { userId: string; gold: number }[]
+  /** One-shot ability sounds to broadcast this tick (jump, etc.). */
+  abilitySfxEvents: AbilitySfxPayload[]
 
   // ── Match outcome ──
   matchEnded: SimOutput["matchEnded"]
@@ -239,6 +253,8 @@ export type SimCtx = {
    * tick to gate damage application to the dangerous-frames window.
    */
   activeMeleeAttacks: Map<number, ActiveMeleeAttack>
+  /** Active combat telegraphs keyed by telegraph id for reconnect/full sync. */
+  activeCombatTelegraphs: Map<string, CombatTelegraphStartPayload>
 
   // ── Written by playerDeltaSystem and projectileDeltaSystem ──
   playerDeltas: PlayerDelta[]
@@ -258,8 +274,11 @@ export type SimOutput = {
   fireballImpacts: FireballImpactPayload[]
   lightningBolts: LightningBoltPayload[]
   primaryMeleeAttacks: PrimaryMeleeAttackPayload[]
+  combatTelegraphStarts: CombatTelegraphStartPayload[]
+  combatTelegraphEnds: CombatTelegraphEndPayload[]
   damageFloats: DamageFloatPayload[]
   goldUpdates: { userId: string; gold: number }[]
+  abilitySfxEvents: AbilitySfxPayload[]
   matchEnded: {
     reason: "lives_depleted" | "host_ended" | "time_cap"
     entries: ScoreboardEntry[]
@@ -323,12 +342,14 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
   const entityUsernameMap = new Map<number, string>()
   const playerHeroIdMap = new Map<string, string>()
   const fireballOwnerMap = new Map<number, string>()
+  const fireballCreatedAtTickMap = new Map<number, number>()
   const commandBuffer = createCommandBuffer()
   const prevPlayerStates = new Map<number, PlayerPrevState>()
   const prevFireballStates = new Map<number, FireballPrevState>()
   const killStats = new Map<string, KillStats>()
   const lastProcessedInputSeqByPlayer = new Map<string, number>()
   const activeMeleeAttacks = new Map<number, ActiveMeleeAttack>()
+  const activeCombatTelegraphs = new Map<string, CombatTelegraphStartPayload>()
 
   let currentTick = 0
   let hostEndSignal = false
@@ -393,6 +414,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     Cooldown.lightningBolt[eid] = 0
     Cooldown.primaryMelee[eid] = 0
     Cooldown.healingPotion[eid] = 0
+    Cooldown.jump[eid] = 0
 
     Equipment.primaryMeleeAttackIndex[eid] = primaryMeleeAttackIdToIndex(
       getHeroPrimaryMeleeAttackId(heroId),
@@ -455,6 +477,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       moveState: "idle",
       castingAbilityId: null,
       invulnerable: false,
+      jumpZ: 0,
       lastProcessedInputSeq: 0,
     })
     // `-1`: no input processed yet; first client `seq: 0` is accepted in `tick`.
@@ -483,6 +506,9 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     prevPlayerStates.delete(eid)
     lastProcessedInputSeqByPlayer.delete(userId)
     activeMeleeAttacks.delete(eid)
+    for (const [id, telegraph] of activeCombatTelegraphs) {
+      if (telegraph.casterId === userId) activeCombatTelegraphs.delete(id)
+    }
   }
 
   // ── requestHostEnd ───────────────────────────────────────────────────
@@ -530,9 +556,10 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       const maxHealth = Health.max[eid]
       const lives = Lives.count[eid]
       const animState = computePlayerAnimState(world, eid)
-      const moveState = computePlayerMoveState(world, eid)
+      const moveState = computePlayerMoveState(world, eid, currentTick)
       const invulnerable = hasComponent(world, eid, InvulnerableTag)
       const castingAbilityId = getCastingAbilityId(world, eid)
+      const jumpZ = hasComponent(world, eid, JumpArc) ? JumpArc.z[eid] : 0
       const lastProcessedInputSeq = lastProcessedSeqForNetworkPayload(
         lastProcessedInputSeqByPlayer,
         userId,
@@ -555,6 +582,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
         moveState,
         castingAbilityId,
         invulnerable,
+        jumpZ,
         lastProcessedInputSeq,
       })
     }
@@ -573,7 +601,11 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       })
     }
 
-    return { players, fireballs, seq: 0, serverTimeMs }
+    const activeTelegraphs = [...activeCombatTelegraphs.values()].filter(
+      (telegraph) => telegraph.endsAtServerTimeMs > serverTimeMs,
+    )
+
+    return { players, fireballs, activeTelegraphs, seq: 0, serverTimeMs }
   }
 
   // ── tick ─────────────────────────────────────────────────────────────
@@ -622,6 +654,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       entityUsernameMap,
       playerHeroIdMap,
       fireballOwnerMap,
+      fireballCreatedAtTickMap,
       inputMap,
       lastProcessedInputSeqByPlayer,
       commandBuffer,
@@ -636,14 +669,18 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       fireballRemovedIds: [],
       lightningBolts: [],
       primaryMeleeAttacks: [],
+      combatTelegraphStarts: [],
+      combatTelegraphEnds: [],
       damageFloats: [],
       goldUpdates: [],
+      abilitySfxEvents: [],
       matchEnded: null,
       hostEndSignal,
       prevPlayerStates,
       prevFireballStates,
       killStats,
       activeMeleeAttacks,
+      activeCombatTelegraphs,
       playerDeltas: [],
       fireballDeltas: [],
     }
@@ -655,6 +692,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     knockbackSystem(ctx)
     playerCollisionSystem(ctx)
     worldCollisionSystem(ctx)
+    jumpPhysicsSystem(ctx)
     projectileMovementSystem(ctx)
     primaryMeleeAttackSystem(ctx)
     lightningBoltSystem(ctx)
@@ -682,8 +720,11 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       fireballImpacts: ctx.fireballImpacts,
       lightningBolts: ctx.lightningBolts,
       primaryMeleeAttacks: ctx.primaryMeleeAttacks,
+      combatTelegraphStarts: ctx.combatTelegraphStarts,
+      combatTelegraphEnds: ctx.combatTelegraphEnds,
       damageFloats: ctx.damageFloats,
       goldUpdates: ctx.goldUpdates,
+      abilitySfxEvents: ctx.abilitySfxEvents,
       matchEnded: ctx.matchEnded,
     }
   }

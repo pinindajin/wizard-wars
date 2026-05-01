@@ -1,5 +1,6 @@
 import Phaser from "phaser"
 
+import { clientLogger } from "@/lib/clientLogger"
 import { WsEvent } from "@/shared/events"
 import { ARENA_CAMERA_FOLLOW_ZOOM, TILEMAP_DEPTH } from "@/shared/balance-config/rendering"
 import type {
@@ -10,9 +11,12 @@ import type {
   FireballImpactPayload,
   LightningBoltPayload,
   PrimaryMeleeAttackPayload,
+  CombatTelegraphStartPayload,
+  CombatTelegraphEndPayload,
   PlayerDeathPayload,
   PlayerRespawnPayload,
   DamageFloatPayload,
+  AbilitySfxPayload,
 } from "@/shared/types"
 import {
   WW_GAME_CONNECTION_REGISTRY_KEY,
@@ -23,6 +27,7 @@ import { PlayerRenderSystem } from "../ecs/systems/PlayerRenderSystem"
 import { ProjectileRenderSystem } from "../ecs/systems/ProjectileRenderSystem"
 import { LightningBoltRenderSystem } from "../ecs/systems/LightningBoltRenderSystem"
 import { PrimaryMeleeAttackRenderSystem } from "../ecs/systems/PrimaryMeleeAttackRenderSystem"
+import { CombatTelegraphRenderSystem } from "../ecs/systems/CombatTelegraphRenderSystem"
 import { DamageFloatersSystem } from "../ecs/systems/DamageFloatersSystem"
 import { NetworkSyncSystem } from "../ecs/systems/NetworkSyncSystem"
 import { KeyboardController } from "../input/KeyboardController"
@@ -73,6 +78,7 @@ export class ArenaRuntime {
   private projectileRenderSystem!: ProjectileRenderSystem
   private lightningBoltRenderSystem!: LightningBoltRenderSystem
   private primaryMeleeAttackRenderSystem!: PrimaryMeleeAttackRenderSystem
+  private combatTelegraphRenderSystem!: CombatTelegraphRenderSystem
   private damageFloatersSystem!: DamageFloatersSystem
   private networkSyncSystem!: NetworkSyncSystem
 
@@ -81,6 +87,7 @@ export class ArenaRuntime {
 
   private bgmPlayer!: BgmPlayer
   private soundManager!: SoundManager
+  private readonly log = clientLogger.child({ area: "netcode" })
 
   /** Whether the match has started (MatchGo received). */
   private matchStarted = false
@@ -158,6 +165,7 @@ export class ArenaRuntime {
     this.projectileRenderSystem = new ProjectileRenderSystem(this.scene)
     this.lightningBoltRenderSystem = new LightningBoltRenderSystem(this.scene)
     this.primaryMeleeAttackRenderSystem = new PrimaryMeleeAttackRenderSystem(this.scene)
+    this.combatTelegraphRenderSystem = new CombatTelegraphRenderSystem(this.scene)
     this.damageFloatersSystem = new DamageFloatersSystem(this.scene)
     this.keyboardController = new KeyboardController(this.scene)
     this.mouseController = new MouseController(this.scene)
@@ -175,7 +183,10 @@ export class ArenaRuntime {
     if (this.arenaWidthPx > 0 && this.arenaHeightPx > 0) {
       cam.setBounds(0, 0, this.arenaWidthPx, this.arenaHeightPx)
     } else {
-      console.warn("[Arena] Tilemap has zero size; camera bounds not set.")
+      this.log.warn(
+        { event: "arena.tilemap.bounds.skipped", reason: "zero_size_tilemap" },
+        "Tilemap has zero size; camera bounds not set",
+      )
     }
   }
 
@@ -200,6 +211,10 @@ export class ArenaRuntime {
 
     if (injected?.room) {
       this.connection = injected
+      this.log.info(
+        { event: "arena.connection.injected", roomId: injected.room.roomId, sessionId: injected.room.sessionId },
+        "Using injected game connection",
+      )
       const sub = this.scene.game.registry.get(WW_LOCAL_PLAYER_ID_REGISTRY_KEY) as
         | string
         | undefined
@@ -207,10 +222,15 @@ export class ArenaRuntime {
       this.networkSyncSystem.localPlayerId = sub ?? null
       this._subscribeRoomEvents()
       this.connection.sendClientSceneReady()
+      this.log.info({ event: "arena.scene_ready.sent", playerId: sub }, "Client scene ready sent")
       return
     }
 
     this.connection = new GameConnection()
+    this.log.info(
+      { event: "arena.connection.fallback", reason: "missing_injected_connection" },
+      "Opening fallback game connection",
+    )
     const sub = this.scene.game.registry.get(WW_LOCAL_PLAYER_ID_REGISTRY_KEY) as
       | string
       | undefined
@@ -219,6 +239,7 @@ export class ArenaRuntime {
     void this.connection.connect().then(() => {
       this._subscribeRoomEvents()
       this.connection.sendClientSceneReady()
+      this.log.info({ event: "arena.scene_ready.sent", playerId: sub }, "Client scene ready sent")
     })
   }
 
@@ -233,6 +254,7 @@ export class ArenaRuntime {
           this.networkSyncSystem.applyFullSync(payload)
           this.playerRenderSystem.applyFullSync(payload)
           this.projectileRenderSystem.applyFullSyncFireballs(payload.fireballs)
+          this.combatTelegraphRenderSystem.applyFullSync(payload.activeTelegraphs ?? [])
           this._ensureMatchLive()
           break
         }
@@ -261,6 +283,19 @@ export class ArenaRuntime {
           )
           this.soundManager.play("sfx-axe-swing")
           break
+        case WsEvent.CombatTelegraphStart:
+          this.combatTelegraphRenderSystem.start(
+            message.payload as CombatTelegraphStartPayload,
+          )
+          break
+        case WsEvent.CombatTelegraphEnd:
+          this.combatTelegraphRenderSystem.end(
+            message.payload as CombatTelegraphEndPayload,
+          )
+          break
+        case WsEvent.AbilitySfx:
+          this.soundManager.play((message.payload as AbilitySfxPayload).sfxKey)
+          break
         case WsEvent.PlayerDeath:
           this.playerRenderSystem.onPlayerDeath(message.payload as PlayerDeathPayload)
           this.soundManager.play("sfx-player-death")
@@ -278,6 +313,10 @@ export class ArenaRuntime {
     })
 
     if (this.connection.isMatchInProgress()) {
+      this.log.info(
+        { event: "arena.resync.requested", roomId: this.connection.room?.roomId },
+        "Requesting match resync after subscription",
+      )
       this.connection.sendRequestResync()
     }
   }
@@ -287,6 +326,12 @@ export class ArenaRuntime {
    * `MatchGo` and after `GameStateSync` (e.g. refresh / resync).
    */
   private _ensureMatchLive(): void {
+    if (!this.matchStarted) {
+      this.log.info(
+        { event: "arena.match.live", roomId: this.connection.room?.roomId },
+        "Arena match marked live",
+      )
+    }
     this.matchStarted = true
     this.keyboardController.enable()
     this.mouseController.enable()
@@ -328,6 +373,9 @@ export class ArenaRuntime {
       this.connection.sendPlayerInput(fullInput)
     })
     this.projectileRenderSystem.update(delta)
+    this.combatTelegraphRenderSystem.update(
+      this.playerRenderSystem.getEstimatedServerTimeMs(),
+    )
     this.lightningBoltRenderSystem.update(delta)
     this.primaryMeleeAttackRenderSystem.update(delta)
     this.damageFloatersSystem.update(delta)

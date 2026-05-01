@@ -8,7 +8,7 @@ import express from "express"
 import { createColyseusServer, getColyseusWss } from "./src/server/colyseus/app.config"
 import { createPostgresChatStore } from "./src/server/store/postgres"
 import { prisma } from "./src/server/db"
-import { logger } from "./src/server/logger"
+import { applyDbLogLevelOverride, logger, resolveEnvLogLevel } from "./src/server/logger"
 
 const dev = process.env.NODE_ENV !== "production"
 const nextApp = next({ dev })
@@ -19,10 +19,28 @@ const handle = nextApp.getRequestHandler()
  * and wires the WebSocket upgrade router to separate Colyseus and Turbopack HMR upgrades.
  */
 const bootstrap = async (): Promise<void> => {
+  logger.info(
+    { event: "app.starting", env: process.env.NODE_ENV ?? "development" },
+    "Starting Wizard Wars server",
+  )
+  logger.info(
+    {
+      event: "log.level.resolved",
+      source: process.env.LOG_LEVEL?.trim() ? "env" : "default",
+      level: resolveEnvLogLevel(),
+    },
+    "Initial log level resolved",
+  )
+
   if (!process.env.AUTH_SECRET?.trim()) {
-    console.error("FATAL: AUTH_SECRET must be set in the environment.")
+    logger.fatal(
+      { event: "app.config.missing", key: "AUTH_SECRET" },
+      "AUTH_SECRET must be set in the environment",
+    )
     process.exit(1)
   }
+
+  await applyDbLogLevelOverride(prisma)
 
   await nextApp.prepare()
 
@@ -46,7 +64,7 @@ const bootstrap = async (): Promise<void> => {
     const pathname = req.url?.split("?")[0] ?? "/"
     if (dev && nextUpgradeHandler && pathname.startsWith("/_next/")) {
       nextUpgradeHandler(req, socket as Duplex, head as Buffer).catch((err: unknown) => {
-        logger.error({ err }, "[next upgrade] failed")
+        logger.error({ event: "ws.upgrade.failed", area: "netcode", side: "server", err }, "WebSocket upgrade failed")
         socket.destroy()
       })
     } else {
@@ -61,7 +79,7 @@ const bootstrap = async (): Promise<void> => {
   await gameServer.listen(port, "0.0.0.0")
   ;(globalThis as unknown as { __wizardWarsMatchMaker: typeof colyseusCore.matchMaker }).__wizardWarsMatchMaker =
     colyseusCore.matchMaker
-  logger.info(`> Ready on http://localhost:${port}`)
+  logger.info({ event: "app.ready", port }, "Wizard Wars server ready")
 }
 
 void bootstrap()

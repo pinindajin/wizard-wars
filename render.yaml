@@ -9,3 +9,9 @@ services:
         sync: false
       - key: AUTH_SECRET
         generateValue: true
+      - key: LOG_LEVEL
+        value: warn
+      - key: ADMIN_USERNAMES
+        sync: false
+      - key: ADMIN_PREFIX
+        sync: false

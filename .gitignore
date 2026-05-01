@@ -28,6 +28,9 @@ Thumbs.db
 *.swp
 *.swo
 
+# Cursor / MCP (Playwright page snapshots)
+.playwright-mcp/
+
 # Logs
 *.log
 server.log
@@ -42,3 +45,11 @@ next-env.d.ts
 
 # Test results
 test-results/
+
+# Local animation tool snapshots
+tools/animation/output/*.json
+!tools/animation/output/.gitkeep
+
+# Local sprite-replace archives (animation tool)
+public/assets/sprites/heroes/lady-wizard/sheets/old/
+public/assets/sprites/heroes/lady-wizard/animations/old/

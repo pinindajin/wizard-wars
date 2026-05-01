@@ -67,11 +67,20 @@ export type PrimaryMeleeAttackConfig = {
   readonly hurtboxRadiusPx: number
   /** Hurtbox arc width in degrees (180 = half-circle). */
   readonly hurtboxArcDeg: number
-  /** Total swing duration in ms (drives cooldown and hurtbox lifetime). */
+  /**
+   * Default swing duration in ms.
+   * Runtime swing timing is loaded from `src/shared/balance-config/animation-config.json`.
+   */
   readonly durationMs: number
-  /** Inclusive start of the dangerous window in ms since swing start. */
+  /**
+   * Default inclusive start of the dangerous window in ms since swing start.
+   * Runtime dangerous-window timing is loaded from `src/shared/balance-config/animation-config.json`.
+   */
   readonly dangerousWindowStartMs: number
-  /** Exclusive end of the dangerous window in ms since swing start. */
+  /**
+   * Default exclusive end of the dangerous window in ms since swing start.
+   * Runtime dangerous-window timing is loaded from `src/shared/balance-config/animation-config.json`.
+   */
   readonly dangerousWindowEndMs: number
   readonly damageProperties: number
   readonly swingSfxKey: string

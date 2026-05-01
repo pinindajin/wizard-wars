@@ -6,23 +6,24 @@ alwaysApply: true
 
 # Wizard Wars — Project Context
 
-Multiplayer top-down (35° angle) arena shooter. 2-12 players per match, WASD movement, fireball + abilities, shop, lives system.
+Multiplayer top-down (35° angle) arena shooter. 2–12 players per match, WASD movement, abilities, shop, lives (starting lives from balance config).
 
 ## Architecture
-- **Runtime**: Bun 1.2 (replaces Vite/Node)
+- **Runtime**: Bun 1.2 (see `package.json` `packageManager`)
 - **Web**: Next.js 16 App Router
 - **API**: tRPC v11 + SuperJSON
+- **HTTP**: Express 5 (`server.ts` co-hosts Next + Colyseus)
 - **WebSockets**: Colyseus 0.17 rooms (`chat`, `game_lobby`)
-- **Game Client**: Phaser 4 (Arena.ts/.scene — Phaser Editor compatible)
-- **Game Server**: bitECS 0.4 simulation at 20 Hz
+- **Game Client**: Phaser 4 (Arena scene — Phaser Editor compatible); default canvas **1344×768** (`src/game/config.ts`)
+- **Game Server**: bitECS 0.4 server-authoritative simulation at **60 Hz** (`TICK_RATE_HZ`, `TICK_MS` in `src/shared/balance-config/rendering.ts`; loop in `GameLobbyRoom`)
 - **Database**: PostgreSQL 16 + Prisma 6
 - **Auth**: jose JWT + bcryptjs, cookie name `ww-token`
 
 ## Key constants
-- Arena: 1344×768 px (21×12 × 64px tiles), center (672, 384)
-- 12 spawn points at radius 300px around center
-- Max players: 12
-- Player radius: 20px, base speed: 200px/s
+- **World / sim bounds**: 66×53 tiles × 64px = **4224×3392** px (`ARENA_LAYOUT_*` in `src/shared/balance-config/arena-layout.ts`); center **(2112, 1696)** (`ARENA_CENTER_*` in `arena.ts`)
+- **Spawns**: **12** committed safe points (`ARENA_LAYOUT_SPAWN_POINTS`); not a fixed-radius ring (`ARENA_SPAWN_RING_RADIUS_PX` is legacy/approximate only)
+- Max players: 12 (`MAX_PLAYERS_PER_MATCH` in `src/shared/balance-config/lobby.ts`)
+- Player: `PLAYER_RADIUS_PX` 20; world collision ellipse 20×9 px (`combat.ts`); base move speed **200** px/s (`BASE_MOVE_SPEED_PX_PER_SEC`)
 
 ## Documentation
 All architecture docs, ADRs, and learnings live at:
