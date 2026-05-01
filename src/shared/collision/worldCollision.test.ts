@@ -87,6 +87,19 @@ describe("resolveJumpLandingWithGrace", () => {
     expect(out).toEqual({ x: lava.x + lava.width + fixtureFootprint.radiusX, y: 140 })
   })
 
+  it("accepts a tiny overlap that can be resolved without movement direction", () => {
+    const out = resolveJumpLandingWithGrace(
+      lava.x + lava.width + fixtureFootprint.radiusX - 4,
+      140,
+      fixtureFootprint,
+      fixtureBounds,
+      [lava],
+      { movementX: 0, movementY: 0, gracePx: 6 },
+    )
+
+    expect(out).toEqual({ x: lava.x + lava.width + fixtureFootprint.radiusX, y: 140 })
+  })
+
   it("rejects a deep landing inside blocked terrain", () => {
     expect(
       resolveJumpLandingWithGrace(
