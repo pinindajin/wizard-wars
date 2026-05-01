@@ -6,6 +6,7 @@ import { SHOP_ITEMS, type ShopItemCategory, type ShopItemConfig } from "@/shared
 import { ABILITY_BAR_SLOT_COUNT } from "@/shared/balance-config/economy"
 import type { ShopStatePayload } from "@/shared/types"
 import type { GameConnection } from "@/game/network/GameConnection"
+import { useBlockGameplayInputEvents } from "./useBlockGameplayInputEvents"
 
 /** Ordered category tabs rendered in the modal. */
 const CATEGORY_ORDER: readonly ShopItemCategory[] = ["ability", "augment", "consumable"]
@@ -28,6 +29,7 @@ type ShopModalProps = {
  * @param props - ShopModalProps.
  */
 export default function ShopModal({ shopState, connection, onClose }: ShopModalProps) {
+  const gameplayInputBlockProps = useBlockGameplayInputEvents()
   const gold = shopState?.gold ?? 0
   const ownedIds = useMemo(
     () => new Set((shopState?.items ?? []).map((i) => i.itemId)),
@@ -75,6 +77,7 @@ export default function ShopModal({ shopState, connection, onClose }: ShopModalP
 
   return (
     <div
+      {...gameplayInputBlockProps}
       className="pointer-events-auto absolute inset-0 z-50 flex items-center justify-center bg-black/70 p-6 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"

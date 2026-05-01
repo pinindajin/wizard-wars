@@ -1,7 +1,10 @@
 import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 
-import { requireAuthRedirect } from "./src/server/auth/middleware"
+import {
+  requireAuthRedirect,
+  withProtectedPathnameHeader,
+} from "./src/server/auth/middleware"
 
 /**
  * Next.js edge middleware: redirects unauthenticated users away from protected routes.
@@ -9,7 +12,12 @@ import { requireAuthRedirect } from "./src/server/auth/middleware"
  */
 export const middleware = async (request: NextRequest): Promise<NextResponse> => {
   const redirect = await requireAuthRedirect(request)
-  return redirect ?? NextResponse.next()
+  if (redirect) return redirect
+  return NextResponse.next({
+    request: {
+      headers: withProtectedPathnameHeader(request),
+    },
+  })
 }
 
 export const config = {

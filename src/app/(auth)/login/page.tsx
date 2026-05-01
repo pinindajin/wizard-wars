@@ -18,6 +18,7 @@ const LoginForm = () => {
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const sessionExpired = searchParams.get("reason") === "session-expired"
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -96,6 +97,11 @@ const LoginForm = () => {
 
           {error && (
             <div className={`mb-5 ${errorBanner}`}>{error}</div>
+          )}
+          {sessionExpired && !error && (
+            <div className={`mb-5 ${errorBanner}`} role="status">
+              Session expired. Please log in again.
+            </div>
           )}
 
           <form className="space-y-4" onSubmit={onSubmit} noValidate>

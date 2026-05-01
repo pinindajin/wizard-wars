@@ -1,7 +1,17 @@
 import { describe, expect, it, vi } from "vitest"
 
+const prismaMock = vi.hoisted(() => ({
+  user: {
+    findUnique: vi.fn(),
+  },
+}))
+
 vi.mock("next/headers", () => ({
   cookies: vi.fn(),
+}))
+
+vi.mock("@/server/db", () => ({
+  prisma: prismaMock,
 }))
 
 import { cookies } from "next/headers"
@@ -68,6 +78,21 @@ describe("GET /api/lobbies", () => {
     expect(Array.isArray(body)).toBe(true)
     expect(body[0].lobbyId).toBe("r1")
     delete (globalThis as { __wizardWarsMatchMaker?: unknown }).__wizardWarsMatchMaker
+    vi.unstubAllEnvs()
+  })
+
+  it("clears cookie when protected user verification finds no DB user", async () => {
+    vi.stubEnv("AUTH_SECRET", "test-secret-32-chars-minimum-required")
+    vi.stubEnv("VERIFY_USER_ON_PROTECTED", "true")
+    prismaMock.user.findUnique.mockResolvedValueOnce(null)
+    const { signToken } = await import("@/server/auth")
+    const token = await signToken({ sub: "u1", username: "A" })
+    vi.mocked(cookies).mockResolvedValueOnce({
+      get: () => ({ value: token }),
+    } as never)
+    const res = await GET()
+    expect(res.status).toBe(401)
+    expect(res.headers.get("set-cookie")).toContain("Max-Age=0")
     vi.unstubAllEnvs()
   })
 })

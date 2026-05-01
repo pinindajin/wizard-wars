@@ -133,6 +133,14 @@ export default class Arena extends Phaser.Scene {
 		)
 	}
 
+	/** Applies user-facing audio volume settings to the active runtime. */
+	setAudioVolumes(settings: {
+		readonly bgmVolume?: number
+		readonly sfxVolume?: number
+	}): void {
+		this.runtime?.setAudioVolumes(settings)
+	}
+
 	/* END-USER-CODE */
 }
 

@@ -11,10 +11,16 @@ export const WW_GAME_CONNECTION_REGISTRY_KEY = "wwGameConnection"
 export const WW_LOCAL_PLAYER_ID_REGISTRY_KEY = "wwLocalPlayerId"
 
 /**
- * Injected `KeybindConfig` from React (GameKeybindProvider). KeyboardController
+ * Injected `KeybindConfig` from React (GameSettingsProvider). KeyboardController
  * reads this so Phaser uses the same binds as the settings UI.
  */
 export const WW_KEYBIND_CONFIG_REGISTRY_KEY = "wwKeybindConfig"
+
+/**
+ * Phaser registry key set by React while an in-game modal owns input.
+ * KeyboardController and MouseController return inactive payloads when true.
+ */
+export const WW_GAMEPLAY_INPUT_BLOCKED_REGISTRY_KEY = "wwGameplayInputBlocked"
 
 /**
  * Phaser registry key for the loader status bridge. React components subscribe

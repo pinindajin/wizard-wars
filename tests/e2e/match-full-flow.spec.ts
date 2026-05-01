@@ -170,6 +170,91 @@ test("full match flow: assets, overlay, canvas, movement, shop, abilities", asyn
       return arena?.playerRenderSystem?.getLocalPlayerRenderPos?.() ?? null
     })
 
+  /**
+   * Installs a test-only recorder around the live GameConnection input sender.
+   */
+  const installInputRecorder = async (): Promise<void> => {
+    await page.evaluate(() => {
+      type PlayerInput = {
+        weaponPrimary: boolean
+        weaponSecondary: boolean
+        abilitySlot: number | null
+        useQuickItemSlot: number | null
+        up: boolean
+        down: boolean
+        left: boolean
+        right: boolean
+      }
+      type ConnectionLike = {
+        sendPlayerInput: (input: PlayerInput) => void
+      }
+      type ArenaLike = {
+        getConnection?: () => ConnectionLike
+      }
+      const w = globalThis as unknown as {
+        __wwGame?: { scene: { getScene: (k: string) => unknown } }
+        __wwInputLog?: PlayerInput[]
+        __wwInputRecorderInstalled?: boolean
+      }
+      if (w.__wwInputRecorderInstalled) return
+      const arena = w.__wwGame?.scene.getScene("Arena") as ArenaLike | undefined
+      const conn = arena?.getConnection?.()
+      if (!conn) throw new Error("E2E input recorder: GameConnection missing")
+      const original = conn.sendPlayerInput.bind(conn)
+      w.__wwInputLog = []
+      conn.sendPlayerInput = (input: PlayerInput) => {
+        w.__wwInputLog?.push({ ...input })
+        original(input)
+      }
+      w.__wwInputRecorderInstalled = true
+    })
+  }
+
+  /**
+   * Clears the test-only input recorder log.
+   */
+  const clearInputLog = async (): Promise<void> => {
+    await page.evaluate(() => {
+      ;(globalThis as unknown as { __wwInputLog?: unknown[] }).__wwInputLog = []
+    })
+  }
+
+  /**
+   * Reads the test-only input recorder log.
+   */
+  const readInputLog = async (): Promise<
+    Array<{
+      weaponPrimary: boolean
+      weaponSecondary: boolean
+      abilitySlot: number | null
+      useQuickItemSlot: number | null
+      up: boolean
+      down: boolean
+      left: boolean
+      right: boolean
+    }>
+  > =>
+    page.evaluate(() => {
+      return [
+        ...((globalThis as unknown as { __wwInputLog?: never[] }).__wwInputLog ?? []),
+      ]
+    })
+
+  /**
+   * Sets a range input and dispatches React-compatible input/change events.
+   *
+   * @param testId - Locator test id.
+   * @param value - New numeric value.
+   */
+  const setRange = async (testId: string, value: number): Promise<void> => {
+    await page.getByTestId(testId).evaluate((el, nextValue) => {
+      const input = el as HTMLInputElement
+      input.value = String(nextValue)
+      input.dispatchEvent(new Event("input", { bubbles: true }))
+      input.dispatchEvent(new Event("change", { bubbles: true }))
+    }, value)
+  }
+
   const startPos = await readLocalPos()
   expect(startPos, "expected local render pos available before W hold").not.toBeNull()
   const startY = startPos!.y
@@ -219,9 +304,71 @@ test("full match flow: assets, overlay, canvas, movement, shop, abilities", asyn
     `expected local Y NOT to drift backward after W release (settledY=${settledY}, afterSettleY=${afterSettleY})`,
   ).toBeLessThan(4)
 
+  await installInputRecorder()
+
+  // Settings modal: BGM/SFX save and gameplay input block.
+  await page.keyboard.press("\\")
+  await expect(page.getByTestId("settings-modal")).toBeVisible({ timeout: 5000 })
+  await setRange("settings-bgm-volume", 23)
+  await setRange("settings-sfx-volume", 34)
+  await page.getByTestId("settings-save").click()
+  await expect(page.getByText(/settings saved/i)).toBeVisible({ timeout: 5000 })
+
+  await clearInputLog()
+  await page.mouse.down()
+  await page.keyboard.press("1")
+  await page.waitForTimeout(250)
+  await page.mouse.up()
+  const settingsInputs = await readInputLog()
+  expect(settingsInputs.length, "expected input samples while settings modal is open").toBeGreaterThan(0)
+  expect(settingsInputs).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        weaponPrimary: false,
+        weaponSecondary: false,
+        abilitySlot: null,
+        useQuickItemSlot: null,
+        up: false,
+        down: false,
+        left: false,
+        right: false,
+      }),
+    ]),
+  )
+  expect(
+    settingsInputs.every(
+      (input) =>
+        !input.weaponPrimary &&
+        !input.weaponSecondary &&
+        input.abilitySlot == null &&
+        input.useQuickItemSlot == null,
+    ),
+    `expected settings modal to block attack/cast inputs: ${JSON.stringify(settingsInputs.slice(-10))}`,
+  ).toBe(true)
+  await page.getByRole("button", { name: /cancel/i }).click()
+  await expect(page.getByTestId("settings-modal")).toBeHidden({ timeout: 5000 })
+
   // Open the shop with B.
   await page.keyboard.press("b")
   await expect(page.getByTestId("shop-modal")).toBeVisible({ timeout: 5000 })
+
+  await clearInputLog()
+  await page.mouse.down()
+  await page.keyboard.press("1")
+  await page.waitForTimeout(250)
+  await page.mouse.up()
+  const shopInputs = await readInputLog()
+  expect(shopInputs.length, "expected input samples while shop modal is open").toBeGreaterThan(0)
+  expect(
+    shopInputs.every(
+      (input) =>
+        !input.weaponPrimary &&
+        !input.weaponSecondary &&
+        input.abilitySlot == null &&
+        input.useQuickItemSlot == null,
+    ),
+    `expected shop modal to block attack/cast inputs: ${JSON.stringify(shopInputs.slice(-10))}`,
+  ).toBe(true)
 
   // Verify shop shows all categories + lightning_bolt buy button enabled.
   await expect(page.getByTestId("shop-section-ability")).toBeVisible()

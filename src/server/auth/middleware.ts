@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server"
 
 import { AUTH_COOKIE_NAME } from "./constants"
 import { verifyToken } from "./jwt"
+import { PROTECTED_PATHNAME_HEADER } from "./sessionRedirect"
 import type { AuthUser } from "../../shared/types"
 
 /**
@@ -21,6 +22,20 @@ const PROTECTED_PATH_PREFIXES = ["/home", "/lobby", "/browse", "/dev/admin"] as 
  */
 export const isProtectedPath = (pathname: string): boolean => {
   return PROTECTED_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+}
+
+/**
+ * Builds request headers for downstream Node layouts. Middleware remains Edge/JWT-only;
+ * DB-backed user checks read this server-overwritten path header later.
+ *
+ * @param request - Next.js request from middleware.
+ * @returns Headers with the protected pathname header overwritten.
+ */
+export function withProtectedPathnameHeader(request: NextRequest): Headers {
+  const requestHeaders = new Headers(request.headers)
+  const pathnameWithSearch = `${request.nextUrl.pathname}${request.nextUrl.search}`
+  requestHeaders.set(PROTECTED_PATHNAME_HEADER, pathnameWithSearch)
+  return requestHeaders
 }
 
 /**
