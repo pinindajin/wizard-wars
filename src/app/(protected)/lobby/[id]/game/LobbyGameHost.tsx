@@ -22,6 +22,7 @@ import LoadingOverlay from "./LoadingOverlay"
 import CountdownOverlay from "./CountdownOverlay"
 import { useLoaderStatus } from "./useLoaderStatus"
 import {
+  WW_DEBUG_MODE_REGISTRY_KEY,
   WW_GAMEPLAY_INPUT_BLOCKED_REGISTRY_KEY,
   WW_KEYBIND_CONFIG_REGISTRY_KEY,
 } from "@/game/constants"
@@ -110,7 +111,8 @@ type LobbyGameHostWithKeybindsProps = {
 function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) {
   const router = useRouter()
   const keybinds = useGameKeybinds()
-  const { audioVolumes, settingsLoaded } = useGameSettingsContext()
+  const { audioVolumes, debugModeEnabled, settingsLoaded } =
+    useGameSettingsContext()
   const gameplayInputBlockProps = useBlockGameplayInputEvents()
   const keybindsRef = useRef(keybinds)
   useEffect(() => {
@@ -339,6 +341,21 @@ function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) 
   useEffect(() => {
     applyAudioVolumes(audioVolumes)
   }, [applyAudioVolumes, audioVolumes])
+
+  useEffect(() => {
+    if (!gameHost) return
+    gameHost.registry.set(WW_DEBUG_MODE_REGISTRY_KEY, debugModeEnabled)
+
+    const host = gameHost as unknown as
+      | { scene?: { getScene: (key: string) => unknown } }
+      | null
+      | undefined
+    const arena = host?.scene?.getScene("Arena") as
+      | { setDebugModeEnabled?: (enabled: boolean) => void }
+      | null
+      | undefined
+    arena?.setDebugModeEnabled?.(debugModeEnabled)
+  }, [debugModeEnabled, gameHost])
 
   const modalInputBlocked = settingsOpen || shopOpen
   useEffect(() => {
