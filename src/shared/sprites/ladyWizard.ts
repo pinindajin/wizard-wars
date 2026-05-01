@@ -42,6 +42,7 @@ export const LADY_WIZARD_CLIP_FRAMES = {
   heavy_spell_cast: 17,
   summoned_axe_swing: 17,
   jump: 17,
+  stumble: 17,
 } as const
 
 export type LadyWizardMegasheetClip = keyof typeof LADY_WIZARD_CLIP_FRAMES
@@ -57,6 +58,7 @@ export const LADY_WIZARD_CLIP_BASE_FRAME: Record<LadyWizardMegasheetClip, number
   heavy_spell_cast: 53,
   summoned_axe_swing: 70,
   jump: 87,
+  stumble: 104,
 }
 
 /**
@@ -71,6 +73,7 @@ export const LADY_WIZARD_CLIP_TO_SHEET_PREFIX: Record<LadyWizardMegasheetClip, s
   heavy_spell_cast: "heavy-spell-cast",
   summoned_axe_swing: "summoned-axe-attack",
   jump: "jump",
+  stumble: "stumble",
 }
 
 /**
@@ -84,13 +87,14 @@ export const LADY_WIZARD_MEGASHEET_CLIP_ORDER: readonly LadyWizardMegasheetClip[
   "heavy_spell_cast",
   "summoned_axe_swing",
   "jump",
+  "stumble",
 ]
 
 /**
  * Width in megasheet frames for one direction row (last band end + 1).
  */
 export const LADY_WIZARD_FRAMES_PER_DIRECTION_ROW =
-  LADY_WIZARD_CLIP_BASE_FRAME.jump + LADY_WIZARD_CLIP_FRAMES.jump
+  LADY_WIZARD_CLIP_BASE_FRAME.stumble + LADY_WIZARD_CLIP_FRAMES.stumble
 
 /**
  * Default animation frame rates (fps) per megasheet clip for Phaser and the sprite viewer.
@@ -103,6 +107,7 @@ export const LADY_WIZARD_CLIP_FPS: Record<LadyWizardMegasheetClip, number> = {
   heavy_spell_cast: 12,
   summoned_axe_swing: 12,
   jump: 12,
+  stumble: 12,
 }
 
 /**
@@ -116,6 +121,7 @@ export const LADY_WIZARD_ATLAS_CLIP_IDS = [
   "heavy-spell-cast",
   "summoned-axe-attack",
   "jump",
+  "stumble",
 ] as const
 
 export type LadyWizardAtlasClipId = (typeof LADY_WIZARD_ATLAS_CLIP_IDS)[number]
@@ -131,6 +137,7 @@ export const LADY_WIZARD_ATLAS_CLIP_TO_MEGASHEET: Record<LadyWizardAtlasClipId, 
   "heavy-spell-cast": "heavy_spell_cast",
   "summoned-axe-attack": "summoned_axe_swing",
   jump: "jump",
+  stumble: "stumble",
 }
 
 /** Root-relative URL directory for shipped strip PNGs and atlas.json. */

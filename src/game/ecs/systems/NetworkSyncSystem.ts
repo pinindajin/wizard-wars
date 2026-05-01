@@ -109,6 +109,7 @@ export class NetworkSyncSystem {
         lives: snap.lives,
         animState: snap.animState,
         moveState: snap.moveState,
+        terrainState: snap.terrainState,
         castingAbilityId: snap.castingAbilityId,
         facingAngle: snap.facingAngle,
         moveFacingAngle: snap.moveFacingAngle,
@@ -176,6 +177,7 @@ export class NetworkSyncSystem {
         if (delta.lives !== undefined) state.lives = delta.lives
         if (delta.animState !== undefined) state.animState = delta.animState
         if (delta.moveState !== undefined) state.moveState = delta.moveState
+        if (delta.terrainState !== undefined) state.terrainState = delta.terrainState
         if (delta.castingAbilityId !== undefined) state.castingAbilityId = delta.castingAbilityId
         if (delta.invulnerable !== undefined) state.invulnerable = delta.invulnerable
         if (delta.jumpZ !== undefined) state.jumpZ = delta.jumpZ

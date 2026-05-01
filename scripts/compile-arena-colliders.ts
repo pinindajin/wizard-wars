@@ -26,7 +26,28 @@ const COLLIDER_OUTPUTS = [
     exportName: "GENERATED_ARENA_NON_WALKABLE_COLLIDERS",
     fileName: "arena-non-walkable-colliders.ts",
   },
+  {
+    layerName: "LavaAreas",
+    exportName: "GENERATED_ARENA_LAVA_COLLIDERS",
+    fileName: "arena-lava-colliders.ts",
+  },
+  {
+    layerName: "CliffAreas",
+    exportName: "GENERATED_ARENA_CLIFF_COLLIDERS",
+    fileName: "arena-cliff-colliders.ts",
+  },
 ] as const
+
+const LAVA_TILE_IDS = new Set([
+  21, 22, 23, 24, 25, 26, 27, 28, 30, 32, 33, 36, 40, 41, 43, 44, 48, 49,
+  51, 52, 54, 55, 59, 60, 64, 65, 68, 69, 76, 77, 79, 80, 82, 84, 85, 87,
+  88, 93, 94, 95, 97, 98, 100, 101, 102, 104, 105, 106, 107, 112, 113, 118,
+  119, 122, 123, 125, 127, 128, 129, 130, 132, 135, 136, 137, 139, 140, 141,
+  142, 145, 146, 148, 149, 150, 151, 152, 153, 155, 157, 158, 159, 160, 167,
+  168, 173, 174, 177, 178, 180, 182, 183, 185, 186, 189, 190, 191, 193, 194,
+  199, 202, 205, 207, 209, 210, 211, 213, 214, 215, 218, 219, 220, 221, 222,
+  223, 224, 225, 226, 227, 228,
+])
 
 type TiledObject = {
   readonly x?: number
@@ -38,22 +59,29 @@ type TiledObject = {
 type TiledLayer = {
   readonly name?: string
   readonly type?: string
+  readonly width?: number
+  readonly height?: number
+  readonly data?: readonly number[]
   readonly objects?: readonly TiledObject[]
 }
 
 type TiledMap = {
+  readonly tilewidth?: number
+  readonly tileheight?: number
   readonly layers?: readonly TiledLayer[]
 }
+
+type Rect = { x: number; y: number; width: number; height: number }
 
 function readColliderRects(
   map: TiledMap,
   layerName: string,
-): { x: number; y: number; width: number; height: number }[] {
+): Rect[] {
   const layers = map.layers ?? []
   const layer = layers.find((l) => l.type === "objectgroup" && l.name === layerName)
   const objects = layer?.objects ?? []
 
-  const rects: { x: number; y: number; width: number; height: number }[] = []
+  const rects: Rect[] = []
   for (const obj of objects) {
     const w = obj.width ?? 0
     const h = obj.height ?? 0
@@ -66,6 +94,75 @@ function readColliderRects(
     })
   }
   return rects
+}
+
+function rectsOverlap(a: Rect, b: Rect): boolean {
+  return (
+    a.x < b.x + b.width &&
+    a.x + a.width > b.x &&
+    a.y < b.y + b.height &&
+    a.y + a.height > b.y
+  )
+}
+
+function mergeTileRects(rects: readonly Rect[]): Rect[] {
+  const rows = new Map<number, Rect[]>()
+  for (const rect of rects) {
+    const row = rows.get(rect.y) ?? []
+    row.push(rect)
+    rows.set(rect.y, row)
+  }
+
+  const horizontal: Rect[] = []
+  for (const row of rows.values()) {
+    row.sort((a, b) => a.x - b.x)
+    for (const rect of row) {
+      const last = horizontal[horizontal.length - 1]
+      if (last && last.y === rect.y && last.height === rect.height && last.x + last.width === rect.x) {
+        last.width += rect.width
+      } else {
+        horizontal.push({ ...rect })
+      }
+    }
+  }
+
+  horizontal.sort((a, b) => a.x - b.x || a.width - b.width || a.y - b.y)
+  const merged: Rect[] = []
+  for (const rect of horizontal) {
+    const last = merged[merged.length - 1]
+    if (last && last.x === rect.x && last.width === rect.width && last.y + last.height === rect.y) {
+      last.height += rect.height
+    } else {
+      merged.push({ ...rect })
+    }
+  }
+  return merged.sort((a, b) => a.y - b.y || a.x - b.x)
+}
+
+function lavaRectsFromGround(map: TiledMap): Rect[] {
+  const ground = (map.layers ?? []).find((layer) => layer.type === "tilelayer" && layer.name === "Ground")
+  const data = ground?.data ?? []
+  const width = ground?.width ?? 0
+  const tileW = map.tilewidth ?? 64
+  const tileH = map.tileheight ?? 64
+  const rects: Rect[] = []
+  for (let i = 0; i < data.length; i++) {
+    if (!LAVA_TILE_IDS.has(data[i] ?? 0)) continue
+    const col = i % width
+    const row = Math.floor(i / width)
+    rects.push({ x: col * tileW, y: row * tileH, width: tileW, height: tileH })
+  }
+  return mergeTileRects(rects)
+}
+
+function hazardRects(map: TiledMap, kind: "lava" | "cliff"): Rect[] {
+  const explicit = readColliderRects(map, kind === "lava" ? "LavaAreas" : "CliffAreas")
+  const lava = [...lavaRectsFromGround(map), ...explicit]
+  if (kind === "lava") return lava
+
+  const nonWalkable = readColliderRects(map, "NonWalkableAreas")
+  const inferredCliff = nonWalkable.filter((rect) => !lava.some((lavaRect) => rectsOverlap(rect, lavaRect)))
+  return [...inferredCliff, ...readColliderRects(map, "CliffAreas")]
 }
 
 function buildSource(
@@ -88,7 +185,12 @@ function main(): void {
   mkdirSync(OUT_DIR, { recursive: true })
 
   for (const output of COLLIDER_OUTPUTS) {
-    const rects = readColliderRects(map, output.layerName)
+    const rects =
+      output.layerName === "LavaAreas"
+        ? hazardRects(map, "lava")
+        : output.layerName === "CliffAreas"
+          ? hazardRects(map, "cliff")
+          : readColliderRects(map, output.layerName)
     const outFile = resolve(OUT_DIR, output.fileName)
     writeFileSync(outFile, buildSource(output.layerName, output.exportName, rects), "utf8")
     console.log(`Wrote ${rects.length} collider(s) to ${outFile}`)

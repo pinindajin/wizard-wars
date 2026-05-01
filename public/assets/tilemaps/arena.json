@@ -8,7 +8,7 @@
   "version": "1.10",
   "tiledversion": "1.10.2",
   "infinite": false,
-  "nextlayerid": 5,
+  "nextlayerid": 7,
   "nextobjectid": 1108,
   "tilesets": [
     {
@@ -4855,6 +4855,28 @@
           "visible": false
         }
       ]
+    },
+    {
+      "id": 5,
+      "name": "LavaAreas",
+      "type": "objectgroup",
+      "visible": true,
+      "opacity": 1,
+      "x": 0,
+      "y": 0,
+      "draworder": "topdown",
+      "objects": []
+    },
+    {
+      "id": 6,
+      "name": "CliffAreas",
+      "type": "objectgroup",
+      "visible": true,
+      "opacity": 1,
+      "x": 0,
+      "y": 0,
+      "draworder": "topdown",
+      "objects": []
     }
   ]
 }

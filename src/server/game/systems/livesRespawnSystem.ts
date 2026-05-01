@@ -33,6 +33,8 @@ import {
   DamageFlashTag,
   SwingingWeapon,
   JumpArc,
+  TerrainState,
+  TERRAIN_KIND,
 } from "../components"
 import type { SimCtx } from "../simulation"
 import {
@@ -117,6 +119,8 @@ function respawnPlayer(
   if (hasComponent(world, eid, JumpArc)) removeComponent(world, eid, JumpArc)
   JumpArc.z[eid] = 0
   JumpArc.vz[eid] = 0
+  TerrainState.kind[eid] = TERRAIN_KIND.land
+  TerrainState.lavaDamageCarry[eid] = 0
   if (hasComponent(world, eid, DamageFlashTag)) removeComponent(world, eid, DamageFlashTag)
 
   removeComponent(world, eid, DeadTag)

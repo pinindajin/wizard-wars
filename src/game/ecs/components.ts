@@ -1,4 +1,4 @@
-import type { PlayerAnimState, PlayerMoveState } from "@/shared/types"
+import type { PlayerAnimState, PlayerMoveState, PlayerTerrainState } from "@/shared/types"
 
 /**
  * Client ECS component records.
@@ -24,6 +24,7 @@ export const ClientPlayerState: Record<
     lives: number
     animState: PlayerAnimState
     moveState: PlayerMoveState
+    terrainState: PlayerTerrainState
     /** Active cast ability id from server, or `null`. */
     castingAbilityId: string | null
     facingAngle: number

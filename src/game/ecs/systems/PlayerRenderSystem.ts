@@ -33,7 +33,7 @@ import {
   worldStepFromIntent,
 } from "@/shared/movementIntent"
 import { moveWithinWorld } from "@/shared/collision/worldCollision"
-import { worldCollidersForJumpZ } from "@/shared/collision/worldCollidersForPlayer"
+import { worldCollidersForPlayerState } from "@/shared/collision/worldCollidersForPlayer"
 import {
   ClientPosition,
   ClientPlayerState,
@@ -54,6 +54,8 @@ import {
 import {
   FIREBALL_CHANNEL_ANIM,
   FIREBALL_CHANNEL_TEXTURE,
+  LAVA_LAP_ANIM,
+  LAVA_LAP_TEXTURE,
 } from "../../animation/FireballAnimDefs"
 import {
   reconcileLocal,
@@ -157,6 +159,9 @@ const FIREBALL_CHANNEL_EAST_WEST_SIN_MAX = 0.5
 const FIREBALL_CHANNEL_SCALE = 0.35
 /** Tiny depth bump so the channel renders just above the casting wizard. */
 const FIREBALL_CHANNEL_DEPTH_EPS = 0.5
+const LAVA_SUBMERGE_VISIBLE_HEIGHT_PX = 70
+const LAVA_LAP_Y_OFFSET_FROM_FOOT_PX = 2
+const LAVA_LAP_DEPTH_EPS = 0.75
 
 /** Per-entity rendering state that lives outside the shared ECS records. */
 interface PlayerRenderEntry {
@@ -171,6 +176,7 @@ interface PlayerRenderEntry {
    * player first casts fireball; hidden between casts to avoid object churn.
    */
   channelOverlay: Phaser.GameObjects.Sprite | null
+  lavaLapOverlay: Phaser.GameObjects.Sprite | null
   /** Accumulated time for invulnerability pulse (ms). */
   invulnTime: number
   /** Remaining damage flash time (ms). 0 = no flash active. */
@@ -283,6 +289,7 @@ export class PlayerRenderSystem {
         lives: snap.lives,
         animState: snap.animState,
         moveState: snap.moveState,
+        terrainState: snap.terrainState,
         castingAbilityId: snap.castingAbilityId,
         facingAngle: snap.facingAngle,
         moveFacingAngle: snap.moveFacingAngle,
@@ -415,6 +422,7 @@ export class PlayerRenderSystem {
       hasSwiftBoots: false,
       castingAbilityId: state.castingAbilityId,
       jumpZ: state.jumpZ ?? 0,
+      terrainState: state.terrainState,
       moveState: state.moveState,
     }
     const simCurr = { x: entry.simCurrX, y: entry.simCurrY }
@@ -494,6 +502,7 @@ export class PlayerRenderSystem {
       nameTag,
       hpBar,
       channelOverlay: null,
+      lavaLapOverlay: null,
       invulnTime: 0,
       flashRemaining: 0,
       lastAnimKey: "",
@@ -571,6 +580,7 @@ export class PlayerRenderSystem {
     entry.nameTag.destroy()
     entry.hpBar.destroy()
     entry.channelOverlay?.destroy()
+    entry.lavaLapOverlay?.destroy()
     this.entries.delete(id)
     removeEntity(id)
     this.remoteBuffer.remove(id)
@@ -645,6 +655,39 @@ export class PlayerRenderSystem {
       renderPos.y + dy + FIREBALL_CHANNEL_Y_BIAS_PX + eastWestNudge,
     )
     overlay.setDepth(renderPos.y + FIREBALL_CHANNEL_DEPTH_EPS)
+    overlay.setVisible(true)
+  }
+
+  private _updateLavaSubmerge(
+    entry: PlayerRenderEntry,
+    renderPos: { x: number; y: number },
+    state: (typeof ClientPlayerState)[number],
+    isDying: boolean,
+  ): void {
+    const show = state.terrainState === "lava" && !isDying
+    if (!show) {
+      if (typeof entry.sprite.setCrop === "function") entry.sprite.setCrop()
+      if (entry.lavaLapOverlay?.visible) entry.lavaLapOverlay.setVisible(false)
+      return
+    }
+
+    if (typeof entry.sprite.setCrop === "function") {
+      entry.sprite.setCrop(0, 0, LADY_WIZARD_FRAME_SIZE_PX, LAVA_SUBMERGE_VISIBLE_HEIGHT_PX)
+    }
+    if (!entry.lavaLapOverlay) {
+      const overlay = this.scene.add.sprite(renderPos.x, renderPos.y, LAVA_LAP_TEXTURE)
+      overlay.setOrigin(0.5, 0.5)
+      entry.lavaLapOverlay = overlay
+    }
+
+    const overlay = entry.lavaLapOverlay
+    if (!overlay.anims.isPlaying || overlay.anims.currentAnim?.key !== LAVA_LAP_ANIM) {
+      if (this.scene.anims.exists(LAVA_LAP_ANIM)) {
+        overlay.play({ key: LAVA_LAP_ANIM, repeat: -1 }, true)
+      }
+    }
+    overlay.setPosition(renderPos.x, renderPos.y + LAVA_LAP_Y_OFFSET_FROM_FOOT_PX)
+    overlay.setDepth(renderPos.y + LAVA_LAP_DEPTH_EPS)
     overlay.setVisible(true)
   }
 
@@ -747,7 +790,7 @@ export class PlayerRenderSystem {
         state.animState === "primary_melee_attack"
           ? SWING_MOVE_SPEED_MULTIPLIER
           : 1
-      const colliders = worldCollidersForJumpZ(state.jumpZ ?? 0)
+      const colliders = worldCollidersForPlayerState(state.jumpZ ?? 0, state.terrainState)
       if (
         this._canPredictMovement(state, localMoveIntent, castMoveMult)
       ) {
@@ -917,6 +960,8 @@ export class PlayerRenderSystem {
         this._drawHpBar(entry.hpBar, renderPos.x, hpBarTopY, hpFraction)
         entry.hpBar.setDepth(renderPos.y + 1)
       }
+
+      this._updateLavaSubmerge(entry, renderPos, state, isDying)
 
       // --- Fireball channel overlay (light_cast + castingAbilityId=fireball) ---
       if (isDying && entry.channelOverlay) {
