@@ -44,6 +44,7 @@ export const WsEvent = {
   PrimaryMeleeAttack: "PRIMARY_MELEE_ATTACK",
   CombatTelegraphStart: "COMBAT_TELEGRAPH_START",
   CombatTelegraphEnd: "COMBAT_TELEGRAPH_END",
+  AbilitySfx: "ABILITY_SFX",
 
   // Shop / economy
   ShopPurchase: "SHOP_PURCHASE",

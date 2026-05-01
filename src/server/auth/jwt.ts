@@ -1,18 +1,12 @@
 import { SignJWT, jwtVerify } from "jose"
 
 import type { AuthUser } from "../../shared/types"
+import { AUTH_TOKEN_EXPIRY } from "./constants"
 
 /**
- * JWT cookie naming and HS256 issue/verify (jose). This module must stay free of Node-only imports
- * (`pino`, `dotenv`, `bcryptjs`, etc.) because Next.js Edge middleware resolves the same graph.
+ * JWT helpers used by Edge middleware and Node routes.
+ * Must stay free of Node-only modules (pino, bcrypt, dotenv) so Next.js can bundle this into the Edge runtime.
  */
-
-/** Cookie name for the JWT session; must match anywhere cookies are parsed. */
-export const AUTH_COOKIE_NAME = "ww-token"
-/** JWT `exp` duration string passed to jose. */
-const AUTH_TOKEN_EXPIRY = "7d"
-/** `Max-Age` (seconds) on the Set-Cookie line; must align with AUTH_TOKEN_EXPIRY. */
-export const AUTH_TOKEN_MAX_AGE_SECONDS = 60 * 60 * 24 * 7
 
 /**
  * Loads and UTF-8 encodes `process.env.AUTH_SECRET` for jose HS256.
@@ -32,7 +26,7 @@ const getAuthSecret = (): Uint8Array => {
  * Issues a signed JWT for an authenticated user (HS256, subject + username claim).
  *
  * @param user - `AuthUser` with `sub` (user id) and `username`.
- * @returns Compact JWT string suitable for the ww-token cookie value.
+ * @returns Compact JWT string suitable for the `ww-token` cookie value.
  */
 export const signToken = async (user: AuthUser): Promise<string> => {
   return new SignJWT({ username: user.username })

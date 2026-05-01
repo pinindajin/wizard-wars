@@ -1602,6 +1602,9 @@ export class GameLobbyRoom extends Room {
     for (const telegraph of output.combatTelegraphEnds) {
       this.broadcast(RoomEvent.CombatTelegraphEnd, telegraph)
     }
+    for (const sfx of output.abilitySfxEvents) {
+      this.broadcast(RoomEvent.AbilitySfx, sfx)
+    }
     for (const death of output.playerDeaths) {
       this.broadcast(RoomEvent.PlayerDeath, parsePlayerDeathPayload(death))
     }

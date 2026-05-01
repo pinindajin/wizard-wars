@@ -31,13 +31,13 @@ import {
   SwingingWeapon,
   PlayerTag,
   ABILITY_INDEX_TO_ID,
+  JumpArc,
 } from "../components"
 import type { SimCtx } from "../simulation"
 import {
   BASE_MOVE_SPEED_PX_PER_SEC,
   ARENA_HEIGHT,
   ARENA_WIDTH,
-  ARENA_WORLD_COLLIDERS,
   PLAYER_WORLD_COLLISION_FOOTPRINT,
   SWING_MOVE_SPEED_MULTIPLIER,
   SWIFT_BOOTS_SPEED_BONUS,
@@ -45,6 +45,7 @@ import {
 } from "../../../shared/balance-config"
 import { ABILITY_CONFIGS } from "../../../shared/balance-config/abilities"
 import { moveWithinWorld } from "../../../shared/collision/worldCollision"
+import { worldCollidersForJumpZ } from "../../../shared/collision/worldCollidersForPlayer"
 import { normalizedMoveFromWASD } from "../../../shared/movementIntent"
 
 const ARENA_BOUNDS = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
@@ -64,6 +65,12 @@ export function movementSystem(ctx: SimCtx): void {
       hasComponent(world, eid, DeadTag) ||
       hasComponent(world, eid, SpectatorTag)
     ) {
+      Velocity.vx[eid] = 0
+      Velocity.vy[eid] = 0
+      continue
+    }
+
+    if (hasComponent(world, eid, JumpArc) && ctx.currentTick < JumpArc.liftEndsAtTick[eid]) {
       Velocity.vx[eid] = 0
       Velocity.vy[eid] = 0
       continue
@@ -104,6 +111,8 @@ export function movementSystem(ctx: SimCtx): void {
     const speedPxPerSec = BASE_MOVE_SPEED_PX_PER_SEC * speedMultiplier
     const stepX = dx * speedPxPerSec * TICK_DT_SEC
     const stepY = dy * speedPxPerSec * TICK_DT_SEC
+    const jumpZForCollider = hasComponent(world, eid, JumpArc) ? JumpArc.z[eid] : 0
+    const worldColliders = worldCollidersForJumpZ(jumpZForCollider)
     const moved = moveWithinWorld(
       Position.x[eid],
       Position.y[eid],
@@ -111,7 +120,7 @@ export function movementSystem(ctx: SimCtx): void {
       stepY,
       PLAYER_WORLD_COLLISION_FOOTPRINT,
       ARENA_BOUNDS,
-      ARENA_WORLD_COLLIDERS,
+      worldColliders,
     )
     Velocity.vx[eid] = moved.appliedDx / TICK_DT_SEC
     Velocity.vy[eid] = moved.appliedDy / TICK_DT_SEC

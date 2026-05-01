@@ -47,6 +47,7 @@ export const RoomEvent = {
   PrimaryMeleeAttack: "primary_melee_attack",
   CombatTelegraphStart: "combat_telegraph_start",
   CombatTelegraphEnd: "combat_telegraph_end",
+  AbilitySfx: "ability_sfx",
 
   // Shop / economy
   ShopPurchase: "shop_purchase",

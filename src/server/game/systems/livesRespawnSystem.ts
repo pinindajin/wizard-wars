@@ -32,6 +32,7 @@ import {
   InvulnerableTag,
   DamageFlashTag,
   SwingingWeapon,
+  JumpArc,
 } from "../components"
 import type { SimCtx } from "../simulation"
 import {
@@ -113,6 +114,9 @@ function respawnPlayer(
   if (hasComponent(world, eid, Knockback)) removeComponent(world, eid, Knockback)
   if (hasComponent(world, eid, Casting))  removeComponent(world, eid, Casting)
   if (hasComponent(world, eid, SwingingWeapon)) removeComponent(world, eid, SwingingWeapon)
+  if (hasComponent(world, eid, JumpArc)) removeComponent(world, eid, JumpArc)
+  JumpArc.z[eid] = 0
+  JumpArc.vz[eid] = 0
   if (hasComponent(world, eid, DamageFlashTag)) removeComponent(world, eid, DamageFlashTag)
 
   removeComponent(world, eid, DeadTag)
@@ -121,6 +125,7 @@ function respawnPlayer(
   Cooldown.lightningBolt[eid] = 0
   Cooldown.primaryMelee[eid] = 0
   Cooldown.healingPotion[eid] = 0
+  Cooldown.jump[eid] = 0
 
   // Invulnerability expiry stored in ticks
   // We store it on a side field; InvulnerableTag is just a presence marker.

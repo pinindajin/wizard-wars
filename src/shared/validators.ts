@@ -87,6 +87,7 @@ export const playerAnimStateSchema = z.enum([
   "light_cast",
   "heavy_cast",
   "primary_melee_attack",
+  "jump",
   "dead",
 ])
 
@@ -119,6 +120,7 @@ export const playerSnapshotSchema = z.object({
   moveState: playerMoveStateSchema,
   castingAbilityId: z.string().min(1).max(64).nullable(),
   invulnerable: z.boolean(),
+  jumpZ: z.number().finite().nonnegative(),
   lastProcessedInputSeq: z.number().int().nonnegative(),
 })
 

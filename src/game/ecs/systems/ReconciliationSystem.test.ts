@@ -42,7 +42,9 @@ const noopCtx = {
   isSwinging: false,
   hasSwiftBoots: false,
   castingAbilityId: null,
-} as const
+  jumpZ: 0,
+  moveState: "idle" as const,
+}
 
 const arenaBounds = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
 function findRightwardReplayStart(): { x: number; y: number } {

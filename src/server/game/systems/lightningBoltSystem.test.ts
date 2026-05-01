@@ -36,6 +36,7 @@ function emptyCtx(overrides: Partial<SimCtx> = {}): SimCtx {
     combatTelegraphEnds: [],
     damageFloats: [],
     goldUpdates: [],
+    abilitySfxEvents: [],
     matchEnded: null,
     hostEndSignal: false,
     prevPlayerStates: new Map(),

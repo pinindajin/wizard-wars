@@ -58,6 +58,16 @@
       "north": 17,
       "north-west": 17,
       "south-west": 17
+    },
+    "jump": {
+      "south": 17,
+      "south-east": 17,
+      "east": 17,
+      "north-east": 17,
+      "north": 17,
+      "north-west": 17,
+      "west": 17,
+      "south-west": 17
     }
   }
 }

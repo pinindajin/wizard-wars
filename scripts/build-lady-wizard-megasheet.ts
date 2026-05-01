@@ -66,9 +66,9 @@ export async function buildLadyWizardMegasheet(
   const log = options.silent ? () => {} : console.log
   const warn = options.silent ? () => {} : console.warn
 
-  if (LADY_WIZARD_FRAMES_PER_DIRECTION_ROW !== 87) {
+  if (LADY_WIZARD_FRAMES_PER_DIRECTION_ROW !== 104) {
     throw new Error(
-      `Layout drift: expected 87 columns, got ${LADY_WIZARD_FRAMES_PER_DIRECTION_ROW}`,
+      `Layout drift: expected 104 columns, got ${LADY_WIZARD_FRAMES_PER_DIRECTION_ROW}`,
     )
   }
 

@@ -67,6 +67,7 @@ function emptyCtx(overrides: Partial<SimCtx> = {}): SimCtx {
     activeCombatTelegraphs: new Map(),
     playerDeltas: [],
     fireballDeltas: [],
+    abilitySfxEvents: [],
     ...overrides,
   }
 }

@@ -19,6 +19,7 @@ import {
   Lives,
   PlayerTag,
   InvulnerableTag,
+  JumpArc,
 } from "../components"
 import { computePlayerAnimState, getCastingAbilityId } from "../playerAnimState"
 import { computePlayerMoveState } from "../playerMoveState"
@@ -31,7 +32,8 @@ import type { PlayerDelta } from "../../../shared/types"
  * @param ctx - Shared simulation context.
  */
 export function playerDeltaSystem(ctx: SimCtx): void {
-  const { world, prevPlayerStates, entityPlayerMap, lastProcessedInputSeqByPlayer } = ctx
+  const { world, prevPlayerStates, entityPlayerMap, lastProcessedInputSeqByPlayer, currentTick } =
+    ctx
 
   for (const eid of query(world, [PlayerTag])) {
     const prev = prevPlayerStates.get(eid)
@@ -45,9 +47,10 @@ export function playerDeltaSystem(ctx: SimCtx): void {
     const health = Health.current[eid]
     const lives = Lives.count[eid]
     const animState = computePlayerAnimState(world, eid)
-    const moveState = computePlayerMoveState(world, eid)
+    const moveState = computePlayerMoveState(world, eid, currentTick)
     const invulnerable = hasComponent(world, eid, InvulnerableTag)
     const castingAbilityId = getCastingAbilityId(world, eid)
+    const jumpZ = hasComponent(world, eid, JumpArc) ? JumpArc.z[eid] : 0
     const lastProcessedInputSeq = Math.max(
       0,
       lastProcessedInputSeqByPlayer.get(userId) ?? 0,
@@ -68,6 +71,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
         moveState,
         castingAbilityId,
         invulnerable,
+        jumpZ,
         lastProcessedInputSeq,
       })
       prevPlayerStates.set(eid, {
@@ -83,6 +87,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
         moveState,
         castingAbilityId,
         invulnerable,
+        jumpZ,
         lastProcessedInputSeq,
       })
       continue
@@ -102,6 +107,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
       ...(moveState !== prev.moveState ? { moveState } : {}),
       ...(castingAbilityId !== prev.castingAbilityId ? { castingAbilityId } : {}),
       ...(invulnerable !== prev.invulnerable ? { invulnerable } : {}),
+      ...(jumpZ !== prev.jumpZ ? { jumpZ } : {}),
       ...(lastProcessedInputSeq !== prev.lastProcessedInputSeq
         ? { lastProcessedInputSeq }
         : {}),
@@ -120,6 +126,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
       delta.moveState !== undefined ||
       delta.castingAbilityId !== undefined ||
       delta.invulnerable !== undefined ||
+      delta.jumpZ !== undefined ||
       delta.lastProcessedInputSeq !== undefined
 
     if (changed) {
@@ -136,6 +143,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
       prev.moveState = moveState
       prev.castingAbilityId = castingAbilityId
       prev.invulnerable = invulnerable
+      prev.jumpZ = jumpZ
       prev.lastProcessedInputSeq = lastProcessedInputSeq
     }
   }

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 
-import { AUTH_COOKIE_NAME, verifyToken } from "./jwt"
+import { AUTH_COOKIE_NAME } from "./constants"
+import { verifyToken } from "./jwt"
 import type { AuthUser } from "../../shared/types"
 
 /**

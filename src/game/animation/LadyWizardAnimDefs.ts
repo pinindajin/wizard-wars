@@ -38,6 +38,7 @@ const ANIM_CLIPS: Record<PlayerAnimState, string> = {
   light_cast: "light_spell_cast",
   heavy_cast: "heavy_spell_cast",
   primary_melee_attack: "summoned_axe_swing",
+  jump: "jump",
 }
 
 /**
@@ -99,6 +100,8 @@ function clipDurationMs(clip: LadyWizardMegasheetClip): number {
         DEFAULT_HERO_ID,
         HERO_CONFIGS[DEFAULT_HERO_ID].primaryMeleeAttackId,
       ).durationMs
+    case "jump":
+      return getSpellAnimationConfig(DEFAULT_HERO_ID, "jump").durationMs
   }
 }
 
