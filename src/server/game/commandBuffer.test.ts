@@ -40,4 +40,19 @@ describe("createCommandBuffer", () => {
     buf.clear()
     buf.execute(world)
   })
+
+  it("skips addEntity when skipIf returns true at execute time", () => {
+    const world = createWorld()
+    const buf = createCommandBuffer()
+    let ran = false
+    buf.enqueue({
+      type: "addEntity",
+      skipIf: () => true,
+      setup: () => {
+        ran = true
+      },
+    })
+    buf.execute(world)
+    expect(ran).toBe(false)
+  })
 })
