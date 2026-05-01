@@ -1,13 +1,10 @@
 import Phaser from "phaser"
 
 import {
+  TELEGRAPH_DANGER_FILL_ALPHA,
   TELEGRAPH_DANGER_FILL_COLOR,
-  TELEGRAPH_DANGER_STROKE_COLOR,
-  TELEGRAPH_FILL_ALPHA,
-  TELEGRAPH_STROKE_ALPHA,
-  TELEGRAPH_STROKE_WIDTH_PX,
+  TELEGRAPH_WINDUP_FILL_ALPHA,
   TELEGRAPH_WINDUP_FILL_COLOR,
-  TELEGRAPH_WINDUP_STROKE_COLOR,
   TILEMAP_DEPTH,
 } from "@/shared/balance-config"
 import type {
@@ -108,11 +105,10 @@ export class CombatTelegraphRenderSystem {
       serverTimeMs >= payload.dangerStartsAtServerTimeMs &&
       serverTimeMs < payload.dangerEndsAtServerTimeMs
     const fill = dangerous ? TELEGRAPH_DANGER_FILL_COLOR : TELEGRAPH_WINDUP_FILL_COLOR
-    const stroke = dangerous ? TELEGRAPH_DANGER_STROKE_COLOR : TELEGRAPH_WINDUP_STROKE_COLOR
+    const fillAlpha = dangerous ? TELEGRAPH_DANGER_FILL_ALPHA : TELEGRAPH_WINDUP_FILL_ALPHA
 
     gfx.clear()
-    gfx.fillStyle(fill, TELEGRAPH_FILL_ALPHA)
-    gfx.lineStyle(TELEGRAPH_STROKE_WIDTH_PX, stroke, TELEGRAPH_STROKE_ALPHA)
+    gfx.fillStyle(fill, fillAlpha)
 
     if (payload.shape.type === "cone") {
       this._drawCone(gfx, anchor.x, anchor.y, payload.directionRad, payload.shape.radiusPx, payload.shape.arcDeg)
@@ -141,7 +137,6 @@ export class CombatTelegraphRenderSystem {
     gfx.arc(x, y, radiusPx, directionRad - halfArc, directionRad + halfArc, false)
     gfx.closePath()
     gfx.fillPath()
-    gfx.strokePath()
   }
 
   /**
@@ -160,7 +155,6 @@ export class CombatTelegraphRenderSystem {
     const len = Math.sqrt(dx * dx + dy * dy)
     if (len === 0) {
       gfx.fillCircle(ax, ay, radiusPx)
-      gfx.strokeCircle(ax, ay, radiusPx)
       return
     }
 
@@ -175,15 +169,6 @@ export class CombatTelegraphRenderSystem {
     gfx.fillPath()
     gfx.fillCircle(ax, ay, radiusPx)
     gfx.fillCircle(bx, by, radiusPx)
-
-    gfx.beginPath()
-    gfx.moveTo(ax + nx * radiusPx, ay + ny * radiusPx)
-    gfx.lineTo(bx + nx * radiusPx, by + ny * radiusPx)
-    gfx.arc(bx, by, radiusPx, Math.atan2(ny, nx), Math.atan2(-ny, -nx), false)
-    gfx.lineTo(ax - nx * radiusPx, ay - ny * radiusPx)
-    gfx.arc(ax, ay, radiusPx, Math.atan2(-ny, -nx), Math.atan2(ny, nx), false)
-    gfx.closePath()
-    gfx.strokePath()
   }
 
   /**

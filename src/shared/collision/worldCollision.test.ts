@@ -4,6 +4,7 @@ import {
   canOccupyWorldPosition,
   moveWithinWorld,
   resolveAgainstWorld,
+  resolveJumpLandingWithGrace,
   type ArenaPropColliderRect,
 } from "./worldCollision"
 
@@ -54,6 +55,62 @@ describe("canOccupyWorldPosition", () => {
     expect(canOccupyWorldPosition(281, 140, fixtureFootprint, fixtureBounds, [])).toBe(false)
     expect(canOccupyWorldPosition(140, 1, fixtureFootprint, fixtureBounds, [])).toBe(false)
     expect(canOccupyWorldPosition(140, 279, fixtureFootprint, fixtureBounds, [])).toBe(false)
+  })
+})
+
+describe("resolveJumpLandingWithGrace", () => {
+  const lava: ArenaPropColliderRect = { x: 100, y: 100, width: 64, height: 100 }
+
+  it("accepts an already legal landing point", () => {
+    expect(
+      resolveJumpLandingWithGrace(
+        lava.x + lava.width + fixtureFootprint.radiusX,
+        140,
+        fixtureFootprint,
+        fixtureBounds,
+        [lava],
+        { movementX: 1, movementY: 0, gracePx: 6 },
+      ),
+    ).toEqual({ x: lava.x + lava.width + fixtureFootprint.radiusX, y: 140 })
+  })
+
+  it("nudges a tiny edge overlap along the landing movement direction", () => {
+    const out = resolveJumpLandingWithGrace(
+      lava.x + lava.width + fixtureFootprint.radiusX - 4,
+      140,
+      fixtureFootprint,
+      fixtureBounds,
+      [lava],
+      { movementX: 1, movementY: 0, gracePx: 6 },
+    )
+
+    expect(out).toEqual({ x: lava.x + lava.width + fixtureFootprint.radiusX, y: 140 })
+  })
+
+  it("accepts a tiny overlap that can be resolved without movement direction", () => {
+    const out = resolveJumpLandingWithGrace(
+      lava.x + lava.width + fixtureFootprint.radiusX - 4,
+      140,
+      fixtureFootprint,
+      fixtureBounds,
+      [lava],
+      { movementX: 0, movementY: 0, gracePx: 6 },
+    )
+
+    expect(out).toEqual({ x: lava.x + lava.width + fixtureFootprint.radiusX, y: 140 })
+  })
+
+  it("rejects a deep landing inside blocked terrain", () => {
+    expect(
+      resolveJumpLandingWithGrace(
+        lava.x + lava.width / 2,
+        140,
+        fixtureFootprint,
+        fixtureBounds,
+        [lava],
+        { movementX: 1, movementY: 0, gracePx: 6 },
+      ),
+    ).toBeNull()
   })
 })
 

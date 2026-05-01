@@ -28,6 +28,8 @@ import {
   ABILITY_INDEX,
   FireballTag,
   JumpArc,
+  TerrainState,
+  TERRAIN_KIND_TO_STATE,
 } from "./components"
 import { createCommandBuffer, CommandBuffer } from "./commandBuffer"
 import {
@@ -61,6 +63,7 @@ import type {
   PlayerSnapshot,
   PlayerAnimState,
   PlayerMoveState,
+  PlayerTerrainState,
   FireballSnapshot,
   AbilitySfxPayload,
 } from "../../shared/types"
@@ -72,6 +75,7 @@ import { knockbackSystem } from "./systems/knockbackSystem"
 import { playerCollisionSystem } from "./systems/playerCollisionSystem"
 import { worldCollisionSystem } from "./systems/worldCollisionSystem"
 import { jumpPhysicsSystem } from "./systems/jumpPhysicsSystem"
+import { terrainHazardSystem } from "./systems/terrainHazardSystem"
 import { projectileMovementSystem } from "./systems/projectileMovementSystem"
 import { primaryMeleeAttackSystem } from "./systems/primaryMeleeAttackSystem"
 import { lightningBoltSystem } from "./systems/lightningBoltSystem"
@@ -176,6 +180,7 @@ export type PlayerPrevState = {
   castingAbilityId: string | null
   invulnerable: boolean
   jumpZ: number
+  terrainState: PlayerTerrainState
   lastProcessedInputSeq: number
 }
 
@@ -395,6 +400,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     addComponent(world, eid, AbilitySlots)
     addComponent(world, eid, QuickItemSlots)
     addComponent(world, eid, PlayerInput)
+    addComponent(world, eid, TerrainState)
 
     Position.x[eid] = spawn.x
     Position.y[eid] = spawn.y
@@ -456,6 +462,8 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     PlayerInput.weaponTargetY[eid] = 0
     PlayerInput.useQuickItemSlot[eid] = -1
     PlayerInput.seq[eid] = 0
+    TerrainState.kind[eid] = 0
+    TerrainState.lavaDamageCarry[eid] = 0
 
     playerEntityMap.set(userId, eid)
     entityPlayerMap.set(eid, userId)
@@ -478,6 +486,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       castingAbilityId: null,
       invulnerable: false,
       jumpZ: 0,
+      terrainState: "land",
       lastProcessedInputSeq: 0,
     })
     // `-1`: no input processed yet; first client `seq: 0` is accepted in `tick`.
@@ -556,10 +565,11 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       const maxHealth = Health.max[eid]
       const lives = Lives.count[eid]
       const animState = computePlayerAnimState(world, eid)
-      const moveState = computePlayerMoveState(world, eid, currentTick)
+      const moveState = computePlayerMoveState(world, eid)
       const invulnerable = hasComponent(world, eid, InvulnerableTag)
       const castingAbilityId = getCastingAbilityId(world, eid)
       const jumpZ = hasComponent(world, eid, JumpArc) ? JumpArc.z[eid] : 0
+      const terrainState = TERRAIN_KIND_TO_STATE[TerrainState.kind[eid]] ?? "land"
       const lastProcessedInputSeq = lastProcessedSeqForNetworkPayload(
         lastProcessedInputSeqByPlayer,
         userId,
@@ -583,6 +593,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
         castingAbilityId,
         invulnerable,
         jumpZ,
+        terrainState,
         lastProcessedInputSeq,
       })
     }
@@ -693,6 +704,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     playerCollisionSystem(ctx)
     worldCollisionSystem(ctx)
     jumpPhysicsSystem(ctx)
+    terrainHazardSystem(ctx)
     projectileMovementSystem(ctx)
     primaryMeleeAttackSystem(ctx)
     lightningBoltSystem(ctx)

@@ -44,6 +44,13 @@ export type WorldMoveResult = {
   readonly blockedY: boolean
 }
 
+/** Context used to resolve a just-landed jump near a hazard edge. */
+export type JumpLandingGraceContext = {
+  readonly movementX: number
+  readonly movementY: number
+  readonly gracePx: number
+}
+
 const MAX_COLLISION_PASSES = 4
 
 /**
@@ -268,4 +275,58 @@ export function resolveAgainstWorld(
   }
 
   return { x: cx, y: cy }
+}
+
+/**
+ * Returns a legal landing position for tiny fixed-tick edge overlaps, or `null`
+ * when the landing is materially inside blocked terrain.
+ */
+export function resolveJumpLandingWithGrace(
+  x: number,
+  y: number,
+  footprint: WorldCollisionFootprint,
+  bounds: ArenaBounds,
+  worldColliders: readonly ArenaPropColliderRect[],
+  context: JumpLandingGraceContext,
+): { x: number; y: number } | null {
+  if (canOccupyWorldPosition(x, y, footprint, bounds, worldColliders)) {
+    return { x, y }
+  }
+
+  const gracePx = Math.max(0, context.gracePx)
+  if (gracePx === 0) return null
+
+  const candidates: { dx: number; dy: number }[] = []
+  const movementLength = Math.hypot(context.movementX, context.movementY)
+  if (movementLength > 0) {
+    candidates.push({
+      dx: context.movementX / movementLength,
+      dy: context.movementY / movementLength,
+    })
+  }
+  if (context.movementX !== 0) candidates.push({ dx: Math.sign(context.movementX), dy: 0 })
+  if (context.movementY !== 0) candidates.push({ dx: 0, dy: Math.sign(context.movementY) })
+
+  const steps = Math.ceil(gracePx)
+  for (let i = 1; i <= steps; i++) {
+    const distance = Math.min(i, gracePx)
+    for (const candidate of candidates) {
+      const nx = x + candidate.dx * distance
+      const ny = y + candidate.dy * distance
+      if (canOccupyWorldPosition(nx, ny, footprint, bounds, worldColliders)) {
+        return { x: nx, y: ny }
+      }
+    }
+  }
+
+  const resolved = resolveAgainstWorld(x, y, footprint, bounds, worldColliders)
+  const moved = Math.hypot(resolved.x - x, resolved.y - y)
+  if (
+    moved <= gracePx &&
+    canOccupyWorldPosition(resolved.x, resolved.y, footprint, bounds, worldColliders)
+  ) {
+    return resolved
+  }
+
+  return null
 }

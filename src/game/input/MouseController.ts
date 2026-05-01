@@ -1,5 +1,6 @@
 import Phaser from "phaser"
 
+import { WW_GAMEPLAY_INPUT_BLOCKED_REGISTRY_KEY } from "@/game/constants"
 import type { PlayerInputPayload } from "@/shared/types"
 
 /** Fields from PlayerInputPayload that the MouseController is responsible for. */
@@ -39,6 +40,15 @@ export class MouseController {
   }
 
   /**
+   * Returns true when React UI owns gameplay input.
+   *
+   * @returns True when gameplay input should be suppressed.
+   */
+  private _isGameplayInputBlocked(): boolean {
+    return this.scene.game.registry.get(WW_GAMEPLAY_INPUT_BLOCKED_REGISTRY_KEY) === true
+  }
+
+  /**
    * Collects the current mouse state and returns the weapon portion of PlayerInputPayload.
    * Both LMB (primary) and RMB (secondary) are sampled as held-state so the caller
    * can auto-repeat at the desired cadence by calling this each tick.
@@ -53,7 +63,7 @@ export class MouseController {
       weaponTargetY: 0,
     }
 
-    if (!this._enabled) return inactive
+    if (!this._enabled || this._isGameplayInputBlocked()) return inactive
 
     const pointer = this.scene.input.activePointer
     const worldPos = pointer.positionToCamera(this.scene.cameras.main) as Phaser.Math.Vector2

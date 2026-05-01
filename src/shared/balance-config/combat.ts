@@ -109,12 +109,10 @@ export const LIGHTNING_CAST_MS = 700
 export const LIGHTNING_COOLDOWN_MS = 4000
 
 // --- Jump (shop ability) ---
-/** Horizontal movement is blocked for this duration after jump starts (lift phase). */
-export const JUMP_LIFT_MS = 150
 /** Gravity applied to vertical jump velocity (world px/s²). */
 export const JUMP_GRAVITY_PX_PER_SEC2 = 2400
 /** Initial upward velocity when a jump begins (world px/s). */
-export const JUMP_INITIAL_VZ_PX_PER_SEC = 600
+export const JUMP_INITIAL_VZ_PX_PER_SEC = 640
 /** Ability cooldown starting when jump is accepted (ms). */
 export const JUMP_COOLDOWN_MS = 2500
 /**
@@ -122,8 +120,26 @@ export const JUMP_COOLDOWN_MS = 2500
  * Must stay consistent across server movement, world resolve, and client replay (r5).
  */
 export const JUMP_AIRBORNE_COLLIDER_EPSILON_PX = 4
+/** Max landing-edge correction for clean one-tile hazard jumps at fixed 60 Hz. */
+export const JUMP_LANDING_GRACE_PX = 6
 /** Client sprite vertical offset per unit of server `jumpZ` (world px → screen px). */
 export const JUMP_SPRITE_Y_PIXELS_PER_SIM_Z = 1
+
+// --- Terrain hazards ---
+/** Damage applied while the player's footprint is in lava, in HP per second. */
+export const LAVA_DAMAGE_PER_SECOND = 10
+
+/** Forced slide speed while a player is stumbling on a cliff, in px/s. */
+export const CLIFF_SLIDE_SPEED_PX_PER_SEC = 10
+
+/** Number of frames in the stumble clip. */
+export const STUMBLE_ANIM_FRAME_COUNT = 17
+
+/** Lava lap spritesheet frame dimensions. */
+export const LAVA_LAP_FRAME_WIDTH_PX = 64
+export const LAVA_LAP_FRAME_HEIGHT_PX = 32
+export const LAVA_LAP_FRAME_COUNT = 6
+export const LAVA_LAP_ANIM_FPS = 8
 
 // --- Axe ---
 /** Damage dealt by the axe swing. Bitmask: Physical | Slashing. */

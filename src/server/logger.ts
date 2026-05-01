@@ -1,5 +1,5 @@
 import pino from "pino"
-import type { PrismaClient } from "@prisma/client"
+import { Prisma, type PrismaClient } from "@prisma/client"
 import { config as loadDotenv } from "dotenv"
 
 import {
@@ -39,8 +39,14 @@ export type DbLogLevelOverrideResult =
   | { status: "none"; effectiveLevel: ServerLogLevelType }
   | { status: "applied"; overrideLevel: ServerLogLevelType; effectiveLevel: ServerLogLevelType }
   | { status: "invalid"; value: string; effectiveLevel: ServerLogLevelType }
+  /** Migrations not applied yet (`app_config` missing); log level stays env-based. */
+  | { status: "pending_schema"; effectiveLevel: ServerLogLevelType }
   | { status: "failed"; err: unknown; effectiveLevel: ServerLogLevelType }
 
+/**
+ * Loads optional `app_config.log_level` from the DB and applies it to the root logger.
+ * If `app_config` does not exist yet (P2021), returns `pending_schema` and keeps env level — no warning.
+ */
 export async function applyDbLogLevelOverride(prisma: PrismaClient): Promise<DbLogLevelOverrideResult> {
   try {
     const row = await prisma.appConfig.findUnique({
@@ -86,6 +92,16 @@ export async function applyDbLogLevelOverride(prisma: PrismaClient): Promise<DbL
     return { status: "applied", overrideLevel: parsed, effectiveLevel }
   } catch (err) {
     const effectiveLevel = setRuntimeLogLevel(null)
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2021") {
+      logger.debug(
+        {
+          event: "log.level.db_override.pending_schema",
+          fallbackLevel: effectiveLevel,
+        },
+        "app_config table missing; log level from env until migrations are applied",
+      )
+      return { status: "pending_schema", effectiveLevel }
+    }
     logger.warn(
       { event: "log.level.db_override.failed", err, fallbackLevel: effectiveLevel },
       "Failed to load DB log level override",

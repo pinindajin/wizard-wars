@@ -13,6 +13,11 @@ import { World, addEntity, removeEntity, addComponent, removeComponent } from "b
 /** Creates a new entity and immediately calls setup with its ID. */
 type AddEntityCmd = {
   type: "addEntity"
+  /**
+   * When present and returns true, no entity is created and `setup` is not run.
+   * Evaluated in `execute()` after the tick's systems have run.
+   */
+  skipIf?: (world: World) => boolean
   setup: (eid: number) => void
 }
 
@@ -70,6 +75,7 @@ export function createCommandBuffer(): CommandBuffer {
       for (const cmd of queue) {
         switch (cmd.type) {
           case "addEntity": {
+            if (cmd.skipIf?.(world)) break
             const eid = addEntity(world)
             cmd.setup(eid)
             break

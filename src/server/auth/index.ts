@@ -14,3 +14,11 @@ export {
 export { signToken, verifyToken } from "./jwt"
 export { hashPassword, verifyPassword } from "./password"
 export { createAuthCookie, createClearAuthCookie } from "./cookies"
+export { findExistingAuthUser, requireExistingAuthUser } from "./existingUser"
+export { shouldVerifyUserOnProtected } from "./protectedVerification"
+export {
+  PROTECTED_PATHNAME_HEADER,
+  buildSessionExpiredLoginPath,
+  buildSessionExpiredPath,
+  sanitizeRelativeNext,
+} from "./sessionRedirect"

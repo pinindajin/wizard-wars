@@ -1,20 +1,21 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
 import { createTrpcClient } from "@/lib/trpc"
-import { DEFAULT_BGM_VOLUME, DEFAULT_SFX_VOLUME } from "@/shared/balance-config/audio"
+import { isUnauthorizedTrpcError } from "@/lib/trpcErrors"
 import {
+  COMBAT_NUMBERS_MODES,
   GAME_KEYBIND_ACTION_IDS,
   GAME_KEYBIND_LABELS,
   DEFAULT_KEYBINDS,
-  useGameKeybindContext,
+  useGameSettingsContext,
+  type AudioVolumeSettings,
+  type CombatNumbersMode,
   type GameKeybindActionId,
   type KeybindConfig,
-} from "./GameKeybindContext"
-
-/** Combat numbers display modes. */
-const COMBAT_NUMBERS_MODES = ["OFF", "ON", "ON_EXTENDED", "ON_FULL"] as const
-type CombatNumbersMode = (typeof COMBAT_NUMBERS_MODES)[number]
+} from "./GameSettingsContext"
+import { useBlockGameplayInputEvents } from "./useBlockGameplayInputEvents"
 
 const COMBAT_NUMBERS_LABELS: Record<CombatNumbersMode, string> = {
   OFF: "Off",
@@ -31,6 +32,8 @@ type GameSettingsModalProps = {
   readonly isHost?: boolean
   /** Invoked when the host ends the in-progress match. */
   readonly onEndMatch?: () => void
+  /** Applies live audio preview values to Phaser. */
+  readonly onApplyAudioVolumes: (settings: AudioVolumeSettings) => void
 }
 
 /**
@@ -60,14 +63,28 @@ export default function GameSettingsModal({
   onClose,
   isHost = false,
   onEndMatch,
+  onApplyAudioVolumes,
 }: GameSettingsModalProps) {
-  const { keybinds, setKeybinds } = useGameKeybindContext()
+  const router = useRouter()
+  const gameplayInputBlockProps = useBlockGameplayInputEvents()
+  const {
+    keybinds,
+    setKeybinds,
+    audioVolumes,
+    setAudioVolumes,
+    combatNumbersMode,
+    setCombatNumbersMode,
+    debugModeEnabled,
+    setDebugModeEnabled,
+    settingsLoaded,
+    settingsLoadError,
+  } = useGameSettingsContext()
 
   const [localKeybinds, setLocalKeybinds] = useState<KeybindConfig>({ ...keybinds })
   const [rebinding, setRebinding] = useState<GameKeybindActionId | null>(null)
-  const [combatMode, setCombatMode] = useState<CombatNumbersMode>("ON")
-  const [bgmVolume, setBgmVolume] = useState(DEFAULT_BGM_VOLUME)
-  const [sfxVolume, setSfxVolume] = useState(DEFAULT_SFX_VOLUME)
+  const [combatMode, setCombatMode] = useState<CombatNumbersMode>(combatNumbersMode)
+  const [bgmVolume, setBgmVolume] = useState(audioVolumes.bgmVolume)
+  const [sfxVolume, setSfxVolume] = useState(audioVolumes.sfxVolume)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [savedOk, setSavedOk] = useState(false)
@@ -78,49 +95,73 @@ export default function GameSettingsModal({
     rebindingRef.current = rebinding
   }, [rebinding])
 
-  // Load current settings from server on mount
-  useEffect(() => {
-    async function load() {
-      try {
-        const trpc = createTrpcClient()
-        const { user } = await trpc.user.me.query()
-        if (!user) return
-        if (user.bgmVolume !== undefined && user.bgmVolume !== null) setBgmVolume(user.bgmVolume)
-        if (user.sfxVolume !== undefined && user.sfxVolume !== null) setSfxVolume(user.sfxVolume)
-        const mode = user.combatNumbersMode as CombatNumbersMode | null
-        if (mode && COMBAT_NUMBERS_MODES.includes(mode)) setCombatMode(mode)
-      } catch {
-        // Use defaults
-      }
-    }
-    void load()
-  }, [])
+  /**
+   * Redirects the user to login after a stale session response.
+   */
+  const redirectToSessionExpired = useCallback(() => {
+    const next = `${window.location.pathname}${window.location.search}`
+    const params = new URLSearchParams({ next })
+    router.replace(`/api/auth/session-expired?${params.toString()}`)
+  }, [router])
 
-  // Close on Escape key
-  useEffect(() => {
-    /** Handles Escape to close modal (unless capturing a rebind). */
-    const onKey = (e: KeyboardEvent) => {
-      if (rebindingRef.current) {
-        e.preventDefault()
-        e.stopPropagation()
-        if (e.key === "Escape") {
-          setRebinding(null)
-          return
-        }
-        // Capture the new key
-        const newKey = e.key === " " ? "Space" : e.key
-        setLocalKeybinds((prev) => ({
-          ...prev,
-          [rebindingRef.current!]: newKey,
-        }))
+  /**
+   * Closes the modal without saving and restores the live audio preview.
+   */
+  const cancel = useCallback(() => {
+    onApplyAudioVolumes(audioVolumes)
+    onClose()
+  }, [audioVolumes, onApplyAudioVolumes, onClose])
+
+  /**
+   * Updates BGM volume local state and live audio preview.
+   *
+   * @param volume - New BGM volume in 0-100 units.
+   */
+  const changeBgmVolume = useCallback((volume: number) => {
+    setBgmVolume(volume)
+    onApplyAudioVolumes({ bgmVolume: volume, sfxVolume })
+  }, [onApplyAudioVolumes, sfxVolume])
+
+  /**
+   * Updates SFX volume local state and live audio preview.
+   *
+   * @param volume - New SFX volume in 0-100 units.
+   */
+  const changeSfxVolume = useCallback((volume: number) => {
+    setSfxVolume(volume)
+    onApplyAudioVolumes({ bgmVolume, sfxVolume: volume })
+  }, [bgmVolume, onApplyAudioVolumes])
+
+  /**
+   * Handles Escape to close modal (unless capturing a rebind).
+   *
+   * @param e - Keyboard event.
+   */
+  const onModalKey = useCallback((e: KeyboardEvent) => {
+    if (rebindingRef.current) {
+      e.preventDefault()
+      e.stopPropagation()
+      if (e.key === "Escape") {
         setRebinding(null)
         return
       }
-      if (e.key === "Escape") onClose()
+      // Capture the new key
+      const newKey = e.key === " " ? "Space" : e.key
+      setLocalKeybinds((prev) => ({
+        ...prev,
+        [rebindingRef.current!]: newKey,
+      }))
+      setRebinding(null)
+      return
     }
-    window.addEventListener("keydown", onKey, { capture: true })
-    return () => window.removeEventListener("keydown", onKey, { capture: true })
-  }, [onClose])
+    if (e.key === "Escape") cancel()
+  }, [cancel])
+
+  // Close on Escape key
+  useEffect(() => {
+    window.addEventListener("keydown", onModalKey, { capture: true })
+    return () => window.removeEventListener("keydown", onModalKey, { capture: true })
+  }, [onModalKey])
 
   /**
    * Saves the current settings to the server via tRPC mutation.
@@ -138,14 +179,29 @@ export default function GameSettingsModal({
         openSettingsKey: localKeybinds.open_settings,
       })
       setKeybinds(localKeybinds)
+      setAudioVolumes({ bgmVolume, sfxVolume })
+      setCombatNumbersMode(combatMode)
       setSavedOk(true)
       setTimeout(() => setSavedOk(false), 2000)
     } catch (err) {
+      if (isUnauthorizedTrpcError(err)) {
+        redirectToSessionExpired()
+        return
+      }
       setSaveError(err instanceof Error ? err.message : "Failed to save settings")
     } finally {
       setSaving(false)
     }
-  }, [combatMode, bgmVolume, sfxVolume, localKeybinds, setKeybinds])
+  }, [
+    bgmVolume,
+    combatMode,
+    localKeybinds,
+    redirectToSessionExpired,
+    setAudioVolumes,
+    setCombatNumbersMode,
+    setKeybinds,
+    sfxVolume,
+  ])
 
   /**
    * Resets all keybinds to their defaults.
@@ -156,8 +212,13 @@ export default function GameSettingsModal({
 
   return (
     <div
+      {...gameplayInputBlockProps}
+      data-testid="settings-modal"
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
+      onClick={(e) => {
+        e.stopPropagation()
+        if (e.target === e.currentTarget) cancel()
+      }}
     >
       <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-gray-700 bg-gray-900 shadow-2xl">
         {/* Header */}
@@ -165,7 +226,7 @@ export default function GameSettingsModal({
           <h2 className="text-xl font-bold text-white">Game Settings</h2>
           <button
             className="rounded p-1 text-gray-400 hover:bg-gray-700 hover:text-white"
-            onClick={onClose}
+            onClick={cancel}
             type="button"
             aria-label="Close settings"
           >
@@ -190,11 +251,13 @@ export default function GameSettingsModal({
                 <input
                   id="bgm-volume"
                   className="flex-1 accent-purple-500"
+                  data-testid="settings-bgm-volume"
                   type="range"
                   min={0}
                   max={100}
                   value={bgmVolume}
-                  onChange={(e) => setBgmVolume(Number(e.target.value))}
+                  onChange={(e) => changeBgmVolume(Number(e.target.value))}
+                  disabled={!settingsLoaded}
                 />
                 <span className="w-10 text-right text-sm tabular-nums text-gray-300">
                   {bgmVolume}
@@ -210,11 +273,13 @@ export default function GameSettingsModal({
                 <input
                   id="sfx-volume"
                   className="flex-1 accent-purple-500"
+                  data-testid="settings-sfx-volume"
                   type="range"
                   min={0}
                   max={100}
                   value={sfxVolume}
-                  onChange={(e) => setSfxVolume(Number(e.target.value))}
+                  onChange={(e) => changeSfxVolume(Number(e.target.value))}
+                  disabled={!settingsLoaded}
                 />
                 <span className="w-10 text-right text-sm tabular-nums text-gray-300">
                   {sfxVolume}
@@ -244,6 +309,25 @@ export default function GameSettingsModal({
                 </button>
               ))}
             </div>
+          </section>
+
+          <section>
+            <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-purple-400">
+              Debug
+            </h3>
+            <label className="flex items-center justify-between rounded-lg border border-gray-700 bg-gray-950/40 px-4 py-3">
+              <span className="text-sm font-medium text-gray-200">
+                Debug Mode
+              </span>
+              <input
+                aria-label="Debug Mode"
+                className="h-5 w-5 accent-purple-500"
+                data-testid="settings-debug-mode"
+                type="checkbox"
+                checked={debugModeEnabled}
+                onChange={(e) => setDebugModeEnabled(e.target.checked)}
+              />
+            </label>
           </section>
 
           {/* Keybinds section */}
@@ -319,14 +403,17 @@ export default function GameSettingsModal({
           {saveError && (
             <p className="text-xs text-red-400">{saveError}</p>
           )}
+          {!saveError && settingsLoadError && (
+            <p className="text-xs text-amber-300">{settingsLoadError}</p>
+          )}
           {savedOk && (
             <p className="text-xs text-green-400">✓ Settings saved</p>
           )}
-          {!saveError && !savedOk && <span />}
+          {!saveError && !settingsLoadError && !savedOk && <span />}
           <div className="flex gap-3">
             <button
               className="rounded-md border border-gray-600 px-4 py-2 text-sm text-gray-400 hover:bg-gray-700"
-              onClick={onClose}
+              onClick={cancel}
               type="button"
             >
               Cancel
@@ -334,10 +421,11 @@ export default function GameSettingsModal({
             <button
               className="rounded-md bg-purple-600 px-5 py-2 text-sm font-semibold text-white hover:bg-purple-700 disabled:opacity-50"
               onClick={() => void save()}
-              disabled={saving}
+              disabled={saving || !settingsLoaded}
               type="button"
+              data-testid="settings-save"
             >
-              {saving ? "Saving…" : "Save Settings"}
+              {!settingsLoaded ? "Loading…" : saving ? "Saving…" : "Save Settings"}
             </button>
           </div>
         </div>

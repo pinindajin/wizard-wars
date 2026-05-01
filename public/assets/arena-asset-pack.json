@@ -48,6 +48,15 @@
                 "url": "/assets/sprites/abilities/ember.png"
             },
             {
+                "type": "spritesheet",
+                "key": "lava-lap",
+                "url": "/assets/sprites/effects/lava-lap.png",
+                "frameConfig": {
+                    "frameWidth": 64,
+                    "frameHeight": 32
+                }
+            },
+            {
                 "type": "image",
                 "key": "prop-barrel",
                 "url": "/assets/sprites/props/barrel.png"

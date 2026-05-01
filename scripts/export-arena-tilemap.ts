@@ -21,6 +21,14 @@ const GENERATED_NON_WALKABLE_COLLIDERS = resolve(
   ROOT,
   "src/shared/balance-config/generated/arena-non-walkable-colliders.ts",
 )
+const GENERATED_LAVA_COLLIDERS = resolve(
+  ROOT,
+  "src/shared/balance-config/generated/arena-lava-colliders.ts",
+)
+const GENERATED_CLIFF_COLLIDERS = resolve(
+  ROOT,
+  "src/shared/balance-config/generated/arena-cliff-colliders.ts",
+)
 const ARENA_TILESET = resolve(ROOT, "public/assets/tilesets/arena-terrain.png")
 
 type EditableTileset = {
@@ -87,6 +95,19 @@ type TiledObject = {
   }[]
 }
 
+type Rect = { x: number; y: number; width: number; height: number }
+
+const LAVA_TILE_IDS = new Set([
+  21, 22, 23, 24, 25, 26, 27, 28, 30, 32, 33, 36, 40, 41, 43, 44, 48, 49,
+  51, 52, 54, 55, 59, 60, 64, 65, 68, 69, 76, 77, 79, 80, 82, 84, 85, 87,
+  88, 93, 94, 95, 97, 98, 100, 101, 102, 104, 105, 106, 107, 112, 113, 118,
+  119, 122, 123, 125, 127, 128, 129, 130, 132, 135, 136, 137, 139, 140, 141,
+  142, 145, 146, 148, 149, 150, 151, 152, 153, 155, 157, 158, 159, 160, 167,
+  168, 173, 174, 177, 178, 180, 182, 183, 185, 186, 189, 190, 191, 193, 194,
+  199, 202, 205, 207, 209, 210, 211, 213, 214, 215, 218, 219, 220, 221, 222,
+  223, 224, 225, 226, 227, 228,
+])
+
 type TiledTileLayer = {
   readonly id: number
   readonly name: string
@@ -137,7 +158,14 @@ type TiledMap = {
     readonly imagewidth: number
     readonly imageheight: number
   }[]
-  readonly layers: readonly [TiledTileLayer, TiledObjectLayer, TiledObjectLayer, TiledObjectLayer]
+  readonly layers: readonly [
+    TiledTileLayer,
+    TiledObjectLayer,
+    TiledObjectLayer,
+    TiledObjectLayer,
+    TiledObjectLayer,
+    TiledObjectLayer,
+  ]
 }
 
 function readJson<T>(path: string): T {
@@ -253,6 +281,74 @@ function readNonWalkableObjects(scene: ArenaScene): TiledObject[] {
   return readSceneRectangleObjects(scene, "nonWalkableArea_", "non-walkable-area", 1000)
 }
 
+function readLavaObjects(scene: ArenaScene): TiledObject[] {
+  return readSceneRectangleObjects(scene, "lavaArea_", "lava-area", 2000)
+}
+
+function readCliffObjects(scene: ArenaScene): TiledObject[] {
+  return readSceneRectangleObjects(scene, "cliffArea_", "cliff-area", 3000)
+}
+
+function rectsOverlap(a: Rect, b: Rect): boolean {
+  return (
+    a.x < b.x + b.width &&
+    a.x + a.width > b.x &&
+    a.y < b.y + b.height &&
+    a.y + a.height > b.y
+  )
+}
+
+function mergeTileRects(rects: readonly Rect[]): Rect[] {
+  const rows = new Map<number, Rect[]>()
+  for (const rect of rects) {
+    const row = rows.get(rect.y) ?? []
+    row.push(rect)
+    rows.set(rect.y, row)
+  }
+
+  const horizontal: Rect[] = []
+  for (const row of [...rows.values()]) {
+    row.sort((a, b) => a.x - b.x)
+    for (const rect of row) {
+      const last = horizontal[horizontal.length - 1]
+      if (last && last.y === rect.y && last.height === rect.height && last.x + last.width === rect.x) {
+        last.width += rect.width
+      } else {
+        horizontal.push({ ...rect })
+      }
+    }
+  }
+
+  horizontal.sort((a, b) => a.x - b.x || a.width - b.width || a.y - b.y)
+  const merged: Rect[] = []
+  for (const rect of horizontal) {
+    const last = merged[merged.length - 1]
+    if (last && last.x === rect.x && last.width === rect.width && last.y + last.height === rect.y) {
+      last.height += rect.height
+    } else {
+      merged.push({ ...rect })
+    }
+  }
+  return merged.sort((a, b) => a.y - b.y || a.x - b.x)
+}
+
+function lavaRectsFromGround(tilemap: TiledMap): Rect[] {
+  const ground = tilemap.layers[0]
+  const rects: Rect[] = []
+  for (let i = 0; i < ground.data.length; i++) {
+    if (!LAVA_TILE_IDS.has(ground.data[i] ?? 0)) continue
+    const col = i % ground.width
+    const row = Math.floor(i / ground.width)
+    rects.push({
+      x: col * TILE_SIZE_PX,
+      y: row * TILE_SIZE_PX,
+      width: TILE_SIZE_PX,
+      height: TILE_SIZE_PX,
+    })
+  }
+  return mergeTileRects(rects)
+}
+
 export function buildArenaTilemapFromScene(scene = readArenaScene()): TiledMap {
   const tilemap = findArenaMap(scene)
   const tileset = tilemap.tilesets.find((item) => item.name === "arena-terrain")
@@ -273,6 +369,8 @@ export function buildArenaTilemapFromScene(scene = readArenaScene()): TiledMap {
   const groundData = readGroundData(tilemap)
   const propObjects = readPropColliderObjects(scene)
   const nonWalkableObjects = readNonWalkableObjects(scene)
+  const lavaObjects = readLavaObjects(scene)
+  const cliffObjects = readCliffObjects(scene)
   const tilesetImage = readPngDimensions(ARENA_TILESET)
   const tilesetColumns = tilesetImage.width / TILE_SIZE_PX
   const tilesetRows = tilesetImage.height / TILE_SIZE_PX
@@ -281,6 +379,8 @@ export function buildArenaTilemapFromScene(scene = readArenaScene()): TiledMap {
     ...generateSpawnPointObjects().map((obj) => obj.id),
     ...propObjects.map((obj) => obj.id),
     ...nonWalkableObjects.map((obj) => obj.id),
+    ...lavaObjects.map((obj) => obj.id),
+    ...cliffObjects.map((obj) => obj.id),
   )
 
   if (!Number.isInteger(tilesetColumns) || !Number.isInteger(tilesetRows)) {
@@ -299,7 +399,7 @@ export function buildArenaTilemapFromScene(scene = readArenaScene()): TiledMap {
     version: "1.10",
     tiledversion: "1.10.2",
     infinite: false,
-    nextlayerid: 5,
+    nextlayerid: 7,
     nextobjectid: highestObjectId + 1,
     tilesets: [
       {
@@ -362,6 +462,28 @@ export function buildArenaTilemapFromScene(scene = readArenaScene()): TiledMap {
         draworder: "topdown",
         objects: nonWalkableObjects,
       },
+      {
+        id: 5,
+        name: "LavaAreas",
+        type: "objectgroup",
+        visible: true,
+        opacity: 1,
+        x: 0,
+        y: 0,
+        draworder: "topdown",
+        objects: lavaObjects,
+      },
+      {
+        id: 6,
+        name: "CliffAreas",
+        type: "objectgroup",
+        visible: true,
+        opacity: 1,
+        x: 0,
+        y: 0,
+        draworder: "topdown",
+        objects: cliffObjects,
+      },
     ],
   }
 }
@@ -381,6 +503,36 @@ function buildGeneratedCollidersSource(
   return `/**
  * AUTO-GENERATED by \`bun run build:arena-colliders\`. Do not edit by hand.
  * Source: public/assets/tilemaps/arena.json (object layer ${layerName}).
+ */
+export const ${exportName} = ${JSON.stringify(rects, null, 2)} as const
+`
+}
+
+function buildGeneratedHazardSource(
+  tilemap: TiledMap,
+  kind: "lava" | "cliff",
+  exportName: string,
+): string {
+  const objectRects = (layerName: string): Rect[] => {
+    const layer = tilemap.layers.find(
+      (item): item is TiledObjectLayer => item.type === "objectgroup" && item.name === layerName,
+    )
+    return layer?.objects.map(({ x, y, width, height }) => ({ x, y, width, height })) ?? []
+  }
+  const lava = [...lavaRectsFromGround(tilemap), ...objectRects("LavaAreas")]
+  const rects =
+    kind === "lava"
+      ? lava
+      : [
+          ...objectRects("NonWalkableAreas").filter(
+            (rect) => !lava.some((lavaRect) => rectsOverlap(rect, lavaRect)),
+          ),
+          ...objectRects("CliffAreas"),
+        ]
+
+  return `/**
+ * AUTO-GENERATED by \`bun run build:arena-colliders\`. Do not edit by hand.
+ * Source: public/assets/tilemaps/arena.json (${kind} hybrid hazard generation).
  */
 export const ${exportName} = ${JSON.stringify(rects, null, 2)} as const
 `
@@ -410,11 +562,23 @@ export function exportArenaTilemap(checkOnly = false): void {
     "NonWalkableAreas",
     "GENERATED_ARENA_NON_WALKABLE_COLLIDERS",
   )
+  const lavaCollidersSource = buildGeneratedHazardSource(
+    tilemap,
+    "lava",
+    "GENERATED_ARENA_LAVA_COLLIDERS",
+  )
+  const cliffCollidersSource = buildGeneratedHazardSource(
+    tilemap,
+    "cliff",
+    "GENERATED_ARENA_CLIFF_COLLIDERS",
+  )
 
   if (checkOnly) {
     assertSameFile(ARENA_JSON, tilemapSource)
     assertSameFile(GENERATED_COLLIDERS, propCollidersSource)
     assertSameFile(GENERATED_NON_WALKABLE_COLLIDERS, nonWalkableCollidersSource)
+    assertSameFile(GENERATED_LAVA_COLLIDERS, lavaCollidersSource)
+    assertSameFile(GENERATED_CLIFF_COLLIDERS, cliffCollidersSource)
     console.log("Arena editor parity OK")
     return
   }
@@ -422,6 +586,8 @@ export function exportArenaTilemap(checkOnly = false): void {
   writeFileSync(ARENA_JSON, tilemapSource, "utf8")
   writeFileSync(GENERATED_COLLIDERS, propCollidersSource, "utf8")
   writeFileSync(GENERATED_NON_WALKABLE_COLLIDERS, nonWalkableCollidersSource, "utf8")
+  writeFileSync(GENERATED_LAVA_COLLIDERS, lavaCollidersSource, "utf8")
+  writeFileSync(GENERATED_CLIFF_COLLIDERS, cliffCollidersSource, "utf8")
   console.log(`Wrote ${ARENA_JSON}`)
 }
 

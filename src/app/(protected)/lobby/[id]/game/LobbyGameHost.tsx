@@ -21,7 +21,11 @@ import WaitingForPlayersOverlay from "./WaitingForPlayersOverlay"
 import LoadingOverlay from "./LoadingOverlay"
 import CountdownOverlay from "./CountdownOverlay"
 import { useLoaderStatus } from "./useLoaderStatus"
-import { WW_KEYBIND_CONFIG_REGISTRY_KEY } from "@/game/constants"
+import {
+  WW_DEBUG_MODE_REGISTRY_KEY,
+  WW_GAMEPLAY_INPUT_BLOCKED_REGISTRY_KEY,
+  WW_KEYBIND_CONFIG_REGISTRY_KEY,
+} from "@/game/constants"
 import type { LoaderStatusHost } from "@/game/loaderStatus"
 import { hudTopPanel } from "@/lib/ui/lobbyStyles"
 import Scoreboard from "./Scoreboard"
@@ -29,7 +33,13 @@ import AbilityBar from "./AbilityBar"
 import QuickItemBar from "./QuickItemBar"
 import GameSettingsModal from "./GameSettingsModal"
 import ShopModal from "./ShopModal"
-import { GameKeybindProvider, useGameKeybinds } from "./GameKeybindContext"
+import { useBlockGameplayInputEvents } from "./useBlockGameplayInputEvents"
+import {
+  GameSettingsProvider,
+  useGameKeybinds,
+  useGameSettingsContext,
+  type AudioVolumeSettings,
+} from "./GameSettingsContext"
 import { useLobbyConnection } from "../LobbyConnectionProvider"
 import { MATCH_COUNTDOWN_DURATION_MS } from "@/shared/balance-config/lobby"
 import type { ShopStatePayload } from "@/shared/types"
@@ -84,9 +94,9 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
   }
 
   return (
-    <GameKeybindProvider>
+    <GameSettingsProvider>
       <LobbyGameHostWithKeybinds lobbyId={lobbyId} />
-    </GameKeybindProvider>
+    </GameSettingsProvider>
   )
 }
 
@@ -95,12 +105,15 @@ type LobbyGameHostWithKeybindsProps = {
 }
 
 /**
- * In-game UI and Phaser mount; must sit under `GameKeybindProvider` so keybinds
- * are passed into Phaser on mount and when the user saves new binds.
+ * In-game UI and Phaser mount; must sit under `GameSettingsProvider` so settings
+ * are passed into Phaser on mount and when the user saves changes.
  */
 function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) {
   const router = useRouter()
   const keybinds = useGameKeybinds()
+  const { audioVolumes, debugModeEnabled, settingsLoaded } =
+    useGameSettingsContext()
+  const gameplayInputBlockProps = useBlockGameplayInputEvents()
   const keybindsRef = useRef(keybinds)
   useEffect(() => {
     keybindsRef.current = keybinds
@@ -308,8 +321,54 @@ function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) 
     gameHost.registry.set(WW_KEYBIND_CONFIG_REGISTRY_KEY, keybinds)
   }, [gameHost, keybinds])
 
+  /**
+   * Applies audio volume settings to the live Arena scene when available.
+   *
+   * @param settings - BGM/SFX volume values in 0-100 units.
+   */
+  const applyAudioVolumes = useCallback((settings: AudioVolumeSettings) => {
+    const host = gameHost as unknown as
+      | { scene?: { getScene: (key: string) => unknown } }
+      | null
+      | undefined
+    const arena = host?.scene?.getScene("Arena") as
+      | { setAudioVolumes?: (settings: AudioVolumeSettings) => void }
+      | null
+      | undefined
+    arena?.setAudioVolumes?.(settings)
+  }, [gameHost])
+
+  useEffect(() => {
+    applyAudioVolumes(audioVolumes)
+  }, [applyAudioVolumes, audioVolumes])
+
+  useEffect(() => {
+    if (!gameHost) return
+    gameHost.registry.set(WW_DEBUG_MODE_REGISTRY_KEY, debugModeEnabled)
+
+    const host = gameHost as unknown as
+      | { scene?: { getScene: (key: string) => unknown } }
+      | null
+      | undefined
+    const arena = host?.scene?.getScene("Arena") as
+      | { setDebugModeEnabled?: (enabled: boolean) => void }
+      | null
+      | undefined
+    arena?.setDebugModeEnabled?.(debugModeEnabled)
+  }, [debugModeEnabled, gameHost])
+
+  const modalInputBlocked = settingsOpen || shopOpen
+  useEffect(() => {
+    if (!gameHost) return
+    gameHost.registry.set(WW_GAMEPLAY_INPUT_BLOCKED_REGISTRY_KEY, modalInputBlocked)
+    return () => {
+      gameHost.registry.set(WW_GAMEPLAY_INPUT_BLOCKED_REGISTRY_KEY, false)
+    }
+  }, [gameHost, modalInputBlocked])
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (modalInputBlocked) return
       const active = document.activeElement
       const isInput =
         active instanceof HTMLInputElement ||
@@ -320,7 +379,7 @@ function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) 
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [])
+  }, [modalInputBlocked])
 
   const onReturnToLobby = useCallback(() => {
     connection?.sendLobbyReturnToLobby()
@@ -396,10 +455,24 @@ function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) 
         />
       )}
 
-      {settingsOpen && (
+      {settingsOpen && !settingsLoaded && (
+        <div
+          {...gameplayInputBlockProps}
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 text-sm text-gray-300 backdrop-blur-sm"
+          data-testid="settings-modal-loading"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Game Settings"
+        >
+          Loading settings…
+        </div>
+      )}
+
+      {settingsOpen && settingsLoaded && (
         <GameSettingsModal
           onClose={() => setSettingsOpen(false)}
           isHost={isHost}
+          onApplyAudioVolumes={applyAudioVolumes}
           onEndMatch={() => {
             connection?.sendLobbyEndGame()
             setSettingsOpen(false)

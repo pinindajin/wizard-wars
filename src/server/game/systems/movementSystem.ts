@@ -32,6 +32,8 @@ import {
   PlayerTag,
   ABILITY_INDEX_TO_ID,
   JumpArc,
+  TerrainState,
+  TERRAIN_KIND_TO_STATE,
 } from "../components"
 import type { SimCtx } from "../simulation"
 import {
@@ -45,7 +47,7 @@ import {
 } from "../../../shared/balance-config"
 import { ABILITY_CONFIGS } from "../../../shared/balance-config/abilities"
 import { moveWithinWorld } from "../../../shared/collision/worldCollision"
-import { worldCollidersForJumpZ } from "../../../shared/collision/worldCollidersForPlayer"
+import { worldCollidersForPlayerState } from "../../../shared/collision/worldCollidersForPlayer"
 import { normalizedMoveFromWASD } from "../../../shared/movementIntent"
 
 const ARENA_BOUNDS = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
@@ -69,8 +71,7 @@ export function movementSystem(ctx: SimCtx): void {
       Velocity.vy[eid] = 0
       continue
     }
-
-    if (hasComponent(world, eid, JumpArc) && ctx.currentTick < JumpArc.liftEndsAtTick[eid]) {
+    if ((TERRAIN_KIND_TO_STATE[TerrainState.kind[eid]] ?? "land") === "cliff") {
       Velocity.vx[eid] = 0
       Velocity.vy[eid] = 0
       continue
@@ -112,7 +113,8 @@ export function movementSystem(ctx: SimCtx): void {
     const stepX = dx * speedPxPerSec * TICK_DT_SEC
     const stepY = dy * speedPxPerSec * TICK_DT_SEC
     const jumpZForCollider = hasComponent(world, eid, JumpArc) ? JumpArc.z[eid] : 0
-    const worldColliders = worldCollidersForJumpZ(jumpZForCollider)
+    const terrainState = TERRAIN_KIND_TO_STATE[TerrainState.kind[eid]] ?? "land"
+    const worldColliders = worldCollidersForPlayerState(jumpZForCollider, terrainState)
     const moved = moveWithinWorld(
       Position.x[eid],
       Position.y[eid],

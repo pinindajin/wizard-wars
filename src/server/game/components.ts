@@ -100,13 +100,19 @@ export const Knockback = {
 }
 
 /**
- * Active jump arc: simulated height `z` (world px), vertical velocity, and first tick
- * where horizontal control returns after the lift/root phase.
+ * Active jump arc: simulated height `z` (world px) and vertical velocity `vz`.
+ * Horizontal movement uses the same WASD path as on the ground while airborne.
  */
 export const JumpArc = {
   z: new Float32Array(MAX_ENTITIES),
   vz: new Float32Array(MAX_ENTITIES),
-  liftEndsAtTick: new Uint32Array(MAX_ENTITIES),
+}
+
+/** Current terrain hazard state: 0 land, 1 lava, 2 cliff. */
+export const TerrainState = {
+  kind: new Uint8Array(MAX_ENTITIES),
+  /** Fractional lava damage carried across ticks until it reaches whole HP. */
+  lavaDamageCarry: new Float32Array(MAX_ENTITIES),
 }
 
 /**
@@ -241,6 +247,14 @@ export const SwingingWeapon = {}
 
 /** Marks a player entity as currently invulnerable after respawn. */
 export const InvulnerableTag = {}
+
+export const TERRAIN_KIND = {
+  land: 0,
+  lava: 1,
+  cliff: 2,
+} as const
+
+export const TERRAIN_KIND_TO_STATE = ["land", "lava", "cliff"] as const
 
 // ─── Index ↔ ID mappings ─────────────────────────────────────────────────
 

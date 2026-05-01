@@ -40,7 +40,8 @@
     "check:arena-editor-parity": "tsx scripts/export-arena-tilemap.ts --check",
     "build:arena-colliders": "bun run export:arena-tilemap && tsx scripts/compile-arena-colliders.ts",
     "build:fireball-sheets": "tsx scripts/build-fireball-sheets.ts",
-    "setup:fresh": "cp sample.env .env && bun install && bun run docker:up:dbs && bunx prisma migrate dev"
+    "setup:fresh": "cp sample.env .env && bun install && bun run docker:up:dbs && bunx prisma migrate dev",
+    "db:migrate": "bunx prisma migrate dev"
   },
   "dependencies": {
     "@colyseus/schema": "^4.0.19",

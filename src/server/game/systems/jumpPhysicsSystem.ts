@@ -8,24 +8,29 @@ import {
   JumpArc,
   PlayerTag,
   Position,
+  Velocity,
   Health,
   DyingTag,
   DeadTag,
   SpectatorTag,
   InvulnerableTag,
+  TerrainState,
+  TERRAIN_KIND,
 } from "../components"
 import type { SimCtx } from "../simulation"
 import {
   ARENA_HEIGHT,
   ARENA_WIDTH,
   JUMP_GRAVITY_PX_PER_SEC2,
+  JUMP_LANDING_GRACE_PX,
   PLAYER_WORLD_COLLISION_FOOTPRINT,
   TICK_DT_SEC,
 } from "../../../shared/balance-config"
 import {
-  canOccupyWorldPosition,
+  resolveJumpLandingWithGrace,
 } from "../../../shared/collision/worldCollision"
 import { ARENA_WORLD_COLLIDERS } from "../../../shared/balance-config/arena"
+import { terrainStateAtPosition } from "../../../shared/collision/terrainHazards"
 
 const ARENA_BOUNDS = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
 
@@ -68,14 +73,36 @@ export function jumpPhysicsSystem(ctx: SimCtx): void {
 
     const gx = Position.x[eid]
     const gy = Position.y[eid]
-    const legal = canOccupyWorldPosition(
+    const landing = resolveJumpLandingWithGrace(
       gx,
       gy,
       PLAYER_WORLD_COLLISION_FOOTPRINT,
       ARENA_BOUNDS,
       ARENA_WORLD_COLLIDERS,
+      {
+        movementX: Velocity.vx[eid],
+        movementY: Velocity.vy[eid],
+        gracePx: JUMP_LANDING_GRACE_PX,
+      },
     )
-    if (legal) continue
+    if (landing) {
+      Position.x[eid] = landing.x
+      Position.y[eid] = landing.y
+      TerrainState.kind[eid] = TERRAIN_KIND.land
+      TerrainState.lavaDamageCarry[eid] = 0
+      continue
+    }
+
+    const terrainState = terrainStateAtPosition(gx, gy)
+    if (terrainState === "lava") {
+      TerrainState.kind[eid] = TERRAIN_KIND.lava
+      continue
+    }
+    if (terrainState === "cliff") {
+      TerrainState.kind[eid] = TERRAIN_KIND.cliff
+      TerrainState.lavaDamageCarry[eid] = 0
+      continue
+    }
 
     if (hasComponent(world, eid, InvulnerableTag)) continue
 

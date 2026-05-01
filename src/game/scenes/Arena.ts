@@ -133,6 +133,19 @@ export default class Arena extends Phaser.Scene {
 		)
 	}
 
+	/** Applies user-facing audio volume settings to the active runtime. */
+	setAudioVolumes(settings: {
+		readonly bgmVolume?: number
+		readonly sfxVolume?: number
+	}): void {
+		this.runtime?.setAudioVolumes(settings)
+	}
+
+	/** Applies local-only debug overlay mode to the active runtime. */
+	setDebugModeEnabled(enabled: boolean): void {
+		this.runtime?.setDebugModeEnabled(enabled)
+	}
+
 	/* END-USER-CODE */
 }
 

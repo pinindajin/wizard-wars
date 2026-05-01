@@ -1,7 +1,14 @@
 import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
 
-import { AUTH_COOKIE_NAME, verifyToken } from "@/server/auth"
+import {
+  AUTH_COOKIE_NAME,
+  createClearAuthCookie,
+  findExistingAuthUser,
+  shouldVerifyUserOnProtected,
+  verifyToken,
+} from "@/server/auth"
+import { prisma } from "@/server/db"
 
 export type LobbyListEntry = {
   readonly lobbyId: string
@@ -26,7 +33,15 @@ export async function GET(): Promise<NextResponse> {
   }
 
   try {
-    await verifyToken(token)
+    const auth = await verifyToken(token)
+    if (shouldVerifyUserOnProtected()) {
+      const user = await findExistingAuthUser(prisma, auth)
+      if (!user) {
+        const response = NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+        response.headers.append("set-cookie", createClearAuthCookie())
+        return response
+      }
+    }
   } catch {
     return NextResponse.json({ error: "Invalid token" }, { status: 401 })
   }

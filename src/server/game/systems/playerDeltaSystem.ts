@@ -20,6 +20,8 @@ import {
   PlayerTag,
   InvulnerableTag,
   JumpArc,
+  TerrainState,
+  TERRAIN_KIND_TO_STATE,
 } from "../components"
 import { computePlayerAnimState, getCastingAbilityId } from "../playerAnimState"
 import { computePlayerMoveState } from "../playerMoveState"
@@ -32,7 +34,7 @@ import type { PlayerDelta } from "../../../shared/types"
  * @param ctx - Shared simulation context.
  */
 export function playerDeltaSystem(ctx: SimCtx): void {
-  const { world, prevPlayerStates, entityPlayerMap, lastProcessedInputSeqByPlayer, currentTick } =
+  const { world, prevPlayerStates, entityPlayerMap, lastProcessedInputSeqByPlayer } =
     ctx
 
   for (const eid of query(world, [PlayerTag])) {
@@ -47,10 +49,11 @@ export function playerDeltaSystem(ctx: SimCtx): void {
     const health = Health.current[eid]
     const lives = Lives.count[eid]
     const animState = computePlayerAnimState(world, eid)
-    const moveState = computePlayerMoveState(world, eid, currentTick)
+    const moveState = computePlayerMoveState(world, eid)
     const invulnerable = hasComponent(world, eid, InvulnerableTag)
     const castingAbilityId = getCastingAbilityId(world, eid)
     const jumpZ = hasComponent(world, eid, JumpArc) ? JumpArc.z[eid] : 0
+    const terrainState = TERRAIN_KIND_TO_STATE[TerrainState.kind[eid]] ?? "land"
     const lastProcessedInputSeq = Math.max(
       0,
       lastProcessedInputSeqByPlayer.get(userId) ?? 0,
@@ -72,6 +75,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
         castingAbilityId,
         invulnerable,
         jumpZ,
+        terrainState,
         lastProcessedInputSeq,
       })
       prevPlayerStates.set(eid, {
@@ -88,6 +92,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
         castingAbilityId,
         invulnerable,
         jumpZ,
+        terrainState,
         lastProcessedInputSeq,
       })
       continue
@@ -108,6 +113,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
       ...(castingAbilityId !== prev.castingAbilityId ? { castingAbilityId } : {}),
       ...(invulnerable !== prev.invulnerable ? { invulnerable } : {}),
       ...(jumpZ !== prev.jumpZ ? { jumpZ } : {}),
+      ...(terrainState !== prev.terrainState ? { terrainState } : {}),
       ...(lastProcessedInputSeq !== prev.lastProcessedInputSeq
         ? { lastProcessedInputSeq }
         : {}),
@@ -127,6 +133,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
       delta.castingAbilityId !== undefined ||
       delta.invulnerable !== undefined ||
       delta.jumpZ !== undefined ||
+      delta.terrainState !== undefined ||
       delta.lastProcessedInputSeq !== undefined
 
     if (changed) {
@@ -144,6 +151,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
       prev.castingAbilityId = castingAbilityId
       prev.invulnerable = invulnerable
       prev.jumpZ = jumpZ
+      prev.terrainState = terrainState
       prev.lastProcessedInputSeq = lastProcessedInputSeq
     }
   }

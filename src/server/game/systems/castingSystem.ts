@@ -3,7 +3,8 @@
  *
  * On each tick:
  *  1. Advances active casts:
- *     - Fireball: spawns a projectile entity via the command buffer.
+ *     - Fireball: enqueues a projectile via the command buffer; spawn position is read at
+ *       buffer execute time (after movement) using press-locked aim from cast start.
  *     - Lightning Bolt: queues a PendingLightningBolt for lightningBoltSystem.
  *     - Healing Potion: heals the caster immediately.
  *     - Effects fire at configured ms timing; cooldown starts when animation ends.
@@ -36,6 +37,8 @@ import {
   JumpArc,
   SwingingWeapon,
   Knockback,
+  TerrainState,
+  TERRAIN_KIND,
 } from "../components"
 import type { SimCtx, PendingLightningBolt } from "../simulation"
 import {
@@ -51,7 +54,6 @@ import {
   LIGHTNING_TELEGRAPH_DANGER_LEAD_MS,
   JUMP_COOLDOWN_MS,
   JUMP_INITIAL_VZ_PX_PER_SEC,
-  JUMP_LIFT_MS,
   JUMP_AIRBORNE_COLLIDER_EPSILON_PX,
 } from "../../../shared/balance-config"
 import { ABILITY_CONFIGS } from "../../../shared/balance-config/abilities"
@@ -136,14 +138,33 @@ function setCooldown(eid: number, abilityId: string, currentTick: number): void 
 
 // ─── Cast completion handlers ────────────────────────────────────────────
 
-/** Spawns a fireball projectile entity via the command buffer. */
-function launchFireball(
-  ctx: SimCtx,
-  casterEid: number,
-  capturedX: number,
-  capturedY: number,
-  capturedAngle: number,
-): void {
+/**
+ * Returns true when a deferred fireball must not spawn for this caster at buffer execute time.
+ *
+ * @param world - bitECS world.
+ * @param casterEid - Player entity that queued the cast.
+ * @returns True if spawn should be skipped (dying, dead, or spectator).
+ */
+function shouldSkipDeferredFireballSpawn(world: World, casterEid: number): boolean {
+  return (
+    hasComponent(world, casterEid, DyingTag) ||
+    hasComponent(world, casterEid, DeadTag) ||
+    hasComponent(world, casterEid, SpectatorTag)
+  )
+}
+
+/**
+ * Enqueues creation of a fireball projectile at end-of-tick execute.
+ *
+ * Spawn position uses the caster's {@link Position} inside `setup` (after `movementSystem`
+ * for this tick). Travel direction uses `capturedAngle` from press-time aim. If the caster
+ * is dying, dead, or spectator at execute time, the enqueue is a no-op.
+ *
+ * @param ctx - Simulation context.
+ * @param casterEid - Casting player entity id.
+ * @param capturedAngle - Locked world radians from cast start (cursor vs feet at press).
+ */
+function launchFireball(ctx: SimCtx, casterEid: number, capturedAngle: number): void {
   const {
     world,
     commandBuffer,
@@ -154,20 +175,21 @@ function launchFireball(
     fireballLaunches,
   } = ctx
 
-  const cx = capturedX
-  const cy = capturedY
   const angle = capturedAngle
   const vx = Math.cos(angle) * FIREBALL_SPEED_PX_PER_SEC
   const vy = Math.sin(angle) * FIREBALL_SPEED_PX_PER_SEC
-  // Spawn slightly in front of caster to avoid self-collision on tick 0
-  const spawnX = cx + Math.cos(angle) * 25
-  const spawnY = cy + Math.sin(angle) * 25
-
   const casterUserId = entityPlayerMap.get(casterEid) ?? ""
 
   commandBuffer.enqueue({
     type: "addEntity",
+    skipIf: (w) => shouldSkipDeferredFireballSpawn(w, casterEid),
     setup: (fbEid) => {
+      const cx = Position.x[casterEid]
+      const cy = Position.y[casterEid]
+      // Spawn slightly in front of caster to avoid self-collision on tick 0
+      const spawnX = cx + Math.cos(angle) * 25
+      const spawnY = cy + Math.sin(angle) * 25
+
       addComponent(world, fbEid, FireballTag)
       addComponent(world, fbEid, ProjectileTag)
       addComponent(world, fbEid, Position)
@@ -308,13 +330,7 @@ export function castingSystem(ctx: SimCtx): void {
     if (Casting.effectFired[eid] !== 1 && currentTick >= Casting.effectFiresAtTick[eid]) {
       switch (abilityId) {
         case "fireball":
-          launchFireball(
-            ctx,
-            eid,
-            Casting.capturedPositionX[eid],
-            Casting.capturedPositionY[eid],
-            Casting.capturedFacingAngle[eid],
-          )
+          launchFireball(ctx, eid, Casting.capturedFacingAngle[eid])
           break
         case "lightning_bolt":
           queueLightningBolt(
@@ -365,7 +381,8 @@ export function castingSystem(ctx: SimCtx): void {
       addComponent(world, eid, JumpArc)
       JumpArc.z[eid] = JUMP_AIRBORNE_COLLIDER_EPSILON_PX + 1
       JumpArc.vz[eid] = JUMP_INITIAL_VZ_PX_PER_SEC
-      JumpArc.liftEndsAtTick[eid] = currentTick + Math.ceil(JUMP_LIFT_MS / TICK_MS)
+      TerrainState.kind[eid] = TERRAIN_KIND.land
+      TerrainState.lavaDamageCarry[eid] = 0
       setCooldown(eid, "jump", currentTick)
       ctx.abilitySfxEvents.push({ sfxKey: jumpCfg.castSfxKey })
       continue
