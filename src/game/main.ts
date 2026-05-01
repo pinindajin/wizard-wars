@@ -1,6 +1,7 @@
 import type Phaser from "phaser"
 
 import type { KeybindConfig } from "@/shared/gameKeybinds/lobbyKeybinds"
+import type { MinimapCorner } from "@/shared/settings-config"
 import type { GameConnection } from "./network/GameConnection"
 
 import { createGame } from "./index"
@@ -10,6 +11,7 @@ export {
   WW_GAME_CONNECTION_REGISTRY_KEY,
   WW_KEYBIND_CONFIG_REGISTRY_KEY,
   WW_LOCAL_PLAYER_ID_REGISTRY_KEY,
+  WW_MINIMAP_CORNER_REGISTRY_KEY,
 } from "./constants"
 
 /** Options passed from the React host component to mount the Phaser game. */
@@ -28,6 +30,8 @@ export interface MountGameOptions {
   localPlayerId: string | null
   /** User keybinds (React); Phaser input matches the lobby settings modal. */
   keybinds?: KeybindConfig
+  /** Persisted compact minimap corner. */
+  minimapCorner?: MinimapCorner
 }
 
 /** Handle returned from {@link mountGame}. */
@@ -47,14 +51,19 @@ export type MountedGame = {
  * @returns An object containing the `game` handle and a `destroy` teardown fn.
  */
 export const mountGame = (options: MountGameOptions): MountedGame => {
-  const { containerId, lobbyId, token, gameConnection, localPlayerId, keybinds } = options
+  const { containerId, lobbyId, token, gameConnection, localPlayerId, keybinds, minimapCorner } = options
 
   sessionStorage.setItem(
     "ww_join_options",
     JSON.stringify({ token, lobbyId }),
   )
 
-  const game = createGame(containerId, { gameConnection, localPlayerId, keybinds })
+  const game = createGame(containerId, {
+    gameConnection,
+    localPlayerId,
+    keybinds,
+    minimapCorner,
+  })
 
   if (typeof window !== "undefined") {
     const w = window as Window & {

@@ -5,8 +5,10 @@ import {
   WW_GAME_CONNECTION_REGISTRY_KEY,
   WW_KEYBIND_CONFIG_REGISTRY_KEY,
   WW_LOCAL_PLAYER_ID_REGISTRY_KEY,
+  WW_MINIMAP_CORNER_REGISTRY_KEY,
 } from "./constants"
 import type { KeybindConfig } from "@/shared/gameKeybinds/lobbyKeybinds"
+import type { MinimapCorner } from "@/shared/settings-config"
 import type { GameConnection } from "./network/GameConnection"
 
 /** Optional injection of the layout-owned Colyseus adapter (single session per user). */
@@ -16,6 +18,8 @@ export type CreateGameOptions = {
   readonly localPlayerId?: string | null
   /** User keybinds from React; falls back if omitted (tests, standalone). */
   readonly keybinds?: KeybindConfig
+  /** Persisted compact minimap corner from React settings. */
+  readonly minimapCorner?: MinimapCorner
 }
 
 /**
@@ -32,8 +36,9 @@ export const createGame = (
   const injected = options?.gameConnection
   const localPlayerId = options?.localPlayerId
   const keybinds = options?.keybinds
+  const minimapCorner = options?.minimapCorner
   const needRegistryBoot =
-    injected != null || localPlayerId != null || keybinds != null
+    injected != null || localPlayerId != null || keybinds != null || minimapCorner != null
   const callbacks: Phaser.Types.Core.GameConfig["callbacks"] = {
     preBoot: (game) => {
       if (needRegistryBoot) {
@@ -45,6 +50,9 @@ export const createGame = (
         }
         if (keybinds) {
           game.registry.set(WW_KEYBIND_CONFIG_REGISTRY_KEY, keybinds)
+        }
+        if (minimapCorner) {
+          game.registry.set(WW_MINIMAP_CORNER_REGISTRY_KEY, minimapCorner)
         }
       }
       ;(globalThis as unknown as { __wwGame?: Phaser.Game }).__wwGame = game

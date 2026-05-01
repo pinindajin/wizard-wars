@@ -9,11 +9,13 @@ import {
   GAME_KEYBIND_ACTION_IDS,
   GAME_KEYBIND_LABELS,
   DEFAULT_KEYBINDS,
+  MINIMAP_CORNERS,
   useGameSettingsContext,
   type AudioVolumeSettings,
   type CombatNumbersMode,
   type GameKeybindActionId,
   type KeybindConfig,
+  type MinimapCorner,
 } from "./GameSettingsContext"
 import { useBlockGameplayInputEvents } from "./useBlockGameplayInputEvents"
 
@@ -22,6 +24,13 @@ const COMBAT_NUMBERS_LABELS: Record<CombatNumbersMode, string> = {
   ON: "On",
   ON_EXTENDED: "On (Extended)",
   ON_FULL: "On (Full)",
+}
+
+const MINIMAP_CORNER_LABELS: Record<MinimapCorner, string> = {
+  top_left: "Top Left",
+  top_right: "Top Right",
+  bottom_left: "Bottom Left",
+  bottom_right: "Bottom Right",
 }
 
 /** Props for GameSettingsModal. */
@@ -74,6 +83,8 @@ export default function GameSettingsModal({
     setAudioVolumes,
     combatNumbersMode,
     setCombatNumbersMode,
+    minimapCorner,
+    setMinimapCorner,
     debugModeEnabled,
     setDebugModeEnabled,
     settingsLoaded,
@@ -83,6 +94,8 @@ export default function GameSettingsModal({
   const [localKeybinds, setLocalKeybinds] = useState<KeybindConfig>({ ...keybinds })
   const [rebinding, setRebinding] = useState<GameKeybindActionId | null>(null)
   const [combatMode, setCombatMode] = useState<CombatNumbersMode>(combatNumbersMode)
+  const [localMinimapCorner, setLocalMinimapCorner] =
+    useState<MinimapCorner>(minimapCorner)
   const [bgmVolume, setBgmVolume] = useState(audioVolumes.bgmVolume)
   const [sfxVolume, setSfxVolume] = useState(audioVolumes.sfxVolume)
   const [saving, setSaving] = useState(false)
@@ -177,10 +190,12 @@ export default function GameSettingsModal({
         bgmVolume,
         sfxVolume,
         openSettingsKey: localKeybinds.open_settings,
+        minimapCorner: localMinimapCorner,
       })
       setKeybinds(localKeybinds)
       setAudioVolumes({ bgmVolume, sfxVolume })
       setCombatNumbersMode(combatMode)
+      setMinimapCorner(localMinimapCorner)
       setSavedOk(true)
       setTimeout(() => setSavedOk(false), 2000)
     } catch (err) {
@@ -196,10 +211,12 @@ export default function GameSettingsModal({
     bgmVolume,
     combatMode,
     localKeybinds,
+    localMinimapCorner,
     redirectToSessionExpired,
     setAudioVolumes,
     setCombatNumbersMode,
     setKeybinds,
+    setMinimapCorner,
     sfxVolume,
   ])
 
@@ -306,6 +323,29 @@ export default function GameSettingsModal({
                   type="button"
                 >
                   {COMBAT_NUMBERS_LABELS[mode]}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section>
+            <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-purple-400">
+              Minimap
+            </h3>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {MINIMAP_CORNERS.map((corner) => (
+                <button
+                  key={corner}
+                  className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+                    localMinimapCorner === corner
+                      ? "border-purple-500 bg-purple-600 text-white"
+                      : "border-gray-600 text-gray-400 hover:bg-gray-700"
+                  }`}
+                  data-testid={`settings-minimap-corner-${corner}`}
+                  onClick={() => setLocalMinimapCorner(corner)}
+                  type="button"
+                >
+                  {MINIMAP_CORNER_LABELS[corner]}
                 </button>
               ))}
             </div>

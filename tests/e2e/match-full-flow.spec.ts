@@ -123,6 +123,22 @@ test("full match flow: assets, overlay, canvas, movement, shop, abilities", asyn
   // mounts when phase === "IN_PROGRESS".
   await expect(page.getByText(/HP/).first()).toBeVisible({ timeout: 30_000 })
 
+  const minimap = page.getByTestId("game-minimap")
+  await expect(minimap).toBeVisible({ timeout: 10_000 })
+  await expect(minimap).toHaveAttribute("data-corner", "top_left")
+  await expect(minimap).toHaveAttribute("data-mode", "compact")
+  const compactBox = await minimap.boundingBox()
+  expect(compactBox?.x ?? Infinity, "expected minimap in left corner").toBeLessThan(260)
+  expect(compactBox?.y ?? Infinity, "expected minimap in top corner").toBeLessThan(120)
+  await page.keyboard.press("m")
+  await expect(minimap).toHaveAttribute("data-mode", "expanded")
+  const expandedBox = await minimap.boundingBox()
+  expect(expandedBox?.width ?? 0, "expected expanded minimap to be wider").toBeGreaterThan(
+    (compactBox?.width ?? 0) * 2,
+  )
+  await page.keyboard.press("m")
+  await expect(minimap).toHaveAttribute("data-mode", "compact")
+
   // Arena follow camera: map size equals default game size, so zoom must be >1
   // or `centerOn` cannot scroll. See ARENA_CAMERA_FOLLOW_ZOOM in balance-config.
   await expect
@@ -323,10 +339,14 @@ test("full match flow: assets, overlay, canvas, movement, shop, abilities", asyn
   // Settings modal: BGM/SFX save and gameplay input block.
   await page.keyboard.press("\\")
   await expect(page.getByTestId("settings-modal")).toBeVisible({ timeout: 5000 })
+  await page.keyboard.press("m")
+  await expect(minimap).toHaveAttribute("data-mode", "compact")
   await setRange("settings-bgm-volume", 23)
   await setRange("settings-sfx-volume", 34)
+  await page.getByTestId("settings-minimap-corner-bottom_right").click()
   await page.getByTestId("settings-save").click()
   await expect(page.getByText(/settings saved/i)).toBeVisible({ timeout: 5000 })
+  await expect(minimap).toHaveAttribute("data-corner", "bottom_right")
 
   await clearInputLog()
   await page.mouse.down()

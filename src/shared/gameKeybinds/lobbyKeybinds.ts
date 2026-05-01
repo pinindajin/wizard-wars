@@ -19,6 +19,7 @@ export const GAME_KEYBIND_ACTION_IDS = [
   "quick_item_4",
   "open_settings",
   "scoreboard",
+  "toggle_minimap",
   "weapon_primary",
   "weapon_secondary",
 ] as const
@@ -43,6 +44,7 @@ export const DEFAULT_KEYBINDS: Record<GameKeybindActionId, string> = {
   quick_item_4: "8",
   open_settings: "\\",
   scoreboard: "Tab",
+  toggle_minimap: "m",
   weapon_primary: "MouseLeft",
   weapon_secondary: "MouseRight",
 }

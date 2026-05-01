@@ -55,6 +55,7 @@ function addPlayer(
     lives: 3,
     animState: "idle",
     moveState: "idle",
+    terrainState: "land",
     castingAbilityId: null,
     facingAngle: 0,
     moveFacingAngle: 0,
