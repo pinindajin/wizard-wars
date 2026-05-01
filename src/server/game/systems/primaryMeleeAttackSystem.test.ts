@@ -28,6 +28,7 @@ function emptyCtx(overrides: Partial<SimCtx> = {}): SimCtx {
     entityUsernameMap: new Map(),
     playerHeroIdMap: new Map(),
     fireballOwnerMap: new Map(),
+    fireballCreatedAtTickMap: new Map(),
     inputMap: new Map(),
     lastProcessedInputSeqByPlayer: new Map(),
     commandBuffer: createCommandBuffer(),

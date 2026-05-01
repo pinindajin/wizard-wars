@@ -86,6 +86,8 @@ export const FIREBALL_SPEED_PX_PER_SEC = 400
 export const FIREBALL_CAST_MS = 500
 /** Fireball cooldown after cast animation finishes. */
 export const FIREBALL_COOLDOWN_MS = 800
+/** Newly launched fireballs ignore their owner for this many ms. */
+export const FIREBALL_OWNER_SELF_DAMAGE_GRACE_MS = 100
 
 // --- Lightning Bolt ---
 /** Damage dealt by lightning bolt. Bitmask: Magic | Electric. */

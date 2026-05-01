@@ -200,6 +200,8 @@ export type SimCtx = {
   playerHeroIdMap: Map<string, string>
   /** fireball entity ID → owner userId */
   fireballOwnerMap: Map<number, string>
+  /** fireball entity ID → simulation tick when launched */
+  fireballCreatedAtTickMap: Map<number, number>
 
   inputMap: Map<string, PlayerInputPayload>
   /**
@@ -324,6 +326,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
   const entityUsernameMap = new Map<number, string>()
   const playerHeroIdMap = new Map<string, string>()
   const fireballOwnerMap = new Map<number, string>()
+  const fireballCreatedAtTickMap = new Map<number, number>()
   const commandBuffer = createCommandBuffer()
   const prevPlayerStates = new Map<number, PlayerPrevState>()
   const prevFireballStates = new Map<number, FireballPrevState>()
@@ -623,6 +626,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       entityUsernameMap,
       playerHeroIdMap,
       fireballOwnerMap,
+      fireballCreatedAtTickMap,
       inputMap,
       lastProcessedInputSeqByPlayer,
       commandBuffer,

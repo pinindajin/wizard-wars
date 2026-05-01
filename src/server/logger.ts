@@ -41,9 +41,7 @@ export type DbLogLevelOverrideResult =
   | { status: "invalid"; value: string; effectiveLevel: ServerLogLevelType }
   | { status: "failed"; err: unknown; effectiveLevel: ServerLogLevelType }
 
-export async function applyDbLogLevelOverride(
-  prisma: Pick<PrismaClient, "appConfig">,
-): Promise<DbLogLevelOverrideResult> {
+export async function applyDbLogLevelOverride(prisma: PrismaClient): Promise<DbLogLevelOverrideResult> {
   try {
     const row = await prisma.appConfig.findUnique({
       where: { id: APP_CONFIG_ID },

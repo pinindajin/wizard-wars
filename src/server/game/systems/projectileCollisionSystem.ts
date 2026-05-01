@@ -21,6 +21,8 @@ import type { SimCtx, DamageRequest } from "../simulation"
 import {
   FIREBALL_DAMAGE,
   FIREBALL_KNOCKBACK_PX,
+  FIREBALL_OWNER_SELF_DAMAGE_GRACE_MS,
+  TICK_MS,
 } from "../../../shared/balance-config"
 import {
   characterHitboxForCenter,
@@ -29,6 +31,19 @@ import {
 
 /** Approximate fireball hit radius in pixels. */
 const FIREBALL_RADIUS = 8
+const FIREBALL_OWNER_SELF_DAMAGE_GRACE_TICKS = Math.ceil(
+  FIREBALL_OWNER_SELF_DAMAGE_GRACE_MS / TICK_MS,
+)
+
+function isWithinOwnerSelfDamageGrace(
+  fireballCreatedAtTickMap: ReadonlyMap<number, number>,
+  fbEid: number,
+  currentTick: number,
+): boolean {
+  const createdAtTick = fireballCreatedAtTickMap.get(fbEid)
+  return createdAtTick !== undefined &&
+    currentTick - createdAtTick < FIREBALL_OWNER_SELF_DAMAGE_GRACE_TICKS
+}
 
 /**
  * Runs the projectile collision system for one tick.
@@ -38,9 +53,11 @@ const FIREBALL_RADIUS = 8
 export function projectileCollisionSystem(ctx: SimCtx): void {
   const {
     world,
+    currentTick,
     commandBuffer,
     entityPlayerMap,
     fireballOwnerMap,
+    fireballCreatedAtTickMap,
     fireballRemovedIds,
     fireballImpacts,
     damageRequests,
@@ -56,6 +73,11 @@ export function projectileCollisionSystem(ctx: SimCtx): void {
     const fbX = Position.x[fbEid]
     const fbY = Position.y[fbEid]
     const ownerUserId = fireballOwnerMap.get(fbEid) ?? null
+    const ownerInGrace = isWithinOwnerSelfDamageGrace(
+      fireballCreatedAtTickMap,
+      fbEid,
+      currentTick,
+    )
 
     for (const playerEid of query(world, [PlayerTag])) {
       if (hasComponent(world, playerEid, DyingTag)) continue
@@ -63,12 +85,13 @@ export function projectileCollisionSystem(ctx: SimCtx): void {
       if (hasComponent(world, playerEid, SpectatorTag)) continue
       if (hasComponent(world, playerEid, InvulnerableTag)) continue
 
+      const targetUserId = entityPlayerMap.get(playerEid) ?? null
+      if (ownerInGrace && ownerUserId !== null && targetUserId === ownerUserId) continue
+
       const hitbox = characterHitboxForCenter(Position.x[playerEid], Position.y[playerEid])
       if (!circleIntersectsRect(fbX, fbY, FIREBALL_RADIUS, hitbox)) continue
 
       // Hit!
-      const targetUserId = entityPlayerMap.get(playerEid) ?? null
-
       // Knockback direction: away from fireball origin
       const vx = Velocity.vx[fbEid]
       const vy = Velocity.vy[fbEid]
@@ -98,6 +121,7 @@ export function projectileCollisionSystem(ctx: SimCtx): void {
       removedThisTick.add(fbEid)
       fireballRemovedIds.push(fbEid)
       fireballOwnerMap.delete(fbEid)
+      fireballCreatedAtTickMap.delete(fbEid)
       commandBuffer.enqueue({ type: "removeEntity", eid: fbEid })
       break // fireball consumed
     }
