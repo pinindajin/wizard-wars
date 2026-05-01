@@ -136,7 +136,15 @@ function launchFireball(
   capturedY: number,
   capturedAngle: number,
 ): void {
-  const { world, commandBuffer, fireballOwnerMap, entityPlayerMap, fireballLaunches } = ctx
+  const {
+    world,
+    commandBuffer,
+    currentTick,
+    fireballOwnerMap,
+    fireballCreatedAtTickMap,
+    entityPlayerMap,
+    fireballLaunches,
+  } = ctx
 
   const cx = capturedX
   const cy = capturedY
@@ -163,6 +171,7 @@ function launchFireball(
       Velocity.vy[fbEid] = vy
       Ownership.ownerEid[fbEid] = casterEid
       fireballOwnerMap.set(fbEid, casterUserId)
+      fireballCreatedAtTickMap.set(fbEid, currentTick)
 
       fireballLaunches.push({
         id: fbEid,

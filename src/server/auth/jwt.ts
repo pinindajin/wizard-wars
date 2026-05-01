@@ -47,8 +47,8 @@ export const signToken = async (user: AuthUser): Promise<string> => {
 export const verifyToken = async (token: string): Promise<AuthUser> => {
   const verification = await jwtVerify(token, getAuthSecret())
   if (!verification.payload.sub || typeof verification.payload.username !== "string") {
-    // Edge middleware cannot import the structured logger (dotenv uses Node APIs). Keep this Edge-safe.
-    console.warn("[auth] JWT missing required claims")
+    // Structured logger lives in Node-only code; middleware runs on Edge.
+    console.warn("[auth.token.invalid_payload]", "JWT missing required claims")
     throw new Error("Invalid token payload")
   }
   return {
