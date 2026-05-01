@@ -1,16 +1,12 @@
 import bcrypt from "bcryptjs"
 
-export {
-  AUTH_COOKIE_NAME,
-  createAuthCookie,
-  createClearAuthCookie,
-  signToken,
-  verifyToken,
-} from "./token"
+import { AUTH_COOKIE_NAME, AUTH_TOKEN_MAX_AGE_SECONDS } from "./jwt"
+
+export { AUTH_COOKIE_NAME, AUTH_TOKEN_MAX_AGE_SECONDS, signToken, verifyToken } from "./jwt"
 
 /**
- * Server-side authentication helpers: password hashing (bcryptjs), plus re-exported JWT/cookie
- * primitives from the Edge-safe token module. All signing depends on `process.env.AUTH_SECRET`.
+ * Server-side authentication helpers: password hashing (bcryptjs), JWT issue/verify (jose HS256),
+ * and serialization of the HttpOnly session cookie. All signing depends on `process.env.AUTH_SECRET`.
  */
 
 /**
@@ -32,4 +28,22 @@ export const hashPassword = async (password: string): Promise<string> => {
  */
 export const verifyPassword = async (password: string, hash: string): Promise<boolean> => {
   return bcrypt.compare(password, hash)
+}
+
+/**
+ * Builds a `Set-Cookie` header value for the session token (HttpOnly, Lax, path `/`).
+ *
+ * @param token - JWT string from `signToken`.
+ * @returns Cookie header value with attributes.
+ */
+export const createAuthCookie = (token: string): string => {
+  const secure = process.env.NODE_ENV === "production" ? "; Secure" : ""
+  return `${AUTH_COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${AUTH_TOKEN_MAX_AGE_SECONDS}${secure}`
+}
+
+/**
+ * Returns a `Set-Cookie` header that clears the auth cookie (MaxAge=0).
+ */
+export const createClearAuthCookie = (): string => {
+  return `${AUTH_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`
 }

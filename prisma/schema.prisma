@@ -20,6 +20,7 @@ model User {
   bgmVolume         Int      @default(70) @map("bgm_volume")
   sfxVolume         Int      @default(85) @map("sfx_volume")
   openSettingsKey   String   @default("Backslash") @map("open_settings_key")
+  isAdmin           Boolean  @default(false) @map("is_admin")
 
   @@map("users")
 }
@@ -30,4 +31,13 @@ model ChatLog {
   savedAt  DateTime @default(now()) @map("saved_at")
 
   @@map("chat_logs")
+}
+
+model AppConfig {
+  id        String   @id @default("global")
+  logLevel  String?  @map("log_level")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("app_config")
 }

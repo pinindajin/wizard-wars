@@ -1,5 +1,6 @@
 import Phaser from "phaser"
 
+import { clientLogger } from "@/lib/clientLogger"
 import { WsEvent } from "@/shared/events"
 import { ARENA_CAMERA_FOLLOW_ZOOM, TILEMAP_DEPTH } from "@/shared/balance-config/rendering"
 import type {
@@ -85,6 +86,7 @@ export class ArenaRuntime {
 
   private bgmPlayer!: BgmPlayer
   private soundManager!: SoundManager
+  private readonly log = clientLogger.child({ area: "netcode" })
 
   /** Whether the match has started (MatchGo received). */
   private matchStarted = false
@@ -180,7 +182,10 @@ export class ArenaRuntime {
     if (this.arenaWidthPx > 0 && this.arenaHeightPx > 0) {
       cam.setBounds(0, 0, this.arenaWidthPx, this.arenaHeightPx)
     } else {
-      console.warn("[Arena] Tilemap has zero size; camera bounds not set.")
+      this.log.warn(
+        { event: "arena.tilemap.bounds.skipped", reason: "zero_size_tilemap" },
+        "Tilemap has zero size; camera bounds not set",
+      )
     }
   }
 
@@ -205,6 +210,10 @@ export class ArenaRuntime {
 
     if (injected?.room) {
       this.connection = injected
+      this.log.info(
+        { event: "arena.connection.injected", roomId: injected.room.roomId, sessionId: injected.room.sessionId },
+        "Using injected game connection",
+      )
       const sub = this.scene.game.registry.get(WW_LOCAL_PLAYER_ID_REGISTRY_KEY) as
         | string
         | undefined
@@ -212,10 +221,15 @@ export class ArenaRuntime {
       this.networkSyncSystem.localPlayerId = sub ?? null
       this._subscribeRoomEvents()
       this.connection.sendClientSceneReady()
+      this.log.info({ event: "arena.scene_ready.sent", playerId: sub }, "Client scene ready sent")
       return
     }
 
     this.connection = new GameConnection()
+    this.log.info(
+      { event: "arena.connection.fallback", reason: "missing_injected_connection" },
+      "Opening fallback game connection",
+    )
     const sub = this.scene.game.registry.get(WW_LOCAL_PLAYER_ID_REGISTRY_KEY) as
       | string
       | undefined
@@ -224,6 +238,7 @@ export class ArenaRuntime {
     void this.connection.connect().then(() => {
       this._subscribeRoomEvents()
       this.connection.sendClientSceneReady()
+      this.log.info({ event: "arena.scene_ready.sent", playerId: sub }, "Client scene ready sent")
     })
   }
 
@@ -294,6 +309,10 @@ export class ArenaRuntime {
     })
 
     if (this.connection.isMatchInProgress()) {
+      this.log.info(
+        { event: "arena.resync.requested", roomId: this.connection.room?.roomId },
+        "Requesting match resync after subscription",
+      )
       this.connection.sendRequestResync()
     }
   }
@@ -303,6 +322,12 @@ export class ArenaRuntime {
    * `MatchGo` and after `GameStateSync` (e.g. refresh / resync).
    */
   private _ensureMatchLive(): void {
+    if (!this.matchStarted) {
+      this.log.info(
+        { event: "arena.match.live", roomId: this.connection.room?.roomId },
+        "Arena match marked live",
+      )
+    }
     this.matchStarted = true
     this.keyboardController.enable()
     this.mouseController.enable()

@@ -1,6 +1,7 @@
 import { Client, Room } from "@colyseus/sdk"
 
 import { getColyseusUrl } from "@/lib/endpoints"
+import { clientLogger } from "@/lib/clientLogger"
 import { RoomEvent, roomToWsEvent } from "@/shared/roomEvents"
 import type {
   PlayerInputPayload,
@@ -10,7 +11,7 @@ import type {
   LobbyPhase,
   LobbyStatePayload,
 } from "@/shared/types"
-import { logger } from "@/server/logger"
+import { summarizePayload } from "@/shared/logging/sanitize"
 
 /** Reconnect window in ms. Colyseus will attempt reconnect within this window. */
 const RECONNECT_WINDOW_MS = 60_000
@@ -41,6 +42,7 @@ export class GameConnection {
   private readonly token: string
   private readonly messageHandlers = new Set<MessageHandler>()
   private readonly readyHandlers = new Set<() => void>()
+  private readonly log = clientLogger.child({ area: "netcode" })
 
   constructor(args?: GameConnectionArgs) {
     this.client = new Client(args?.serverUrl ?? getColyseusUrl())
@@ -95,8 +97,18 @@ export class GameConnection {
   async connectById(roomId: string): Promise<void> {
     if (this._room) return
 
-    this._room = await this.client.joinById(roomId, { token: this.token })
-    this.wireRoomListeners()
+    this.log.info({ event: "net.connect.start", roomId }, "Joining game room by id")
+    try {
+      this._room = await this.client.joinById(roomId, { token: this.token })
+      this.log.info(
+        { event: "net.connect.success", roomId, sessionId: this._room.sessionId },
+        "Joined game room",
+      )
+      this.wireRoomListeners()
+    } catch (err) {
+      this.log.error({ event: "net.connect.failed", roomId, err }, "Failed to join game room")
+      throw err
+    }
   }
 
   /**
@@ -107,13 +119,25 @@ export class GameConnection {
     if (this._room) return
 
     const raw = sessionStorage.getItem("ww_join_options")
-    if (!raw) throw new Error("GameConnection: no join options found in sessionStorage")
+    if (!raw) {
+      this.log.error(
+        { event: "net.connect.failed", reason: "missing_join_options" },
+        "No join options found in sessionStorage",
+      )
+      throw new Error("GameConnection: no join options found in sessionStorage")
+    }
 
     try {
       const { token, lobbyId } = JSON.parse(raw) as { token: string; lobbyId: string }
+      this.log.info({ event: "net.connect.start", roomId: lobbyId }, "Joining game room from sessionStorage")
       this._room = await this.client.joinById(lobbyId, { token })
+      this.log.info(
+        { event: "net.connect.success", roomId: lobbyId, sessionId: this._room.sessionId },
+        "Joined game room",
+      )
       this.wireRoomListeners()
-    } catch {
+    } catch (err) {
+      this.log.error({ event: "net.connect.failed", err }, "Failed to parse or use join options")
       throw new Error("GameConnection: failed to parse join options from sessionStorage")
     }
   }
@@ -123,6 +147,10 @@ export class GameConnection {
    */
   async close(): Promise<void> {
     if (this._room) {
+      this.log.info(
+        { event: "net.connection.close", roomId: this._room.roomId, sessionId: this._room.sessionId },
+        "Leaving game room",
+      )
       await this._room.leave()
       this._room = null
     }
@@ -158,42 +186,42 @@ export class GameConnection {
   // ─── Send Helpers (Lobby) ──────────────────────────────────────────────────
 
   sendLobbyChat(text: string): void {
-    this._room?.send(RoomEvent.LobbyChat, { text })
+    this.send(RoomEvent.LobbyChat, { text })
   }
 
   sendLobbyHeroSelect(heroId: string): void {
-    this._room?.send(RoomEvent.LobbyHeroSelect, { heroId })
+    this.send(RoomEvent.LobbyHeroSelect, { heroId })
   }
 
   sendLobbyStartGame(): void {
-    this._room?.send(RoomEvent.LobbyStartGame, {})
+    this.send(RoomEvent.LobbyStartGame, {})
   }
 
   sendLobbyEndGame(): void {
-    this._room?.send(RoomEvent.LobbyEndGame, {})
+    this.send(RoomEvent.LobbyEndGame, {})
   }
 
   sendLobbyEndLobby(): void {
-    this._room?.send(RoomEvent.LobbyEndLobby, {})
+    this.send(RoomEvent.LobbyEndLobby, {})
   }
 
   sendLobbyReturnToLobby(): void {
-    this._room?.send(RoomEvent.LobbyReturnToLobby, {})
+    this.send(RoomEvent.LobbyReturnToLobby, {})
   }
 
   sendRequestResync(): void {
-    this._room?.send(RoomEvent.RequestResync, {})
+    this.send(RoomEvent.RequestResync, {})
   }
 
   // ─── Send Helpers (Game) ───────────────────────────────────────────────────
 
   sendClientSceneReady(): void {
     const payload: ClientSceneReadyPayload = {}
-    this._room?.send(RoomEvent.ClientSceneReady, payload)
+    this.send(RoomEvent.ClientSceneReady, payload)
   }
 
   sendPlayerInput(input: PlayerInputPayload): void {
-    this._room?.send(RoomEvent.PlayerInput, input)
+    this.send(RoomEvent.PlayerInput, input, { sampleEvery: 60, seq: input.seq })
   }
 
   // ─── Send Helpers (Shop / Inventory) ──────────────────────────────────────
@@ -204,7 +232,7 @@ export class GameConnection {
    * @param itemId - The `SHOP_ITEMS` id to buy.
    */
   sendShopPurchase(itemId: string): void {
-    this._room?.send(RoomEvent.ShopPurchase, { itemId })
+    this.send(RoomEvent.ShopPurchase, { itemId })
   }
 
   /**
@@ -214,7 +242,7 @@ export class GameConnection {
    * @param slotIndex - Slot index in range 0..ABILITY_BAR_SLOT_COUNT-1.
    */
   sendAssignAbility(itemId: string, slotIndex: number): void {
-    this._room?.send(RoomEvent.AssignAbility, { itemId, slotIndex })
+    this.send(RoomEvent.AssignAbility, { itemId, slotIndex })
   }
 
   /**
@@ -223,7 +251,7 @@ export class GameConnection {
    * @param slotIndex - Quick item slot index.
    */
   sendUseQuickItem(slotIndex: number): void {
-    this._room?.send(RoomEvent.UseQuickItem, { slotIndex })
+    this.send(RoomEvent.UseQuickItem, { slotIndex })
   }
 
   /** Returns and increments the local sequence counter for PlayerInput. */
@@ -240,11 +268,33 @@ export class GameConnection {
     this._room.onMessage("*", (type: string | number, payload: unknown) => {
       const roomKey = String(type)
       const wsKey = roomToWsEvent[roomKey]
-      if (!wsKey) return
+      if (!wsKey) {
+        this.log.warn(
+          {
+            event: "net.message.unknown",
+            roomId: this._room?.roomId,
+            sessionId: this._room?.sessionId,
+            reason: "unmapped_room_event",
+            roomEvent: roomKey,
+            payload: summarizePayload(payload),
+          },
+          "Received unmapped room event",
+        )
+        return
+      }
 
       // Mark ready on first lobby state or game sync
       if (!this._ready && (roomKey === RoomEvent.LobbyState || roomKey === RoomEvent.GameStateSync)) {
         this._ready = true
+        this.log.info(
+          {
+            event: "net.connection.ready",
+            roomId: this._room?.roomId,
+            sessionId: this._room?.sessionId,
+            reason: roomKey,
+          },
+          "Game connection became ready",
+        )
         this.readyHandlers.forEach((h) => h())
       }
 
@@ -258,6 +308,10 @@ export class GameConnection {
 
     this._room.onLeave(async (code) => {
       if (code === 1000) {
+        this.log.info(
+          { event: "net.connection.closed", roomId: this._room?.roomId, sessionId: this._room?.sessionId, code },
+          "Game room left cleanly",
+        )
         this._room = null
         this._ready = false
         this._lobbyPhase = null
@@ -267,20 +321,64 @@ export class GameConnection {
       // Reconnect logic for unexpected drops
       try {
         if (this._room) {
+          const previousRoomId = this._room.roomId
+          const previousSessionId = this._room.sessionId
+          this.log.warn(
+            { event: "net.reconnect.start", roomId: previousRoomId, sessionId: previousSessionId, code },
+            "Unexpected room leave; attempting reconnect",
+          )
           this._room = await this.client.reconnect(this._room.reconnectionToken, RECONNECT_WINDOW_MS)
+          this.log.info(
+            { event: "net.reconnect.success", roomId: this._room.roomId, sessionId: this._room.sessionId },
+            "Reconnected to game room",
+          )
           this.wireRoomListeners()
         }
       } catch (err) {
-        logger.warn({ event: "gameconnection.reconnect_failed", err }, "Reconnect failed")
+        this.log.warn({ event: "net.reconnect.failed", err, code }, "Reconnect failed")
         this._room = null
         this._ready = false
         this._lobbyPhase = null
       }
     })
 
-    this._room.onError(() => {
+    this._room.onError((code, message) => {
+      this.log.error(
+        { event: "net.connection.error", roomId: this._room?.roomId, sessionId: this._room?.sessionId, code, message },
+        "Game room connection error",
+      )
       this._ready = false
       this._lobbyPhase = null
     })
+  }
+
+  private send(
+    type: RoomEvent,
+    payload: unknown,
+    opts: { readonly sampleEvery?: number; readonly seq?: number } = {},
+  ): void {
+    if (!this._room) {
+      this.log.debug(
+        { event: "net.send.skipped", reason: "not_connected", roomEvent: type, seq: opts.seq },
+        "Skipped send because no room is connected",
+      )
+      return
+    }
+
+    const shouldTrace = opts.sampleEvery === undefined || opts.seq === undefined || opts.seq % opts.sampleEvery === 0
+    if (shouldTrace) {
+      this.log.trace(
+        {
+          event: "net.send",
+          roomId: this._room.roomId,
+          sessionId: this._room.sessionId,
+          roomEvent: type,
+          seq: opts.seq,
+          payload: summarizePayload(payload),
+        },
+        "Sending room event",
+      )
+    }
+    this._room.send(type, payload)
   }
 }
