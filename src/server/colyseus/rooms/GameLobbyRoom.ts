@@ -344,6 +344,9 @@ export class GameLobbyRoom extends Room {
       )
       throw err
     }
+    // Future hardening: normal browser joins fetch tokens through `/api/auth/ws-token`,
+    // which can DB-verify users when VERIFY_USER_ON_PROTECTED=true. If direct stale JWT
+    // WebSocket joins become a real issue, add DB-backed user verification here too.
 
     for (const c of this.clients) {
       const pd = c.userData as PlayerData | undefined

@@ -345,6 +345,23 @@ export class ArenaRuntime {
   }
 
   /**
+   * Applies user-facing audio volume settings to the active audio managers.
+   *
+   * @param settings - Optional BGM/SFX volume values in 0-100 units.
+   */
+  setAudioVolumes(settings: {
+    readonly bgmVolume?: number
+    readonly sfxVolume?: number
+  }): void {
+    if (settings.bgmVolume !== undefined) {
+      this.bgmPlayer.setMasterBgmVolume(settings.bgmVolume)
+    }
+    if (settings.sfxVolume !== undefined) {
+      this.soundManager.setMasterSfxVolume(settings.sfxVolume)
+    }
+  }
+
+  /**
    * Main game loop update. Runs all ECS systems each frame.
    *
    * @param _time - Absolute time in ms (unused directly).

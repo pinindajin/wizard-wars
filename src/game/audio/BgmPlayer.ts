@@ -72,9 +72,11 @@ export class BgmPlayer {
    */
   setMasterBgmVolume(volume: number): void {
     this.masterVolume = Math.max(0, Math.min(1, volume / 100))
-    const sound = this.currentTrack as Phaser.Sound.WebAudioSound | Phaser.Sound.HTML5AudioSound | null
-    if (sound?.isPlaying && !this._muted) {
-      sound.setVolume(this.masterVolume)
+    for (const sound of [this.currentTrack, this.nextTrack]) {
+      const active = sound as Phaser.Sound.WebAudioSound | Phaser.Sound.HTML5AudioSound | null
+      if (!active?.isPlaying) continue
+      this.scene.tweens.killTweensOf(active)
+      active.setVolume(this._muted ? 0 : this.masterVolume)
     }
   }
 

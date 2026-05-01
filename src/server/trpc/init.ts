@@ -3,7 +3,13 @@ import type { PrismaClient } from "@prisma/client"
 import superjson from "superjson"
 
 import { prisma } from "../db"
-import { AUTH_COOKIE_NAME, verifyToken } from "../auth"
+import {
+  AUTH_COOKIE_NAME,
+  createClearAuthCookie,
+  findExistingAuthUser,
+  shouldVerifyUserOnProtected,
+  verifyToken,
+} from "../auth"
 import { createPostgresChatStore } from "../store/postgres"
 import type { ChatStore } from "../store/types"
 import type { AuthUser } from "../../shared/types"
@@ -99,12 +105,23 @@ export const publicProcedure = t.procedure
  * Procedure that requires ctx.user; narrows context so ctx.user is non-null in the handler.
  * Throws TRPCError UNAUTHORIZED if the session cookie is missing or invalid.
  */
-export const protectedProcedure = t.procedure.use(({ ctx, next }) => {
+export const protectedProcedure = t.procedure.use(async ({ ctx, next }) => {
   if (!ctx.user) {
     throw new TRPCError({
       code: "UNAUTHORIZED",
       message: "Authentication required",
     })
+  }
+  if (shouldVerifyUserOnProtected()) {
+    const user = await findExistingAuthUser(ctx.prisma, ctx.user)
+    if (!user) {
+      ctx.setCookie?.(createClearAuthCookie())
+      throw new TRPCError({
+        code: "UNAUTHORIZED",
+        message: "Session expired. Please log in again.",
+      })
+    }
+    return next({ ctx: { ...ctx, user } })
   }
   return next({ ctx: { ...ctx, user: ctx.user } })
 })

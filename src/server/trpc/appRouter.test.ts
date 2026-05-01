@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { ChatMessage } from "@/shared/types"
@@ -76,6 +77,41 @@ describe("appRouter", () => {
       user: { sub: "u1", username: "Alice" },
     })
     await expect(caller.chat.latest()).resolves.toEqual({ messages: msgs })
+  })
+
+  it("protectedProcedure verifies DB user when flag enabled", async () => {
+    vi.stubEnv("VERIFY_USER_ON_PROTECTED", "true")
+    prismaMock.user.findUnique.mockResolvedValueOnce({ id: "u1", username: "Fresh" })
+    const ctx = await createTrpcContext({
+      prismaClient: prismaMock as never,
+      chatStore: chatStoreMock,
+    })
+    const caller = appRouter.createCaller({
+      ...ctx,
+      user: { sub: "u1", username: "Stale" },
+    })
+    await caller.chat.latest()
+    expect(prismaMock.user.findUnique).toHaveBeenCalledWith({
+      where: { id: "u1" },
+      select: { id: true, username: true },
+    })
+  })
+
+  it("protectedProcedure clears cookie when flag enabled and user missing", async () => {
+    vi.stubEnv("VERIFY_USER_ON_PROTECTED", "true")
+    prismaMock.user.findUnique.mockResolvedValueOnce(null)
+    const setCookie = vi.fn()
+    const ctx = await createTrpcContext({
+      prismaClient: prismaMock as never,
+      chatStore: chatStoreMock,
+      setCookie,
+    })
+    const caller = appRouter.createCaller({
+      ...ctx,
+      user: { sub: "u1", username: "Missing" },
+    })
+    await expect(caller.chat.latest()).rejects.toMatchObject({ code: "UNAUTHORIZED" })
+    expect(setCookie).toHaveBeenCalledWith(expect.stringContaining("Max-Age=0"))
   })
 
   it("auth.signup creates user when username free", async () => {
@@ -197,5 +233,39 @@ describe("appRouter", () => {
     const caller = appRouter.createCaller({ ...ctx, user: { sub: "u1", username: "Bob" } })
     const out = await caller.user.updateSettings({ bgmVolume: 10 })
     expect(out.user.bgmVolume).toBe(10)
+  })
+
+  it("user.updateSettings clears stale sessions on missing user update", async () => {
+    prismaMock.user.update.mockRejectedValueOnce({ code: "P2025" })
+    const setCookie = vi.fn()
+    const ctx = await createTrpcContext({
+      prismaClient: prismaMock as never,
+      chatStore: chatStoreMock,
+      setCookie,
+    })
+    const caller = appRouter.createCaller({ ...ctx, user: { sub: "u1", username: "Bob" } })
+    await expect(caller.user.updateSettings({ bgmVolume: 10 })).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    })
+    expect(setCookie).toHaveBeenCalledWith(expect.stringContaining("Max-Age=0"))
+  })
+
+  it("user.updateSettings clears stale sessions on Prisma P2025 client error", async () => {
+    const prismaErr = new Prisma.PrismaClientKnownRequestError("Record not found", {
+      code: "P2025",
+      clientVersion: "test",
+    })
+    prismaMock.user.update.mockRejectedValueOnce(prismaErr)
+    const setCookie = vi.fn()
+    const ctx = await createTrpcContext({
+      prismaClient: prismaMock as never,
+      chatStore: chatStoreMock,
+      setCookie,
+    })
+    const caller = appRouter.createCaller({ ...ctx, user: { sub: "u1", username: "Bob" } })
+    await expect(caller.user.updateSettings({ bgmVolume: 10 })).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    })
+    expect(setCookie).toHaveBeenCalledWith(expect.stringContaining("Max-Age=0"))
   })
 })

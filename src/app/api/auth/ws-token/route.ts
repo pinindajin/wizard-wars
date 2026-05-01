@@ -1,6 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server"
 
-import { AUTH_COOKIE_NAME, verifyToken } from "@/server/auth"
+import {
+  AUTH_COOKIE_NAME,
+  createClearAuthCookie,
+  findExistingAuthUser,
+  shouldVerifyUserOnProtected,
+  verifyToken,
+} from "@/server/auth"
+import { prisma } from "@/server/db"
 
 /**
  * Returns the session JWT plus verified identity for Colyseus `join` and lobby UI.
@@ -19,6 +26,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
   try {
     const auth = await verifyToken(token)
+    if (shouldVerifyUserOnProtected()) {
+      const user = await findExistingAuthUser(prisma, auth)
+      if (!user) {
+        const response = NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+        response.headers.append("set-cookie", createClearAuthCookie())
+        return response
+      }
+    }
     return NextResponse.json({
       token,
       sub: auth.sub,

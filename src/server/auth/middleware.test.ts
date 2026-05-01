@@ -1,10 +1,17 @@
 import { describe, expect, it, vi } from "vitest"
 
-import { getUserFromRequest, isProtectedPath, requireAuthRedirect } from "./middleware"
+import {
+  getUserFromRequest,
+  isProtectedPath,
+  requireAuthRedirect,
+  withProtectedPathnameHeader,
+} from "./middleware"
+import { PROTECTED_PATHNAME_HEADER } from "./sessionRedirect"
 
 function makeRequest(pathname: string, cookie?: string): Parameters<typeof getUserFromRequest>[0] {
   return {
-    nextUrl: { pathname } as { pathname: string },
+    headers: new Headers({ [PROTECTED_PATHNAME_HEADER]: "/spoofed" }),
+    nextUrl: { pathname, search: "?x=1" } as { pathname: string; search: string },
     url: "https://example.com",
     cookies: {
       get: (name: string) => (cookie && name === "ww-token" ? { value: cookie } : undefined),
@@ -50,5 +57,10 @@ describe("auth middleware helpers", () => {
     )
     expect(r).toBeNull()
     vi.unstubAllEnvs()
+  })
+
+  it("overwrites protected pathname header from request URL", () => {
+    const headers = withProtectedPathnameHeader(makeRequest("/browse"))
+    expect(headers.get(PROTECTED_PATHNAME_HEADER)).toBe("/browse?x=1")
   })
 })

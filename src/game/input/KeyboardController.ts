@@ -4,7 +4,10 @@ import {
   DEFAULT_KEYBINDS,
   type KeybindConfig,
 } from "@/shared/gameKeybinds/lobbyKeybinds"
-import { WW_KEYBIND_CONFIG_REGISTRY_KEY } from "@/game/constants"
+import {
+  WW_GAMEPLAY_INPUT_BLOCKED_REGISTRY_KEY,
+  WW_KEYBIND_CONFIG_REGISTRY_KEY,
+} from "@/game/constants"
 import type { PlayerInputPayload } from "@/shared/types"
 
 import { keyStringToKeyCode } from "./keyStringToKeyCode"
@@ -100,6 +103,15 @@ export class KeyboardController {
   }
 
   /**
+   * Returns true when React UI owns gameplay input.
+   *
+   * @returns True when gameplay input should be suppressed.
+   */
+  private _isGameplayInputBlocked(): boolean {
+    return this.scene.game.registry.get(WW_GAMEPLAY_INPUT_BLOCKED_REGISTRY_KEY) === true
+  }
+
+  /**
    * Collects the current keyboard state and returns the movement + ability portion
    * of a PlayerInputPayload. Mouse-driven fields are filled in by MouseController
    * and `clientSendTimeMs` is stamped by `Arena.update` right before send to
@@ -136,7 +148,7 @@ export class KeyboardController {
       seq,
     }
 
-    if (!this._enabled || this._isUiInputFocused()) {
+    if (!this._enabled || this._isUiInputFocused() || this._isGameplayInputBlocked()) {
       this._armedAbility = null
       this._armedQuick = null
       return inactive
