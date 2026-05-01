@@ -87,6 +87,7 @@ function snap(over: Partial<PlayerSnapshot> & Pick<PlayerSnapshot, "id" | "playe
     heroId: over.heroId ?? "red_wizard",
     animState: over.animState ?? "idle",
     moveState: over.moveState ?? "idle",
+    terrainState: over.terrainState ?? "land",
     castingAbilityId: over.castingAbilityId ?? null,
     invulnerable: over.invulnerable ?? false,
     jumpZ: over.jumpZ ?? 0,

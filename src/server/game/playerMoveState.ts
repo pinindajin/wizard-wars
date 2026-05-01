@@ -13,6 +13,8 @@ import {
   SpectatorTag,
   SwingingWeapon,
   Knockback,
+  TerrainState,
+  TERRAIN_KIND,
 } from "./components"
 import type { PlayerMoveState } from "../../shared/types"
 import { ABILITY_INDEX_TO_ID } from "./components"
@@ -30,6 +32,7 @@ export function computePlayerMoveState(world: World, eid: number): PlayerMoveSta
   if (hasComponent(world, eid, DyingTag)) return "idle"
   if (hasComponent(world, eid, SpectatorTag)) return "idle"
   if (hasComponent(world, eid, Knockback)) return "knockback"
+  if (TerrainState.kind[eid] === TERRAIN_KIND.cliff) return "rooted"
 
   if (hasComponent(world, eid, Casting)) {
     const abilityId = ABILITY_INDEX_TO_ID[Casting.abilityIndex[eid]] ?? ""

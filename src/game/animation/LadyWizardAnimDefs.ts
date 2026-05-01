@@ -39,6 +39,7 @@ const ANIM_CLIPS: Record<PlayerAnimState, string> = {
   heavy_cast: "heavy_spell_cast",
   primary_melee_attack: "summoned_axe_swing",
   jump: "jump",
+  stumble: "stumble",
 }
 
 /**
@@ -102,6 +103,8 @@ function clipDurationMs(clip: LadyWizardMegasheetClip): number {
       ).durationMs
     case "jump":
       return getSpellAnimationConfig(DEFAULT_HERO_ID, "jump").durationMs
+    case "stumble":
+      return getBehaviorAnimationConfig(DEFAULT_HERO_ID, "stumble").durationMs
   }
 }
 
@@ -118,7 +121,7 @@ function clipDurationMs(clip: LadyWizardMegasheetClip): number {
 export const registerLadyWizardAnims = (animManager: Phaser.Animations.AnimationManager): void => {
   const TEXTURE = "lady-wizard"
 
-  const LOOP_CLIPS = new Set(["breathing_idle", "walk"])
+  const LOOP_CLIPS = new Set(["breathing_idle", "walk", "stumble"])
 
   const directionRowMap: Record<Direction, number> = {
     south: 0,

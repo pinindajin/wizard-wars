@@ -5,6 +5,7 @@ import {
   FIREBALL_CHANNEL_TEXTURE,
   FIREBALL_FLY_ANIM,
   FIREBALL_FLY_TEXTURE,
+  LAVA_LAP_ANIM,
   registerFireballAnims,
 } from "./FireballAnimDefs"
 
@@ -66,6 +67,7 @@ describe("registerFireballAnims", () => {
     const { manager, existing } = mockAnimManager()
     existing.add(FIREBALL_FLY_ANIM)
     existing.add(FIREBALL_CHANNEL_ANIM)
+    existing.add(LAVA_LAP_ANIM)
 
     registerFireballAnims(manager as never)
 

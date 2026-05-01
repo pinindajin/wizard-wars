@@ -35,11 +35,12 @@ describe("attemptPurchase", () => {
     expect(economy.abilitySlots).toContain("lightning_bolt")
   })
 
-  it("purchases jump for 5 gold into an empty ability slot", () => {
+  it("purchases jump for 0 gold into an empty ability slot", () => {
     const economy = createSessionEconomy()
+    economy.gold = 0
     const result = attemptPurchase(economy, "jump")
     expect(result.success).toBe(true)
-    expect(economy.gold).toBe(STARTING_GOLD - 5)
+    expect(economy.gold).toBe(0)
     expect(economy.ownedItemIds.has("jump")).toBe(true)
     expect(economy.abilitySlots).toContain("jump")
   })

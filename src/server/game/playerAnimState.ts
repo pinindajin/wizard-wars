@@ -12,6 +12,8 @@ import {
   SwingingWeapon,
   ABILITY_INDEX_TO_ID,
   JumpArc,
+  TerrainState,
+  TERRAIN_KIND,
 } from "./components"
 import type { PlayerAnimState } from "../../shared/types"
 
@@ -40,6 +42,7 @@ export function computePlayerAnimState(world: World, eid: number): PlayerAnimSta
   if (hasComponent(world, eid, SwingingWeapon)) return "primary_melee_attack"
 
   if (hasComponent(world, eid, JumpArc)) return "jump"
+  if (TerrainState.kind[eid] === TERRAIN_KIND.cliff) return "stumble"
 
   if (hasComponent(world, eid, Casting)) {
     const abilityId = ABILITY_INDEX_TO_ID[Casting.abilityIndex[eid]] ?? ""

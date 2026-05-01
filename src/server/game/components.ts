@@ -108,6 +108,13 @@ export const JumpArc = {
   vz: new Float32Array(MAX_ENTITIES),
 }
 
+/** Current terrain hazard state: 0 land, 1 lava, 2 cliff. */
+export const TerrainState = {
+  kind: new Uint8Array(MAX_ENTITIES),
+  /** Fractional lava damage carried across ticks until it reaches whole HP. */
+  lavaDamageCarry: new Float32Array(MAX_ENTITIES),
+}
+
 /**
  * Per-ability cooldown stored as the *simulation tick* at which the ability
  * becomes ready. Ready when `currentTick >= Cooldown.<ability>[eid]`.
@@ -240,6 +247,14 @@ export const SwingingWeapon = {}
 
 /** Marks a player entity as currently invulnerable after respawn. */
 export const InvulnerableTag = {}
+
+export const TERRAIN_KIND = {
+  land: 0,
+  lava: 1,
+  cliff: 2,
+} as const
+
+export const TERRAIN_KIND_TO_STATE = ["land", "lava", "cliff"] as const
 
 // ─── Index ↔ ID mappings ─────────────────────────────────────────────────
 

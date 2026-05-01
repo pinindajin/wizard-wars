@@ -13,6 +13,8 @@ import {
   DeadTag,
   SpectatorTag,
   InvulnerableTag,
+  TerrainState,
+  TERRAIN_KIND,
 } from "../components"
 import type { SimCtx } from "../simulation"
 import {
@@ -26,6 +28,7 @@ import {
   canOccupyWorldPosition,
 } from "../../../shared/collision/worldCollision"
 import { ARENA_WORLD_COLLIDERS } from "../../../shared/balance-config/arena"
+import { terrainStateAtPosition } from "../../../shared/collision/terrainHazards"
 
 const ARENA_BOUNDS = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
 
@@ -75,7 +78,22 @@ export function jumpPhysicsSystem(ctx: SimCtx): void {
       ARENA_BOUNDS,
       ARENA_WORLD_COLLIDERS,
     )
-    if (legal) continue
+    if (legal) {
+      TerrainState.kind[eid] = TERRAIN_KIND.land
+      TerrainState.lavaDamageCarry[eid] = 0
+      continue
+    }
+
+    const terrainState = terrainStateAtPosition(gx, gy)
+    if (terrainState === "lava") {
+      TerrainState.kind[eid] = TERRAIN_KIND.lava
+      continue
+    }
+    if (terrainState === "cliff") {
+      TerrainState.kind[eid] = TERRAIN_KIND.cliff
+      TerrainState.lavaDamageCarry[eid] = 0
+      continue
+    }
 
     if (hasComponent(world, eid, InvulnerableTag)) continue
 

@@ -15,6 +15,10 @@
           "type": "behavior",
           "durationMs": 800
         },
+        "stumble": {
+          "type": "behavior",
+          "durationMs": 1417
+        },
         "spell:fireball": {
           "type": "spell",
           "durationMs": 500,
@@ -52,6 +56,10 @@
           "type": "behavior",
           "durationMs": 800
         },
+        "stumble": {
+          "type": "behavior",
+          "durationMs": 1417
+        },
         "spell:fireball": {
           "type": "spell",
           "durationMs": 500,
@@ -88,6 +96,10 @@
         "death": {
           "type": "behavior",
           "durationMs": 800
+        },
+        "stumble": {
+          "type": "behavior",
+          "durationMs": 1417
         },
         "spell:fireball": {
           "type": "spell",

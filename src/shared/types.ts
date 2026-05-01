@@ -120,6 +120,9 @@ export type PlayerMoveState =
   | "knockback"
   | "rooted"
 
+/** Authoritative terrain/hazard state for a player footprint. */
+export type PlayerTerrainState = "land" | "lava" | "cliff"
+
 /** A snapshot of a single player's position and state (sent in batch updates). */
 export type PlayerSnapshot = {
   readonly id: number // bitECS entity id
@@ -139,6 +142,8 @@ export type PlayerSnapshot = {
   readonly heroId: string
   readonly animState: PlayerAnimState
   readonly moveState: PlayerMoveState
+  /** Terrain currently controlling hazard damage, movement, and render treatment. */
+  readonly terrainState: PlayerTerrainState
   /** Active cast ability id while `Casting` is set on the server, else `null`. */
   readonly castingAbilityId: string | null
   readonly invulnerable: boolean
@@ -164,6 +169,7 @@ export type PlayerDelta = {
   readonly lives?: number
   readonly animState?: PlayerAnimState
   readonly moveState?: PlayerMoveState
+  readonly terrainState?: PlayerTerrainState
   readonly castingAbilityId?: string | null
   readonly invulnerable?: boolean
   readonly jumpZ?: number
@@ -180,6 +186,7 @@ export type PlayerAnimState =
   | "heavy_cast"
   | "primary_melee_attack"
   | "jump"
+  | "stumble"
   | "dead"
 
 /** Batch player state update payload. */

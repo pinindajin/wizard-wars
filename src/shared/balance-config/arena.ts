@@ -1,5 +1,7 @@
 import { GENERATED_ARENA_PROP_COLLIDERS } from "./generated/arena-prop-colliders"
 import { GENERATED_ARENA_NON_WALKABLE_COLLIDERS } from "./generated/arena-non-walkable-colliders"
+import { GENERATED_ARENA_LAVA_COLLIDERS } from "./generated/arena-lava-colliders"
+import { GENERATED_ARENA_CLIFF_COLLIDERS } from "./generated/arena-cliff-colliders"
 import {
   ARENA_LAYOUT_COLS,
   ARENA_LAYOUT_ROWS,
@@ -57,6 +59,37 @@ export const ARENA_NON_WALKABLE_COLLIDERS: readonly {
   width: number
   height: number
 }[] = GENERATED_ARENA_NON_WALKABLE_COLLIDERS
+
+/** Lava rectangles; walkable only after jump/terrain state enters lava. */
+export const ARENA_LAVA_COLLIDERS: readonly {
+  x: number
+  y: number
+  width: number
+  height: number
+}[] = GENERATED_ARENA_LAVA_COLLIDERS
+
+/** Cliff rectangles; jump landings enter stumble/slide state. */
+export const ARENA_CLIFF_COLLIDERS: readonly {
+  x: number
+  y: number
+  width: number
+  height: number
+}[] = GENERATED_ARENA_CLIFF_COLLIDERS
+
+/** Non-walkable rectangles that are neither lava nor cliff. */
+export const ARENA_NON_HAZARD_COLLIDERS: readonly {
+  x: number
+  y: number
+  width: number
+  height: number
+}[] = ARENA_NON_WALKABLE_COLLIDERS.filter((rect) => {
+  const overlaps = (other: { x: number; y: number; width: number; height: number }) =>
+    rect.x < other.x + other.width &&
+    rect.x + rect.width > other.x &&
+    rect.y < other.y + other.height &&
+    rect.y + rect.height > other.y
+  return !ARENA_LAVA_COLLIDERS.some(overlaps) && !ARENA_CLIFF_COLLIDERS.some(overlaps)
+})
 
 /** All static rectangles that block player movement. */
 export const ARENA_WORLD_COLLIDERS: readonly {
