@@ -35,7 +35,7 @@ export const SHOP_ITEMS: Record<string, ShopItemConfig> = {
   jump: {
     id: "jump",
     displayName: "Jump",
-    cost: 5,
+    cost: 0,
     category: "ability",
     description: "Leap over hazards; props and bounds still block. Cooldown on press.",
   },

@@ -7,6 +7,7 @@
 import { ARENA_PROP_COLLIDERS, ARENA_WORLD_COLLIDERS } from "../balance-config/arena"
 import { JUMP_AIRBORNE_COLLIDER_EPSILON_PX } from "../balance-config/combat"
 import type { ArenaPropColliderRect } from "./worldCollision"
+export { worldCollidersForPlayerState } from "./terrainHazards"
 
 /**
  * Returns the rectangle list used for player world collision given authoritative jump height.

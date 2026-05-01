@@ -124,6 +124,7 @@ export const animationConfigSchema = z.object({
       "idle",
       "walk",
       "death",
+      "stumble",
       ...Object.keys(ABILITY_CONFIGS).map(spellActionId),
       primaryAttackActionId(hero.primaryMeleeAttackId),
     ])
@@ -164,7 +165,7 @@ export type AnimationActionConfig = z.infer<typeof animationActionConfigSchema>
 export type AnimationConfig = z.infer<typeof animationConfigSchema>
 export type AnimationToolSave = z.infer<typeof animationToolSaveSchema>
 
-export type AnimationBehaviorActionId = "idle" | "walk" | "death"
+export type AnimationBehaviorActionId = "idle" | "walk" | "death" | "stumble"
 export type AnimationSpellActionId = `spell:${string}`
 export type AnimationPrimaryAttackActionId = `primary:${PrimaryMeleeAttackId}`
 export type AnimationActionId =

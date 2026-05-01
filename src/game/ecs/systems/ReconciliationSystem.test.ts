@@ -44,6 +44,7 @@ const noopCtx = {
   castingAbilityId: null,
   jumpZ: 0,
   moveState: "idle" as const,
+  terrainState: "land" as const,
 }
 
 const arenaBounds = { width: ARENA_WIDTH, height: ARENA_HEIGHT }

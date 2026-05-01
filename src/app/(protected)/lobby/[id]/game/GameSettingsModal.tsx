@@ -74,6 +74,8 @@ export default function GameSettingsModal({
     setAudioVolumes,
     combatNumbersMode,
     setCombatNumbersMode,
+    debugModeEnabled,
+    setDebugModeEnabled,
     settingsLoaded,
     settingsLoadError,
   } = useGameSettingsContext()
@@ -307,6 +309,25 @@ export default function GameSettingsModal({
                 </button>
               ))}
             </div>
+          </section>
+
+          <section>
+            <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-purple-400">
+              Debug
+            </h3>
+            <label className="flex items-center justify-between rounded-lg border border-gray-700 bg-gray-950/40 px-4 py-3">
+              <span className="text-sm font-medium text-gray-200">
+                Debug Mode
+              </span>
+              <input
+                aria-label="Debug Mode"
+                className="h-5 w-5 accent-purple-500"
+                data-testid="settings-debug-mode"
+                type="checkbox"
+                checked={debugModeEnabled}
+                onChange={(e) => setDebugModeEnabled(e.target.checked)}
+              />
+            </label>
           </section>
 
           {/* Keybinds section */}

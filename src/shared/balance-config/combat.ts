@@ -125,6 +125,22 @@ export const JUMP_LANDING_GRACE_PX = 6
 /** Client sprite vertical offset per unit of server `jumpZ` (world px → screen px). */
 export const JUMP_SPRITE_Y_PIXELS_PER_SIM_Z = 1
 
+// --- Terrain hazards ---
+/** Damage applied while the player's footprint is in lava, in HP per second. */
+export const LAVA_DAMAGE_PER_SECOND = 10
+
+/** Forced slide speed while a player is stumbling on a cliff, in px/s. */
+export const CLIFF_SLIDE_SPEED_PX_PER_SEC = 10
+
+/** Number of frames in the stumble clip. */
+export const STUMBLE_ANIM_FRAME_COUNT = 17
+
+/** Lava lap spritesheet frame dimensions. */
+export const LAVA_LAP_FRAME_WIDTH_PX = 64
+export const LAVA_LAP_FRAME_HEIGHT_PX = 32
+export const LAVA_LAP_FRAME_COUNT = 6
+export const LAVA_LAP_ANIM_FPS = 8
+
 // --- Axe ---
 /** Damage dealt by the axe swing. Bitmask: Physical | Slashing. */
 export const AXE_DAMAGE = 30

@@ -7,7 +7,13 @@
  */
 import { query, hasComponent } from "bitecs"
 
-import { Position, PlayerTag, JumpArc } from "../components"
+import {
+  Position,
+  PlayerTag,
+  JumpArc,
+  TerrainState,
+  TERRAIN_KIND_TO_STATE,
+} from "../components"
 import type { SimCtx } from "../simulation"
 import {
   ARENA_WIDTH,
@@ -18,7 +24,7 @@ import {
   resolveAgainstWorld,
   type ArenaPropColliderRect,
 } from "../../../shared/collision/worldCollision"
-import { worldCollidersForJumpZ } from "../../../shared/collision/worldCollidersForPlayer"
+import { worldCollidersForPlayerState } from "../../../shared/collision/worldCollidersForPlayer"
 
 export type { ArenaPropColliderRect } from "../../../shared/collision/worldCollision"
 
@@ -56,7 +62,8 @@ export function worldCollisionSystem(ctx: SimCtx): void {
 
   for (const eid of query(world, [PlayerTag])) {
     const jumpZ = hasComponent(world, eid, JumpArc) ? JumpArc.z[eid] : 0
-    const colliders = worldCollidersForJumpZ(jumpZ)
+    const terrainState = TERRAIN_KIND_TO_STATE[TerrainState.kind[eid]] ?? "land"
+    const colliders = worldCollidersForPlayerState(jumpZ, terrainState)
     const out = resolveAgainstWorld(
       Position.x[eid],
       Position.y[eid],

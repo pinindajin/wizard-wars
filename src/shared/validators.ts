@@ -88,6 +88,7 @@ export const playerAnimStateSchema = z.enum([
   "heavy_cast",
   "primary_melee_attack",
   "jump",
+  "stumble",
   "dead",
 ])
 
@@ -100,6 +101,8 @@ export const playerMoveStateSchema = z.enum([
   "knockback",
   "rooted",
 ])
+
+export const playerTerrainStateSchema = z.enum(["land", "lava", "cliff"])
 
 /** Single player row in `GameStateSync`. */
 export const playerSnapshotSchema = z.object({
@@ -118,6 +121,7 @@ export const playerSnapshotSchema = z.object({
   heroId: z.string().min(1).max(64),
   animState: playerAnimStateSchema,
   moveState: playerMoveStateSchema,
+  terrainState: playerTerrainStateSchema,
   castingAbilityId: z.string().min(1).max(64).nullable(),
   invulnerable: z.boolean(),
   jumpZ: z.number().finite().nonnegative(),

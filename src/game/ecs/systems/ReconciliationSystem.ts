@@ -18,8 +18,8 @@ import {
   worldStepFromIntent,
 } from "@/shared/movementIntent"
 import { moveWithinWorld } from "@/shared/collision/worldCollision"
-import { worldCollidersForJumpZ } from "@/shared/collision/worldCollidersForPlayer"
-import type { PlayerInputPayload, PlayerMoveState } from "@/shared/types"
+import { worldCollidersForPlayerState } from "@/shared/collision/worldCollidersForPlayer"
+import type { PlayerInputPayload, PlayerMoveState, PlayerTerrainState } from "@/shared/types"
 
 import type { LocalInputHistory } from "../../network/LocalInputHistory"
 
@@ -38,6 +38,7 @@ export type LocalReplayContext = {
   readonly jumpZ: number
   /** Server-reported coarse move state (e.g. cast-rooted vs moving). */
   readonly moveState: PlayerMoveState
+  readonly terrainState: PlayerTerrainState
 }
 
 /** Authoritative state the server just ACKed for the local player. */
@@ -108,6 +109,7 @@ function stepReplay(
   }
   const mult = replaySpeedMultiplier(ctx)
   if (mult === 0) return { x, y }
+  if (ctx.terrainState === "cliff") return { x, y }
   const step = worldStepFromIntent(
     dx,
     dy,
@@ -115,7 +117,7 @@ function stepReplay(
     TICK_DT_SEC,
     mult,
   )
-  const colliders = worldCollidersForJumpZ(ctx.jumpZ)
+  const colliders = worldCollidersForPlayerState(ctx.jumpZ, ctx.terrainState)
   const moved = moveWithinWorld(
     x,
     y,

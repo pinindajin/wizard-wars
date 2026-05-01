@@ -74,6 +74,10 @@ type GameSettingsContextValue = {
   readonly combatNumbersMode: CombatNumbersMode
   /** Replace combat numbers display mode. */
   readonly setCombatNumbersMode: (mode: CombatNumbersMode) => void
+  /** Current local-only debug overlay mode. */
+  readonly debugModeEnabled: boolean
+  /** Replace local-only debug overlay mode. */
+  readonly setDebugModeEnabled: (enabled: boolean) => void
   /** True once the initial settings load has either succeeded or failed. */
   readonly settingsLoaded: boolean
   /** Non-auth settings load error, if defaults are being used. */
@@ -116,6 +120,7 @@ export function GameSettingsProvider({ children }: { readonly children: React.Re
   })
   const [combatNumbersMode, setCombatNumbersMode] =
     useState<CombatNumbersMode>(DEFAULT_COMBAT_NUMBERS_MODE)
+  const [debugModeEnabled, setDebugModeEnabled] = useState(false)
   const [settingsLoaded, setSettingsLoaded] = useState(false)
   const [settingsLoadError, setSettingsLoadError] = useState<string | null>(null)
 
@@ -190,6 +195,8 @@ export function GameSettingsProvider({ children }: { readonly children: React.Re
         setAudioVolumes: handleSetAudioVolumes,
         combatNumbersMode,
         setCombatNumbersMode,
+        debugModeEnabled,
+        setDebugModeEnabled,
         settingsLoaded,
         settingsLoadError,
       }}

@@ -23,6 +23,12 @@ export const WW_KEYBIND_CONFIG_REGISTRY_KEY = "wwKeybindConfig"
 export const WW_GAMEPLAY_INPUT_BLOCKED_REGISTRY_KEY = "wwGameplayInputBlocked"
 
 /**
+ * Phaser registry key for local-only arena debug overlays.
+ * React settings own this in memory; no network or persisted settings use it.
+ */
+export const WW_DEBUG_MODE_REGISTRY_KEY = "wwDebugMode"
+
+/**
  * Phaser registry key for the loader status bridge. React components subscribe
  * via {@link subscribeLoaderStatus} to render a progress overlay outside the
  * Phaser canvas. Scenes publish via {@link publishLoaderStatus} in their
