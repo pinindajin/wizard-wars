@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { ChatMessage } from "@/shared/types"
@@ -236,6 +237,25 @@ describe("appRouter", () => {
 
   it("user.updateSettings clears stale sessions on missing user update", async () => {
     prismaMock.user.update.mockRejectedValueOnce({ code: "P2025" })
+    const setCookie = vi.fn()
+    const ctx = await createTrpcContext({
+      prismaClient: prismaMock as never,
+      chatStore: chatStoreMock,
+      setCookie,
+    })
+    const caller = appRouter.createCaller({ ...ctx, user: { sub: "u1", username: "Bob" } })
+    await expect(caller.user.updateSettings({ bgmVolume: 10 })).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    })
+    expect(setCookie).toHaveBeenCalledWith(expect.stringContaining("Max-Age=0"))
+  })
+
+  it("user.updateSettings clears stale sessions on Prisma P2025 client error", async () => {
+    const prismaErr = new Prisma.PrismaClientKnownRequestError("Record not found", {
+      code: "P2025",
+      clientVersion: "test",
+    })
+    prismaMock.user.update.mockRejectedValueOnce(prismaErr)
     const setCookie = vi.fn()
     const ctx = await createTrpcContext({
       prismaClient: prismaMock as never,
