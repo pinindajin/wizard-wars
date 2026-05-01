@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 describe("logger", () => {
@@ -82,5 +83,22 @@ describe("logger", () => {
         },
       } as never),
     ).resolves.toMatchObject({ status: "failed", effectiveLevel: "warn" })
+  })
+
+  it("treats missing app_config table (Prisma P2021) as pending schema, not a failure", async () => {
+    vi.stubEnv("NODE_ENV", "production")
+    vi.stubEnv("LOG_LEVEL", "warn")
+    const noTableErr = new Prisma.PrismaClientKnownRequestError("table missing", {
+      code: "P2021",
+      clientVersion: "test",
+    })
+    const { applyDbLogLevelOverride } = await import("./logger")
+    await expect(
+      applyDbLogLevelOverride({
+        appConfig: {
+          findUnique: vi.fn().mockRejectedValue(noTableErr),
+        },
+      } as never),
+    ).resolves.toMatchObject({ status: "pending_schema", effectiveLevel: "warn" })
   })
 })
