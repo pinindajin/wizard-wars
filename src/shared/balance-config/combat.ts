@@ -112,7 +112,7 @@ export const LIGHTNING_COOLDOWN_MS = 4000
 /** Gravity applied to vertical jump velocity (world px/s²). */
 export const JUMP_GRAVITY_PX_PER_SEC2 = 2400
 /** Initial upward velocity when a jump begins (world px/s). */
-export const JUMP_INITIAL_VZ_PX_PER_SEC = 600
+export const JUMP_INITIAL_VZ_PX_PER_SEC = 640
 /** Ability cooldown starting when jump is accepted (ms). */
 export const JUMP_COOLDOWN_MS = 2500
 /**
@@ -120,6 +120,8 @@ export const JUMP_COOLDOWN_MS = 2500
  * Must stay consistent across server movement, world resolve, and client replay (r5).
  */
 export const JUMP_AIRBORNE_COLLIDER_EPSILON_PX = 4
+/** Max landing-edge correction for clean one-tile hazard jumps at fixed 60 Hz. */
+export const JUMP_LANDING_GRACE_PX = 6
 /** Client sprite vertical offset per unit of server `jumpZ` (world px → screen px). */
 export const JUMP_SPRITE_Y_PIXELS_PER_SIM_Z = 1
 
