@@ -255,6 +255,20 @@ test("full match flow: assets, overlay, canvas, movement, shop, abilities", asyn
     }, value)
   }
 
+  /**
+   * Waits until the input recorder has at least one sample (CI-safe vs fixed sleeps).
+   *
+   * @param minCount - Minimum log entries required.
+   */
+  const waitForInputSamples = async (minCount: number): Promise<void> => {
+    await expect
+      .poll(async () => (await readInputLog()).length, {
+        timeout: 5000,
+        intervals: [50, 100, 150, 200],
+      })
+      .toBeGreaterThanOrEqual(minCount)
+  }
+
   const startPos = await readLocalPos()
   expect(startPos, "expected local render pos available before W hold").not.toBeNull()
   const startY = startPos!.y
@@ -317,7 +331,7 @@ test("full match flow: assets, overlay, canvas, movement, shop, abilities", asyn
   await clearInputLog()
   await page.mouse.down()
   await page.keyboard.press("1")
-  await page.waitForTimeout(250)
+  await waitForInputSamples(1)
   await page.mouse.up()
   const settingsInputs = await readInputLog()
   expect(settingsInputs.length, "expected input samples while settings modal is open").toBeGreaterThan(0)
@@ -345,7 +359,10 @@ test("full match flow: assets, overlay, canvas, movement, shop, abilities", asyn
     ),
     `expected settings modal to block attack/cast inputs: ${JSON.stringify(settingsInputs.slice(-10))}`,
   ).toBe(true)
-  await page.getByRole("button", { name: /cancel/i }).click()
+  await page
+    .getByTestId("settings-modal")
+    .getByRole("button", { name: "Cancel" })
+    .click()
   await expect(page.getByTestId("settings-modal")).toBeHidden({ timeout: 5000 })
 
   // Open the shop with B.
@@ -355,7 +372,7 @@ test("full match flow: assets, overlay, canvas, movement, shop, abilities", asyn
   await clearInputLog()
   await page.mouse.down()
   await page.keyboard.press("1")
-  await page.waitForTimeout(250)
+  await waitForInputSamples(1)
   await page.mouse.up()
   const shopInputs = await readInputLog()
   expect(shopInputs.length, "expected input samples while shop modal is open").toBeGreaterThan(0)

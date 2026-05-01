@@ -442,7 +442,7 @@ function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) 
         <div
           {...gameplayInputBlockProps}
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 text-sm text-gray-300 backdrop-blur-sm"
-          data-testid="settings-modal"
+          data-testid="settings-modal-loading"
           role="dialog"
           aria-modal="true"
           aria-label="Game Settings"
