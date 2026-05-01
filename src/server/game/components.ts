@@ -100,13 +100,12 @@ export const Knockback = {
 }
 
 /**
- * Active jump arc: simulated height `z` (world px), vertical velocity, and first tick
- * where horizontal control returns after the lift/root phase.
+ * Active jump arc: simulated height `z` (world px) and vertical velocity `vz`.
+ * Horizontal movement uses the same WASD path as on the ground while airborne.
  */
 export const JumpArc = {
   z: new Float32Array(MAX_ENTITIES),
   vz: new Float32Array(MAX_ENTITIES),
-  liftEndsAtTick: new Uint32Array(MAX_ENTITIES),
 }
 
 /**

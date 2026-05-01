@@ -36,7 +36,7 @@ export type LocalReplayContext = {
   readonly castingAbilityId: string | null
   /** Server jump height used for world collider split during replay (r5). */
   readonly jumpZ: number
-  /** Server-reported coarse move state (jump lift roots without `Casting`). */
+  /** Server-reported coarse move state (e.g. cast-rooted vs moving). */
   readonly moveState: PlayerMoveState
 }
 

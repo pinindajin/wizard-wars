@@ -50,7 +50,6 @@ describe("jump pit landing (integration)", () => {
     addComponent(sim.world, eid, JumpArc)
     JumpArc.z[eid] = 120
     JumpArc.vz[eid] = -8000
-    JumpArc.liftEndsAtTick[eid] = 0
 
     sim.tick(new Map(), Date.now())
 
