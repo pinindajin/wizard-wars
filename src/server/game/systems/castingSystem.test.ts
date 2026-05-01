@@ -106,7 +106,7 @@ describe("castingSystem animation timing", () => {
       structuredClone(originalFireballConfig) as AnimationActionConfig
   })
 
-  it("fires fireball from press-time position and target-derived facing", () => {
+  it("fires fireball from effect-time feet with press-locked aim", () => {
     const world = createWorld()
     const caster = addCaster(world)
     const commandBuffer = createCommandBuffer()
@@ -133,12 +133,39 @@ describe("castingSystem animation timing", () => {
     commandBuffer.execute(world)
 
     expect(ctx.fireballLaunches).toHaveLength(1)
-    expect(ctx.fireballLaunches[0]!.x).toBeCloseTo(125)
-    expect(ctx.fireballLaunches[0]!.y).toBeCloseTo(100)
+    expect(ctx.fireballLaunches[0]!.x).toBeCloseTo(525)
+    expect(ctx.fireballLaunches[0]!.y).toBeCloseTo(500)
     expect(ctx.fireballLaunches[0]!.vx).toBeGreaterThan(0)
     expect(ctx.fireballCreatedAtTickMap.get(ctx.fireballLaunches[0]!.id)).toBe(
       ctx.currentTick,
     )
+  })
+
+  it("does not spawn fireball when caster is dying before command buffer execute", () => {
+    const world = createWorld()
+    const caster = addCaster(world)
+    const commandBuffer = createCommandBuffer()
+    const ctx = emptyCtx({
+      world,
+      currentTick: 10,
+      commandBuffer,
+      entityPlayerMap: new Map([[caster, "caster"]]),
+    })
+
+    castingSystem(ctx)
+    Position.x[caster] = 500
+    Position.y[caster] = 500
+    PlayerInput.abilitySlot[caster] = -1
+
+    ctx.currentTick =
+      10 + msToTickOffset(getSpellAnimationConfig("red_wizard", "fireball").durationMs)
+    castingSystem(ctx)
+    addComponent(world, caster, DyingTag)
+    commandBuffer.execute(world)
+
+    expect(ctx.fireballLaunches).toHaveLength(0)
+    expect(ctx.fireballOwnerMap.size).toBe(0)
+    expect(ctx.fireballCreatedAtTickMap.size).toBe(0)
   })
 
   it("can fire a spell effect before the animation finishes", () => {
