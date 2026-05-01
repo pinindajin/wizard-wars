@@ -142,6 +142,8 @@ export type PlayerSnapshot = {
   /** Active cast ability id while `Casting` is set on the server, else `null`. */
   readonly castingAbilityId: string | null
   readonly invulnerable: boolean
+  /** Server simulated jump height (world px); `0` when grounded. */
+  readonly jumpZ: number
   /**
    * Highest client input `seq` the server has processed for this player.
    * Used by the client to drive rewind-and-replay reconciliation.
@@ -164,6 +166,7 @@ export type PlayerDelta = {
   readonly moveState?: PlayerMoveState
   readonly castingAbilityId?: string | null
   readonly invulnerable?: boolean
+  readonly jumpZ?: number
   /** Highest client input `seq` the server has processed for this player. */
   readonly lastProcessedInputSeq?: number
 }
@@ -176,6 +179,7 @@ export type PlayerAnimState =
   | "light_cast"
   | "heavy_cast"
   | "primary_melee_attack"
+  | "jump"
   | "dead"
 
 /** Batch player state update payload. */
@@ -212,6 +216,11 @@ export type FireballBatchUpdatePayload = {
   readonly deltas: readonly { id: number; x: number; y: number }[]
   readonly removedIds: readonly number[]
   readonly seq: number
+}
+
+/** Server → all: play a one-shot ability sound by manifest key. */
+export type AbilitySfxPayload = {
+  readonly sfxKey: string
 }
 
 /** Server → all: fireball launched. */

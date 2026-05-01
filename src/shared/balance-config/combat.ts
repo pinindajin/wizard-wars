@@ -106,6 +106,23 @@ export const LIGHTNING_CAST_MS = 700
 /** Lightning cooldown after cast animation finishes. */
 export const LIGHTNING_COOLDOWN_MS = 4000
 
+// --- Jump (shop ability) ---
+/** Horizontal movement is blocked for this duration after jump starts (lift phase). */
+export const JUMP_LIFT_MS = 150
+/** Gravity applied to vertical jump velocity (world px/s²). */
+export const JUMP_GRAVITY_PX_PER_SEC2 = 2400
+/** Initial upward velocity when a jump begins (world px/s). */
+export const JUMP_INITIAL_VZ_PX_PER_SEC = 600
+/** Ability cooldown starting when jump is accepted (ms). */
+export const JUMP_COOLDOWN_MS = 2500
+/**
+ * Minimum simulated `jumpZ` (px) to treat the player as airborne for collider splitting.
+ * Must stay consistent across server movement, world resolve, and client replay (r5).
+ */
+export const JUMP_AIRBORNE_COLLIDER_EPSILON_PX = 4
+/** Client sprite vertical offset per unit of server `jumpZ` (world px → screen px). */
+export const JUMP_SPRITE_Y_PIXELS_PER_SIM_Z = 1
+
 // --- Axe ---
 /** Damage dealt by the axe swing. Bitmask: Physical | Slashing. */
 export const AXE_DAMAGE = 30

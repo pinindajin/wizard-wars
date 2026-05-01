@@ -25,6 +25,11 @@
           "durationMs": 700,
           "effectTiming": "after"
         },
+        "spell:jump": {
+          "type": "spell",
+          "durationMs": 500,
+          "effectTiming": "before"
+        },
         "primary:red_wizard_cleaver": {
           "type": "primaryAttack",
           "durationMs": 1417,
@@ -57,6 +62,11 @@
           "durationMs": 700,
           "effectTiming": "after"
         },
+        "spell:jump": {
+          "type": "spell",
+          "durationMs": 500,
+          "effectTiming": "before"
+        },
         "primary:barbarian_cleaver": {
           "type": "primaryAttack",
           "durationMs": 1417,
@@ -88,6 +98,11 @@
           "type": "spell",
           "durationMs": 700,
           "effectTiming": "after"
+        },
+        "spell:jump": {
+          "type": "spell",
+          "durationMs": 500,
+          "effectTiming": "before"
         },
         "primary:ranger_cleaver": {
           "type": "primaryAttack",

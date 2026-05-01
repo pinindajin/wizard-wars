@@ -10,7 +10,7 @@
  *  2. Starts new casts from PlayerInput.abilitySlot.
  *  3. Processes quick-item (healing potion) usage from PlayerInput.useQuickItemSlot.
  */
-import { query, hasComponent, addComponent, removeComponent } from "bitecs"
+import { query, hasComponent, addComponent, removeComponent, type World } from "bitecs"
 
 import {
   PlayerTag,
@@ -33,6 +33,9 @@ import {
   ABILITY_INDEX_TO_ID,
   ITEM_INDEX_TO_ID,
   HERO_INDEX_TO_ID,
+  JumpArc,
+  SwingingWeapon,
+  Knockback,
 } from "../components"
 import type { SimCtx, PendingLightningBolt } from "../simulation"
 import {
@@ -43,6 +46,10 @@ import {
   HEALING_POTION_HP,
   DEFAULT_PLAYER_HEALTH,
   TICK_MS,
+  JUMP_COOLDOWN_MS,
+  JUMP_INITIAL_VZ_PX_PER_SEC,
+  JUMP_LIFT_MS,
+  JUMP_AIRBORNE_COLLIDER_EPSILON_PX,
 } from "../../../shared/balance-config"
 import { ABILITY_CONFIGS } from "../../../shared/balance-config/abilities"
 import {
@@ -50,13 +57,18 @@ import {
   msToTickOffset,
 } from "../../../shared/balance-config/animationConfig"
 
-// ─── Helpers ─────────────────────────────────────────────────────────────
+/** Returns true when quick items and new melee swings must be blocked (airborne). */
+function isAirborneForAirLock(world: World, eid: number): boolean {
+  if (!hasComponent(world, eid, JumpArc)) return false
+  return JumpArc.z[eid] > JUMP_AIRBORNE_COLLIDER_EPSILON_PX
+}
 
 /** Tick duration equivalent for each ability cooldown. */
 const COOLDOWN_TICKS: Record<string, number> = {
   fireball: Math.ceil(FIREBALL_COOLDOWN_MS / TICK_MS),
   lightning_bolt: Math.ceil(LIGHTNING_COOLDOWN_MS / TICK_MS),
   healing_potion: Math.ceil(HEALING_POTION_CAST_MS / TICK_MS),
+  jump: Math.ceil(JUMP_COOLDOWN_MS / TICK_MS),
 }
 
 /** Returns the hero id stored on an entity, falling back to the default index. */
@@ -95,10 +107,11 @@ function slotAbilityIndex(eid: number, slot: number): number {
 /** Checks if an ability cooldown is ready for the given entity. */
 function isCooldownReady(eid: number, abilityId: string, currentTick: number): boolean {
   switch (abilityId) {
-    case "fireball":      return currentTick >= Cooldown.fireball[eid]
-    case "lightning_bolt":return currentTick >= Cooldown.lightningBolt[eid]
-    case "healing_potion":return currentTick >= Cooldown.healingPotion[eid]
-    default:              return false
+    case "fireball":       return currentTick >= Cooldown.fireball[eid]
+    case "lightning_bolt": return currentTick >= Cooldown.lightningBolt[eid]
+    case "healing_potion": return currentTick >= Cooldown.healingPotion[eid]
+    case "jump":           return currentTick >= Cooldown.jump[eid]
+    default:               return false
   }
 }
 
@@ -106,9 +119,10 @@ function isCooldownReady(eid: number, abilityId: string, currentTick: number): b
 function setCooldown(eid: number, abilityId: string, currentTick: number): void {
   const cd = COOLDOWN_TICKS[abilityId] ?? 0
   switch (abilityId) {
-    case "fireball":      Cooldown.fireball[eid]      = currentTick + cd; break
-    case "lightning_bolt":Cooldown.lightningBolt[eid] = currentTick + cd; break
-    case "healing_potion":Cooldown.healingPotion[eid] = currentTick + cd; break
+    case "fireball":       Cooldown.fireball[eid]       = currentTick + cd; break
+    case "lightning_bolt": Cooldown.lightningBolt[eid] = currentTick + cd; break
+    case "healing_potion": Cooldown.healingPotion[eid] = currentTick + cd; break
+    case "jump":           Cooldown.jump[eid]          = currentTick + cd; break
   }
 }
 
@@ -261,6 +275,24 @@ export function castingSystem(ctx: SimCtx): void {
     const abilityId = ABILITY_INDEX_TO_ID[abilityIndex] ?? ""
     if (!abilityId) continue
 
+    if (isAirborneForAirLock(world, eid)) continue
+
+    if (abilityId === "jump") {
+      const jumpCfg = ABILITY_CONFIGS.jump
+      if (!jumpCfg) continue
+      if (hasComponent(world, eid, SwingingWeapon)) continue
+      if (hasComponent(world, eid, Knockback)) continue
+      if (!isCooldownReady(eid, "jump", currentTick)) continue
+
+      addComponent(world, eid, JumpArc)
+      JumpArc.z[eid] = JUMP_AIRBORNE_COLLIDER_EPSILON_PX + 1
+      JumpArc.vz[eid] = JUMP_INITIAL_VZ_PX_PER_SEC
+      JumpArc.liftEndsAtTick[eid] = currentTick + Math.ceil(JUMP_LIFT_MS / TICK_MS)
+      setCooldown(eid, "jump", currentTick)
+      ctx.abilitySfxEvents.push({ sfxKey: jumpCfg.castSfxKey })
+      continue
+    }
+
     const cfg = ABILITY_CONFIGS[abilityId]
     if (!cfg) continue
 
@@ -294,6 +326,8 @@ export function castingSystem(ctx: SimCtx): void {
 
     const qSlot = PlayerInput.useQuickItemSlot[eid]
     if (qSlot < 0) continue
+
+    if (isAirborneForAirLock(world, eid)) continue
 
     let itemIndex = -1
     let charges = 0

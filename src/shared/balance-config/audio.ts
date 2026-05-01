@@ -41,6 +41,7 @@ export const SFX_KEYS = {
   playerHit: "sfx-player-hit",
   countdownBeep: "sfx-countdown-beep",
   countdownGo: "sfx-countdown-go",
+  jump: "sfx-jump",
 } as const
 
 /** SFX concurrency caps (max simultaneous instances). */

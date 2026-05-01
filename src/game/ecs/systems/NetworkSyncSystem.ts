@@ -108,10 +108,12 @@ export class NetworkSyncSystem {
         maxHealth: snap.maxHealth,
         lives: snap.lives,
         animState: snap.animState,
+        moveState: snap.moveState,
         castingAbilityId: snap.castingAbilityId,
         facingAngle: snap.facingAngle,
         moveFacingAngle: snap.moveFacingAngle,
         invulnerable: snap.invulnerable,
+        jumpZ: snap.jumpZ,
       }
       this.lastAckByPlayer.set(snap.playerId, snap.lastProcessedInputSeq)
     }
@@ -173,8 +175,10 @@ export class NetworkSyncSystem {
         if (delta.health !== undefined) state.health = delta.health
         if (delta.lives !== undefined) state.lives = delta.lives
         if (delta.animState !== undefined) state.animState = delta.animState
+        if (delta.moveState !== undefined) state.moveState = delta.moveState
         if (delta.castingAbilityId !== undefined) state.castingAbilityId = delta.castingAbilityId
         if (delta.invulnerable !== undefined) state.invulnerable = delta.invulnerable
+        if (delta.jumpZ !== undefined) state.jumpZ = delta.jumpZ
       }
       if (!pos && (delta.x !== undefined || delta.y !== undefined)) {
         this.log.debug(

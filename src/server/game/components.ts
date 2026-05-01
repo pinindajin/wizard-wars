@@ -100,6 +100,16 @@ export const Knockback = {
 }
 
 /**
+ * Active jump arc: simulated height `z` (world px), vertical velocity, and first tick
+ * where horizontal control returns after the lift/root phase.
+ */
+export const JumpArc = {
+  z: new Float32Array(MAX_ENTITIES),
+  vz: new Float32Array(MAX_ENTITIES),
+  liftEndsAtTick: new Uint32Array(MAX_ENTITIES),
+}
+
+/**
  * Per-ability cooldown stored as the *simulation tick* at which the ability
  * becomes ready. Ready when `currentTick >= Cooldown.<ability>[eid]`.
  */
@@ -109,6 +119,7 @@ export const Cooldown = {
   /** Primary melee swing end tick (was legacy `axe` cooldown array). */
   primaryMelee: new Uint32Array(MAX_ENTITIES),
   healingPotion: new Uint32Array(MAX_ENTITIES),
+  jump: new Uint32Array(MAX_ENTITIES),
 }
 
 /** Post-respawn invulnerability; expires at this simulation tick. */
@@ -242,6 +253,7 @@ export const ABILITY_INDEX = {
   lightning_bolt: 1,
   axe: 2,
   healing_potion: 3,
+  jump: 4,
 } as const
 
 /** Reverse lookup: abilityIndex → ability ID string. */
@@ -250,6 +262,7 @@ export const ABILITY_INDEX_TO_ID: readonly string[] = [
   "lightning_bolt",
   "axe",
   "healing_potion",
+  "jump",
 ]
 
 /** Maps hero string IDs to the integer stored in {@link Hero}.typeIndex. */

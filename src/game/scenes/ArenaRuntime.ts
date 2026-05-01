@@ -14,6 +14,7 @@ import type {
   PlayerDeathPayload,
   PlayerRespawnPayload,
   DamageFloatPayload,
+  AbilitySfxPayload,
 } from "@/shared/types"
 import {
   WW_GAME_CONNECTION_REGISTRY_KEY,
@@ -275,6 +276,9 @@ export class ArenaRuntime {
             message.payload as PrimaryMeleeAttackPayload,
           )
           this.soundManager.play("sfx-axe-swing")
+          break
+        case WsEvent.AbilitySfx:
+          this.soundManager.play((message.payload as AbilitySfxPayload).sfxKey)
           break
         case WsEvent.PlayerDeath:
           this.playerRenderSystem.onPlayerDeath(message.payload as PlayerDeathPayload)

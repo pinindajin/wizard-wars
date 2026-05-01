@@ -127,6 +127,7 @@ describe("parseGameStateSyncPayload", () => {
           moveState: "idle",
           castingAbilityId: null,
           invulnerable: false,
+          jumpZ: 0,
           lastProcessedInputSeq: 0,
         },
       ],

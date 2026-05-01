@@ -1596,6 +1596,9 @@ export class GameLobbyRoom extends Room {
     for (const swing of output.primaryMeleeAttacks) {
       this.broadcast(RoomEvent.PrimaryMeleeAttack, swing)
     }
+    for (const sfx of output.abilitySfxEvents) {
+      this.broadcast(RoomEvent.AbilitySfx, sfx)
+    }
     for (const death of output.playerDeaths) {
       this.broadcast(RoomEvent.PlayerDeath, parsePlayerDeathPayload(death))
     }
