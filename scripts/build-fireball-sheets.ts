@@ -22,7 +22,8 @@ import { dirname, resolve } from "node:path"
 
 import sharp from "sharp"
 
-const DEFAULT_SRC = "/Users/jakemcbride/Personal/Development/my-sprites/Fantasy/Abilities/fireball_anim.jpg"
+const DEFAULT_SRC =
+  "/Users/jakemcbride/Personal/Development/my-sprites/pixellab/fantasy/Abilities/fireball_anim.jpg"
 
 const args = Object.fromEntries(
   process.argv.slice(2).flatMap((arg) => {
