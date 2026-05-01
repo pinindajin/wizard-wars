@@ -13,7 +13,6 @@ import {
   SpectatorTag,
   SwingingWeapon,
   Knockback,
-  JumpArc,
 } from "./components"
 import type { PlayerMoveState } from "../../shared/types"
 import { ABILITY_INDEX_TO_ID } from "./components"
@@ -24,21 +23,13 @@ import { ABILITY_CONFIGS } from "../../shared/balance-config/abilities"
  *
  * @param world - bitECS world.
  * @param eid - Player entity id.
- * @param currentTick - Simulation tick used for jump lift rooting windows.
  * @returns Coarse movement state for client routing decisions.
  */
-export function computePlayerMoveState(world: World, eid: number, currentTick: number): PlayerMoveState {
+export function computePlayerMoveState(world: World, eid: number): PlayerMoveState {
   if (hasComponent(world, eid, DeadTag)) return "idle"
   if (hasComponent(world, eid, DyingTag)) return "idle"
   if (hasComponent(world, eid, SpectatorTag)) return "idle"
   if (hasComponent(world, eid, Knockback)) return "knockback"
-
-  if (
-    hasComponent(world, eid, JumpArc) &&
-    currentTick < JumpArc.liftEndsAtTick[eid]
-  ) {
-    return "rooted"
-  }
 
   if (hasComponent(world, eid, Casting)) {
     const abilityId = ABILITY_INDEX_TO_ID[Casting.abilityIndex[eid]] ?? ""

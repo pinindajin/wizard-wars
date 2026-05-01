@@ -55,7 +55,7 @@ export const ABILITY_CONFIGS: Record<string, AbilityConfig> = {
   jump: {
     id: "jump",
     displayName: "Jump",
-    /** Jump does not use `Casting`; lift/air movement is handled by `JumpArc` + movementSystem. */
+    /** Jump does not use `Casting`; vertical arc is `JumpArc`, horizontal movement is movementSystem. */
     quick: true,
     castMs: 0,
     cooldownMs: JUMP_COOLDOWN_MS,

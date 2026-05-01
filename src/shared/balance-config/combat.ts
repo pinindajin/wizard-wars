@@ -109,8 +109,6 @@ export const LIGHTNING_CAST_MS = 700
 export const LIGHTNING_COOLDOWN_MS = 4000
 
 // --- Jump (shop ability) ---
-/** Horizontal movement is blocked for this duration after jump starts (lift phase). */
-export const JUMP_LIFT_MS = 150
 /** Gravity applied to vertical jump velocity (world px/s²). */
 export const JUMP_GRAVITY_PX_PER_SEC2 = 2400
 /** Initial upward velocity when a jump begins (world px/s). */

@@ -32,7 +32,7 @@ import type { PlayerDelta } from "../../../shared/types"
  * @param ctx - Shared simulation context.
  */
 export function playerDeltaSystem(ctx: SimCtx): void {
-  const { world, prevPlayerStates, entityPlayerMap, lastProcessedInputSeqByPlayer, currentTick } =
+  const { world, prevPlayerStates, entityPlayerMap, lastProcessedInputSeqByPlayer } =
     ctx
 
   for (const eid of query(world, [PlayerTag])) {
@@ -47,7 +47,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
     const health = Health.current[eid]
     const lives = Lives.count[eid]
     const animState = computePlayerAnimState(world, eid)
-    const moveState = computePlayerMoveState(world, eid, currentTick)
+    const moveState = computePlayerMoveState(world, eid)
     const invulnerable = hasComponent(world, eid, InvulnerableTag)
     const castingAbilityId = getCastingAbilityId(world, eid)
     const jumpZ = hasComponent(world, eid, JumpArc) ? JumpArc.z[eid] : 0

@@ -556,7 +556,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       const maxHealth = Health.max[eid]
       const lives = Lives.count[eid]
       const animState = computePlayerAnimState(world, eid)
-      const moveState = computePlayerMoveState(world, eid, currentTick)
+      const moveState = computePlayerMoveState(world, eid)
       const invulnerable = hasComponent(world, eid, InvulnerableTag)
       const castingAbilityId = getCastingAbilityId(world, eid)
       const jumpZ = hasComponent(world, eid, JumpArc) ? JumpArc.z[eid] : 0

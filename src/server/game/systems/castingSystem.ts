@@ -52,7 +52,6 @@ import {
   LIGHTNING_TELEGRAPH_DANGER_LEAD_MS,
   JUMP_COOLDOWN_MS,
   JUMP_INITIAL_VZ_PX_PER_SEC,
-  JUMP_LIFT_MS,
   JUMP_AIRBORNE_COLLIDER_EPSILON_PX,
 } from "../../../shared/balance-config"
 import { ABILITY_CONFIGS } from "../../../shared/balance-config/abilities"
@@ -380,7 +379,6 @@ export function castingSystem(ctx: SimCtx): void {
       addComponent(world, eid, JumpArc)
       JumpArc.z[eid] = JUMP_AIRBORNE_COLLIDER_EPSILON_PX + 1
       JumpArc.vz[eid] = JUMP_INITIAL_VZ_PX_PER_SEC
-      JumpArc.liftEndsAtTick[eid] = currentTick + Math.ceil(JUMP_LIFT_MS / TICK_MS)
       setCooldown(eid, "jump", currentTick)
       ctx.abilitySfxEvents.push({ sfxKey: jumpCfg.castSfxKey })
       continue

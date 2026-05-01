@@ -70,12 +70,6 @@ export function movementSystem(ctx: SimCtx): void {
       continue
     }
 
-    if (hasComponent(world, eid, JumpArc) && ctx.currentTick < JumpArc.liftEndsAtTick[eid]) {
-      Velocity.vx[eid] = 0
-      Velocity.vy[eid] = 0
-      continue
-    }
-
     // Speed multiplier
     let speedMultiplier = 1.0
     if (hasComponent(world, eid, SwingingWeapon)) {
