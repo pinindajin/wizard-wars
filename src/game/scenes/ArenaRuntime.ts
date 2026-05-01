@@ -20,6 +20,7 @@ import type {
 } from "@/shared/types"
 import {
   WW_GAME_CONNECTION_REGISTRY_KEY,
+  WW_DEBUG_MODE_REGISTRY_KEY,
   WW_LOCAL_PLAYER_ID_REGISTRY_KEY,
 } from "../constants"
 import { GameConnection } from "../network/GameConnection"
@@ -29,6 +30,7 @@ import { LightningBoltRenderSystem } from "../ecs/systems/LightningBoltRenderSys
 import { PrimaryMeleeAttackRenderSystem } from "../ecs/systems/PrimaryMeleeAttackRenderSystem"
 import { CombatTelegraphRenderSystem } from "../ecs/systems/CombatTelegraphRenderSystem"
 import { DamageFloatersSystem } from "../ecs/systems/DamageFloatersSystem"
+import { DebugOverlaySystem } from "../ecs/systems/DebugOverlaySystem"
 import { NetworkSyncSystem } from "../ecs/systems/NetworkSyncSystem"
 import { KeyboardController } from "../input/KeyboardController"
 import { MouseController } from "../input/MouseController"
@@ -80,6 +82,7 @@ export class ArenaRuntime {
   private primaryMeleeAttackRenderSystem!: PrimaryMeleeAttackRenderSystem
   private combatTelegraphRenderSystem!: CombatTelegraphRenderSystem
   private damageFloatersSystem!: DamageFloatersSystem
+  private debugOverlaySystem!: DebugOverlaySystem
   private networkSyncSystem!: NetworkSyncSystem
 
   private keyboardController!: KeyboardController
@@ -167,6 +170,10 @@ export class ArenaRuntime {
     this.primaryMeleeAttackRenderSystem = new PrimaryMeleeAttackRenderSystem(this.scene)
     this.combatTelegraphRenderSystem = new CombatTelegraphRenderSystem(this.scene)
     this.damageFloatersSystem = new DamageFloatersSystem(this.scene)
+    this.debugOverlaySystem = new DebugOverlaySystem(this.scene)
+    this.debugOverlaySystem.setEnabled(
+      this.scene.game.registry.get(WW_DEBUG_MODE_REGISTRY_KEY) === true,
+    )
     this.keyboardController = new KeyboardController(this.scene)
     this.mouseController = new MouseController(this.scene)
   }
@@ -362,6 +369,15 @@ export class ArenaRuntime {
   }
 
   /**
+   * Enables or disables local-only debug overlays.
+   *
+   * @param enabled - Whether debug geometry should be drawn on this client.
+   */
+  setDebugModeEnabled(enabled: boolean): void {
+    this.debugOverlaySystem?.setEnabled(enabled)
+  }
+
+  /**
    * Main game loop update. Runs all ECS systems each frame.
    *
    * @param _time - Absolute time in ms (unused directly).
@@ -389,6 +405,7 @@ export class ArenaRuntime {
       this.playerRenderSystem.localInputHistory.append(fullInput)
       this.connection.sendPlayerInput(fullInput)
     })
+    this.debugOverlaySystem.update()
     this.projectileRenderSystem.update(delta)
     this.combatTelegraphRenderSystem.update(
       this.playerRenderSystem.getEstimatedServerTimeMs(),
