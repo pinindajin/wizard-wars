@@ -1,4 +1,4 @@
-import type { PlayerAnimState } from "@/shared/types"
+import type { PlayerAnimState, PlayerMoveState } from "@/shared/types"
 
 /**
  * Client ECS component records.
@@ -23,11 +23,14 @@ export const ClientPlayerState: Record<
     maxHealth: number
     lives: number
     animState: PlayerAnimState
+    moveState: PlayerMoveState
     /** Active cast ability id from server, or `null`. */
     castingAbilityId: string | null
     facingAngle: number
     moveFacingAngle: number
     invulnerable: boolean
+    /** Authoritative simulated jump height (world px). */
+    jumpZ: number
   }
 > = {}
 

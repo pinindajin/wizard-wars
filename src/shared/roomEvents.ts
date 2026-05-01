@@ -45,6 +45,7 @@ export const RoomEvent = {
   FireballBatchUpdate: "fireball_batch_update",
   LightningBolt: "lightning_bolt",
   PrimaryMeleeAttack: "primary_melee_attack",
+  AbilitySfx: "ability_sfx",
 
   // Shop / economy
   ShopPurchase: "shop_purchase",

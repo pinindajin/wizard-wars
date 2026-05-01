@@ -26,6 +26,7 @@ import {
   DeadTag,
   SpectatorTag,
   InvulnerableTag,
+  JumpArc,
 } from "../components"
 import type { DamageRequest, SimCtx } from "../simulation"
 import {
@@ -35,6 +36,7 @@ import {
 } from "../../../shared/balance-config/equipment"
 import { getPrimaryAttackAnimationConfigByAttackId } from "../../../shared/balance-config/animationConfig"
 import { TICK_MS } from "../../../shared/balance-config"
+import { JUMP_AIRBORNE_COLLIDER_EPSILON_PX } from "../../../shared/balance-config/combat"
 import { characterHitboxForCenter } from "../../../shared/collision/characterHitbox"
 import { swingConeIntersectsCharacterHitbox } from "./swingConeGeometry"
 
@@ -68,6 +70,7 @@ export function primaryMeleeAttackSystem(ctx: SimCtx): void {
     if (hasComponent(world, eid, DyingTag)) continue
     if (hasComponent(world, eid, DeadTag)) continue
     if (hasComponent(world, eid, SpectatorTag)) continue
+    if (hasComponent(world, eid, JumpArc) && JumpArc.z[eid] > JUMP_AIRBORNE_COLLIDER_EPSILON_PX) continue
 
     const swingTicks = Math.ceil(timing.durationMs / TICK_MS)
 

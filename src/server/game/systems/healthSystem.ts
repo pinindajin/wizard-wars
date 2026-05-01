@@ -26,9 +26,10 @@ import {
   InvulnerableTag,
   Hero,
   HERO_INDEX_TO_ID,
+  JumpArc,
 } from "../components"
 import type { SimCtx, DeathEvent } from "../simulation"
-import { DAMAGE_FLASH_MS } from "../../../shared/balance-config"
+import { DAMAGE_FLASH_MS, JUMP_AIRBORNE_COLLIDER_EPSILON_PX } from "../../../shared/balance-config"
 import { getBehaviorAnimationConfig } from "../../../shared/balance-config/animationConfig"
 
 /**
@@ -67,8 +68,16 @@ export function healthSystem(ctx: SimCtx): void {
     addComponent(world, targetEid, DamageFlash)
     DamageFlash.expiresAtMs[targetEid] = serverTimeMs + DAMAGE_FLASH_MS
 
-    // Knockback
+    // Knockback (clear airborne jump before applying slide while hit mid-air)
     if (knockbackX !== undefined && knockbackY !== undefined && knockbackPx) {
+      if (
+        hasComponent(world, targetEid, JumpArc) &&
+        JumpArc.z[targetEid] > JUMP_AIRBORNE_COLLIDER_EPSILON_PX
+      ) {
+        removeComponent(world, targetEid, JumpArc)
+        JumpArc.z[targetEid] = 0
+        JumpArc.vz[targetEid] = 0
+      }
       addComponent(world, targetEid, Knockback)
       Knockback.impulseX[targetEid] = knockbackX
       Knockback.impulseY[targetEid] = knockbackY

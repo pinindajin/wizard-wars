@@ -1,7 +1,6 @@
 import {
   ARENA_WIDTH,
   ARENA_HEIGHT,
-  ARENA_WORLD_COLLIDERS,
   BASE_MOVE_SPEED_PX_PER_SEC,
   PLAYER_WORLD_COLLISION_FOOTPRINT,
   SWING_MOVE_SPEED_MULTIPLIER,
@@ -19,7 +18,8 @@ import {
   worldStepFromIntent,
 } from "@/shared/movementIntent"
 import { moveWithinWorld } from "@/shared/collision/worldCollision"
-import type { PlayerInputPayload } from "@/shared/types"
+import { worldCollidersForJumpZ } from "@/shared/collision/worldCollidersForPlayer"
+import type { PlayerInputPayload, PlayerMoveState } from "@/shared/types"
 
 import type { LocalInputHistory } from "../../network/LocalInputHistory"
 
@@ -34,6 +34,10 @@ export type LocalReplayContext = {
    * Used to look up the ability's `castMoveSpeedMultiplier`.
    */
   readonly castingAbilityId: string | null
+  /** Server jump height used for world collider split during replay (r5). */
+  readonly jumpZ: number
+  /** Server-reported coarse move state (jump lift roots without `Casting`). */
+  readonly moveState: PlayerMoveState
 }
 
 /** Authoritative state the server just ACKed for the local player. */
@@ -71,6 +75,14 @@ function replaySpeedMultiplier(ctx: LocalReplayContext): number {
   } else if (ctx.hasSwiftBoots) {
     speedMultiplier = 1.0 + SWIFT_BOOTS_SPEED_BONUS
   }
+  if (ctx.moveState === "rooted") {
+    if (!ctx.castingAbilityId) return 0
+    const cfg = ABILITY_CONFIGS[ctx.castingAbilityId]
+    const castMoveMult = cfg?.castMoveSpeedMultiplier ?? 0
+    if (castMoveMult === 0) return 0
+    speedMultiplier *= castMoveMult
+    return speedMultiplier
+  }
   if (ctx.castingAbilityId) {
     const cfg = ABILITY_CONFIGS[ctx.castingAbilityId]
     const castMoveMult = cfg?.castMoveSpeedMultiplier ?? 0
@@ -103,6 +115,7 @@ function stepReplay(
     TICK_DT_SEC,
     mult,
   )
+  const colliders = worldCollidersForJumpZ(ctx.jumpZ)
   const moved = moveWithinWorld(
     x,
     y,
@@ -110,7 +123,7 @@ function stepReplay(
     step.y,
     PLAYER_WORLD_COLLISION_FOOTPRINT,
     ARENA_BOUNDS,
-    ARENA_WORLD_COLLIDERS,
+    colliders,
   )
   return { x: moved.x, y: moved.y }
 }

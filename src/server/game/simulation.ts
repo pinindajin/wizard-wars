@@ -27,6 +27,7 @@ import {
   HERO_INDEX,
   ABILITY_INDEX,
   FireballTag,
+  JumpArc,
 } from "./components"
 import { createCommandBuffer, CommandBuffer } from "./commandBuffer"
 import {
@@ -59,6 +60,7 @@ import type {
   PlayerAnimState,
   PlayerMoveState,
   FireballSnapshot,
+  AbilitySfxPayload,
 } from "../../shared/types"
 
 import { inputSystem } from "./systems/inputSystem"
@@ -67,6 +69,7 @@ import { movementSystem } from "./systems/movementSystem"
 import { knockbackSystem } from "./systems/knockbackSystem"
 import { playerCollisionSystem } from "./systems/playerCollisionSystem"
 import { worldCollisionSystem } from "./systems/worldCollisionSystem"
+import { jumpPhysicsSystem } from "./systems/jumpPhysicsSystem"
 import { projectileMovementSystem } from "./systems/projectileMovementSystem"
 import { primaryMeleeAttackSystem } from "./systems/primaryMeleeAttackSystem"
 import { lightningBoltSystem } from "./systems/lightningBoltSystem"
@@ -169,6 +172,7 @@ export type PlayerPrevState = {
   /** Mirrors server `getCastingAbilityId`; `null` when not casting. */
   castingAbilityId: string | null
   invulnerable: boolean
+  jumpZ: number
   lastProcessedInputSeq: number
 }
 
@@ -227,6 +231,8 @@ export type SimCtx = {
   primaryMeleeAttacks: PrimaryMeleeAttackPayload[]
   damageFloats: DamageFloatPayload[]
   goldUpdates: { userId: string; gold: number }[]
+  /** One-shot ability sounds to broadcast this tick (jump, etc.). */
+  abilitySfxEvents: AbilitySfxPayload[]
 
   // ── Match outcome ──
   matchEnded: SimOutput["matchEnded"]
@@ -263,6 +269,7 @@ export type SimOutput = {
   primaryMeleeAttacks: PrimaryMeleeAttackPayload[]
   damageFloats: DamageFloatPayload[]
   goldUpdates: { userId: string; gold: number }[]
+  abilitySfxEvents: AbilitySfxPayload[]
   matchEnded: {
     reason: "lives_depleted" | "host_ended" | "time_cap"
     entries: ScoreboardEntry[]
@@ -397,6 +404,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     Cooldown.lightningBolt[eid] = 0
     Cooldown.primaryMelee[eid] = 0
     Cooldown.healingPotion[eid] = 0
+    Cooldown.jump[eid] = 0
 
     Equipment.primaryMeleeAttackIndex[eid] = primaryMeleeAttackIdToIndex(
       getHeroPrimaryMeleeAttackId(heroId),
@@ -459,6 +467,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       moveState: "idle",
       castingAbilityId: null,
       invulnerable: false,
+      jumpZ: 0,
       lastProcessedInputSeq: 0,
     })
     // `-1`: no input processed yet; first client `seq: 0` is accepted in `tick`.
@@ -534,9 +543,10 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       const maxHealth = Health.max[eid]
       const lives = Lives.count[eid]
       const animState = computePlayerAnimState(world, eid)
-      const moveState = computePlayerMoveState(world, eid)
+      const moveState = computePlayerMoveState(world, eid, currentTick)
       const invulnerable = hasComponent(world, eid, InvulnerableTag)
       const castingAbilityId = getCastingAbilityId(world, eid)
+      const jumpZ = hasComponent(world, eid, JumpArc) ? JumpArc.z[eid] : 0
       const lastProcessedInputSeq = lastProcessedSeqForNetworkPayload(
         lastProcessedInputSeqByPlayer,
         userId,
@@ -559,6 +569,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
         moveState,
         castingAbilityId,
         invulnerable,
+        jumpZ,
         lastProcessedInputSeq,
       })
     }
@@ -643,6 +654,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       primaryMeleeAttacks: [],
       damageFloats: [],
       goldUpdates: [],
+      abilitySfxEvents: [],
       matchEnded: null,
       hostEndSignal,
       prevPlayerStates,
@@ -660,6 +672,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     knockbackSystem(ctx)
     playerCollisionSystem(ctx)
     worldCollisionSystem(ctx)
+    jumpPhysicsSystem(ctx)
     projectileMovementSystem(ctx)
     primaryMeleeAttackSystem(ctx)
     lightningBoltSystem(ctx)
@@ -689,6 +702,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       primaryMeleeAttacks: ctx.primaryMeleeAttacks,
       damageFloats: ctx.damageFloats,
       goldUpdates: ctx.goldUpdates,
+      abilitySfxEvents: ctx.abilitySfxEvents,
       matchEnded: ctx.matchEnded,
     }
   }

@@ -42,6 +42,7 @@ export const WsEvent = {
   FireballBatchUpdate: "FIREBALL_BATCH_UPDATE",
   LightningBolt: "LIGHTNING_BOLT",
   PrimaryMeleeAttack: "PRIMARY_MELEE_ATTACK",
+  AbilitySfx: "ABILITY_SFX",
 
   // Shop / economy
   ShopPurchase: "SHOP_PURCHASE",

@@ -5,20 +5,20 @@
  * Delegates to the shared `resolveAgainstWorld` math so the client's
  * rewind-and-replay path can run identical collision resolution.
  */
-import { query } from "bitecs"
+import { query, hasComponent } from "bitecs"
 
-import { Position, PlayerTag } from "../components"
+import { Position, PlayerTag, JumpArc } from "../components"
 import type { SimCtx } from "../simulation"
 import {
   ARENA_WIDTH,
   ARENA_HEIGHT,
   PLAYER_WORLD_COLLISION_FOOTPRINT,
-  ARENA_WORLD_COLLIDERS,
 } from "../../../shared/balance-config"
 import {
   resolveAgainstWorld,
   type ArenaPropColliderRect,
 } from "../../../shared/collision/worldCollision"
+import { worldCollidersForJumpZ } from "../../../shared/collision/worldCollidersForPlayer"
 
 export type { ArenaPropColliderRect } from "../../../shared/collision/worldCollision"
 
@@ -55,12 +55,14 @@ export function worldCollisionSystem(ctx: SimCtx): void {
   const { world } = ctx
 
   for (const eid of query(world, [PlayerTag])) {
+    const jumpZ = hasComponent(world, eid, JumpArc) ? JumpArc.z[eid] : 0
+    const colliders = worldCollidersForJumpZ(jumpZ)
     const out = resolveAgainstWorld(
       Position.x[eid],
       Position.y[eid],
       PLAYER_WORLD_COLLISION_FOOTPRINT,
       ARENA_BOUNDS,
-      ARENA_WORLD_COLLIDERS,
+      colliders,
     )
     Position.x[eid] = out.x
     Position.y[eid] = out.y
