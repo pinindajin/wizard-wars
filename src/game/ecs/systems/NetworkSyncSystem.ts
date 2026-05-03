@@ -115,6 +115,7 @@ export class NetworkSyncSystem {
         moveFacingAngle: snap.moveFacingAngle,
         invulnerable: snap.invulnerable,
         jumpZ: snap.jumpZ,
+        jumpStartedInLava: snap.jumpStartedInLava,
       }
       this.lastAckByPlayer.set(snap.playerId, snap.lastProcessedInputSeq)
     }
@@ -181,6 +182,9 @@ export class NetworkSyncSystem {
         if (delta.castingAbilityId !== undefined) state.castingAbilityId = delta.castingAbilityId
         if (delta.invulnerable !== undefined) state.invulnerable = delta.invulnerable
         if (delta.jumpZ !== undefined) state.jumpZ = delta.jumpZ
+        if (delta.jumpStartedInLava !== undefined) {
+          state.jumpStartedInLava = delta.jumpStartedInLava
+        }
       }
       if (!pos && (delta.x !== undefined || delta.y !== undefined)) {
         this.log.debug(

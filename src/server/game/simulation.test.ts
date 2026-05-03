@@ -389,6 +389,7 @@ describe("buildGameStateSyncPayload", () => {
     const snap = sim.buildGameStateSyncPayload(Date.now()).players[0]!
     expect(snap.lastProcessedInputSeq).toBe(0)
     expect(snap.jumpZ).toBe(0)
+    expect(snap.jumpStartedInLava).toBe(false)
   })
 
   it("spawns with -1 seed; seq 0 and seq 1 are both applied in order", () => {

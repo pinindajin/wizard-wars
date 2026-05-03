@@ -43,6 +43,7 @@ const noopCtx = {
   hasSwiftBoots: false,
   castingAbilityId: null,
   jumpZ: 0,
+  jumpStartedInLava: false,
   moveState: "idle" as const,
   terrainState: "land" as const,
 }

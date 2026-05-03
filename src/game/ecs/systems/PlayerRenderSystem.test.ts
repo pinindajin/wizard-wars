@@ -91,6 +91,7 @@ function snap(over: Partial<PlayerSnapshot> & Pick<PlayerSnapshot, "id" | "playe
     castingAbilityId: over.castingAbilityId ?? null,
     invulnerable: over.invulnerable ?? false,
     jumpZ: over.jumpZ ?? 0,
+    jumpStartedInLava: over.jumpStartedInLava ?? false,
     lastProcessedInputSeq: over.lastProcessedInputSeq ?? 0,
   }
 }

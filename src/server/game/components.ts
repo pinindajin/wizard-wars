@@ -106,6 +106,8 @@ export const Knockback = {
 export const JumpArc = {
   z: new Float32Array(MAX_ENTITIES),
   vz: new Float32Array(MAX_ENTITIES),
+  /** 1 if this jump began while the player was in lava (escape jump); affects airborne colliders. */
+  startedInLava: new Uint8Array(MAX_ENTITIES),
 }
 
 /** Current terrain hazard state: 0 land, 1 lava, 2 cliff. */

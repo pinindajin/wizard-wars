@@ -25,6 +25,7 @@ function baseSnapshot(over: Partial<PlayerSnapshot> & { id: number; playerId: st
     castingAbilityId: over.castingAbilityId ?? null,
     invulnerable: over.invulnerable ?? false,
     jumpZ: over.jumpZ ?? 0,
+    jumpStartedInLava: over.jumpStartedInLava ?? false,
     lastProcessedInputSeq: over.lastProcessedInputSeq ?? 0,
   }
 }
@@ -85,6 +86,7 @@ describe("NetworkSyncSystem.applyFullSync (r5 despawn)", () => {
       moveFacingAngle: 0,
       invulnerable: false,
       jumpZ: 0,
+      jumpStartedInLava: false,
     }
     const snap = baseSnapshot({ id: 3, playerId: "only" })
     system.applyFullSync({ players: [snap], fireballs: [], seq: 0, serverTimeMs: 3 })

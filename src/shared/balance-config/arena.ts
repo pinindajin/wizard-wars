@@ -2,6 +2,7 @@ import { GENERATED_ARENA_PROP_COLLIDERS } from "./generated/arena-prop-colliders
 import { GENERATED_ARENA_NON_WALKABLE_COLLIDERS } from "./generated/arena-non-walkable-colliders"
 import { GENERATED_ARENA_LAVA_COLLIDERS } from "./generated/arena-lava-colliders"
 import { GENERATED_ARENA_CLIFF_COLLIDERS } from "./generated/arena-cliff-colliders"
+import { GENERATED_ARENA_LAVA_TRANSITION_COLLIDERS } from "./generated/arena-lava-transition-colliders"
 import {
   ARENA_LAYOUT_COLS,
   ARENA_LAYOUT_ROWS,
@@ -75,6 +76,17 @@ export const ARENA_CLIFF_COLLIDERS: readonly {
   width: number
   height: number
 }[] = GENERATED_ARENA_CLIFF_COLLIDERS
+
+/**
+ * Non-walkable rectangles that overlap hybrid lava but extend outside it; used only
+ * while `terrainState === "lava"` so lava–cliff boundaries stay solid. Regenerate via `bun run build:arena-colliders`.
+ */
+export const ARENA_LAVA_TRANSITION_COLLIDERS: readonly {
+  x: number
+  y: number
+  width: number
+  height: number
+}[] = GENERATED_ARENA_LAVA_TRANSITION_COLLIDERS
 
 /** Non-walkable rectangles that are neither lava nor cliff. */
 export const ARENA_NON_HAZARD_COLLIDERS: readonly {

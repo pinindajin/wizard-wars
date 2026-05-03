@@ -114,7 +114,11 @@ export function movementSystem(ctx: SimCtx): void {
     const stepY = dy * speedPxPerSec * TICK_DT_SEC
     const jumpZForCollider = hasComponent(world, eid, JumpArc) ? JumpArc.z[eid] : 0
     const terrainState = TERRAIN_KIND_TO_STATE[TerrainState.kind[eid]] ?? "land"
-    const worldColliders = worldCollidersForPlayerState(jumpZForCollider, terrainState)
+    const jumpStartedInLava =
+      hasComponent(world, eid, JumpArc) && JumpArc.startedInLava[eid] === 1
+    const worldColliders = worldCollidersForPlayerState(jumpZForCollider, terrainState, {
+      jumpStartedInLava,
+    })
     const moved = moveWithinWorld(
       Position.x[eid],
       Position.y[eid],

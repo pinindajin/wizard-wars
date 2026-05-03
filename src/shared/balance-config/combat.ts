@@ -124,6 +124,12 @@ export const JUMP_AIRBORNE_COLLIDER_EPSILON_PX = 4
 export const JUMP_LANDING_GRACE_PX = 6
 /** Client sprite vertical offset per unit of server `jumpZ` (world px → screen px). */
 export const JUMP_SPRITE_Y_PIXELS_PER_SIM_Z = 1
+/**
+ * While airborne from land, horizontal collision ignores lava until `jumpZ`
+ * reaches this height so one-tile gaps stay clearable; at/above it, lava AABBs
+ * apply so wide pits cannot be skimmed mid-arc. Escape jumps use props-only regardless.
+ */
+export const JUMP_AIRBORNE_LAVA_COLLISION_MIN_Z_PX = 87
 
 // --- Terrain hazards ---
 /** Damage applied while the player's footprint is in lava, in HP per second. */
