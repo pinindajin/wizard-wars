@@ -180,6 +180,7 @@ export type PlayerPrevState = {
   castingAbilityId: string | null
   invulnerable: boolean
   jumpZ: number
+  jumpStartedInLava: boolean
   terrainState: PlayerTerrainState
   lastProcessedInputSeq: number
 }
@@ -486,6 +487,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       castingAbilityId: null,
       invulnerable: false,
       jumpZ: 0,
+      jumpStartedInLava: false,
       terrainState: "land",
       lastProcessedInputSeq: 0,
     })
@@ -569,6 +571,8 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       const invulnerable = hasComponent(world, eid, InvulnerableTag)
       const castingAbilityId = getCastingAbilityId(world, eid)
       const jumpZ = hasComponent(world, eid, JumpArc) ? JumpArc.z[eid] : 0
+      const jumpStartedInLava =
+        hasComponent(world, eid, JumpArc) && JumpArc.startedInLava[eid] === 1
       const terrainState = TERRAIN_KIND_TO_STATE[TerrainState.kind[eid]] ?? "land"
       const lastProcessedInputSeq = lastProcessedSeqForNetworkPayload(
         lastProcessedInputSeqByPlayer,
@@ -593,6 +597,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
         castingAbilityId,
         invulnerable,
         jumpZ,
+        jumpStartedInLava,
         terrainState,
         lastProcessedInputSeq,
       })

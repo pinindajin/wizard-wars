@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import {
   ARENA_CLIFF_COLLIDERS,
   ARENA_LAVA_COLLIDERS,
+  ARENA_LAVA_TRANSITION_COLLIDERS,
   ARENA_NON_HAZARD_COLLIDERS,
   ARENA_PROP_COLLIDERS,
   ARENA_WORLD_COLLIDERS,
@@ -50,7 +51,7 @@ describe("terrain geometry helpers", () => {
 })
 
 describe("worldCollidersForPlayerState", () => {
-  it("blocks all hazards on land and excludes lava while in lava", () => {
+  it("blocks all hazards on land and submerged lava path adds transition strips", () => {
     expect(worldCollidersForPlayerState(0, "land")).toBe(ARENA_WORLD_COLLIDERS)
 
     const lavaColliders = worldCollidersForPlayerState(0, "lava")
@@ -58,10 +59,31 @@ describe("worldCollidersForPlayerState", () => {
     expect(lavaColliders).not.toContain(ARENA_LAVA_COLLIDERS[0])
     expect(lavaColliders).toEqual(expect.arrayContaining([...ARENA_PROP_COLLIDERS]))
     expect(lavaColliders).toEqual(expect.arrayContaining([...ARENA_CLIFF_COLLIDERS]))
+    if (ARENA_LAVA_TRANSITION_COLLIDERS.length > 0) {
+      expect(lavaColliders).toEqual(
+        expect.arrayContaining([...ARENA_LAVA_TRANSITION_COLLIDERS]),
+      )
+    }
   })
 
-  it("uses props only while airborne", () => {
-    expect(worldCollidersForPlayerState(999, "lava")).toBe(ARENA_PROP_COLLIDERS)
+  it("uses props only in the last ticks of an arc (low jumpZ) from land", () => {
+    expect(worldCollidersForPlayerState(3, "lava")).toBe(ARENA_PROP_COLLIDERS)
+  })
+
+  it("uses props only mid-arc from land when below lava-collision height", () => {
+    expect(worldCollidersForPlayerState(50, "lava")).toBe(ARENA_PROP_COLLIDERS)
+  })
+
+  it("uses props plus lava only near apex from land (tightens wide gap skims)", () => {
+    const c = worldCollidersForPlayerState(90, "lava")
+    expect(c).toEqual(expect.arrayContaining([...ARENA_PROP_COLLIDERS]))
+    expect(c).toEqual(expect.arrayContaining([...ARENA_LAVA_COLLIDERS]))
+  })
+
+  it("uses props only while airborne escape jump from lava", () => {
+    expect(
+      worldCollidersForPlayerState(3, "land", { jumpStartedInLava: true }),
+    ).toBe(ARENA_PROP_COLLIDERS)
   })
 
   it("excludes cliff colliders while already stumbling on a cliff", () => {

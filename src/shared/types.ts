@@ -149,6 +149,8 @@ export type PlayerSnapshot = {
   readonly invulnerable: boolean
   /** Server simulated jump height (world px); `0` when grounded. */
   readonly jumpZ: number
+  /** True when the active jump arc began in lava (escape jump). */
+  readonly jumpStartedInLava: boolean
   /**
    * Highest client input `seq` the server has processed for this player.
    * Used by the client to drive rewind-and-replay reconciliation.
@@ -173,6 +175,7 @@ export type PlayerDelta = {
   readonly castingAbilityId?: string | null
   readonly invulnerable?: boolean
   readonly jumpZ?: number
+  readonly jumpStartedInLava?: boolean
   /** Highest client input `seq` the server has processed for this player. */
   readonly lastProcessedInputSeq?: number
 }

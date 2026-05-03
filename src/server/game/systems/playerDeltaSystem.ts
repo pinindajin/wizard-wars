@@ -53,6 +53,8 @@ export function playerDeltaSystem(ctx: SimCtx): void {
     const invulnerable = hasComponent(world, eid, InvulnerableTag)
     const castingAbilityId = getCastingAbilityId(world, eid)
     const jumpZ = hasComponent(world, eid, JumpArc) ? JumpArc.z[eid] : 0
+    const jumpStartedInLava =
+      hasComponent(world, eid, JumpArc) && JumpArc.startedInLava[eid] === 1
     const terrainState = TERRAIN_KIND_TO_STATE[TerrainState.kind[eid]] ?? "land"
     const lastProcessedInputSeq = Math.max(
       0,
@@ -75,6 +77,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
         castingAbilityId,
         invulnerable,
         jumpZ,
+        jumpStartedInLava,
         terrainState,
         lastProcessedInputSeq,
       })
@@ -92,6 +95,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
         castingAbilityId,
         invulnerable,
         jumpZ,
+        jumpStartedInLava,
         terrainState,
         lastProcessedInputSeq,
       })
@@ -113,6 +117,9 @@ export function playerDeltaSystem(ctx: SimCtx): void {
       ...(castingAbilityId !== prev.castingAbilityId ? { castingAbilityId } : {}),
       ...(invulnerable !== prev.invulnerable ? { invulnerable } : {}),
       ...(jumpZ !== prev.jumpZ ? { jumpZ } : {}),
+      ...(jumpStartedInLava !== prev.jumpStartedInLava
+        ? { jumpStartedInLava }
+        : {}),
       ...(terrainState !== prev.terrainState ? { terrainState } : {}),
       ...(lastProcessedInputSeq !== prev.lastProcessedInputSeq
         ? { lastProcessedInputSeq }
@@ -133,6 +140,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
       delta.castingAbilityId !== undefined ||
       delta.invulnerable !== undefined ||
       delta.jumpZ !== undefined ||
+      delta.jumpStartedInLava !== undefined ||
       delta.terrainState !== undefined ||
       delta.lastProcessedInputSeq !== undefined
 
@@ -151,6 +159,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
       prev.castingAbilityId = castingAbilityId
       prev.invulnerable = invulnerable
       prev.jumpZ = jumpZ
+      prev.jumpStartedInLava = jumpStartedInLava
       prev.terrainState = terrainState
       prev.lastProcessedInputSeq = lastProcessedInputSeq
     }

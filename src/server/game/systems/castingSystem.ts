@@ -378,9 +378,11 @@ export function castingSystem(ctx: SimCtx): void {
       if (hasComponent(world, eid, Knockback)) continue
       if (!isCooldownReady(eid, "jump", currentTick)) continue
 
+      const jumpStartedInLava = TerrainState.kind[eid] === TERRAIN_KIND.lava ? 1 : 0
       addComponent(world, eid, JumpArc)
       JumpArc.z[eid] = JUMP_AIRBORNE_COLLIDER_EPSILON_PX + 1
       JumpArc.vz[eid] = JUMP_INITIAL_VZ_PX_PER_SEC
+      JumpArc.startedInLava[eid] = jumpStartedInLava
       TerrainState.kind[eid] = TERRAIN_KIND.land
       TerrainState.lavaDamageCarry[eid] = 0
       setCooldown(eid, "jump", currentTick)

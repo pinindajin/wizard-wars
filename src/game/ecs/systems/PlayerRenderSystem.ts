@@ -295,6 +295,7 @@ export class PlayerRenderSystem {
         moveFacingAngle: snap.moveFacingAngle,
         invulnerable: snap.invulnerable,
         jumpZ: snap.jumpZ,
+        jumpStartedInLava: snap.jumpStartedInLava,
       }
       this.onAuthoritativePosition(snap.id, snap.x, snap.y, "full_sync")
 
@@ -422,6 +423,7 @@ export class PlayerRenderSystem {
       hasSwiftBoots: false,
       castingAbilityId: state.castingAbilityId,
       jumpZ: state.jumpZ ?? 0,
+      jumpStartedInLava: state.jumpStartedInLava ?? false,
       terrainState: state.terrainState,
       moveState: state.moveState,
     }
@@ -790,7 +792,9 @@ export class PlayerRenderSystem {
         state.animState === "primary_melee_attack"
           ? SWING_MOVE_SPEED_MULTIPLIER
           : 1
-      const colliders = worldCollidersForPlayerState(state.jumpZ ?? 0, state.terrainState)
+      const colliders = worldCollidersForPlayerState(state.jumpZ ?? 0, state.terrainState, {
+        jumpStartedInLava: state.jumpStartedInLava ?? false,
+      })
       if (
         this._canPredictMovement(state, localMoveIntent, castMoveMult)
       ) {
