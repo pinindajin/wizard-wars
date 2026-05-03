@@ -29,6 +29,12 @@ export const WW_GAMEPLAY_INPUT_BLOCKED_REGISTRY_KEY = "wwGameplayInputBlocked"
 export const WW_DEBUG_MODE_REGISTRY_KEY = "wwDebugMode"
 
 /**
+ * Phaser registry key for persisted minimap corner preference.
+ * React settings own persistence; Arena reads this for live minimap layout.
+ */
+export const WW_MINIMAP_CORNER_REGISTRY_KEY = "wwMinimapCorner"
+
+/**
  * Phaser registry key for the loader status bridge. React components subscribe
  * via {@link subscribeLoaderStatus} to render a progress overlay outside the
  * Phaser canvas. Scenes publish via {@link publishLoaderStatus} in their

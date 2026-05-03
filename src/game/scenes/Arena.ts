@@ -5,6 +5,7 @@
 /* START-USER-IMPORTS */
 import Phaser from "phaser"
 
+import type { MinimapCorner } from "@/shared/settings-config"
 import { WW_LOCAL_PLAYER_ID_REGISTRY_KEY } from "../constants"
 import { GameConnection } from "../network/GameConnection"
 import { PlayerRenderSystem } from "../ecs/systems/PlayerRenderSystem"
@@ -144,6 +145,11 @@ export default class Arena extends Phaser.Scene {
 	/** Applies local-only debug overlay mode to the active runtime. */
 	setDebugModeEnabled(enabled: boolean): void {
 		this.runtime?.setDebugModeEnabled(enabled)
+	}
+
+	/** Applies persisted minimap placement to the active runtime. */
+	setMinimapCorner(corner: MinimapCorner): void {
+		this.runtime?.setMinimapCorner(corner)
 	}
 
 	/* END-USER-CODE */

@@ -25,6 +25,7 @@ import {
   WW_DEBUG_MODE_REGISTRY_KEY,
   WW_GAMEPLAY_INPUT_BLOCKED_REGISTRY_KEY,
   WW_KEYBIND_CONFIG_REGISTRY_KEY,
+  WW_MINIMAP_CORNER_REGISTRY_KEY,
 } from "@/game/constants"
 import type { LoaderStatusHost } from "@/game/loaderStatus"
 import { hudTopPanel } from "@/lib/ui/lobbyStyles"
@@ -39,6 +40,7 @@ import {
   useGameKeybinds,
   useGameSettingsContext,
   type AudioVolumeSettings,
+  type MinimapCorner,
 } from "./GameSettingsContext"
 import { useLobbyConnection } from "../LobbyConnectionProvider"
 import { MATCH_COUNTDOWN_DURATION_MS } from "@/shared/balance-config/lobby"
@@ -111,13 +113,17 @@ type LobbyGameHostWithKeybindsProps = {
 function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) {
   const router = useRouter()
   const keybinds = useGameKeybinds()
-  const { audioVolumes, debugModeEnabled, settingsLoaded } =
+  const { audioVolumes, debugModeEnabled, minimapCorner, settingsLoaded } =
     useGameSettingsContext()
   const gameplayInputBlockProps = useBlockGameplayInputEvents()
   const keybindsRef = useRef(keybinds)
+  const minimapCornerRef = useRef(minimapCorner)
   useEffect(() => {
     keybindsRef.current = keybinds
   }, [keybinds])
+  useEffect(() => {
+    minimapCornerRef.current = minimapCorner
+  }, [minimapCorner])
   const { connection, lobbyState, localPlayerId } = useLobbyConnection()
   const isHost =
     localPlayerId != null && localPlayerId === lobbyState?.hostPlayerId
@@ -288,6 +294,7 @@ function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) 
           gameConnection: connection,
           localPlayerId,
           keybinds: keybindsRef.current,
+          minimapCorner: minimapCornerRef.current,
         })
         destroyGame = mounted.destroy
         setGameHost(mounted.game as unknown as LoaderStatusHost)
@@ -320,6 +327,21 @@ function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) 
     if (!gameHost) return
     gameHost.registry.set(WW_KEYBIND_CONFIG_REGISTRY_KEY, keybinds)
   }, [gameHost, keybinds])
+
+  useEffect(() => {
+    if (!gameHost) return
+    gameHost.registry.set(WW_MINIMAP_CORNER_REGISTRY_KEY, minimapCorner)
+
+    const host = gameHost as unknown as
+      | { scene?: { getScene: (key: string) => unknown } }
+      | null
+      | undefined
+    const arena = host?.scene?.getScene("Arena") as
+      | { setMinimapCorner?: (corner: MinimapCorner) => void }
+      | null
+      | undefined
+    arena?.setMinimapCorner?.(minimapCorner)
+  }, [gameHost, minimapCorner])
 
   /**
    * Applies audio volume settings to the live Arena scene when available.

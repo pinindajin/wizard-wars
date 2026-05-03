@@ -65,4 +65,22 @@ describe("GameSettings debug mode", () => {
     await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1))
     expect(updateSettings.mock.calls[0]?.[0]).not.toHaveProperty("debugModeEnabled")
   })
+
+  it("persists selected minimap corner when settings are saved", async () => {
+    renderWithSettings(
+      <GameSettingsModal
+        onClose={() => {}}
+        onApplyAudioVolumes={() => {}}
+      />,
+    )
+
+    const corner = await screen.findByTestId("settings-minimap-corner-bottom_right")
+    fireEvent.click(corner)
+    fireEvent.click(screen.getByTestId("settings-save"))
+
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1))
+    expect(updateSettings.mock.calls[0]?.[0]).toMatchObject({
+      minimapCorner: "bottom_right",
+    })
+  })
 })
