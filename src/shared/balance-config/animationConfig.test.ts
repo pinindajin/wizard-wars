@@ -4,12 +4,14 @@ import {
   ANIMATION_CONFIG,
   animationConfigSchema,
   frameRateForDuration,
+  frameStartMsList,
   getAnimationActionConfig,
   getBehaviorAnimationConfig,
   getAnimationToolActions,
   getPrimaryAttackAnimationConfig,
   getPrimaryAttackAnimationConfigByAttackId,
   getSpellAnimationConfig,
+  megasheetClipForAnimationActionKey,
   msToFrameIndex,
   msToFrameIndexForAction,
   msToFrameIndexFromDurations,
@@ -179,6 +181,36 @@ describe("animation config", () => {
       msToFrameIndex(300, 540, 7),
     )
     expect(msToFrameIndexForAction(100, 1000, 4, undefined)).toBe(0)
+    expect(msToFrameIndexForAction(1, 500, 0, [1])).toBe(0)
+  })
+
+  it("resolves megasheet clip for spell, primary, and behavior action keys", () => {
+    expect(megasheetClipForAnimationActionKey("idle")).toBe("breathing_idle")
+    expect(megasheetClipForAnimationActionKey("walk")).toBe("walk")
+    expect(megasheetClipForAnimationActionKey("death")).toBe("death")
+    expect(megasheetClipForAnimationActionKey("stumble")).toBe("stumble")
+    expect(megasheetClipForAnimationActionKey("spell:fireball")).toBe("light_spell_cast")
+    expect(megasheetClipForAnimationActionKey("spell:lightning_bolt")).toBe("heavy_spell_cast")
+    expect(megasheetClipForAnimationActionKey("primary:red_wizard_cleaver")).toBe(
+      "summoned_axe_swing",
+    )
+    expect(() => megasheetClipForAnimationActionKey("not-a-real-key")).toThrow(
+      /Unknown animation action key/,
+    )
+  })
+
+  it("frameStartMsList returns empty for non-positive frame count", () => {
+    expect(frameStartMsList(1000, 0, undefined)).toEqual([])
+    expect(frameStartMsList(1000, -1, undefined)).toEqual([])
+  })
+
+  it("frameStartMsList uses per-frame durations when length matches frame count", () => {
+    expect(frameStartMsList(400, 4, [100, 100, 100, 100])).toEqual([0, 100, 200, 300])
+  })
+
+  it("frameStartMsList falls back to uniform splits when durations length mismatches", () => {
+    expect(frameStartMsList(100, 4, [50, 50])).toEqual([0, 25, 50, 75])
+    expect(frameStartMsList(100, 4, [])).toEqual([0, 25, 50, 75])
   })
 
   it("builds one shared action list without direction variants", () => {
