@@ -28,7 +28,6 @@ import { GameConnection } from "../network/GameConnection"
 import { PlayerRenderSystem } from "../ecs/systems/PlayerRenderSystem"
 import { ProjectileRenderSystem } from "../ecs/systems/ProjectileRenderSystem"
 import { LightningBoltRenderSystem } from "../ecs/systems/LightningBoltRenderSystem"
-import { PrimaryMeleeAttackRenderSystem } from "../ecs/systems/PrimaryMeleeAttackRenderSystem"
 import { CombatTelegraphRenderSystem } from "../ecs/systems/CombatTelegraphRenderSystem"
 import { DamageFloatersSystem } from "../ecs/systems/DamageFloatersSystem"
 import { DebugOverlaySystem } from "../ecs/systems/DebugOverlaySystem"
@@ -81,7 +80,6 @@ export class ArenaRuntime {
 
   private projectileRenderSystem!: ProjectileRenderSystem
   private lightningBoltRenderSystem!: LightningBoltRenderSystem
-  private primaryMeleeAttackRenderSystem!: PrimaryMeleeAttackRenderSystem
   private combatTelegraphRenderSystem!: CombatTelegraphRenderSystem
   private damageFloatersSystem!: DamageFloatersSystem
   private debugOverlaySystem!: DebugOverlaySystem
@@ -171,7 +169,6 @@ export class ArenaRuntime {
     })
     this.projectileRenderSystem = new ProjectileRenderSystem(this.scene)
     this.lightningBoltRenderSystem = new LightningBoltRenderSystem(this.scene)
-    this.primaryMeleeAttackRenderSystem = new PrimaryMeleeAttackRenderSystem(this.scene)
     this.combatTelegraphRenderSystem = new CombatTelegraphRenderSystem(this.scene)
     this.damageFloatersSystem = new DamageFloatersSystem(this.scene)
     this.debugOverlaySystem = new DebugOverlaySystem(this.scene)
@@ -300,7 +297,6 @@ export class ArenaRuntime {
           break
         case WsEvent.PrimaryMeleeAttack: {
           const payload = message.payload as PrimaryMeleeAttackPayload
-          this.primaryMeleeAttackRenderSystem.spawnSwing(payload)
           this.playerRenderSystem.onPrimaryMeleeSwing(payload)
           this.soundManager.play("sfx-axe-swing")
           break
@@ -435,7 +431,6 @@ export class ArenaRuntime {
       this.playerRenderSystem.getEstimatedServerTimeMs(),
     )
     this.lightningBoltRenderSystem.update(delta)
-    this.primaryMeleeAttackRenderSystem.update(delta)
     this.damageFloatersSystem.update(delta)
 
     const local = this.playerRenderSystem.getLocalPlayerRenderPos()

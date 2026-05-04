@@ -3,8 +3,6 @@ import Phaser from "phaser"
 import {
   TELEGRAPH_DANGER_FILL_ALPHA,
   TELEGRAPH_DANGER_FILL_COLOR,
-  TELEGRAPH_WINDUP_FILL_ALPHA,
-  TELEGRAPH_WINDUP_FILL_COLOR,
   TILEMAP_DEPTH,
 } from "@/shared/balance-config"
 import type {
@@ -23,6 +21,7 @@ type TelegraphEntry = {
 
 /**
  * Renders server-seeded, client-side ground telegraphs for combat hurtboxes.
+ * Only the dangerous window is filled (full red); there is no pre-danger wind-up fill.
  */
 export class CombatTelegraphRenderSystem {
   private readonly scene: Phaser.Scene
@@ -101,14 +100,16 @@ export class CombatTelegraphRenderSystem {
     anchor: { x: number; y: number },
     serverTimeMs: number,
   ): void {
-    const dangerous =
+    const inDanger =
       serverTimeMs >= payload.dangerStartsAtServerTimeMs &&
       serverTimeMs < payload.dangerEndsAtServerTimeMs
-    const fill = dangerous ? TELEGRAPH_DANGER_FILL_COLOR : TELEGRAPH_WINDUP_FILL_COLOR
-    const fillAlpha = dangerous ? TELEGRAPH_DANGER_FILL_ALPHA : TELEGRAPH_WINDUP_FILL_ALPHA
 
     gfx.clear()
-    gfx.fillStyle(fill, fillAlpha)
+    if (!inDanger) {
+      return
+    }
+
+    gfx.fillStyle(TELEGRAPH_DANGER_FILL_COLOR, TELEGRAPH_DANGER_FILL_ALPHA)
 
     if (payload.shape.type === "cone") {
       this._drawCone(gfx, anchor.x, anchor.y, payload.directionRad, payload.shape.radiusPx, payload.shape.arcDeg)
