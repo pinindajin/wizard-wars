@@ -58,8 +58,8 @@ describe("LadyWizardAnimDefs", () => {
         key: "lady-wizard-summoned_axe_swing-south-west",
         repeat: 0,
         frames: expect.arrayContaining([
-          expect.objectContaining({ duration: 100 }),
-          expect.objectContaining({ duration: 60 }),
+          expect.objectContaining({ duration: 180 }),
+          expect.objectContaining({ duration: 40 }),
         ]),
       }),
     )

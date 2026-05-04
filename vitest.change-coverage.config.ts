@@ -25,7 +25,6 @@ const PR_CHANGE_COVERAGE_INCLUDE = [
   "src/server/game/components.ts",
   "src/server/game/systems/primaryMeleeAttackSystem.ts",
   "src/server/game/systems/swingConeGeometry.ts",
-  "src/game/ecs/systems/PrimaryMeleeAttackRenderSystem.ts",
   "src/lib/kill-feed-format.ts",
 ] as const
 

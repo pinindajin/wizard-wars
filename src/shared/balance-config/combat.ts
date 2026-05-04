@@ -41,7 +41,7 @@ export const CHARACTER_HITBOX_DOWN_PX = 15
 export const BASE_MOVE_SPEED_PX_PER_SEC = 200
 
 /** Movement speed multiplier while swinging a weapon. */
-export const SWING_MOVE_SPEED_MULTIPLIER = 0.35
+export const SWING_MOVE_SPEED_MULTIPLIER = 0.2
 
 /** Duration of the red damage flash on a player sprite, in ms. */
 export const DAMAGE_FLASH_MS = 150
@@ -162,7 +162,7 @@ export const AXE_HURTBOX_ARC_DEG = 180
  * Default axe swing animation duration in ms.
  * Runtime primary-attack timing is loaded from `src/shared/balance-config/animation-config.json`.
  */
-export const AXE_SWING_DURATION_MS = 540
+export const AXE_SWING_DURATION_MS = 570
 /**
  * Default dangerous-window start.
  * Runtime primary-attack timing is loaded from `src/shared/balance-config/animation-config.json`.
@@ -172,7 +172,7 @@ export const AXE_DANGEROUS_WINDOW_START_MS = 300
  * Default dangerous-window end.
  * Runtime primary-attack timing is loaded from `src/shared/balance-config/animation-config.json`.
  */
-export const AXE_DANGEROUS_WINDOW_END_MS = 540
+export const AXE_DANGEROUS_WINDOW_END_MS = 570
 
 // --- Healing Potion ---
 /** HP restored by a healing potion. */
