@@ -84,6 +84,30 @@ export const getDirectionFromAngle = (angle: number): Direction => {
   return remap[index]!
 }
 
+function clipFrameDurationsMs(clip: LadyWizardMegasheetClip): readonly number[] | undefined {
+  switch (clip) {
+    case "breathing_idle":
+      return getBehaviorAnimationConfig(DEFAULT_HERO_ID, "idle").frameDurationsMs
+    case "walk":
+      return getBehaviorAnimationConfig(DEFAULT_HERO_ID, "walk").frameDurationsMs
+    case "death":
+      return getBehaviorAnimationConfig(DEFAULT_HERO_ID, "death").frameDurationsMs
+    case "light_spell_cast":
+      return getSpellAnimationConfig(DEFAULT_HERO_ID, "fireball").frameDurationsMs
+    case "heavy_spell_cast":
+      return getSpellAnimationConfig(DEFAULT_HERO_ID, "lightning_bolt").frameDurationsMs
+    case "summoned_axe_swing":
+      return getPrimaryAttackAnimationConfig(
+        DEFAULT_HERO_ID,
+        HERO_CONFIGS[DEFAULT_HERO_ID].primaryMeleeAttackId,
+      ).frameDurationsMs
+    case "jump":
+      return getSpellAnimationConfig(DEFAULT_HERO_ID, "jump").frameDurationsMs
+    case "stumble":
+      return getBehaviorAnimationConfig(DEFAULT_HERO_ID, "stumble").frameDurationsMs
+  }
+}
+
 function clipDurationMs(clip: LadyWizardMegasheetClip): number {
   switch (clip) {
     case "breathing_idle":
@@ -137,6 +161,9 @@ export const registerLadyWizardAnims = (animManager: Phaser.Animations.Animation
   for (const clip of LADY_WIZARD_MEGASHEET_CLIP_ORDER) {
     const frameCount = LADY_WIZARD_CLIP_FRAMES[clip]
     const baseFrame = LADY_WIZARD_CLIP_BASE_FRAME[clip]
+    const perFrameMs = clipFrameDurationsMs(clip)
+    const useVariable =
+      perFrameMs !== undefined && perFrameMs.length === frameCount && frameCount > 0
     const fps = frameRateForDuration(frameCount, clipDurationMs(clip))
     const repeat = LOOP_CLIPS.has(clip) ? -1 : 0
 
@@ -145,6 +172,25 @@ export const registerLadyWizardAnims = (animManager: Phaser.Animations.Animation
       if (animManager.exists(key)) continue
 
       const rowOffset = directionRowMap[direction] * LADY_WIZARD_FRAMES_PER_DIRECTION_ROW
+
+      if (useVariable) {
+        const frames: Phaser.Types.Animations.AnimationFrame[] = []
+        for (let i = 0; i < frameCount; i++) {
+          frames.push({
+            key: TEXTURE,
+            frame: rowOffset + baseFrame + i,
+            duration: perFrameMs[i]!,
+          })
+        }
+        animManager.create({
+          key,
+          frames,
+          repeat,
+          yoyo: false,
+        })
+        continue
+      }
+
       const frames = animManager.generateFrameNumbers(TEXTURE, {
         start: rowOffset + baseFrame,
         end: rowOffset + baseFrame + frameCount - 1,

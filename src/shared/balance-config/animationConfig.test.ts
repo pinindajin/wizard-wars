@@ -11,6 +11,8 @@ import {
   getPrimaryAttackAnimationConfigByAttackId,
   getSpellAnimationConfig,
   msToFrameIndex,
+  msToFrameIndexForAction,
+  msToFrameIndexFromDurations,
   msToTickOffset,
   parseAnimationConfig,
   parseAnimationToolSave,
@@ -120,6 +122,63 @@ describe("animation config", () => {
     expect(frameRateForDuration(10, 500)).toBe(20)
     expect(frameRateForDuration(0, 500)).toBe(1)
     expect(frameRateForDuration(10, 0)).toBe(1)
+  })
+
+  it("rejects frameDurationsMs when length mismatches clip frame count", () => {
+    const bad = structuredClone(ANIMATION_CONFIG)
+    bad.heroes.red_wizard.actions["primary:red_wizard_cleaver"] = {
+      type: "primaryAttack",
+      durationMs: 540,
+      dangerousWindowStartMs: 300,
+      dangerousWindowEndMs: 540,
+      frameDurationsMs: [100, 100, 100],
+    }
+    expect(animationConfigSchema.safeParse(bad).success).toBe(false)
+  })
+
+  it("rejects frameDurationsMs when sum does not match durationMs", () => {
+    const bad = structuredClone(ANIMATION_CONFIG)
+    bad.heroes.red_wizard.actions["primary:red_wizard_cleaver"] = {
+      type: "primaryAttack",
+      durationMs: 540,
+      dangerousWindowStartMs: 300,
+      dangerousWindowEndMs: 540,
+      frameDurationsMs: [100, 100, 100, 60, 60, 60, 80],
+    }
+    expect(animationConfigSchema.safeParse(bad).success).toBe(false)
+  })
+
+  it("accepts optional frameDurationsMs when length and sum match", () => {
+    const good = structuredClone(ANIMATION_CONFIG)
+    good.heroes.red_wizard.actions["primary:red_wizard_cleaver"] = {
+      type: "primaryAttack",
+      durationMs: 540,
+      dangerousWindowStartMs: 300,
+      dangerousWindowEndMs: 540,
+      frameDurationsMs: [100, 100, 100, 60, 60, 60, 60],
+    }
+    expect(animationConfigSchema.safeParse(good).success).toBe(true)
+  })
+
+  it("maps ms to frame index from per-frame durations at boundaries", () => {
+    const fd = [100, 100, 100, 60, 60, 60, 60] as const
+    expect(msToFrameIndexFromDurations(0, fd)).toBe(0)
+    expect(msToFrameIndexFromDurations(99, fd)).toBe(0)
+    expect(msToFrameIndexFromDurations(100, fd)).toBe(1)
+    expect(msToFrameIndexFromDurations(299, fd)).toBe(2)
+    expect(msToFrameIndexFromDurations(300, fd)).toBe(3)
+    expect(msToFrameIndexFromDurations(539, fd)).toBe(6)
+    expect(msToFrameIndexFromDurations(900, fd)).toBe(6)
+    expect(msToFrameIndexFromDurations(10, [])).toBe(0)
+  })
+
+  it("msToFrameIndexForAction uses per-frame list only when length matches frame count", () => {
+    const fd = [100, 100, 100, 60, 60, 60, 60] as const
+    expect(msToFrameIndexForAction(300, 540, 7, fd)).toBe(3)
+    expect(msToFrameIndexForAction(300, 540, 7, [100, 100])).toBe(
+      msToFrameIndex(300, 540, 7),
+    )
+    expect(msToFrameIndexForAction(100, 1000, 4, undefined)).toBe(0)
   })
 
   it("builds one shared action list without direction variants", () => {

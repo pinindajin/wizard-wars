@@ -40,7 +40,7 @@ export const LADY_WIZARD_CLIP_FRAMES = {
   death: 17,
   light_spell_cast: 17,
   heavy_spell_cast: 17,
-  summoned_axe_swing: 17,
+  summoned_axe_swing: 7,
   jump: 17,
   stumble: 17,
 } as const
@@ -57,8 +57,8 @@ export const LADY_WIZARD_CLIP_BASE_FRAME: Record<LadyWizardMegasheetClip, number
   light_spell_cast: 36,
   heavy_spell_cast: 53,
   summoned_axe_swing: 70,
-  jump: 87,
-  stumble: 104,
+  jump: 77,
+  stumble: 94,
 }
 
 /**
