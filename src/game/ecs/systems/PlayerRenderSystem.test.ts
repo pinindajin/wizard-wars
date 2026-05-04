@@ -52,7 +52,8 @@ import {
 } from "./PlayerRenderSystem"
 import { ClientPosition, ClientPlayerState, ClientRenderPos } from "../components"
 import { clientEntities, removeEntity } from "../world"
-import type { PlayerSnapshot } from "@/shared/types"
+import type { PlayerSnapshot, PrimaryMeleeAttackPayload } from "@/shared/types"
+import { getAnimKey, getDirectionFromAngle } from "../../animation/LadyWizardAnimDefs"
 import { HERO_CONFIGS } from "@/shared/balance-config/heroes"
 import {
   ARENA_SPAWN_POINTS,
@@ -563,6 +564,108 @@ describe("PlayerRenderSystem smoothing + render interp", () => {
 
     // simCurr must be unchanged after release — no pull-back.
     expect(afterRelease).toBe(stoppedBaseline)
+  })
+})
+
+/**
+ * Minimal primary-melee payload for {@link PlayerRenderSystem.onPrimaryMeleeSwing} tests.
+ *
+ * @param over - Field overrides.
+ * @returns Payload satisfying {@link PrimaryMeleeAttackPayload}.
+ */
+function meleeSwingPayload(
+  over: Partial<PrimaryMeleeAttackPayload> = {},
+): PrimaryMeleeAttackPayload {
+  return {
+    casterId: "p1",
+    attackId: "red_wizard_cleaver",
+    x: 0,
+    y: 0,
+    facingAngle: 0,
+    damage: 10,
+    hurtboxRadiusPx: 80,
+    hurtboxArcDeg: 90,
+    durationMs: 200,
+    dangerousWindowStartMs: 0,
+    dangerousWindowEndMs: 200,
+    ...over,
+  }
+}
+
+describe("PlayerRenderSystem.onPrimaryMeleeSwing", () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-04-23T12:00:00.000Z"))
+    for (const id of [...clientEntities]) {
+      removeEntity(id)
+      delete ClientPosition[id]
+      delete ClientRenderPos[id]
+      delete ClientPlayerState[id]
+    }
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it("calls sprite.play with ignoreIfPlaying false twice when the same anim key repeats (held melee)", () => {
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    sys.localPlayerId = "p1"
+
+    sys.applyFullSync(
+      sync([
+        snap({
+          id: 1,
+          playerId: "p1",
+          x: OPEN_TEST_POINT.x,
+          y: OPEN_TEST_POINT.y,
+          facingAngle: 0,
+        }),
+      ]),
+    )
+
+    const spriteFn = scene.add.sprite as ReturnType<typeof vi.fn>
+    const sprite = spriteFn.mock.results[0]!.value as { play: ReturnType<typeof vi.fn> }
+    sprite.play.mockClear()
+
+    const expectedKey = getAnimKey(
+      "primary_melee_attack",
+      getDirectionFromAngle(0),
+    )
+
+    sys.onPrimaryMeleeSwing(meleeSwingPayload({ facingAngle: 0 }))
+    sys.onPrimaryMeleeSwing(meleeSwingPayload({ facingAngle: 0 }))
+
+    expect(sprite.play).toHaveBeenCalledTimes(2)
+    expect(sprite.play.mock.calls[0]).toEqual([expectedKey, false])
+    expect(sprite.play.mock.calls[1]).toEqual([expectedKey, false])
+  })
+
+  it("no-ops when casterId does not match any spawned player", () => {
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    sys.localPlayerId = "p1"
+
+    sys.applyFullSync(
+      sync([
+        snap({
+          id: 1,
+          playerId: "p1",
+          x: OPEN_TEST_POINT.x,
+          y: OPEN_TEST_POINT.y,
+        }),
+      ]),
+    )
+
+    const spriteFn = scene.add.sprite as ReturnType<typeof vi.fn>
+    const sprite = spriteFn.mock.results[0]!.value as { play: ReturnType<typeof vi.fn> }
+    sprite.play.mockClear()
+
+    expect(() =>
+      sys.onPrimaryMeleeSwing(meleeSwingPayload({ casterId: "unknown-caster" })),
+    ).not.toThrow()
+    expect(sprite.play).not.toHaveBeenCalled()
   })
 })
 

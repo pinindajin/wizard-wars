@@ -26,6 +26,7 @@ import type {
   PlayerAnimState,
   PlayerDeathPayload,
   PlayerRespawnPayload,
+  PrimaryMeleeAttackPayload,
 } from "@/shared/types"
 import {
   normalizedMoveFromWASD,
@@ -727,6 +728,45 @@ export class PlayerRenderSystem {
         break
       }
     }
+  }
+
+  /**
+   * Restarts the caster's primary melee Phaser clip for this swing.
+   *
+   * While {@link ClientPlayerState} stays `primary_melee_attack` across chained
+   * swings (held input), {@link _renderStep} keeps the same `animKey` and does
+   * not call `play()` again; one-shot clips would otherwise freeze on the last
+   * frame. Each authoritative `PRIMARY_MELEE_ATTACK` event invokes this so the
+   * sprite replays in sync with swing VFX.
+   *
+   * @param payload - Server swing-start payload (`casterId`, `facingAngle`, …).
+   */
+  onPrimaryMeleeSwing(payload: PrimaryMeleeAttackPayload): void {
+    const id = this._entityIdForPlayerUserId(payload.casterId)
+    if (id === undefined) return
+    const entry = this.entries.get(id)
+    if (!entry) return
+
+    const animKey = getAnimKey(
+      "primary_melee_attack",
+      getDirectionFromAngle(payload.facingAngle),
+    )
+    entry.sprite.play(animKey, false)
+    entry.lastAnimKey = animKey
+  }
+
+  /**
+   * Resolves a Colyseus user id string to the client ECS entity id used in
+   * `ClientPlayerState` / `this.entries`, if that player is present.
+   *
+   * @param playerUserId - `casterId` from {@link PrimaryMeleeAttackPayload}.
+   * @returns Numeric entity id, or `undefined` when no match.
+   */
+  private _entityIdForPlayerUserId(playerUserId: string): number | undefined {
+    for (const [idStr, state] of Object.entries(ClientPlayerState)) {
+      if (state.playerId === playerUserId) return Number(idStr)
+    }
+    return undefined
   }
 
   /**
