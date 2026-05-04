@@ -298,12 +298,13 @@ export class ArenaRuntime {
           this.lightningBoltRenderSystem.spawnBolt(message.payload as LightningBoltPayload)
           this.soundManager.play("sfx-lightning-cast")
           break
-        case WsEvent.PrimaryMeleeAttack:
-          this.primaryMeleeAttackRenderSystem.spawnSwing(
-            message.payload as PrimaryMeleeAttackPayload,
-          )
+        case WsEvent.PrimaryMeleeAttack: {
+          const payload = message.payload as PrimaryMeleeAttackPayload
+          this.primaryMeleeAttackRenderSystem.spawnSwing(payload)
+          this.playerRenderSystem.onPrimaryMeleeSwing(payload)
           this.soundManager.play("sfx-axe-swing")
           break
+        }
         case WsEvent.CombatTelegraphStart:
           this.combatTelegraphRenderSystem.start(
             message.payload as CombatTelegraphStartPayload,
