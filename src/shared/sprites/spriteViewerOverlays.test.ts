@@ -83,7 +83,7 @@ describe("primary-attack hurtbox overlay helpers", () => {
   })
 
   it("maps ms dangerous window to half-open frame range", () => {
-    const cfg = { dangerousWindowStartMs: 300, dangerousWindowEndMs: 540 }
+    const cfg = { dangerousWindowStartMs: 300, dangerousWindowEndMs: 570 }
     expect(spriteViewerDangerousFrameRange(cfg, 12)).toEqual([3, 7])
   })
 
