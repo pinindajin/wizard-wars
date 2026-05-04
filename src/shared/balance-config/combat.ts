@@ -41,7 +41,7 @@ export const CHARACTER_HITBOX_DOWN_PX = 15
 export const BASE_MOVE_SPEED_PX_PER_SEC = 200
 
 /** Movement speed multiplier while swinging a weapon. */
-export const SWING_MOVE_SPEED_MULTIPLIER = 0.35
+export const SWING_MOVE_SPEED_MULTIPLIER = 0.2
 
 /** Duration of the red damage flash on a player sprite, in ms. */
 export const DAMAGE_FLASH_MS = 150
