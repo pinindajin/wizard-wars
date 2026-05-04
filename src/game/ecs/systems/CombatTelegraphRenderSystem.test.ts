@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import { TELEGRAPH_DANGER_FILL_COLOR, TELEGRAPH_DANGER_FILL_ALPHA } from "@/shared/balance-config"
+import {
+  TELEGRAPH_DANGER_FILL_ALPHA,
+  TELEGRAPH_DANGER_FILL_COLOR,
+  TELEGRAPH_WINDUP_FILL_ALPHA,
+  TELEGRAPH_WINDUP_FILL_COLOR,
+} from "@/shared/balance-config"
 import type { CombatTelegraphStartPayload } from "@/shared/types"
 import { ClientPlayerState, ClientRenderPos } from "../components"
 import { CombatTelegraphRenderSystem } from "./CombatTelegraphRenderSystem"
@@ -74,7 +79,7 @@ describe("CombatTelegraphRenderSystem", () => {
     vi.clearAllMocks()
   })
 
-  it("draws no filled telegraph before dangerStarts (only clear)", () => {
+  it("draws lighter-red wind-up fill after startsAt and before dangerStarts", () => {
     const gfx = mockGraphics()
     const scene = { add: { graphics: vi.fn(() => gfx) } }
     const sys = new CombatTelegraphRenderSystem(scene as never)
@@ -82,8 +87,20 @@ describe("CombatTelegraphRenderSystem", () => {
     sys.start(baseConePayload())
     sys.update(1_500) // after starts, before danger
     expect(gfx.clear).toHaveBeenCalled()
-    expect(gfx.fillPath).not.toHaveBeenCalled()
+    expect(gfx.fillStyle).toHaveBeenCalledWith(TELEGRAPH_WINDUP_FILL_COLOR, TELEGRAPH_WINDUP_FILL_ALPHA)
+    expect(gfx.fillPath).toHaveBeenCalled()
+  })
+
+  it("draws no fill before startsAtServerTimeMs (only clear)", () => {
+    const gfx = mockGraphics()
+    const scene = { add: { graphics: vi.fn(() => gfx) } }
+    const sys = new CombatTelegraphRenderSystem(scene as never)
+    wireCaster("u1", 100, 200)
+    sys.start(baseConePayload())
+    sys.update(500) // before startsAt (1000)
+    expect(gfx.clear).toHaveBeenCalled()
     expect(gfx.fillStyle).not.toHaveBeenCalled()
+    expect(gfx.fillPath).not.toHaveBeenCalled()
   })
 
   it("draws danger fill when server time is inside the dangerous window", () => {
