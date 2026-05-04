@@ -13,7 +13,8 @@ import {
   ANIMATION_CONFIG_SCHEMA_VERSION,
   frameRateForDuration,
   getAnimationToolActions,
-  msToFrameIndex,
+  megasheetClipForAnimationActionKey,
+  msToFrameIndexForAction,
   msToTickOffset,
   parseAnimationConfig,
   type AnimationActionConfig,
@@ -24,6 +25,7 @@ import {
 import { LIGHTNING_TELEGRAPH_DANGER_LEAD_MS } from "@/shared/balance-config/telegraphs"
 import { HERO_CONFIGS, VALID_HERO_IDS } from "@/shared/balance-config/heroes"
 import {
+  LADY_WIZARD_CLIP_FRAMES,
   LADY_WIZARD_DIRECTIONS,
   LADY_WIZARD_FRAME_SIZE_PX,
   LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y,
@@ -69,12 +71,14 @@ type TimingDraft = {
   readonly durationMs: string
   readonly dangerousWindowStartMs: string
   readonly dangerousWindowEndMs: string
+  readonly frameDurationsMs?: readonly string[]
 }
 
 type TimingValidation = {
   durationMs?: string
   dangerousWindowStartMs?: string
   dangerousWindowEndMs?: string
+  frameDurationsMs?: string
 }
 
 const HERO_SELECTION_COLORS: Record<string, string> = {
@@ -84,19 +88,100 @@ const HERO_SELECTION_COLORS: Record<string, string> = {
 }
 
 function timingDraftFromConfig(config: AnimationActionConfig): TimingDraft {
-  return {
+  const base: TimingDraft = {
     durationMs: String(config.durationMs),
     dangerousWindowStartMs:
       config.type === "primaryAttack" ? String(config.dangerousWindowStartMs) : "",
     dangerousWindowEndMs:
       config.type === "primaryAttack" ? String(config.dangerousWindowEndMs) : "",
   }
+  if ("frameDurationsMs" in config && config.frameDurationsMs && config.frameDurationsMs.length > 0) {
+    return {
+      ...base,
+      frameDurationsMs: config.frameDurationsMs.map((n) => String(n)),
+    }
+  }
+  return base
 }
 
 function wholePositiveInteger(raw: string): number | null {
   if (!/^[1-9]\d*$/.test(raw)) return null
   const value = Number(raw)
   return Number.isSafeInteger(value) ? value : null
+}
+
+function wholeNonNegativeInteger(raw: string): number | null {
+  if (!/^(0|[1-9]\d*)$/.test(raw)) return null
+  const value = Number(raw)
+  return Number.isSafeInteger(value) ? value : null
+}
+
+/** Per-frame ms split that sums exactly to `totalMs` for `count` frames. */
+function uniformFrameDurationsMs(totalMs: number, count: number): number[] {
+  if (count <= 0) return []
+  const base = Math.floor(totalMs / count)
+  let rem = totalMs - base * count
+  return Array.from({ length: count }, () => {
+    const v = base + (rem > 0 ? 1 : 0)
+    if (rem > 0) rem -= 1
+    return v
+  })
+}
+
+function animationFrameDurationsMs(config: AnimationActionConfig): readonly number[] | undefined {
+  return "frameDurationsMs" in config && config.frameDurationsMs && config.frameDurationsMs.length > 0
+    ? config.frameDurationsMs
+    : undefined
+}
+
+function stripFrameDurationsMs(config: AnimationActionConfig): AnimationActionConfig {
+  if (!("frameDurationsMs" in config) || config.frameDurationsMs === undefined) return config
+  const { frameDurationsMs: _fd, ...rest } = config as AnimationActionConfig & {
+    frameDurationsMs?: readonly number[]
+  }
+  return rest as AnimationActionConfig
+}
+
+function frameStartMsAt(
+  frameIndex: number,
+  durationMs: number,
+  frameCount: number,
+  fd: readonly number[] | undefined,
+): number {
+  if (fd && fd.length === frameCount) {
+    let t = 0
+    for (let i = 0; i < frameIndex; i++) t += fd[i]!
+    return t
+  }
+  return frameStartMs(frameIndex, durationMs, frameCount)
+}
+
+function frameEndMsAt(
+  frameIndex: number,
+  durationMs: number,
+  frameCount: number,
+  fd: readonly number[] | undefined,
+): number {
+  if (fd && fd.length === frameCount) {
+    return frameStartMsAt(frameIndex, durationMs, frameCount, fd) + fd[frameIndex]!
+  }
+  return frameEndMs(frameIndex, durationMs, frameCount)
+}
+
+function frameClickTargetMsAt(
+  frameIndex: number,
+  durationMs: number,
+  frameCount: number,
+  fd: readonly number[] | undefined,
+): number {
+  if (fd && fd.length === frameCount) {
+    if (frameIndex <= 0) return 0
+    if (frameIndex >= frameCount - 1) return Math.max(0, durationMs - 1)
+    const start = frameStartMsAt(frameIndex, durationMs, frameCount, fd)
+    const end = frameEndMsAt(frameIndex, durationMs, frameCount, fd)
+    return Math.min(durationMs - 1, Math.floor((start + end) / 2))
+  }
+  return frameClickTargetMs(frameIndex, durationMs, frameCount)
 }
 
 function savedActionConfig(
@@ -315,11 +400,12 @@ function FrameTimeline(props: {
   readonly playing: boolean
 }) {
   const { actionId, config, frameCount, currentFrame, timeMs, setPlaying, setTimeMs, playing } = props
+  const fd = animationFrameDurationsMs(config)
   const fps = frameRateForDuration(frameCount, config.durationMs)
   const labelStride = Math.max(1, Math.ceil(frameCount / 8))
   const castFrame =
     config.type === "spell" && config.effectTiming === "during"
-      ? msToFrameIndex(config.effectAtMs ?? 0, config.durationMs, frameCount)
+      ? msToFrameIndexForAction(config.effectAtMs ?? 0, config.durationMs, frameCount, fd)
       : null
   const castsBeforeAnimation = config.type === "spell" && config.effectTiming === "before"
   const castsAfterAnimation = config.type === "spell" && config.effectTiming === "after"
@@ -338,7 +424,7 @@ function FrameTimeline(props: {
 
   function jumpToFrame(frameIndex: number) {
     setPlaying(false)
-    setTimeMs(frameClickTargetMs(frameIndex, config.durationMs, frameCount))
+    setTimeMs(frameClickTargetMsAt(frameIndex, config.durationMs, frameCount, fd))
   }
 
   return (
@@ -409,8 +495,8 @@ function FrameTimeline(props: {
           </div>
         ) : null}
         {Array.from({ length: frameCount }, (_, frameIndex) => {
-          const start = frameStartMs(frameIndex, config.durationMs, frameCount)
-          const end = frameEndMs(frameIndex, config.durationMs, frameCount)
+          const start = frameStartMsAt(frameIndex, config.durationMs, frameCount, fd)
+          const end = frameEndMsAt(frameIndex, config.durationMs, frameCount, fd)
           const isCurrent = frameIndex === currentFrame
           const isDangerous =
             (config.type === "primaryAttack" &&
@@ -477,7 +563,7 @@ function FrameTimeline(props: {
         {Array.from({ length: frameCount }, (_, frameIndex) => (
           <span key={frameIndex}>
             {frameIndex === 0 || frameIndex === frameCount - 1 || frameIndex % labelStride === 0
-              ? frameStartMs(frameIndex, config.durationMs, frameCount)
+              ? frameStartMsAt(frameIndex, config.durationMs, frameCount, fd)
               : ""}
           </span>
         ))}
@@ -831,7 +917,13 @@ export function AnimationToolClient() {
     (direction) => cells.find((cell) => cell.direction === direction)!,
   ).filter(Boolean)
   const frameCount = Math.max(1, ...orderedCells.map((cell) => cell.frameCount || cell.expectedFrames))
-  const currentFrame = msToFrameIndex(timeMs, actionConfig.durationMs, frameCount)
+  const fdTiming = animationFrameDurationsMs(actionConfig)
+  const frameDurationsActive = Boolean(fdTiming && fdTiming.length > 0)
+  const durationFieldValue =
+    frameDurationsActive && fdTiming
+      ? String(fdTiming.reduce((a, b) => a + b, 0))
+      : timingDraft.durationMs
+  const currentFrame = msToFrameIndexForAction(timeMs, actionConfig.durationMs, frameCount, fdTiming)
   const missingDirections = orderedCells.filter((cell) => cell.missing).map((cell) => cell.direction)
 
   useEffect(() => {
@@ -878,23 +970,48 @@ export function AnimationToolClient() {
   const timingValidation = useMemo<TimingValidation>(() => {
     const durationMs = wholePositiveInteger(timingDraft.durationMs)
     const errors: TimingValidation = {}
-    if (durationMs == null) {
-      errors.durationMs = "Enter a whole number greater than 0."
+    const fd = animationFrameDurationsMs(actionConfig)
+    if (!fd || fd.length === 0) {
+      if (durationMs == null) {
+        errors.durationMs = "Enter a whole number greater than 0."
+      }
+    }
+
+    if (fd && fd.length > 0) {
+      const expectedLen = LADY_WIZARD_CLIP_FRAMES[megasheetClipForAnimationActionKey(action.id)]
+      if (fd.length !== expectedLen) {
+        errors.frameDurationsMs = `Need ${String(expectedLen)} frame durations for this action.`
+      } else {
+        const sum = fd.reduce((a, b) => a + b, 0)
+        if (sum !== actionConfig.durationMs) {
+          errors.frameDurationsMs = "Per-frame ms must sum to duration."
+        }
+      }
     }
 
     if (actionConfig.type === "primaryAttack") {
-      const dangerousWindowStartMs = wholePositiveInteger(timingDraft.dangerousWindowStartMs)
+      const dangerousWindowStartMs = wholeNonNegativeInteger(timingDraft.dangerousWindowStartMs)
       const dangerousWindowEndMs = wholePositiveInteger(timingDraft.dangerousWindowEndMs)
+      const effectiveDuration =
+        fd && fd.length > 0 ? actionConfig.durationMs : durationMs
       if (dangerousWindowStartMs == null) {
-        errors.dangerousWindowStartMs = "Enter a whole number greater than 0."
+        errors.dangerousWindowStartMs = "Enter a whole number (0 or greater)."
       }
       if (dangerousWindowEndMs == null) {
         errors.dangerousWindowEndMs = "Enter a whole number greater than 0."
       }
-      if (durationMs != null && dangerousWindowStartMs != null && dangerousWindowStartMs >= durationMs) {
+      if (
+        effectiveDuration != null &&
+        dangerousWindowStartMs != null &&
+        dangerousWindowStartMs >= effectiveDuration
+      ) {
         errors.dangerousWindowStartMs = "Start must be less than duration."
       }
-      if (durationMs != null && dangerousWindowEndMs != null && dangerousWindowEndMs > durationMs) {
+      if (
+        effectiveDuration != null &&
+        dangerousWindowEndMs != null &&
+        dangerousWindowEndMs > effectiveDuration
+      ) {
         errors.dangerousWindowEndMs = "End must be no greater than duration."
       }
       if (
@@ -907,7 +1024,7 @@ export function AnimationToolClient() {
     }
 
     return errors
-  }, [actionConfig.type, timingDraft])
+  }, [action.id, actionConfig, timingDraft])
 
   const timingHasErrors = Object.keys(timingValidation).length > 0
 
@@ -916,11 +1033,12 @@ export function AnimationToolClient() {
   }
 
   function commitDuration(raw: string) {
+    if (animationFrameDurationsMs(actionConfig)) return
     setTimingDraft({ ...timingDraft, durationMs: raw })
     const durationMs = wholePositiveInteger(raw)
     if (durationMs == null) return
     if (actionConfig.type === "primaryAttack") {
-      const dangerousWindowStartMs = wholePositiveInteger(timingDraft.dangerousWindowStartMs)
+      const dangerousWindowStartMs = wholeNonNegativeInteger(timingDraft.dangerousWindowStartMs)
       const dangerousWindowEndMs = wholePositiveInteger(timingDraft.dangerousWindowEndMs)
       if (
         dangerousWindowStartMs == null ||
@@ -944,9 +1062,11 @@ export function AnimationToolClient() {
   function commitDangerousStart(raw: string) {
     setTimingDraft({ ...timingDraft, dangerousWindowStartMs: raw })
     if (actionConfig.type !== "primaryAttack") return
-    const dangerousWindowStartMs = wholePositiveInteger(raw)
+    const dangerousWindowStartMs = wholeNonNegativeInteger(raw)
     const dangerousWindowEndMs = wholePositiveInteger(timingDraft.dangerousWindowEndMs)
-    const durationMs = wholePositiveInteger(timingDraft.durationMs)
+    const fdAct = animationFrameDurationsMs(actionConfig)
+    const durationMs =
+      fdAct && fdAct.length > 0 ? actionConfig.durationMs : wholePositiveInteger(timingDraft.durationMs)
     if (
       dangerousWindowStartMs == null ||
       dangerousWindowEndMs == null ||
@@ -963,9 +1083,11 @@ export function AnimationToolClient() {
   function commitDangerousEnd(raw: string) {
     setTimingDraft({ ...timingDraft, dangerousWindowEndMs: raw })
     if (actionConfig.type !== "primaryAttack") return
-    const dangerousWindowStartMs = wholePositiveInteger(timingDraft.dangerousWindowStartMs)
+    const dangerousWindowStartMs = wholeNonNegativeInteger(timingDraft.dangerousWindowStartMs)
     const dangerousWindowEndMs = wholePositiveInteger(raw)
-    const durationMs = wholePositiveInteger(timingDraft.durationMs)
+    const fdAct = animationFrameDurationsMs(actionConfig)
+    const durationMs =
+      fdAct && fdAct.length > 0 ? actionConfig.durationMs : wholePositiveInteger(timingDraft.durationMs)
     if (
       dangerousWindowStartMs == null ||
       dangerousWindowEndMs == null ||
@@ -1079,12 +1201,12 @@ export function AnimationToolClient() {
         : actionConfig.effectTiming === "after"
         ? "effect fires after animation"
         : `effect fires at ${actionConfig.effectAtMs}ms, frame ${
-            msToFrameIndex(actionConfig.effectAtMs ?? 0, actionConfig.durationMs, frameCount) + 1
+            msToFrameIndexForAction(actionConfig.effectAtMs ?? 0, actionConfig.durationMs, frameCount, fdTiming) + 1
           }, tick +${msToTickOffset(actionConfig.effectAtMs ?? 0)}`
       : actionConfig.type === "primaryAttack"
         ? `dangerous ${actionConfig.dangerousWindowStartMs}-${actionConfig.dangerousWindowEndMs}ms, frames ${
-            msToFrameIndex(actionConfig.dangerousWindowStartMs, actionConfig.durationMs, frameCount) + 1
-          }-${msToFrameIndex(actionConfig.dangerousWindowEndMs - 1, actionConfig.durationMs, frameCount) + 1}`
+            msToFrameIndexForAction(actionConfig.dangerousWindowStartMs, actionConfig.durationMs, frameCount, fdTiming) + 1
+          }-${msToFrameIndexForAction(actionConfig.dangerousWindowEndMs - 1, actionConfig.durationMs, frameCount, fdTiming) + 1}`
         : "timing only"
 
   return (
@@ -1230,23 +1352,87 @@ export function AnimationToolClient() {
 
           <CollapsiblePanel title="Timing">
             <div className="rounded-xl border border-stone-700 bg-stone-950/70 p-3">
+            <label className="mt-3 flex items-center gap-2 font-mono text-xs text-stone-300">
+              <input
+                type="checkbox"
+                checked={frameDurationsActive}
+                onChange={(event) => {
+                  const clip = megasheetClipForAnimationActionKey(action.id)
+                  const n = LADY_WIZARD_CLIP_FRAMES[clip]
+                  if (event.target.checked) {
+                    const totalMs =
+                      wholePositiveInteger(timingDraft.durationMs) ?? actionConfig.durationMs
+                    const nextFd = uniformFrameDurationsMs(totalMs, n)
+                    updateActionConfig({
+                      ...actionConfig,
+                      durationMs: nextFd.reduce((a, b) => a + b, 0),
+                      frameDurationsMs: nextFd,
+                    } as AnimationActionConfig)
+                  } else {
+                    updateActionConfig(stripFrameDurationsMs(actionConfig))
+                  }
+                }}
+              />
+              Custom per-frame ms (uniform split when enabled; total = sum of frames)
+            </label>
+
             <label className="mt-3 flex flex-col gap-1 font-mono text-xs text-stone-300">
-              Duration ms
+              {frameDurationsActive ? "Duration ms (sum of frames)" : "Duration ms"}
               <input
                 type="text"
                 inputMode="numeric"
                 pattern="[1-9][0-9]*"
-                className="rounded border border-stone-700 bg-stone-950 p-2"
-                value={timingDraft.durationMs}
+                className="rounded border border-stone-700 bg-stone-950 p-2 disabled:cursor-not-allowed disabled:opacity-60"
+                value={durationFieldValue}
+                disabled={frameDurationsActive}
                 onChange={(event) => commitDuration(event.target.value)}
               />
               {timingValidation.durationMs ? (
                 <span className="text-[11px] text-red-300">{timingValidation.durationMs}</span>
               ) : null}
+              {timingValidation.frameDurationsMs ? (
+                <span className="text-[11px] text-red-300">{timingValidation.frameDurationsMs}</span>
+              ) : null}
               <span className="text-[11px] text-stone-500">
                 saved: {savedConfigForAction?.durationMs ?? "unknown"}ms
               </span>
             </label>
+
+            {frameDurationsActive &&
+            "frameDurationsMs" in actionConfig &&
+            actionConfig.frameDurationsMs &&
+            actionConfig.frameDurationsMs.length > 0 ? (
+              <div
+                className="mt-2 grid gap-2"
+                style={{
+                  gridTemplateColumns: `repeat(${Math.min(frameCount, 8)}, minmax(0, 1fr))`,
+                }}
+              >
+                {actionConfig.frameDurationsMs.map((ms, i) => (
+                  <label key={i} className="flex flex-col gap-1 font-mono text-[10px] text-stone-400">
+                    F{i + 1}
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      className="rounded border border-stone-700 bg-stone-950 p-1.5 text-stone-100"
+                      value={String(ms)}
+                      onChange={(event) => {
+                        const parsed = wholePositiveInteger(event.target.value)
+                        if (parsed == null) return
+                        const next = [...actionConfig.frameDurationsMs!]
+                        next[i] = parsed
+                        const sum = next.reduce((a, b) => a + b, 0)
+                        updateActionConfig({
+                          ...actionConfig,
+                          durationMs: sum,
+                          frameDurationsMs: next,
+                        } as AnimationActionConfig)
+                      }}
+                    />
+                  </label>
+                ))}
+              </div>
+            ) : null}
 
             {actionConfig.type === "spell" ? (
               <div className="mt-3 flex flex-col gap-2">

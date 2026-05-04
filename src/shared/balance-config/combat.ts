@@ -162,17 +162,17 @@ export const AXE_HURTBOX_ARC_DEG = 180
  * Default axe swing animation duration in ms.
  * Runtime primary-attack timing is loaded from `src/shared/balance-config/animation-config.json`.
  */
-export const AXE_SWING_DURATION_MS = 1417
+export const AXE_SWING_DURATION_MS = 540
 /**
  * Default dangerous-window start.
  * Runtime primary-attack timing is loaded from `src/shared/balance-config/animation-config.json`.
  */
-export const AXE_DANGEROUS_WINDOW_START_MS = 500
+export const AXE_DANGEROUS_WINDOW_START_MS = 300
 /**
  * Default dangerous-window end.
  * Runtime primary-attack timing is loaded from `src/shared/balance-config/animation-config.json`.
  */
-export const AXE_DANGEROUS_WINDOW_END_MS = 900
+export const AXE_DANGEROUS_WINDOW_END_MS = 540
 
 // --- Healing Potion ---
 /** HP restored by a healing potion. */

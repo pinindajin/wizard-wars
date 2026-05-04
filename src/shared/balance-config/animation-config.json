@@ -36,9 +36,10 @@
         },
         "primary:red_wizard_cleaver": {
           "type": "primaryAttack",
-          "durationMs": 1417,
-          "dangerousWindowStartMs": 500,
-          "dangerousWindowEndMs": 900
+          "durationMs": 540,
+          "dangerousWindowStartMs": 300,
+          "dangerousWindowEndMs": 540,
+          "frameDurationsMs": [100, 100, 100, 60, 60, 60, 60]
         }
       }
     },
@@ -77,9 +78,10 @@
         },
         "primary:barbarian_cleaver": {
           "type": "primaryAttack",
-          "durationMs": 1417,
-          "dangerousWindowStartMs": 500,
-          "dangerousWindowEndMs": 900
+          "durationMs": 540,
+          "dangerousWindowStartMs": 300,
+          "dangerousWindowEndMs": 540,
+          "frameDurationsMs": [100, 100, 100, 60, 60, 60, 60]
         }
       }
     },
@@ -118,9 +120,10 @@
         },
         "primary:ranger_cleaver": {
           "type": "primaryAttack",
-          "durationMs": 1417,
-          "dangerousWindowStartMs": 500,
-          "dangerousWindowEndMs": 900
+          "durationMs": 540,
+          "dangerousWindowStartMs": 300,
+          "dangerousWindowEndMs": 540,
+          "frameDurationsMs": [100, 100, 100, 60, 60, 60, 60]
         }
       }
     }

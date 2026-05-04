@@ -18,7 +18,7 @@ describe("buildLadyWizardViewerCells", () => {
     expect(sw!.missing).toBe(true)
   })
 
-  it("marks summoned-axe-attack west as missing for committed atlas", () => {
+  it("marks summoned-axe-attack west as present for committed atlas", () => {
     const atlasPath = resolve(
       process.cwd(),
       "public/assets/sprites/heroes/lady-wizard/sheets/atlas.json",
@@ -27,7 +27,8 @@ describe("buildLadyWizardViewerCells", () => {
     const cells = buildLadyWizardViewerCells(atlas)
     const west = cells.find((c) => c.atlasClipId === "summoned-axe-attack" && c.direction === "west")
     expect(west).toBeDefined()
-    expect(west!.missing).toBe(true)
+    expect(west!.missing).toBe(false)
+    expect(west!.frameCount).toBe(7)
   })
 
   it("marks idle south as present with positive frames", () => {
