@@ -32,6 +32,8 @@ export const ClientPlayerState: Record<
     invulnerable: boolean
     /** Authoritative simulated jump height (world px). */
     jumpZ: number
+    /** True when current jump arc began in lava (server); used for airborne collider replay. */
+    jumpStartedInLava: boolean
   }
 > = {}
 

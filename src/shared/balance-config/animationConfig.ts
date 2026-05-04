@@ -10,6 +10,7 @@ import {
 import { TICK_MS } from "./rendering"
 import {
   LADY_WIZARD_ATLAS_CLIP_TO_MEGASHEET,
+  LADY_WIZARD_CLIP_FRAMES,
   type LadyWizardAtlasClipId,
   type LadyWizardMegasheetClip,
 } from "../sprites/ladyWizard"
@@ -20,9 +21,13 @@ export const animationEffectTimingSchema = z.enum(["before", "after", "during"])
 
 const durationMsSchema = z.number().int().positive()
 
+/** Optional per-frame durations in ms; when set, length must match clip frame count and sum to `durationMs`. */
+const frameDurationsMsSchema = z.array(z.number().int().positive())
+
 export const behaviorAnimationActionSchema = z.object({
   type: z.literal("behavior"),
   durationMs: durationMsSchema,
+  frameDurationsMs: frameDurationsMsSchema.optional(),
 })
 
 export const spellAnimationActionSchema = z
@@ -31,6 +36,7 @@ export const spellAnimationActionSchema = z
     durationMs: durationMsSchema,
     effectTiming: animationEffectTimingSchema,
     effectAtMs: z.number().int().positive().optional(),
+    frameDurationsMs: frameDurationsMsSchema.optional(),
   })
   .superRefine((value, ctx) => {
     if (value.effectTiming === "during") {
@@ -66,6 +72,7 @@ export const primaryAttackAnimationActionSchema = z
     durationMs: durationMsSchema,
     dangerousWindowStartMs: z.number().int().min(0),
     dangerousWindowEndMs: z.number().int().positive(),
+    frameDurationsMs: frameDurationsMsSchema.optional(),
   })
   .superRefine((value, ctx) => {
     if (value.dangerousWindowEndMs <= value.dangerousWindowStartMs) {
@@ -89,6 +96,34 @@ export const animationActionConfigSchema = z.discriminatedUnion("type", [
   spellAnimationActionSchema,
   primaryAttackAnimationActionSchema,
 ])
+
+/**
+ * Megasheet clip whose frame count must match `frameDurationsMs` length for a hero action key.
+ *
+ * @param actionKey - Key under `heroes[*].actions` (e.g. `idle`, `spell:fireball`, `primary:red_wizard_cleaver`).
+ * @returns Megasheet clip id for `LADY_WIZARD_CLIP_FRAMES`.
+ */
+export function megasheetClipForAnimationActionKey(actionKey: string): LadyWizardMegasheetClip {
+  switch (actionKey) {
+    case "idle":
+      return "breathing_idle"
+    case "walk":
+      return "walk"
+    case "death":
+      return "death"
+    case "stumble":
+      return "stumble"
+    default:
+      break
+  }
+  if (actionKey.startsWith("spell:")) {
+    const abilityId = actionKey.slice("spell:".length)
+    if (abilityId === "fireball") return "light_spell_cast"
+    return "heavy_spell_cast"
+  }
+  if (actionKey.startsWith("primary:")) return "summoned_axe_swing"
+  throw new Error(`Unknown animation action key: ${actionKey}`)
+}
 
 export const animationConfigSchema = z.object({
   schemaVersion: z.literal(ANIMATION_CONFIG_SCHEMA_VERSION),
@@ -143,6 +178,29 @@ export const animationConfigSchema = z.object({
           code: "custom",
           path: ["heroes", heroId, "actions", key],
           message: `unexpected action ${key}; direction-specific timing is not allowed`,
+        })
+      }
+    }
+
+    for (const [actionKey, action] of Object.entries(heroConfig.actions)) {
+      const fd = "frameDurationsMs" in action ? action.frameDurationsMs : undefined
+      if (fd === undefined) continue
+      const clip = megasheetClipForAnimationActionKey(actionKey)
+      const expectedFrames = LADY_WIZARD_CLIP_FRAMES[clip]
+      if (fd.length !== expectedFrames) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["heroes", heroId, "actions", actionKey, "frameDurationsMs"],
+          message: `frameDurationsMs length must be ${String(expectedFrames)} for ${actionKey} (${clip})`,
+        })
+        continue
+      }
+      const sum = fd.reduce((a, b) => a + b, 0)
+      if (sum !== action.durationMs) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["heroes", heroId, "actions", actionKey, "frameDurationsMs"],
+          message: "frameDurationsMs must sum to durationMs",
         })
       }
     }
@@ -203,6 +261,79 @@ export function msToTickOffset(ms: number): number {
 export function msToFrameIndex(ms: number, durationMs: number, frameCount: number): number {
   if (durationMs <= 0 || frameCount <= 0) return 0
   return Math.min(frameCount - 1, Math.floor((ms / durationMs) * frameCount))
+}
+
+/**
+ * Maps elapsed ms to frame index using per-frame durations (half-open intervals per frame).
+ *
+ * @param ms - Elapsed time in ms since animation start.
+ * @param frameDurationsMs - Positive duration of each frame in order.
+ * @returns 0-based frame index clamped to the last frame.
+ */
+export function msToFrameIndexFromDurations(ms: number, frameDurationsMs: readonly number[]): number {
+  if (frameDurationsMs.length === 0) return 0
+  let start = 0
+  for (let i = 0; i < frameDurationsMs.length; i++) {
+    const d = frameDurationsMs[i]!
+    if (ms < start + d) return i
+    start += d
+  }
+  return frameDurationsMs.length - 1
+}
+
+/**
+ * Returns cumulative start time in ms for each frame from optional per-frame durations, or uniform splits.
+ *
+ * @param durationMs - Total animation length.
+ * @param frameCount - Number of frames.
+ * @param frameDurationsMs - When present and length matches `frameCount`, used as authoritative segment lengths.
+ * @returns Array of length `frameCount` with start ms for each frame.
+ */
+export function frameStartMsList(
+  durationMs: number,
+  frameCount: number,
+  frameDurationsMs: readonly number[] | undefined,
+): number[] {
+  if (frameCount <= 0) return []
+  if (
+    frameDurationsMs !== undefined &&
+    frameDurationsMs.length === frameCount &&
+    frameDurationsMs.length > 0
+  ) {
+    let t = 0
+    return frameDurationsMs.map((d) => {
+      const s = t
+      t += d
+      return s
+    })
+  }
+  return Array.from({ length: frameCount }, (_, i) =>
+    Math.floor((i * durationMs) / frameCount),
+  )
+}
+
+/**
+ * Resolves which frame index `ms` falls into using either uniform timing or `frameDurationsMs`.
+ *
+ * @param ms - Elapsed ms.
+ * @param durationMs - Total duration.
+ * @param frameCount - Frame count for the clip.
+ * @param frameDurationsMs - Optional per-frame durations (length must match `frameCount` when used).
+ */
+export function msToFrameIndexForAction(
+  ms: number,
+  durationMs: number,
+  frameCount: number,
+  frameDurationsMs: readonly number[] | undefined,
+): number {
+  if (
+    frameDurationsMs !== undefined &&
+    frameDurationsMs.length === frameCount &&
+    frameCount > 0
+  ) {
+    return msToFrameIndexFromDurations(ms, frameDurationsMs)
+  }
+  return msToFrameIndex(ms, durationMs, frameCount)
 }
 
 export function frameRateForDuration(frameCount: number, durationMs: number): number {

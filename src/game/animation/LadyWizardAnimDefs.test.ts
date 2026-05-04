@@ -57,16 +57,16 @@ describe("LadyWizardAnimDefs", () => {
       expect.objectContaining({
         key: "lady-wizard-summoned_axe_swing-south-west",
         repeat: 0,
+        frames: expect.arrayContaining([
+          expect.objectContaining({ duration: 180 }),
+          expect.objectContaining({ duration: 40 }),
+        ]),
       }),
     )
 
-    const westRow = 6
-    const baseFrame = LADY_WIZARD_CLIP_BASE_FRAME.summoned_axe_swing
-    const frameCount = LADY_WIZARD_CLIP_FRAMES.summoned_axe_swing
-    expect(animManager.generateFrameNumbers).toHaveBeenCalledWith("lady-wizard", {
-      start: westRow * LADY_WIZARD_FRAMES_PER_DIRECTION_ROW + baseFrame,
-      end: westRow * LADY_WIZARD_FRAMES_PER_DIRECTION_ROW + baseFrame + frameCount - 1,
-    })
+    expect(animManager.generateFrameNumbers).toHaveBeenCalledTimes(
+      (LADY_WIZARD_MEGASHEET_CLIP_ORDER.length - 1) * DIRECTIONS.length,
+    )
   })
 
   it("does not recreate animations that already exist", () => {

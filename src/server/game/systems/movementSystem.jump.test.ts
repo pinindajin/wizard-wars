@@ -94,6 +94,7 @@ describe("movementSystem with JumpArc", () => {
 
     JumpArc.z[eid] = JUMP_AIRBORNE_COLLIDER_EPSILON_PX + 50
     JumpArc.vz[eid] = 400
+    JumpArc.startedInLava[eid] = 0
 
     const ctx = emptyCtx({ world, currentTick: 0 })
     const x0 = Position.x[eid]

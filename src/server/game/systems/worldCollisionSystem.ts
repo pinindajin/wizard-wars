@@ -63,7 +63,11 @@ export function worldCollisionSystem(ctx: SimCtx): void {
   for (const eid of query(world, [PlayerTag])) {
     const jumpZ = hasComponent(world, eid, JumpArc) ? JumpArc.z[eid] : 0
     const terrainState = TERRAIN_KIND_TO_STATE[TerrainState.kind[eid]] ?? "land"
-    const colliders = worldCollidersForPlayerState(jumpZ, terrainState)
+    const jumpStartedInLava =
+      hasComponent(world, eid, JumpArc) && JumpArc.startedInLava[eid] === 1
+    const colliders = worldCollidersForPlayerState(jumpZ, terrainState, {
+      jumpStartedInLava,
+    })
     const out = resolveAgainstWorld(
       Position.x[eid],
       Position.y[eid],

@@ -5,7 +5,6 @@
  */
 
 import { ARENA_PROP_COLLIDERS, ARENA_WORLD_COLLIDERS } from "../balance-config/arena"
-import { JUMP_AIRBORNE_COLLIDER_EPSILON_PX } from "../balance-config/combat"
 import type { ArenaPropColliderRect } from "./worldCollision"
 export { worldCollidersForPlayerState } from "./terrainHazards"
 
@@ -13,10 +12,8 @@ export { worldCollidersForPlayerState } from "./terrainHazards"
  * Returns the rectangle list used for player world collision given authoritative jump height.
  *
  * @param jumpZ - Simulated vertical offset in world pixels; grounded callers pass `0`.
- * @returns Full colliders when grounded; props-only when sufficiently airborne.
+ * @returns Full colliders when grounded; props-only when airborne (`jumpZ > 0`).
  */
 export function worldCollidersForJumpZ(jumpZ: number): readonly ArenaPropColliderRect[] {
-  return jumpZ > JUMP_AIRBORNE_COLLIDER_EPSILON_PX
-    ? ARENA_PROP_COLLIDERS
-    : ARENA_WORLD_COLLIDERS
+  return jumpZ > 0 ? ARENA_PROP_COLLIDERS : ARENA_WORLD_COLLIDERS
 }

@@ -23,6 +23,7 @@ type TelegraphEntry = {
 
 /**
  * Renders server-seeded, client-side ground telegraphs for combat hurtboxes.
+ * Wind-up (before danger): lighter red fill; danger window: full red fill; after danger until end: clear only.
  */
 export class CombatTelegraphRenderSystem {
   private readonly scene: Phaser.Scene
@@ -93,7 +94,14 @@ export class CombatTelegraphRenderSystem {
   }
 
   /**
-   * Draws one telegraph at its current anchor.
+   * Draws one telegraph at its current anchor for the active server-time phase:
+   * before `startsAt` nothing; wind-up uses lighter red; danger window uses full red;
+   * after `dangerEnds` until `endsAt` clears without fill.
+   *
+   * @param gfx - Graphics object for this telegraph.
+   * @param payload - Server timing and shape data.
+   * @param anchor - World position of the telegraph origin.
+   * @param serverTimeMs - Estimated server clock used for phase selection.
    */
   private _draw(
     gfx: Phaser.GameObjects.Graphics,
@@ -101,14 +109,28 @@ export class CombatTelegraphRenderSystem {
     anchor: { x: number; y: number },
     serverTimeMs: number,
   ): void {
-    const dangerous =
+    gfx.clear()
+
+    if (serverTimeMs < payload.startsAtServerTimeMs) {
+      return
+    }
+
+    if (serverTimeMs >= payload.endsAtServerTimeMs) {
+      return
+    }
+
+    const inDanger =
       serverTimeMs >= payload.dangerStartsAtServerTimeMs &&
       serverTimeMs < payload.dangerEndsAtServerTimeMs
-    const fill = dangerous ? TELEGRAPH_DANGER_FILL_COLOR : TELEGRAPH_WINDUP_FILL_COLOR
-    const fillAlpha = dangerous ? TELEGRAPH_DANGER_FILL_ALPHA : TELEGRAPH_WINDUP_FILL_ALPHA
 
-    gfx.clear()
-    gfx.fillStyle(fill, fillAlpha)
+    if (inDanger) {
+      gfx.fillStyle(TELEGRAPH_DANGER_FILL_COLOR, TELEGRAPH_DANGER_FILL_ALPHA)
+    } else if (serverTimeMs < payload.dangerStartsAtServerTimeMs) {
+      gfx.fillStyle(TELEGRAPH_WINDUP_FILL_COLOR, TELEGRAPH_WINDUP_FILL_ALPHA)
+    } else {
+      // After danger ends but telegraph still active (e.g. follow-through): no fill.
+      return
+    }
 
     if (payload.shape.type === "cone") {
       this._drawCone(gfx, anchor.x, anchor.y, payload.directionRad, payload.shape.radiusPx, payload.shape.arcDeg)

@@ -26,6 +26,7 @@ import type {
   PlayerAnimState,
   PlayerDeathPayload,
   PlayerRespawnPayload,
+  PrimaryMeleeAttackPayload,
 } from "@/shared/types"
 import {
   normalizedMoveFromWASD,
@@ -295,6 +296,7 @@ export class PlayerRenderSystem {
         moveFacingAngle: snap.moveFacingAngle,
         invulnerable: snap.invulnerable,
         jumpZ: snap.jumpZ,
+        jumpStartedInLava: snap.jumpStartedInLava,
       }
       this.onAuthoritativePosition(snap.id, snap.x, snap.y, "full_sync")
 
@@ -422,6 +424,7 @@ export class PlayerRenderSystem {
       hasSwiftBoots: false,
       castingAbilityId: state.castingAbilityId,
       jumpZ: state.jumpZ ?? 0,
+      jumpStartedInLava: state.jumpStartedInLava ?? false,
       terrainState: state.terrainState,
       moveState: state.moveState,
     }
@@ -728,6 +731,45 @@ export class PlayerRenderSystem {
   }
 
   /**
+   * Restarts the caster's primary melee Phaser clip for this swing.
+   *
+   * While {@link ClientPlayerState} stays `primary_melee_attack` across chained
+   * swings (held input), {@link _renderStep} keeps the same `animKey` and does
+   * not call `play()` again; one-shot clips would otherwise freeze on the last
+   * frame. Each authoritative `PRIMARY_MELEE_ATTACK` event invokes this so the
+   * sprite replays in sync with swing VFX.
+   *
+   * @param payload - Server swing-start payload (`casterId`, `facingAngle`, …).
+   */
+  onPrimaryMeleeSwing(payload: PrimaryMeleeAttackPayload): void {
+    const id = this._entityIdForPlayerUserId(payload.casterId)
+    if (id === undefined) return
+    const entry = this.entries.get(id)
+    if (!entry) return
+
+    const animKey = getAnimKey(
+      "primary_melee_attack",
+      getDirectionFromAngle(payload.facingAngle),
+    )
+    entry.sprite.play(animKey, false)
+    entry.lastAnimKey = animKey
+  }
+
+  /**
+   * Resolves a Colyseus user id string to the client ECS entity id used in
+   * `ClientPlayerState` / `this.entries`, if that player is present.
+   *
+   * @param playerUserId - `casterId` from {@link PrimaryMeleeAttackPayload}.
+   * @returns Numeric entity id, or `undefined` when no match.
+   */
+  private _entityIdForPlayerUserId(playerUserId: string): number | undefined {
+    for (const [idStr, state] of Object.entries(ClientPlayerState)) {
+      if (state.playerId === playerUserId) return Number(idStr)
+    }
+    return undefined
+  }
+
+  /**
    * Main per-frame update. Drains accumulated real-time debt into
    * whole-tick **sim steps** (deterministic, fixed `TICK_MS` cadence)
    * then runs a single **render step** that interpolates each local
@@ -790,7 +832,9 @@ export class PlayerRenderSystem {
         state.animState === "primary_melee_attack"
           ? SWING_MOVE_SPEED_MULTIPLIER
           : 1
-      const colliders = worldCollidersForPlayerState(state.jumpZ ?? 0, state.terrainState)
+      const colliders = worldCollidersForPlayerState(state.jumpZ ?? 0, state.terrainState, {
+        jumpStartedInLava: state.jumpStartedInLava ?? false,
+      })
       if (
         this._canPredictMovement(state, localMoveIntent, castMoveMult)
       ) {

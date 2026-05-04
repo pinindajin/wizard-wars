@@ -208,6 +208,7 @@ describe("appRouter", () => {
       bgmVolume: 50,
       sfxVolume: 60,
       openSettingsKey: "\\",
+      minimapCorner: "bottom_right",
     })
     const ctx = await createTrpcContext({
       prismaClient: prismaMock as never,
@@ -216,6 +217,7 @@ describe("appRouter", () => {
     const caller = appRouter.createCaller({ ...ctx, user: { sub: "u1", username: "Bob" } })
     const out = await caller.user.me()
     expect(out.user?.username).toBe("Bob")
+    expect(out.user?.minimapCorner).toBe("bottom_right")
   })
 
   it("user.updateSettings updates user", async () => {
@@ -225,14 +227,23 @@ describe("appRouter", () => {
       bgmVolume: 10,
       sfxVolume: 20,
       openSettingsKey: "Tab",
+      minimapCorner: "top_left",
     })
     const ctx = await createTrpcContext({
       prismaClient: prismaMock as never,
       chatStore: chatStoreMock,
     })
     const caller = appRouter.createCaller({ ...ctx, user: { sub: "u1", username: "Bob" } })
-    const out = await caller.user.updateSettings({ bgmVolume: 10 })
+    const out = await caller.user.updateSettings({
+      bgmVolume: 10,
+      minimapCorner: "bottom_right",
+    })
     expect(out.user.bgmVolume).toBe(10)
+    expect(prismaMock.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ bgmVolume: 10, minimapCorner: "bottom_right" }),
+      }),
+    )
   })
 
   it("user.updateSettings clears stale sessions on missing user update", async () => {

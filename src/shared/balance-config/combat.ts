@@ -41,7 +41,7 @@ export const CHARACTER_HITBOX_DOWN_PX = 15
 export const BASE_MOVE_SPEED_PX_PER_SEC = 200
 
 /** Movement speed multiplier while swinging a weapon. */
-export const SWING_MOVE_SPEED_MULTIPLIER = 0.35
+export const SWING_MOVE_SPEED_MULTIPLIER = 0.2
 
 /** Duration of the red damage flash on a player sprite, in ms. */
 export const DAMAGE_FLASH_MS = 150
@@ -124,6 +124,12 @@ export const JUMP_AIRBORNE_COLLIDER_EPSILON_PX = 4
 export const JUMP_LANDING_GRACE_PX = 6
 /** Client sprite vertical offset per unit of server `jumpZ` (world px → screen px). */
 export const JUMP_SPRITE_Y_PIXELS_PER_SIM_Z = 1
+/**
+ * While airborne from land, horizontal collision ignores lava until `jumpZ`
+ * reaches this height so one-tile gaps stay clearable; at/above it, lava AABBs
+ * apply so wide pits cannot be skimmed mid-arc. Escape jumps use props-only regardless.
+ */
+export const JUMP_AIRBORNE_LAVA_COLLISION_MIN_Z_PX = 87
 
 // --- Terrain hazards ---
 /** Damage applied while the player's footprint is in lava, in HP per second. */
@@ -156,17 +162,17 @@ export const AXE_HURTBOX_ARC_DEG = 180
  * Default axe swing animation duration in ms.
  * Runtime primary-attack timing is loaded from `src/shared/balance-config/animation-config.json`.
  */
-export const AXE_SWING_DURATION_MS = 1417
+export const AXE_SWING_DURATION_MS = 570
 /**
  * Default dangerous-window start.
  * Runtime primary-attack timing is loaded from `src/shared/balance-config/animation-config.json`.
  */
-export const AXE_DANGEROUS_WINDOW_START_MS = 500
+export const AXE_DANGEROUS_WINDOW_START_MS = 300
 /**
  * Default dangerous-window end.
  * Runtime primary-attack timing is loaded from `src/shared/balance-config/animation-config.json`.
  */
-export const AXE_DANGEROUS_WINDOW_END_MS = 900
+export const AXE_DANGEROUS_WINDOW_END_MS = 570
 
 // --- Healing Potion ---
 /** HP restored by a healing potion. */

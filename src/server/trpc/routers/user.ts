@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client"
 import { TRPCError } from "@trpc/server"
 
 import { createClearAuthCookie } from "@/server/auth"
+import { MINIMAP_CORNERS } from "@/shared/settings-config"
 import { protectedProcedure, router } from "../init"
 
 /**
@@ -36,6 +37,7 @@ export const userRouter = router({
         bgmVolume: true,
         sfxVolume: true,
         openSettingsKey: true,
+        minimapCorner: true,
       },
     })
     return { user }
@@ -48,6 +50,7 @@ export const userRouter = router({
         bgmVolume: z.number().int().min(0).max(100).optional(),
         sfxVolume: z.number().int().min(0).max(100).optional(),
         openSettingsKey: z.string().min(1).max(32).optional(),
+        minimapCorner: z.enum(MINIMAP_CORNERS).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -59,6 +62,7 @@ export const userRouter = router({
             ...(input.bgmVolume !== undefined && { bgmVolume: input.bgmVolume }),
             ...(input.sfxVolume !== undefined && { sfxVolume: input.sfxVolume }),
             ...(input.openSettingsKey !== undefined && { openSettingsKey: input.openSettingsKey }),
+            ...(input.minimapCorner !== undefined && { minimapCorner: input.minimapCorner }),
           },
           select: {
             id: true,
@@ -66,6 +70,7 @@ export const userRouter = router({
             bgmVolume: true,
             sfxVolume: true,
             openSettingsKey: true,
+            minimapCorner: true,
           },
         })
         return { user: updated }

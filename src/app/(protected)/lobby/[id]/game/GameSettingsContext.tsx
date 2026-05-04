@@ -13,6 +13,12 @@ import { createTrpcClient } from "@/lib/trpc"
 import { isUnauthorizedTrpcError } from "@/lib/trpcErrors"
 import { DEFAULT_BGM_VOLUME, DEFAULT_SFX_VOLUME } from "@/shared/balance-config/audio"
 import {
+  DEFAULT_MINIMAP_CORNER,
+  MINIMAP_CORNERS,
+  parseMinimapCorner,
+  type MinimapCorner,
+} from "@/shared/settings-config"
+import {
   DEFAULT_KEYBINDS,
   GAME_KEYBIND_ACTION_IDS,
   type GameKeybindActionId,
@@ -50,8 +56,15 @@ export const GAME_KEYBIND_LABELS: Record<GameKeybindActionId, string> = {
   quick_item_4: "Quick Item 4",
   open_settings: "Open Settings",
   scoreboard: "Scoreboard (hold)",
+  toggle_minimap: "Toggle Minimap",
   weapon_primary: "Primary Attack",
   weapon_secondary: "Secondary Attack",
+}
+
+export {
+  DEFAULT_MINIMAP_CORNER,
+  MINIMAP_CORNERS,
+  type MinimapCorner,
 }
 
 /** Audio volume settings in user-facing 0-100 units. */
@@ -74,6 +87,10 @@ type GameSettingsContextValue = {
   readonly combatNumbersMode: CombatNumbersMode
   /** Replace combat numbers display mode. */
   readonly setCombatNumbersMode: (mode: CombatNumbersMode) => void
+  /** Compact minimap screen corner. */
+  readonly minimapCorner: MinimapCorner
+  /** Replace compact minimap screen corner. */
+  readonly setMinimapCorner: (corner: MinimapCorner) => void
   /** Current local-only debug overlay mode. */
   readonly debugModeEnabled: boolean
   /** Replace local-only debug overlay mode. */
@@ -120,6 +137,8 @@ export function GameSettingsProvider({ children }: { readonly children: React.Re
   })
   const [combatNumbersMode, setCombatNumbersMode] =
     useState<CombatNumbersMode>(DEFAULT_COMBAT_NUMBERS_MODE)
+  const [minimapCorner, setMinimapCorner] =
+    useState<MinimapCorner>(DEFAULT_MINIMAP_CORNER)
   const [debugModeEnabled, setDebugModeEnabled] = useState(false)
   const [settingsLoaded, setSettingsLoaded] = useState(false)
   const [settingsLoadError, setSettingsLoadError] = useState<string | null>(null)
@@ -150,6 +169,7 @@ export function GameSettingsProvider({ children }: { readonly children: React.Re
         if (mode && COMBAT_NUMBERS_MODES.includes(mode)) {
           setCombatNumbersMode(mode)
         }
+        setMinimapCorner(parseMinimapCorner(user.minimapCorner))
       } catch (err) {
         if (cancelled) return
         if (isUnauthorizedTrpcError(err)) {
@@ -186,6 +206,15 @@ export function GameSettingsProvider({ children }: { readonly children: React.Re
     setAudioVolumes(settings)
   }, [])
 
+  /**
+   * Replaces compact minimap corner.
+   *
+   * @param corner - New minimap corner.
+   */
+  const handleSetMinimapCorner = useCallback((corner: MinimapCorner) => {
+    setMinimapCorner(corner)
+  }, [])
+
   return (
     <GameSettingsContext.Provider
       value={{
@@ -195,6 +224,8 @@ export function GameSettingsProvider({ children }: { readonly children: React.Re
         setAudioVolumes: handleSetAudioVolumes,
         combatNumbersMode,
         setCombatNumbersMode,
+        minimapCorner,
+        setMinimapCorner: handleSetMinimapCorner,
         debugModeEnabled,
         setDebugModeEnabled,
         settingsLoaded,

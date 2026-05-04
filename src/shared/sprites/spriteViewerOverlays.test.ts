@@ -83,8 +83,8 @@ describe("primary-attack hurtbox overlay helpers", () => {
   })
 
   it("maps ms dangerous window to half-open frame range", () => {
-    const cfg = { dangerousWindowStartMs: 500, dangerousWindowEndMs: 900 }
-    expect(spriteViewerDangerousFrameRange(cfg, 12)).toEqual([6, 11])
+    const cfg = { dangerousWindowStartMs: 300, dangerousWindowEndMs: 570 }
+    expect(spriteViewerDangerousFrameRange(cfg, 12)).toEqual([3, 7])
   })
 
   it("returns [0,0] for non-positive fps", () => {
@@ -105,10 +105,10 @@ describe("primary-attack hurtbox overlay helpers", () => {
   })
 
   it("flags frames inside the dangerous window and not those outside", () => {
-    const overlay = { dangerousStartFrame: 6, dangerousEndFrame: 11 }
-    expect(spriteViewerFrameIsDangerous(5, overlay)).toBe(false)
+    const overlay = { dangerousStartFrame: 3, dangerousEndFrame: 7 }
+    expect(spriteViewerFrameIsDangerous(2, overlay)).toBe(false)
+    expect(spriteViewerFrameIsDangerous(3, overlay)).toBe(true)
     expect(spriteViewerFrameIsDangerous(6, overlay)).toBe(true)
-    expect(spriteViewerFrameIsDangerous(10, overlay)).toBe(true)
-    expect(spriteViewerFrameIsDangerous(11, overlay)).toBe(false)
+    expect(spriteViewerFrameIsDangerous(7, overlay)).toBe(false)
   })
 })

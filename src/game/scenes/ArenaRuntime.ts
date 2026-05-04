@@ -23,11 +23,11 @@ import {
   WW_DEBUG_MODE_REGISTRY_KEY,
   WW_LOCAL_PLAYER_ID_REGISTRY_KEY,
 } from "../constants"
+import type { MinimapCorner } from "@/shared/settings-config"
 import { GameConnection } from "../network/GameConnection"
 import { PlayerRenderSystem } from "../ecs/systems/PlayerRenderSystem"
 import { ProjectileRenderSystem } from "../ecs/systems/ProjectileRenderSystem"
 import { LightningBoltRenderSystem } from "../ecs/systems/LightningBoltRenderSystem"
-import { PrimaryMeleeAttackRenderSystem } from "../ecs/systems/PrimaryMeleeAttackRenderSystem"
 import { CombatTelegraphRenderSystem } from "../ecs/systems/CombatTelegraphRenderSystem"
 import { DamageFloatersSystem } from "../ecs/systems/DamageFloatersSystem"
 import { DebugOverlaySystem } from "../ecs/systems/DebugOverlaySystem"
@@ -38,6 +38,7 @@ import { registerLadyWizardAnims } from "../animation/LadyWizardAnimDefs"
 import { registerFireballAnims } from "../animation/FireballAnimDefs"
 import { BgmPlayer } from "../audio/BgmPlayer"
 import { SoundManager } from "../audio/SoundManager"
+import { MinimapController } from "../minimap/MinimapController"
 
 type ArenaRuntimeVisuals = {
   arenaMap: Phaser.Tilemaps.Tilemap
@@ -79,11 +80,11 @@ export class ArenaRuntime {
 
   private projectileRenderSystem!: ProjectileRenderSystem
   private lightningBoltRenderSystem!: LightningBoltRenderSystem
-  private primaryMeleeAttackRenderSystem!: PrimaryMeleeAttackRenderSystem
   private combatTelegraphRenderSystem!: CombatTelegraphRenderSystem
   private damageFloatersSystem!: DamageFloatersSystem
   private debugOverlaySystem!: DebugOverlaySystem
   private networkSyncSystem!: NetworkSyncSystem
+  private minimapController!: MinimapController
 
   private keyboardController!: KeyboardController
   private mouseController!: MouseController
@@ -113,6 +114,7 @@ export class ArenaRuntime {
     this._createPlayerGroup()
     this._createSystems()
     this._setupCamera()
+    this._setupMinimap()
     this._setupAudio()
     registerLadyWizardAnims(this.scene.anims)
     registerFireballAnims(this.scene.anims)
@@ -167,7 +169,6 @@ export class ArenaRuntime {
     })
     this.projectileRenderSystem = new ProjectileRenderSystem(this.scene)
     this.lightningBoltRenderSystem = new LightningBoltRenderSystem(this.scene)
-    this.primaryMeleeAttackRenderSystem = new PrimaryMeleeAttackRenderSystem(this.scene)
     this.combatTelegraphRenderSystem = new CombatTelegraphRenderSystem(this.scene)
     this.damageFloatersSystem = new DamageFloatersSystem(this.scene)
     this.debugOverlaySystem = new DebugOverlaySystem(this.scene)
@@ -195,6 +196,16 @@ export class ArenaRuntime {
         "Tilemap has zero size; camera bounds not set",
       )
     }
+  }
+
+  /**
+   * Creates the minimap camera and DOM frame after world visuals exist.
+   */
+  private _setupMinimap(): void {
+    this.minimapController = new MinimapController(this.scene, this.visuals.arenaMap)
+    this.scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.minimapController?.destroy()
+    })
   }
 
   /**
@@ -284,12 +295,12 @@ export class ArenaRuntime {
           this.lightningBoltRenderSystem.spawnBolt(message.payload as LightningBoltPayload)
           this.soundManager.play("sfx-lightning-cast")
           break
-        case WsEvent.PrimaryMeleeAttack:
-          this.primaryMeleeAttackRenderSystem.spawnSwing(
-            message.payload as PrimaryMeleeAttackPayload,
-          )
+        case WsEvent.PrimaryMeleeAttack: {
+          const payload = message.payload as PrimaryMeleeAttackPayload
+          this.playerRenderSystem.onPrimaryMeleeSwing(payload)
           this.soundManager.play("sfx-axe-swing")
           break
+        }
         case WsEvent.CombatTelegraphStart:
           this.combatTelegraphRenderSystem.start(
             message.payload as CombatTelegraphStartPayload,
@@ -378,6 +389,15 @@ export class ArenaRuntime {
   }
 
   /**
+   * Applies compact minimap placement from user settings.
+   *
+   * @param corner - Compact minimap corner.
+   */
+  setMinimapCorner(corner: MinimapCorner): void {
+    this.minimapController?.setCorner(corner)
+  }
+
+  /**
    * Main game loop update. Runs all ECS systems each frame.
    *
    * @param _time - Absolute time in ms (unused directly).
@@ -411,13 +431,13 @@ export class ArenaRuntime {
       this.playerRenderSystem.getEstimatedServerTimeMs(),
     )
     this.lightningBoltRenderSystem.update(delta)
-    this.primaryMeleeAttackRenderSystem.update(delta)
     this.damageFloatersSystem.update(delta)
 
     const local = this.playerRenderSystem.getLocalPlayerRenderPos()
     if (local) {
       this.scene.cameras.main.centerOn(local.x, local.y)
     }
+    this.minimapController.update()
   }
 
   /**

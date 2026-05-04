@@ -4,13 +4,17 @@ import {
   ANIMATION_CONFIG,
   animationConfigSchema,
   frameRateForDuration,
+  frameStartMsList,
   getAnimationActionConfig,
   getBehaviorAnimationConfig,
   getAnimationToolActions,
   getPrimaryAttackAnimationConfig,
   getPrimaryAttackAnimationConfigByAttackId,
   getSpellAnimationConfig,
+  megasheetClipForAnimationActionKey,
   msToFrameIndex,
+  msToFrameIndexForAction,
+  msToFrameIndexFromDurations,
   msToTickOffset,
   parseAnimationConfig,
   parseAnimationToolSave,
@@ -120,6 +124,94 @@ describe("animation config", () => {
     expect(frameRateForDuration(10, 500)).toBe(20)
     expect(frameRateForDuration(0, 500)).toBe(1)
     expect(frameRateForDuration(10, 0)).toBe(1)
+  })
+
+  it("rejects frameDurationsMs when length mismatches clip frame count", () => {
+    const bad = structuredClone(ANIMATION_CONFIG)
+    bad.heroes.red_wizard.actions["primary:red_wizard_cleaver"] = {
+      type: "primaryAttack",
+      durationMs: 570,
+      dangerousWindowStartMs: 300,
+      dangerousWindowEndMs: 570,
+      frameDurationsMs: [100, 100, 100],
+    }
+    expect(animationConfigSchema.safeParse(bad).success).toBe(false)
+  })
+
+  it("rejects frameDurationsMs when sum does not match durationMs", () => {
+    const bad = structuredClone(ANIMATION_CONFIG)
+    bad.heroes.red_wizard.actions["primary:red_wizard_cleaver"] = {
+      type: "primaryAttack",
+      durationMs: 570,
+      dangerousWindowStartMs: 300,
+      dangerousWindowEndMs: 570,
+      frameDurationsMs: [180, 120, 110, 40, 40, 40, 80],
+    }
+    expect(animationConfigSchema.safeParse(bad).success).toBe(false)
+  })
+
+  it("accepts optional frameDurationsMs when length and sum match", () => {
+    const good = structuredClone(ANIMATION_CONFIG)
+    good.heroes.red_wizard.actions["primary:red_wizard_cleaver"] = {
+      type: "primaryAttack",
+      durationMs: 570,
+      dangerousWindowStartMs: 300,
+      dangerousWindowEndMs: 570,
+      frameDurationsMs: [180, 120, 110, 40, 40, 40, 40],
+    }
+    expect(animationConfigSchema.safeParse(good).success).toBe(true)
+  })
+
+  it("maps ms to frame index from per-frame durations at boundaries", () => {
+    const fd = [180, 120, 110, 40, 40, 40, 40] as const
+    expect(msToFrameIndexFromDurations(0, fd)).toBe(0)
+    expect(msToFrameIndexFromDurations(99, fd)).toBe(0)
+    expect(msToFrameIndexFromDurations(179, fd)).toBe(0)
+    expect(msToFrameIndexFromDurations(180, fd)).toBe(1)
+    expect(msToFrameIndexFromDurations(299, fd)).toBe(1)
+    expect(msToFrameIndexFromDurations(300, fd)).toBe(2)
+    expect(msToFrameIndexFromDurations(569, fd)).toBe(6)
+    expect(msToFrameIndexFromDurations(900, fd)).toBe(6)
+    expect(msToFrameIndexFromDurations(10, [])).toBe(0)
+  })
+
+  it("msToFrameIndexForAction uses per-frame list only when length matches frame count", () => {
+    const fd = [180, 120, 110, 40, 40, 40, 40] as const
+    expect(msToFrameIndexForAction(300, 570, 7, fd)).toBe(2)
+    expect(msToFrameIndexForAction(300, 570, 7, [100, 100])).toBe(
+      msToFrameIndex(300, 570, 7),
+    )
+    expect(msToFrameIndexForAction(100, 1000, 4, undefined)).toBe(0)
+    expect(msToFrameIndexForAction(1, 500, 0, [1])).toBe(0)
+  })
+
+  it("resolves megasheet clip for spell, primary, and behavior action keys", () => {
+    expect(megasheetClipForAnimationActionKey("idle")).toBe("breathing_idle")
+    expect(megasheetClipForAnimationActionKey("walk")).toBe("walk")
+    expect(megasheetClipForAnimationActionKey("death")).toBe("death")
+    expect(megasheetClipForAnimationActionKey("stumble")).toBe("stumble")
+    expect(megasheetClipForAnimationActionKey("spell:fireball")).toBe("light_spell_cast")
+    expect(megasheetClipForAnimationActionKey("spell:lightning_bolt")).toBe("heavy_spell_cast")
+    expect(megasheetClipForAnimationActionKey("primary:red_wizard_cleaver")).toBe(
+      "summoned_axe_swing",
+    )
+    expect(() => megasheetClipForAnimationActionKey("not-a-real-key")).toThrow(
+      /Unknown animation action key/,
+    )
+  })
+
+  it("frameStartMsList returns empty for non-positive frame count", () => {
+    expect(frameStartMsList(1000, 0, undefined)).toEqual([])
+    expect(frameStartMsList(1000, -1, undefined)).toEqual([])
+  })
+
+  it("frameStartMsList uses per-frame durations when length matches frame count", () => {
+    expect(frameStartMsList(400, 4, [100, 100, 100, 100])).toEqual([0, 100, 200, 300])
+  })
+
+  it("frameStartMsList falls back to uniform splits when durations length mismatches", () => {
+    expect(frameStartMsList(100, 4, [50, 50])).toEqual([0, 25, 50, 75])
+    expect(frameStartMsList(100, 4, [])).toEqual([0, 25, 50, 75])
   })
 
   it("builds one shared action list without direction variants", () => {

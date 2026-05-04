@@ -20,6 +20,7 @@ model User {
   bgmVolume         Int      @default(70) @map("bgm_volume")
   sfxVolume         Int      @default(85) @map("sfx_volume")
   openSettingsKey   String   @default("Backslash") @map("open_settings_key")
+  minimapCorner     String   @default("top_left") @map("minimap_corner")
   isAdmin           Boolean  @default(false) @map("is_admin")
 
   @@map("users")

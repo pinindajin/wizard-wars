@@ -125,6 +125,7 @@ export const playerSnapshotSchema = z.object({
   castingAbilityId: z.string().min(1).max(64).nullable(),
   invulnerable: z.boolean(),
   jumpZ: z.number().finite().nonnegative(),
+  jumpStartedInLava: z.boolean(),
   lastProcessedInputSeq: z.number().int().nonnegative(),
 })
 
