@@ -90,6 +90,12 @@ export class ArenaRuntime {
   /** Prevents async fallback connection setup from subscribing after teardown. */
   private destroyed = false
 
+  /**
+   * Incremented on each {@link start} and {@link destroy}. Room handlers capture a
+   * snapshot generation so in-flight Colyseus deliveries cannot touch systems after teardown.
+   */
+  private messageGeneration = 0
+
   private projectileRenderSystem!: ProjectileRenderSystem
   private lightningBoltRenderSystem!: LightningBoltRenderSystem
   private combatTelegraphRenderSystem!: CombatTelegraphRenderSystem
@@ -130,6 +136,7 @@ export class ArenaRuntime {
    */
   start(): void {
     this.destroyed = false
+    this.messageGeneration++
     this._configureTilemap()
     this._createPlayerGroup()
     this._createSystems()
@@ -295,7 +302,9 @@ export class ArenaRuntime {
    */
   private _subscribeRoomEvents(): void {
     this.connectionUnsub?.()
+    const generation = this.messageGeneration
     this.connectionUnsub = this.connection.onMessage((message) => {
+      if (this.destroyed || generation !== this.messageGeneration) return
       switch (message.type) {
         case WsEvent.GameStateSync: {
           const payload = message.payload as GameStateSyncPayload
@@ -522,15 +531,19 @@ export class ArenaRuntime {
    *
    * The lobby keeps a shared {@link GameConnection} alive while navigating
    * between lobby and game routes, so each Arena scene must remove only its own
-   * room handler. This method is intentionally idempotent because Phaser can
+   * room handler. Also destroys ECS-backed render state ({@link PlayerRenderSystem},
+   * {@link CombatTelegraphRenderSystem}) so sprites do not outlive the scene when the
+   * connection is reused. This method is intentionally idempotent because Phaser can
    * emit multiple teardown events during game destruction.
    */
   destroy(): void {
     if (this.destroyed) return
     this.destroyed = true
+    this.messageGeneration++
 
     this.connectionUnsub?.()
     this.connectionUnsub = undefined
+    this.playerRenderSystem?.destroy()
     this.combatTelegraphRenderSystem?.destroy()
 
     if (this.ownsConnection) {

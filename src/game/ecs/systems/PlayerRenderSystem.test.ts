@@ -29,6 +29,10 @@ vi.mock("phaser", () => {
 
   return {
     default: {
+      Scenes: {
+        SHUTDOWN: 8,
+        DESTROYED: 9,
+      },
       Display: {
         Color: {
           ValueToColor: valueToColor,
@@ -41,6 +45,8 @@ vi.mock("phaser", () => {
     },
   }
 })
+
+import Phaser from "phaser"
 
 import {
   computeHeroHudYOffsets,
@@ -131,6 +137,9 @@ function mockSceneAndGroup() {
         const sprite = {
           x,
           y,
+          active: true,
+          scene: {},
+          anims: { animationManager: {} },
           destroy: spriteDestroy,
           setOrigin: vi.fn(),
           setTint: vi.fn(),
@@ -665,6 +674,34 @@ describe("PlayerRenderSystem.onPrimaryMeleeSwing", () => {
     expect(() =>
       sys.onPrimaryMeleeSwing(meleeSwingPayload({ casterId: "unknown-caster" })),
     ).not.toThrow()
+    expect(sprite.play).not.toHaveBeenCalled()
+  })
+
+  it("does not throw when the scene is shutting down (Phaser status SHUTDOWN)", () => {
+    const { scene, group } = mockSceneAndGroup()
+    ;(scene as { sys?: { settings: { status: number } } }).sys = {
+      settings: { status: Phaser.Scenes.SHUTDOWN },
+    }
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    sys.localPlayerId = "p1"
+
+    sys.applyFullSync(
+      sync([
+        snap({
+          id: 1,
+          playerId: "p1",
+          x: OPEN_TEST_POINT.x,
+          y: OPEN_TEST_POINT.y,
+          facingAngle: 0,
+        }),
+      ]),
+    )
+
+    const spriteFn = scene.add.sprite as ReturnType<typeof vi.fn>
+    const sprite = spriteFn.mock.results[0]!.value as { play: ReturnType<typeof vi.fn> }
+    sprite.play.mockClear()
+
+    expect(() => sys.onPrimaryMeleeSwing(meleeSwingPayload({ facingAngle: 0 }))).not.toThrow()
     expect(sprite.play).not.toHaveBeenCalled()
   })
 })

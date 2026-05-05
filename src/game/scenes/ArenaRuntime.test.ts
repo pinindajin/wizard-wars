@@ -5,34 +5,83 @@ import { ArenaRuntime } from "./ArenaRuntime"
 import { WsEvent } from "@/shared/events"
 import type { AnyWsMessage, MessageHandler } from "@/shared/types"
 
-vi.mock("phaser", () => ({
-  default: {
-    Scenes: {
-      Events: {
-        SHUTDOWN: "shutdown",
+const telegraphMock = vi.hoisted(() => ({
+  applyFullSync: vi.fn(),
+  start: vi.fn(),
+  end: vi.fn(),
+  update: vi.fn(),
+  destroy: vi.fn(),
+}))
+
+const playerRenderMock = vi.hoisted(() => ({
+  localPlayerId: null as string | null,
+  markBatchReceived: vi.fn(),
+  onAuthoritativePosition: vi.fn(),
+  onRemoteSnapshot: vi.fn(),
+  onLocalAck: vi.fn(),
+  updateServerTimeOffset: vi.fn(),
+  applyFullSync: vi.fn(),
+  onPrimaryMeleeSwing: vi.fn(),
+  onPlayerDeath: vi.fn(),
+  onPlayerRespawn: vi.fn(),
+  triggerHitFeedbackFlashForPlayerUserId: vi.fn(),
+  getEstimatedServerTimeMs: vi.fn(() => 0),
+  update: vi.fn(),
+  getLocalPlayerRenderPos: vi.fn(() => null),
+  localInputHistory: { append: vi.fn() },
+  destroy: vi.fn(),
+}))
+
+vi.mock("phaser", () => {
+  const letters = "abcdefghijklmnopqrstuvwxyz"
+  const KeyCodes: Record<string, number> = {
+    TAB: 9,
+    BACK_SLASH: 220,
+    SPACE: 32,
+    SHIFT: 16,
+    CTRL: 17,
+    ALT: 18,
+    UP: 38,
+    DOWN: 40,
+    LEFT: 37,
+    RIGHT: 39,
+    ZERO: 48,
+    ONE: 49,
+    TWO: 50,
+    THREE: 51,
+    FOUR: 52,
+    FIVE: 53,
+    SIX: 54,
+    SEVEN: 55,
+    EIGHT: 56,
+    NINE: 57,
+  }
+  for (let i = 0; i < letters.length; i++) {
+    KeyCodes[letters[i]!.toUpperCase()] = 65 + i
+  }
+  return {
+    default: {
+      Input: {
+        Keyboard: {
+          KeyCodes,
+          JustDown: vi.fn(() => false),
+        },
+      },
+      Scenes: {
+        Events: {
+          SHUTDOWN: "shutdown",
+        },
       },
     },
-  },
+  }
+})
+
+vi.mock("../ecs/systems/CombatTelegraphRenderSystem", () => ({
+  CombatTelegraphRenderSystem: vi.fn().mockImplementation(() => telegraphMock),
 }))
 
 vi.mock("../ecs/systems/PlayerRenderSystem", () => ({
-  PlayerRenderSystem: vi.fn().mockImplementation(() => ({
-    localPlayerId: null,
-    markBatchReceived: vi.fn(),
-    onAuthoritativePosition: vi.fn(),
-    onRemoteSnapshot: vi.fn(),
-    onLocalAck: vi.fn(),
-    updateServerTimeOffset: vi.fn(),
-    applyFullSync: vi.fn(),
-    onPrimaryMeleeSwing: vi.fn(),
-    onPlayerDeath: vi.fn(),
-    onPlayerRespawn: vi.fn(),
-    triggerHitFeedbackFlashForPlayerUserId: vi.fn(),
-    getEstimatedServerTimeMs: vi.fn(() => 0),
-    update: vi.fn(),
-    getLocalPlayerRenderPos: vi.fn(() => null),
-    localInputHistory: { append: vi.fn() },
-  })),
+  PlayerRenderSystem: vi.fn().mockImplementation(() => playerRenderMock),
 }))
 
 vi.mock("../ecs/systems/ProjectileRenderSystem", () => ({
@@ -109,7 +158,7 @@ vi.mock("../audio/WalkFootstepController", () => ({
   })),
 }))
 
-vi.mock("../minimap/MinimapController", () => ({
+vi.mock("@/game/minimap/MinimapController", () => ({
   MinimapController: vi.fn().mockImplementation(() => ({
     destroy: vi.fn(),
     setCorner: vi.fn(),
@@ -117,11 +166,11 @@ vi.mock("../minimap/MinimapController", () => ({
   })),
 }))
 
-vi.mock("../animation/LadyWizardAnimDefs", () => ({
+vi.mock("@/game/animation/LadyWizardAnimDefs", () => ({
   registerLadyWizardAnims: vi.fn(),
 }))
 
-vi.mock("../animation/FireballAnimDefs", () => ({
+vi.mock("@/game/animation/FireballAnimDefs", () => ({
   registerFireballAnims: vi.fn(),
 }))
 
@@ -155,16 +204,22 @@ function makeConnection() {
 
 function makeScene(connection: ReturnType<typeof makeConnection>) {
   const once = vi.fn()
-  const graphics = vi.fn(() => ({
-    destroy: vi.fn(),
-    clear: vi.fn(),
+  const mockGfx = {
     setDepth: vi.fn(),
-  }))
+    setVisible: vi.fn(),
+    clear: vi.fn(),
+    lineStyle: vi.fn(),
+    beginPath: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    strokePath: vi.fn(),
+    closePath: vi.fn(),
+  }
 
   return {
     add: {
       group: vi.fn(() => ({})),
-      graphics,
+      graphics: vi.fn(() => mockGfx),
     },
     anims: {},
     cameras: {
@@ -175,7 +230,34 @@ function makeScene(connection: ReturnType<typeof makeConnection>) {
         centerOn: vi.fn(),
       },
     },
+    input: {
+      keyboard: {
+        addKey: vi.fn(() => ({ isDown: false })),
+      },
+      activePointer: {
+        leftButtonDown: vi.fn(() => false),
+        rightButtonDown: vi.fn(() => false),
+        positionToCamera: vi.fn(() => ({ x: 0, y: 0 })),
+      },
+    },
     events: { once },
+    cache: {
+      audio: {
+        exists: vi.fn(() => false),
+      },
+    },
+    tweens: {
+      killTweensOf: vi.fn(),
+    },
+    sound: {
+      add: vi.fn(() => ({
+        play: vi.fn(),
+        pause: vi.fn(),
+        resume: vi.fn(),
+        isPlaying: false,
+        once: vi.fn(),
+      })),
+    },
     game: {
       registry: {
         get: vi.fn((key: string) => {
@@ -186,7 +268,6 @@ function makeScene(connection: ReturnType<typeof makeConnection>) {
       },
     },
     __once: once,
-    __graphics: graphics,
   }
 }
 
@@ -205,6 +286,8 @@ function makeRuntime(connection = makeConnection()) {
 describe("ArenaRuntime lifecycle", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    telegraphMock.start.mockClear()
+    playerRenderMock.onPrimaryMeleeSwing.mockClear()
   })
 
   it("unsubscribes from the shared GameConnection exactly once when destroyed", () => {
@@ -221,10 +304,12 @@ describe("ArenaRuntime lifecycle", () => {
   })
 
   it("does not handle room messages after destroy", () => {
-    const { runtime, scene, connection } = makeRuntime()
+    const { runtime, connection } = makeRuntime()
 
     runtime.start()
     runtime.destroy()
+    telegraphMock.start.mockClear()
+
     connection.emit({
       type: WsEvent.CombatTelegraphStart,
       payload: {
@@ -241,7 +326,34 @@ describe("ArenaRuntime lifecycle", () => {
       },
     })
 
-    expect(scene.__graphics).not.toHaveBeenCalled()
+    expect(telegraphMock.start).not.toHaveBeenCalled()
+  })
+
+  it("does not invoke PlayerRenderSystem for PrimaryMeleeAttack after destroy (generation)", () => {
+    const { runtime, connection } = makeRuntime()
+
+    runtime.start()
+    playerRenderMock.onPrimaryMeleeSwing.mockClear()
+    runtime.destroy()
+
+    connection.emit({
+      type: WsEvent.PrimaryMeleeAttack,
+      payload: {
+        casterId: "player-1",
+        attackId: "red_wizard_cleaver",
+        x: 0,
+        y: 0,
+        facingAngle: 0,
+        damage: 10,
+        hurtboxRadiusPx: 80,
+        hurtboxArcDeg: 90,
+        durationMs: 200,
+        dangerousWindowStartMs: 0,
+        dangerousWindowEndMs: 200,
+      },
+    })
+
+    expect(playerRenderMock.onPrimaryMeleeSwing).not.toHaveBeenCalled()
   })
 
   it("keeps one active room handler across sequential runtimes on the same connection", () => {
