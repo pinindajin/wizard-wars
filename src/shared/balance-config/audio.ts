@@ -1,5 +1,8 @@
 /** Audio configuration: SFX paths, BGM paths, and crossfade constants. */
 
+import { getBehaviorAnimationConfig } from "./animationConfig"
+import { DEFAULT_HERO_ID } from "./heroes"
+
 /** BGM crossfade duration in ms. */
 export const BGM_CROSSFADE_MS = 2000
 
@@ -28,6 +31,12 @@ export const BATTLE_MUSIC_PATHS = [
   "/assets/music/battle/wizard-wars-battle-02-ost.mp3",
 ] as const
 
+/**
+ * Time between local walk footstep one-shots. Half the configured walk loop
+ * duration (two steps per full walk cycle in {@link animation-config.json}).
+ */
+export const WALK_FOOTSTEP_INTERVAL_MS =
+  getBehaviorAnimationConfig(DEFAULT_HERO_ID, "walk").durationMs / 2
 /** SFX asset keys and paths. */
 export const SFX_KEYS = {
   fireballCast: "sfx-fireball-cast",
