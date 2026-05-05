@@ -179,12 +179,12 @@
             {
                 "type": "audio",
                 "key": "sfx-walk-step",
-                "url": ["/assets/sounds/sfx-walk-step.mp3"]
+                "url": ["/assets/sounds/dirt-walk-2.wav"]
             },
             {
                 "type": "audio",
                 "key": "sfx-jump",
-                "url": ["/assets/sounds/sfx-walk-step.mp3"]
+                "url": ["/assets/sounds/dirt-jump.wav"]
             },
             {
                 "type": "audio",

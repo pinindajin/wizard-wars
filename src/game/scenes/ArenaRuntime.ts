@@ -38,6 +38,7 @@ import { registerLadyWizardAnims } from "../animation/LadyWizardAnimDefs"
 import { registerFireballAnims } from "../animation/FireballAnimDefs"
 import { BgmPlayer } from "../audio/BgmPlayer"
 import { SoundManager } from "../audio/SoundManager"
+import { WalkFootstepController } from "../audio/WalkFootstepController"
 import { MinimapController } from "../minimap/MinimapController"
 
 type ArenaRuntimeVisuals = {
@@ -91,6 +92,7 @@ export class ArenaRuntime {
 
   private bgmPlayer!: BgmPlayer
   private soundManager!: SoundManager
+  private walkFootstep!: WalkFootstepController
   private readonly log = clientLogger.child({ area: "netcode" })
 
   /** Whether the match has started (MatchGo received). */
@@ -213,6 +215,9 @@ export class ArenaRuntime {
    */
   private _setupAudio(): void {
     this.soundManager = new SoundManager(this.scene)
+    this.walkFootstep = new WalkFootstepController(this.soundManager, () =>
+      this.playerRenderSystem.localPlayerId,
+    )
     this.bgmPlayer = new BgmPlayer(this.scene)
     this.bgmPlayer.startBattleMusic()
   }
@@ -425,6 +430,7 @@ export class ArenaRuntime {
       this.playerRenderSystem.localInputHistory.append(fullInput)
       this.connection.sendPlayerInput(fullInput)
     })
+    this.walkFootstep.tick(delta, keyboardInput)
     this.debugOverlaySystem.update()
     this.projectileRenderSystem.update(delta)
     this.combatTelegraphRenderSystem.update(
