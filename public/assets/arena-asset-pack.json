@@ -169,7 +169,7 @@
             {
                 "type": "audio",
                 "key": "sfx-axe-swing",
-                "url": ["/assets/sounds/sfx-axe-swing.mp3"]
+                "url": ["/assets/sounds/sfx-axe-swing.wav"]
             },
             {
                 "type": "audio",
