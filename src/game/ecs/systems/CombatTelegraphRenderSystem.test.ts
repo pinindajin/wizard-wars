@@ -1,5 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+vi.mock("phaser", () => ({
+  default: {
+    Scenes: {
+      RUNNING: 5,
+      SHUTDOWN: 8,
+      DESTROYED: 9,
+    },
+  },
+}))
+
 import {
   TELEGRAPH_DANGER_FILL_ALPHA,
   TELEGRAPH_DANGER_FILL_COLOR,
@@ -9,6 +19,10 @@ import {
 import type { CombatTelegraphStartPayload } from "@/shared/types"
 import { ClientPlayerState, ClientRenderPos } from "../components"
 import { CombatTelegraphRenderSystem } from "./CombatTelegraphRenderSystem"
+
+/** Phaser scene status numbers (see `node_modules/phaser/src/scene/const.js`). */
+const SCENE_RUNNING = 5
+const SCENE_SHUTDOWN = 8
 
 function clearClientPlayerBuffers(): void {
   for (const k of Object.keys(ClientPlayerState)) {
@@ -129,5 +143,31 @@ describe("CombatTelegraphRenderSystem", () => {
     sys.update(3_200) // after danger, telegraph still active
     expect(gfx.clear).toHaveBeenCalled()
     expect(gfx.fillPath).not.toHaveBeenCalled()
+  })
+
+  it("does not allocate graphics when the scene is in SHUTDOWN (stale Colyseus after teardown)", () => {
+    const gfx = mockGraphics()
+    const scene = {
+      add: { graphics: vi.fn(() => gfx) },
+      sys: { settings: { status: SCENE_SHUTDOWN } },
+    }
+    const sys = new CombatTelegraphRenderSystem(scene as never)
+    wireCaster("u1", 100, 200)
+    sys.start(baseConePayload())
+    expect(scene.add.graphics).not.toHaveBeenCalled()
+  })
+
+  it("clears telegraphs on update when scene has shut down", () => {
+    const gfx = mockGraphics()
+    const scene = {
+      add: { graphics: vi.fn(() => gfx) },
+      sys: { settings: { status: SCENE_RUNNING } },
+    }
+    const sys = new CombatTelegraphRenderSystem(scene as never)
+    wireCaster("u1", 100, 200)
+    sys.start(baseConePayload())
+    scene.sys.settings.status = SCENE_SHUTDOWN
+    sys.update(2_500)
+    expect(gfx.destroy).toHaveBeenCalled()
   })
 })

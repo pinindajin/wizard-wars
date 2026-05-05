@@ -35,7 +35,7 @@ export class SoundManager {
    * @param volumeOverride - Optional per-call volume multiplier (0–1).
    */
   play(key: string, volumeOverride?: number): void {
-    if (!this.scene.cache.audio.exists(key)) return
+    if (!this.scene.cache.audio?.exists(key)) return
 
     const cap = SFX_CONCURRENCY[key] ?? Infinity
     const current = this.activeCounts.get(key) ?? 0
@@ -62,7 +62,7 @@ export class SoundManager {
    * @param volumeOverride - Optional per-call volume multiplier (0–1).
    */
   playRestarting(key: string, volumeOverride?: number): void {
-    if (!this.scene.cache.audio.exists(key)) return
+    if (!this.scene.cache.audio?.exists(key)) return
 
     const prev = this.restartOneShotByKey.get(key)
     if (prev) {

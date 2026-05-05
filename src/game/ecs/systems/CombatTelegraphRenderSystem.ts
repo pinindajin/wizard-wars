@@ -55,6 +55,7 @@ export class CombatTelegraphRenderSystem {
    */
   start(payload: CombatTelegraphStartPayload): void {
     this.end({ id: payload.id, reason: "expired" })
+    if (!this._sceneAcceptsNewGameObjects()) return
     const gfx = this.scene.add.graphics()
     gfx.setDepth(TELEGRAPH_DEPTH)
     this.telegraphs.set(payload.id, { gfx, payload })
@@ -78,6 +79,10 @@ export class CombatTelegraphRenderSystem {
    * @param serverTimeMs - Estimated current server time.
    */
   update(serverTimeMs: number): void {
+    if (!this._sceneAcceptsNewGameObjects()) {
+      this.destroy()
+      return
+    }
     for (const [id, entry] of this.telegraphs) {
       if (serverTimeMs >= entry.payload.endsAtServerTimeMs) {
         entry.gfx.destroy()
@@ -211,5 +216,17 @@ export class CombatTelegraphRenderSystem {
       entry.gfx.destroy()
     }
     this.telegraphs.clear()
+  }
+
+  /**
+   * True when the Arena scene is still allowed to create display objects (not in
+   * shutdown/destroy). Used to ignore stale Colyseus deliveries after Phaser teardown.
+   *
+   * @returns Whether {@link Phaser.GameObjects.GameObjectFactory#graphics} is safe to call.
+   */
+  private _sceneAcceptsNewGameObjects(): boolean {
+    const status = this.scene.sys?.settings?.status
+    if (status === undefined) return true
+    return status !== Phaser.Scenes.SHUTDOWN && status !== Phaser.Scenes.DESTROYED
   }
 }

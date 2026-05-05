@@ -106,7 +106,7 @@ export class ProjectileRenderSystem {
     sprite.setScale(FIREBALL_SCALE)
     sprite.setDepth(FIREBALL_DEPTH)
 
-    if (this.scene.anims.exists(FIREBALL_FLY_ANIM)) {
+    if (this.scene.anims?.exists(FIREBALL_FLY_ANIM)) {
       sprite.play(FIREBALL_FLY_ANIM)
     }
 
