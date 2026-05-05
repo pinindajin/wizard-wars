@@ -27,7 +27,7 @@
     "docker:down:db": "docker compose down db",
     "dev:stack": "bun ./scripts/dev-with-docker.ts",
     "dev:hybrid": "bun ./scripts/dev-with-docker.ts",
-    "dev:animation-tool": "tsx server.ts",
+    "dev:animation-tool": "bun ./scripts/dev-with-docker.ts",
     "dev:animation-sync": "tsx scripts/animation-sync.ts",
     "check:animation-config": "tsx scripts/check-animation-config.ts",
     "prepare": "husky",
