@@ -11,6 +11,11 @@ export class SoundManager {
   private scene: Phaser.Scene
   /** Maps SFX key → number of currently playing instances. */
   private activeCounts: Map<string, number> = new Map()
+  /**
+   * At most one active instance per key; used by {@link SoundManager.playRestarting}.
+   * New plays stop and replace the previous instance (take-hit grunt).
+   */
+  private restartOneShotByKey: Map<string, Phaser.Sound.BaseSound> = new Map()
   /** Master volume 0–1. */
   private masterVolume: number
 
@@ -43,6 +48,37 @@ export class SoundManager {
 
     sound.once("complete", () => {
       this.activeCounts.set(key, Math.max(0, (this.activeCounts.get(key) ?? 1) - 1))
+      sound.destroy()
+    })
+
+    sound.play()
+  }
+
+  /**
+   * Plays a one-shot, stopping any still-playing instance with the same key first.
+   * Used for take-hit feedback so rapid hits restart one channel instead of stacking.
+   *
+   * @param key - The Phaser audio asset key.
+   * @param volumeOverride - Optional per-call volume multiplier (0–1).
+   */
+  playRestarting(key: string, volumeOverride?: number): void {
+    if (!this.scene.cache.audio.exists(key)) return
+
+    const prev = this.restartOneShotByKey.get(key)
+    if (prev) {
+      prev.stop()
+      prev.destroy()
+      this.restartOneShotByKey.delete(key)
+    }
+
+    const volume = this.masterVolume * (volumeOverride ?? 1)
+    const sound = this.scene.sound.add(key, { volume })
+    this.restartOneShotByKey.set(key, sound)
+
+    sound.once("complete", () => {
+      if (this.restartOneShotByKey.get(key) === sound) {
+        this.restartOneShotByKey.delete(key)
+      }
       sound.destroy()
     })
 

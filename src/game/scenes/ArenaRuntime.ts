@@ -36,6 +36,8 @@ import { KeyboardController } from "../input/KeyboardController"
 import { MouseController } from "../input/MouseController"
 import { registerLadyWizardAnims } from "../animation/LadyWizardAnimDefs"
 import { registerFireballAnims } from "../animation/FireballAnimDefs"
+import { SFX_KEYS } from "@/shared/balance-config/audio"
+import { resolveDamageFloatLocalFeedback } from "../hitFeedback/damageFloatLocalFeedback"
 import { BgmPlayer } from "../audio/BgmPlayer"
 import { SoundManager } from "../audio/SoundManager"
 import { WalkFootstepController } from "../audio/WalkFootstepController"
@@ -97,6 +99,12 @@ export class ArenaRuntime {
 
   /** Whether the match has started (MatchGo received). */
   private matchStarted = false
+
+  /**
+   * Wall clock (ms) when hazard take-hit SFX last played; used to throttle
+   * environmental damage grunts only.
+   */
+  private lastHazardTakeHitSfxAtMs: number | null = null
 
   /** Pixel size of the loaded arena tilemap (for camera bounds). */
   private arenaWidthPx = 0
@@ -326,9 +334,34 @@ export class ArenaRuntime {
         case WsEvent.PlayerRespawn:
           this.playerRenderSystem.onPlayerRespawn(message.payload as PlayerRespawnPayload)
           break
-        case WsEvent.DamageFloat:
-          this.damageFloatersSystem.spawn(message.payload as DamageFloatPayload)
+        case WsEvent.DamageFloat: {
+          const payload = message.payload as DamageFloatPayload
+          this.damageFloatersSystem.spawn(payload)
+          const decision = resolveDamageFloatLocalFeedback(
+            this.playerRenderSystem.localPlayerId,
+            payload,
+            Date.now(),
+            this.lastHazardTakeHitSfxAtMs,
+          )
+          this.lastHazardTakeHitSfxAtMs = decision.nextLastHazardTakeHitSfxAtMs
+          if (decision.flashVictimUserId) {
+            this.playerRenderSystem.triggerHitFeedbackFlashForPlayerUserId(
+              decision.flashVictimUserId,
+            )
+          }
+          if (decision.flashDealerUserId) {
+            this.playerRenderSystem.triggerHitFeedbackFlashForPlayerUserId(
+              decision.flashDealerUserId,
+            )
+          }
+          if (decision.playTakeHitSfx) {
+            this.soundManager.playRestarting(SFX_KEYS.hitTaken)
+          }
+          if (decision.playDealSfx) {
+            this.soundManager.play(SFX_KEYS.hitDeal)
+          }
           break
+        }
         case WsEvent.MatchGo:
           this._onMatchGo()
           break
