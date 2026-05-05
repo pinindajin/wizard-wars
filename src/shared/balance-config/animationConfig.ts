@@ -119,6 +119,7 @@ export function megasheetClipForAnimationActionKey(actionKey: string): LadyWizar
   if (actionKey.startsWith("spell:")) {
     const abilityId = actionKey.slice("spell:".length)
     if (abilityId === "fireball") return "light_spell_cast"
+    if (abilityId === "jump") return "jump"
     return "heavy_spell_cast"
   }
   if (actionKey.startsWith("primary:")) return "summoned_axe_swing"
@@ -453,12 +454,21 @@ export function getAnimationToolActions(
     },
     ...Object.values(ABILITY_CONFIGS).map((ability): AnimationToolAction => {
       const light = ability.id === "fireball"
+      const jump = ability.id === "jump"
       return {
         id: spellActionId(ability.id),
         label: ability.displayName,
         category: "Spell" as const,
-        atlasClipId: light ? "light-spell-cast" as const : "heavy-spell-cast" as const,
-        megasheetClip: light ? "light_spell_cast" as const : "heavy_spell_cast" as const,
+        atlasClipId: light
+          ? ("light-spell-cast" as const)
+          : jump
+            ? ("jump" as const)
+            : ("heavy-spell-cast" as const),
+        megasheetClip: light
+          ? ("light_spell_cast" as const)
+          : jump
+            ? ("jump" as const)
+            : ("heavy_spell_cast" as const),
         config: actions[spellActionId(ability.id)],
       }
     }),

@@ -1,4 +1,5 @@
 import { ABILITY_CONFIGS } from "./abilities"
+import { SFX_KEYS } from "./audio"
 import { PRIMARY_MELEE_ATTACK_CONFIGS, type PrimaryMeleeAttackId } from "./equipment"
 import { HERO_CONFIGS } from "./heroes"
 import type { AnimationActionId } from "./animationConfig"
@@ -7,7 +8,7 @@ import { primaryAttackActionId } from "./animationConfig"
 /**
  * Returns the Phaser audio cache key (`sfx-…`) used for gameplay SFX for a hero animation
  * action shown in the animation tool, or `null` when no single SFX key is defined in balance
- * config (e.g. idle/walk/death have no `castSfxKey` / swing mapping here).
+ * config (e.g. idle/death have no `castSfxKey` / swing mapping here; walk maps to footstep key).
  *
  * @param heroId - Lobby hero id (must exist in `HERO_CONFIGS` or result is `null`).
  * @param actionId - Animation tool action id (`spell:…`, `primary:…`, or behavior ids).
@@ -32,6 +33,10 @@ export function resolveSfxKeyForAction(heroId: string, actionId: AnimationAction
     return melee?.swingSfxKey ?? null
   }
 
-  // Behavior clips (idle, walk, death, stumble, …) — no single balance-config SFX key today.
+  if (actionId === "walk") {
+    return SFX_KEYS.walkStep
+  }
+
+  // Other behavior clips (idle, death, stumble, …) — no single balance-config SFX key here.
   return null
 }

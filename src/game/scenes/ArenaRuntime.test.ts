@@ -4,6 +4,9 @@ import { WW_GAME_CONNECTION_REGISTRY_KEY, WW_LOCAL_PLAYER_ID_REGISTRY_KEY } from
 import { ArenaRuntime } from "./ArenaRuntime"
 import { WsEvent } from "@/shared/events"
 import type { AnyWsMessage, MessageHandler } from "@/shared/types"
+import { SFX_KEYS } from "@/shared/balance-config/audio"
+
+const soundPlaySpy = vi.hoisted(() => vi.fn())
 
 const telegraphMock = vi.hoisted(() => ({
   applyFullSync: vi.fn(),
@@ -146,7 +149,7 @@ vi.mock("../audio/BgmPlayer", () => ({
 
 vi.mock("../audio/SoundManager", () => ({
   SoundManager: vi.fn().mockImplementation(() => ({
-    play: vi.fn(),
+    play: soundPlaySpy,
     playRestarting: vi.fn(),
     setMasterSfxVolume: vi.fn(),
   })),
@@ -366,5 +369,26 @@ describe("ArenaRuntime lifecycle", () => {
     second.runtime.start()
 
     expect(connection.handlerCount()).toBe(1)
+  })
+
+  it("plays fireball cast SFX when FireballLaunch is received", () => {
+    const { runtime, connection } = makeRuntime()
+
+    runtime.start()
+    soundPlaySpy.mockClear()
+
+    connection.emit({
+      type: WsEvent.FireballLaunch,
+      payload: {
+        id: 1,
+        ownerId: "p1",
+        x: 10,
+        y: 20,
+        vx: 100,
+        vy: 0,
+      },
+    })
+
+    expect(soundPlaySpy).toHaveBeenCalledWith(SFX_KEYS.fireballCast)
   })
 })

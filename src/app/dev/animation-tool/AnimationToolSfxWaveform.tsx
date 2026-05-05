@@ -5,21 +5,30 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { previewVolumePercentToAudioVolume } from "./animationToolPreviewVolume"
 
 export type AnimationToolSfxWaveformProps = {
-  /** Site-relative or absolute URL for the MP3 (include cache-bust query when needed). */
+  /** Site-relative URL for fetch/decode and HTMLAudio preview (include cache-bust query when needed). */
   readonly audioSrc: string | null
   /** Preview loudness 0–100 (does not affect game runtime). */
   readonly previewVolumePercent: number
+  /**
+   * Optional cadence markers in ms along the animation loop (e.g. walk footsteps).
+   * Horizontal position uses `cadenceTimelineDurationMs`.
+   */
+  readonly cadenceMarkerTimesMs?: readonly number[]
+  /** Duration of the animation loop in ms; required when `cadenceMarkerTimesMs` is non-empty. */
+  readonly cadenceTimelineDurationMs?: number
+  /** Short legend under the bar when cadence markers are shown. */
+  readonly cadenceLegend?: string
 }
 
 const PEAK_BAR_COUNT = 400
 
 /**
- * Decodes an MP3 URL into min/max peak samples for canvas rendering.
+ * Decodes a browser-supported audio URL into min/max peak samples for canvas rendering.
  *
- * @param audioSrc - URL to fetch and decode.
+ * @param audioSrc - URL to fetch and decode (mp3, wav, ogg, … per browser support).
  * @returns Normalized peak magnitudes in `[0, 1]`, length `PEAK_BAR_COUNT`, or `null` on failure.
  */
-export async function decodeMp3PeaksForWaveform(audioSrc: string): Promise<{
+export async function decodeAudioPeaksForWaveform(audioSrc: string): Promise<{
   readonly peaks: readonly number[]
   readonly durationSec: number
 } | null> {
@@ -52,12 +61,21 @@ export async function decodeMp3PeaksForWaveform(audioSrc: string): Promise<{
   }
 }
 
+/** @deprecated Use {@link decodeAudioPeaksForWaveform}. */
+export const decodeMp3PeaksForWaveform = decodeAudioPeaksForWaveform
+
 /**
- * Renders a clickable waveform preview: decode peaks from the MP3 URL, play on click,
+ * Renders a clickable waveform preview: decode peaks from the audio URL, play on click,
  * show a playhead while audio plays, and block replay until `ended`.
  */
 export function AnimationToolSfxWaveform(props: AnimationToolSfxWaveformProps) {
-  const { audioSrc, previewVolumePercent } = props
+  const {
+    audioSrc,
+    previewVolumePercent,
+    cadenceMarkerTimesMs,
+    cadenceTimelineDurationMs,
+    cadenceLegend,
+  } = props
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -158,7 +176,7 @@ export function AnimationToolSfxWaveform(props: AnimationToolSfxWaveformProps) {
       }
     }
     void (async () => {
-      const decoded = await decodeMp3PeaksForWaveform(audioSrc)
+      const decoded = await decodeAudioPeaksForWaveform(audioSrc)
       if (cancelled) return
       setDecodeBusy(false)
       if (decoded) {
@@ -212,10 +230,24 @@ export function AnimationToolSfxWaveform(props: AnimationToolSfxWaveformProps) {
     })
   }, [audioSrc, playing, previewVolumePercent])
 
+  const playFootstepPreview = useCallback(() => {
+    if (!audioSrc) return
+    const a = new Audio(audioSrc)
+    a.volume = previewVolumePercentToAudioVolume(previewVolumePercent)
+    void a.play().catch(() => {})
+  }, [audioSrc, previewVolumePercent])
+
   useEffect(() => {
     const a = audioRef.current
     if (a) a.volume = previewVolumePercentToAudioVolume(previewVolumePercent)
   }, [previewVolumePercent])
+
+  const showCadence =
+    Boolean(audioSrc) &&
+    cadenceMarkerTimesMs &&
+    cadenceMarkerTimesMs.length > 0 &&
+    typeof cadenceTimelineDurationMs === "number" &&
+    cadenceTimelineDurationMs > 0
 
   if (!audioSrc) {
     return (
@@ -226,31 +258,66 @@ export function AnimationToolSfxWaveform(props: AnimationToolSfxWaveformProps) {
   }
 
   return (
-    <div className="mt-2" ref={wrapRef}>
-      <button
-        type="button"
-        className={[
-          "relative w-full overflow-hidden rounded-lg border text-left transition-colors",
-          hover ? "border-lime-400 bg-lime-950/20" : "border-stone-600 bg-stone-900/90",
-          playing ? "cursor-wait opacity-90" : "cursor-pointer hover:border-lime-600",
-        ].join(" ")}
-        onMouseEnter={() => setHover(true)}
-        onMouseLeave={() => setHover(false)}
-        onClick={() => {
-          if (playing) return
-          void startPlayback()
-        }}
-        disabled={decodeBusy || !peaks?.length}
-        aria-busy={playing}
-        data-testid="animation-tool-sfx-waveform"
-        aria-label={playing ? "SFX playing" : "Play SFX preview"}
-      >
-        <canvas ref={canvasRef} className="block h-11 w-full" />
-      </button>
+    <div className="mt-2">
+      <div ref={wrapRef} className="relative w-full">
+        <div className="relative h-11 w-full">
+          <button
+            type="button"
+            className={[
+              "relative z-0 h-11 w-full overflow-hidden rounded-lg border text-left transition-colors",
+              hover ? "border-lime-400 bg-lime-950/20" : "border-stone-600 bg-stone-900/90",
+              playing ? "cursor-wait opacity-90" : "cursor-pointer hover:border-lime-600",
+            ].join(" ")}
+            onMouseEnter={() => setHover(true)}
+            onMouseLeave={() => setHover(false)}
+            onClick={() => {
+              if (playing) return
+              void startPlayback()
+            }}
+            disabled={decodeBusy || !peaks?.length}
+            aria-busy={playing}
+            data-testid="animation-tool-sfx-waveform"
+            aria-label={playing ? "SFX playing" : "Play SFX preview"}
+          >
+            <canvas ref={canvasRef} className="block h-11 w-full" />
+          </button>
+          {showCadence ? (
+            <div
+              className="pointer-events-none absolute inset-0 z-10"
+              data-testid="animation-tool-sfx-waveform-cadence-layer"
+            >
+              {cadenceMarkerTimesMs!.map((ms, i) => {
+                const pct = Math.min(
+                  100,
+                  Math.max(0, (ms / (cadenceTimelineDurationMs as number)) * 100),
+                )
+                return (
+                  <button
+                    key={`cadence-${String(i)}-${String(ms)}`}
+                    type="button"
+                    className="pointer-events-auto absolute bottom-0 top-0 w-2 -translate-x-1/2 rounded-sm border border-sky-400/90 bg-sky-500/35 hover:bg-sky-400/55"
+                    style={{ left: `${String(pct)}%` }}
+                    title={`Footstep cadence ~${String(ms)}ms`}
+                    aria-label={`Play footstep SFX preview (${String(ms)}ms in walk loop)`}
+                    data-testid={`animation-tool-sfx-waveform-cadence-${String(i)}`}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      playFootstepPreview()
+                    }}
+                  />
+                )
+              })}
+            </div>
+          ) : null}
+        </div>
+      </div>
       {decodeBusy ? (
         <p className="mt-1 font-mono text-[10px] text-stone-500" data-testid="animation-tool-sfx-waveform-loading">
           Loading waveform…
         </p>
+      ) : null}
+      {showCadence && cadenceLegend ? (
+        <p className="mt-1 font-mono text-[10px] text-sky-300/90">{cadenceLegend}</p>
       ) : null}
     </div>
   )
