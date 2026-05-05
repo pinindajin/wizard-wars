@@ -81,6 +81,15 @@ export class ArenaRuntime {
   /** Active Colyseus room connection. */
   private connection!: GameConnection
 
+  /** Removes this runtime's room message handler from the active connection. */
+  private connectionUnsub?: () => void
+
+  /** Whether this runtime created the connection and should close it on teardown. */
+  private ownsConnection = false
+
+  /** Prevents async fallback connection setup from subscribing after teardown. */
+  private destroyed = false
+
   private projectileRenderSystem!: ProjectileRenderSystem
   private lightningBoltRenderSystem!: LightningBoltRenderSystem
   private combatTelegraphRenderSystem!: CombatTelegraphRenderSystem
@@ -120,6 +129,7 @@ export class ArenaRuntime {
    * Phaser Editor has created the visual tilemap.
    */
   start(): void {
+    this.destroyed = false
     this._configureTilemap()
     this._createPlayerGroup()
     this._createSystems()
@@ -242,6 +252,7 @@ export class ArenaRuntime {
 
     if (injected?.room) {
       this.connection = injected
+      this.ownsConnection = false
       this.log.info(
         { event: "arena.connection.injected", roomId: injected.room.roomId, sessionId: injected.room.sessionId },
         "Using injected game connection",
@@ -258,6 +269,7 @@ export class ArenaRuntime {
     }
 
     this.connection = new GameConnection()
+    this.ownsConnection = true
     this.log.info(
       { event: "arena.connection.fallback", reason: "missing_injected_connection" },
       "Opening fallback game connection",
@@ -268,6 +280,10 @@ export class ArenaRuntime {
     this.playerRenderSystem.localPlayerId = sub ?? null
     this.networkSyncSystem.localPlayerId = sub ?? null
     void this.connection.connect().then(() => {
+      if (this.destroyed) {
+        void this.connection.close()
+        return
+      }
       this._subscribeRoomEvents()
       this.connection.sendClientSceneReady()
       this.log.info({ event: "arena.scene_ready.sent", playerId: sub }, "Client scene ready sent")
@@ -278,7 +294,8 @@ export class ArenaRuntime {
    * Subscribes all relevant room message handlers to the active connection.
    */
   private _subscribeRoomEvents(): void {
-    this.connection.onMessage((message) => {
+    this.connectionUnsub?.()
+    this.connectionUnsub = this.connection.onMessage((message) => {
       switch (message.type) {
         case WsEvent.GameStateSync: {
           const payload = message.payload as GameStateSyncPayload
@@ -498,5 +515,26 @@ export class ArenaRuntime {
       | string
       | undefined
     return sub ?? null
+  }
+
+  /**
+   * Releases runtime-owned resources that outlive Phaser scene teardown.
+   *
+   * The lobby keeps a shared {@link GameConnection} alive while navigating
+   * between lobby and game routes, so each Arena scene must remove only its own
+   * room handler. This method is intentionally idempotent because Phaser can
+   * emit multiple teardown events during game destruction.
+   */
+  destroy(): void {
+    if (this.destroyed) return
+    this.destroyed = true
+
+    this.connectionUnsub?.()
+    this.connectionUnsub = undefined
+    this.combatTelegraphRenderSystem?.destroy()
+
+    if (this.ownsConnection) {
+      void this.connection?.close()
+    }
   }
 }

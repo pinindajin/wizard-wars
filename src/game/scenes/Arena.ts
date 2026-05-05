@@ -105,6 +105,10 @@ export default class Arena extends Phaser.Scene {
 		this.runtime = new ArenaRuntime(this, {
 			arenaMap: this.arenaMap,
 		})
+		this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+			this.runtime?.destroy()
+			this.runtime = undefined
+		})
 		this.runtime.start()
 		publishLoaderComplete(this.game as unknown as Parameters<typeof publishLoaderComplete>[0])
 	}
