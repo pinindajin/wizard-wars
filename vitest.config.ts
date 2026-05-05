@@ -48,6 +48,7 @@ export default defineConfig({
         // Dev-only multipart routes: error-path branches (disk, recovery) are covered by integration tests, not 95% branch-gated.
         "src/app/api/dev/animation-tool/replace-sheet/route.ts",
         "src/app/api/dev/animation-tool/rebuild-megasheet/route.ts",
+        "src/app/api/dev/animation-tool/import-sound/route.ts",
       ],
       thresholds: {
         lines: 95,

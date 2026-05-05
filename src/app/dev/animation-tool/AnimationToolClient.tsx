@@ -52,6 +52,14 @@ import {
   validateLadyWizardReplaceFile,
   withStripCacheBust,
 } from "@/app/dev/animation-tool/animationToolReplaceClient"
+import {
+  ANIMATION_TOOL_SFX_PREVIEW_VOLUME_LS,
+  clampPreviewVolumePercent,
+  parseStoredPreviewVolumePercent,
+} from "@/app/dev/animation-tool/animationToolPreviewVolume"
+import { AnimationToolSfxImportModal } from "@/app/dev/animation-tool/AnimationToolSfxImportModal"
+import { AnimationToolSfxWaveform } from "@/app/dev/animation-tool/AnimationToolSfxWaveform"
+import { resolveSfxKeyForAction } from "@/shared/balance-config/animationToolSfx"
 
 const FRAME = LADY_WIZARD_FRAME_SIZE_PX
 const PREVIEW_SCALE = 1.45
@@ -398,8 +406,23 @@ function FrameTimeline(props: {
   readonly setPlaying: (playing: boolean) => void
   readonly setTimeMs: (timeMs: number) => void
   readonly playing: boolean
+  /** Resolved SFX preview URL, or `null` when no key. */
+  readonly sfxAudioSrc: string | null
+  /** Animation-tool-only preview loudness (0–100). */
+  readonly previewVolumePercent: number
 }) {
-  const { actionId, config, frameCount, currentFrame, timeMs, setPlaying, setTimeMs, playing } = props
+  const {
+    actionId,
+    config,
+    frameCount,
+    currentFrame,
+    timeMs,
+    setPlaying,
+    setTimeMs,
+    playing,
+    sfxAudioSrc,
+    previewVolumePercent,
+  } = props
   const fd = animationFrameDurationsMs(config)
   const fps = frameRateForDuration(frameCount, config.durationMs)
   const labelStride = Math.max(1, Math.ceil(frameCount / 8))
@@ -474,6 +497,8 @@ function FrameTimeline(props: {
           {Math.round(fps)} fps · {frameCount}f
         </div>
       </div>
+
+      <AnimationToolSfxWaveform audioSrc={sfxAudioSrc} previewVolumePercent={previewVolumePercent} />
 
       <div
         className="mt-3 grid gap-0.5"
@@ -875,6 +900,11 @@ export function AnimationToolClient() {
   const [megasheetRebuildStatus, setMegasheetRebuildStatus] = useState("")
   const [replaceErrorByKey, setReplaceErrorByKey] = useState<Record<string, string>>({})
   const [replaceUploadingKey, setReplaceUploadingKey] = useState<string | null>(null)
+  const [previewVolumePercent, setPreviewVolumePercent] = useState(85)
+  const [sfxImportOpen, setSfxImportOpen] = useState(false)
+  const [sfxImportBusy, setSfxImportBusy] = useState(false)
+  const [sfxImportError, setSfxImportError] = useState<string | null>(null)
+  const [sfxReloadToken, setSfxReloadToken] = useState(0)
   const rafRef = useRef<number | null>(null)
   const lastRafRef = useRef<number>(0)
 
@@ -894,6 +924,27 @@ export function AnimationToolClient() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    try {
+      setPreviewVolumePercent(
+        parseStoredPreviewVolumePercent(localStorage.getItem(ANIMATION_TOOL_SFX_PREVIEW_VOLUME_LS)),
+      )
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        ANIMATION_TOOL_SFX_PREVIEW_VOLUME_LS,
+        String(clampPreviewVolumePercent(previewVolumePercent)),
+      )
+    } catch {
+      /* ignore */
+    }
+  }, [previewVolumePercent])
 
   const actions = useMemo(() => getAnimationToolActions(heroId, config), [config, heroId])
   const action = actions.find((candidate) => candidate.id === actionId) ?? actions[0]!
@@ -925,6 +976,14 @@ export function AnimationToolClient() {
       : timingDraft.durationMs
   const currentFrame = msToFrameIndexForAction(timeMs, actionConfig.durationMs, frameCount, fdTiming)
   const missingDirections = orderedCells.filter((cell) => cell.missing).map((cell) => cell.direction)
+  const resolvedSfxKey = resolveSfxKeyForAction(heroId, action.id)
+  const sfxAudioSrc = resolvedSfxKey
+    ? `/assets/sounds/${resolvedSfxKey}.mp3?v=${String(sfxReloadToken)}`
+    : null
+
+  useEffect(() => {
+    if (!resolvedSfxKey) setSfxImportOpen(false)
+  }, [resolvedSfxKey])
 
   useEffect(() => {
     if (!playing) {
@@ -1194,6 +1253,38 @@ export function AnimationToolClient() {
     }
   }, [])
 
+  const handleSfxImportSubmit = useCallback(
+    async (file: File) => {
+      const key = resolveSfxKeyForAction(heroId, action.id)
+      if (key == null) {
+        setSfxImportError("No SFX key mapped for this hero/action.")
+        return
+      }
+      setSfxImportBusy(true)
+      setSfxImportError(null)
+      try {
+        const form = new FormData()
+        form.set("file", file)
+        form.set("heroId", heroId)
+        form.set("actionId", action.id)
+        form.set("confirmReplace", "true")
+        const res = await fetch("/api/dev/animation-tool/import-sound", { method: "POST", body: form })
+        const body = (await res.json()) as { ok?: boolean; message?: string }
+        if (!res.ok || body.ok === false) {
+          setSfxImportError(body.message ?? `Import failed (${String(res.status)})`)
+          return
+        }
+        setSfxReloadToken((t) => t + 1)
+        setSfxImportOpen(false)
+      } catch (error) {
+        setSfxImportError(error instanceof Error ? error.message : "Import failed")
+      } finally {
+        setSfxImportBusy(false)
+      }
+    },
+    [action.id, heroId],
+  )
+
   const markerCopy =
     actionConfig.type === "spell"
       ? actionConfig.effectTiming === "before"
@@ -1347,6 +1438,51 @@ export function AnimationToolClient() {
                   </div>
                 ) : null,
               )}
+            </div>
+          </CollapsiblePanel>
+
+          <CollapsiblePanel title="Sound effect">
+            <div className="flex flex-col gap-3 font-mono text-[11px] text-stone-400" data-testid="animation-tool-sfx-panel">
+              {resolvedSfxKey ? (
+                <>
+                  <p>
+                    Phaser key: <span className="text-lime-200">{resolvedSfxKey}</span>
+                  </p>
+                  <p className="break-all text-stone-500">
+                    Path: <span className="text-stone-300">public/assets/sounds/{resolvedSfxKey}.mp3</span>
+                  </p>
+                </>
+              ) : (
+                <p className="text-stone-500">
+                  No balance-config SFX key for this action (behaviors and unmapped primaries have none here).
+                </p>
+              )}
+              <label className="flex flex-col gap-1 text-stone-300">
+                <span>
+                  Preview volume ({previewVolumePercent}%) — browser only; does not change in-game mix.
+                </span>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={previewVolumePercent}
+                  className="w-full accent-lime-400"
+                  data-testid="animation-tool-sfx-preview-volume"
+                  onChange={(event) => setPreviewVolumePercent(Number(event.target.value))}
+                />
+              </label>
+              <button
+                type="button"
+                className="rounded-lg border border-stone-600 bg-stone-950 px-3 py-2 text-sm text-stone-200 hover:border-lime-600 disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={resolvedSfxKey == null}
+                data-testid="animation-tool-sfx-change-open"
+                onClick={() => {
+                  setSfxImportError(null)
+                  setSfxImportOpen(true)
+                }}
+              >
+                Change sound…
+              </button>
             </div>
           </CollapsiblePanel>
 
@@ -1721,6 +1857,8 @@ export function AnimationToolClient() {
               setPlaying={setPlaying}
               setTimeMs={setTimeMs}
               playing={playing}
+              sfxAudioSrc={sfxAudioSrc}
+              previewVolumePercent={previewVolumePercent}
             />
             {missingDirections.length > 0 ? (
               <p className="mt-3 rounded border border-amber-700/60 bg-amber-950/30 p-2 font-mono text-xs text-amber-200">
@@ -1764,6 +1902,21 @@ export function AnimationToolClient() {
           </section>
         </div>
       </section>
+
+      {resolvedSfxKey && sfxImportOpen ? (
+        <AnimationToolSfxImportModal
+          onClose={() => {
+            if (!sfxImportBusy) setSfxImportOpen(false)
+          }}
+          heroId={heroId}
+          actionId={action.id}
+          resolvedKey={resolvedSfxKey}
+          destinationPathLabel={`public/assets/sounds/${resolvedSfxKey}.mp3`}
+          busy={sfxImportBusy}
+          error={sfxImportError}
+          onSubmit={handleSfxImportSubmit}
+        />
+      ) : null}
     </div>
   )
 }
