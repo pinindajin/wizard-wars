@@ -88,6 +88,7 @@ export function healthSystem(ctx: SimCtx): void {
     const targetUserId = entityPlayerMap.get(targetEid) ?? ""
     damageFloats.push({
       targetId: targetUserId,
+      attackerUserId: killerUserId,
       amount: damage,
       x: Position.x[targetEid],
       y: Position.y[targetEid],

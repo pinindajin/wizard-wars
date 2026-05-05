@@ -198,6 +198,16 @@
             },
             {
                 "type": "audio",
+                "key": "sfx-hit-deal",
+                "url": ["/assets/sounds/sfx-hit-deal.wav"]
+            },
+            {
+                "type": "audio",
+                "key": "sfx-hit-taken",
+                "url": ["/assets/sounds/sfx-hit-taken.mp3"]
+            },
+            {
+                "type": "audio",
                 "key": "sfx-countdown-beep",
                 "url": ["/assets/sounds/sfx-countdown-beep.mp3"]
             },

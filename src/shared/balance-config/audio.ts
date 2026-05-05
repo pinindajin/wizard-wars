@@ -48,6 +48,8 @@ export const SFX_KEYS = {
   walkStep: "sfx-walk-step",
   playerDeath: "sfx-player-death",
   playerHit: "sfx-player-hit",
+  hitDeal: "sfx-hit-deal",
+  hitTaken: "sfx-hit-taken",
   countdownBeep: "sfx-countdown-beep",
   countdownGo: "sfx-countdown-go",
   jump: "sfx-jump",
@@ -59,4 +61,6 @@ export const SFX_CONCURRENCY: Record<string, number> = {
   [SFX_KEYS.walkStep]: 2,
   [SFX_KEYS.axeSwing]: 4,
   [SFX_KEYS.playerHit]: 6,
+  [SFX_KEYS.hitDeal]: 4,
+  [SFX_KEYS.hitTaken]: 1,
 }

@@ -16,7 +16,7 @@ import {
 } from "@/shared/balance-config/arena"
 import {
   BASE_MOVE_SPEED_PX_PER_SEC,
-  DAMAGE_FLASH_MS,
+  HIT_FEEDBACK_FLASH_MS,
   PLAYER_WORLD_COLLISION_FOOTPRINT,
   SWING_MOVE_SPEED_MULTIPLIER,
   JUMP_SPRITE_Y_PIXELS_PER_SIM_Z,
@@ -694,12 +694,27 @@ export class PlayerRenderSystem {
     overlay.setVisible(true)
   }
 
-  /** Triggers a red damage flash on a player sprite. */
-  triggerDamageFlash(id: number): void {
+  /**
+   * Client-only: white hit-feedback flash for the player with this Colyseus id.
+   *
+   * @param userId - `playerId` in {@link ClientPlayerState} (Colyseus user id).
+   */
+  triggerHitFeedbackFlashForPlayerUserId(userId: string): void {
+    const id = this._entityIdForPlayerUserId(userId)
+    if (id === undefined) return
+    this.triggerHitFeedbackFlashByEntityId(id)
+  }
+
+  /**
+   * Client-only: white hit-feedback flash for a spawned client entity.
+   *
+   * @param id - Numeric client ECS id from `ClientPlayerState` keys.
+   */
+  triggerHitFeedbackFlashByEntityId(id: number): void {
     const entry = this.entries.get(id)
     if (!entry) return
-    entry.flashRemaining = DAMAGE_FLASH_MS
-    entry.sprite.setTint(0xff0000)
+    entry.flashRemaining = HIT_FEEDBACK_FLASH_MS
+    entry.sprite.setTint(0xffffff)
   }
 
   /** Handles a PlayerDeath event: hides name tag + HP bar, plays death state. */
@@ -964,7 +979,7 @@ export class PlayerRenderSystem {
         entry.lastAnimKey = animKey
       }
 
-      // --- Damage flash ---
+      // --- Hit feedback white flash (tint cleared when flashRemaining hits 0) ---
       if (entry.flashRemaining > 0) {
         entry.flashRemaining -= delta
         if (entry.flashRemaining <= 0) {
