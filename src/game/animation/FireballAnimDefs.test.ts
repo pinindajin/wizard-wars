@@ -54,7 +54,7 @@ describe("registerFireballAnims", () => {
     expect(fly!.frames).toEqual({
       texture: FIREBALL_FLY_TEXTURE,
       start: 0,
-      end: 7,
+      end: 4,
     })
     expect(channel!.frames).toEqual({
       texture: FIREBALL_CHANNEL_TEXTURE,
