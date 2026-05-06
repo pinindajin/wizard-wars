@@ -16,6 +16,7 @@ import {
   ladyWizardSheetsArchiveFsDir,
   ladyWizardStripFsPath,
 } from "@/shared/sprites/ladyWizard"
+import { isAnimationToolApiForbiddenInProduction } from "@/shared/dev/animationToolE2eGate"
 
 export const runtime = "nodejs"
 
@@ -48,7 +49,7 @@ function err(code: string, message: string, status = 400, extra: ErrExtra = {}):
  * @returns JSON including `version` for cache-busting the strip URL.
  */
 export async function POST(request: Request): Promise<NextResponse> {
-  if (process.env.NODE_ENV === "production") {
+  if (isAnimationToolApiForbiddenInProduction()) {
     return err("forbidden", "animation tool is dev-only", 403)
   }
 

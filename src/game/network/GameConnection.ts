@@ -35,6 +35,8 @@ export interface GameConnectionArgs {
 export class GameConnection {
   private client: Client
   private _room: Room | null = null
+  /** Remover returned by Colyseus for the `"*"` wildcard handler; cleared when rewiring. */
+  private _wildcardMessageOff?: () => void
   private _ready = false
   private _seq = 0
   /** Latest `LobbyState.phase` from the server; updated before message fan-out. */
@@ -261,11 +263,18 @@ export class GameConnection {
 
   // ─── Internals ─────────────────────────────────────────────────────────────
 
+  /**
+   * Wires Colyseus room events. Reconnect calls this again; the previous `"*"`
+   * handler is removed first so message fan-out is not duplicated.
+   */
   private wireRoomListeners(): void {
     if (!this._room) return
 
+    this._wildcardMessageOff?.()
+    this._wildcardMessageOff = undefined
+
     // Wildcard listener for all room messages
-    this._room.onMessage("*", (type: string | number, payload: unknown) => {
+    const off = this._room.onMessage("*", (type: string | number, payload: unknown) => {
       const roomKey = String(type)
       const wsKey = roomToWsEvent[roomKey]
       if (!wsKey) {
@@ -305,6 +314,7 @@ export class GameConnection {
       const message: AnyWsMessage = { type: wsKey, payload }
       this.messageHandlers.forEach((handler) => handler(message))
     })
+    this._wildcardMessageOff = typeof off === "function" ? off : undefined
 
     this._room.onLeave(async (code) => {
       if (code === 1000) {

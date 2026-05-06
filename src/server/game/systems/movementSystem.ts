@@ -14,6 +14,10 @@
  *  2. Casting → WASD speed × `castMoveSpeedMultiplier` (0 = root)
  *  3. SwingingWeapon                    → speed × SWING_MOVE_SPEED_MULTIPLIER
  *  4. Otherwise                         → speed × 1.0 (+ Swift Boots bonus)
+ *
+ * Aim facing: {@link Facing} tracks the weapon cursor except while the entity
+ * has {@link SwingingWeapon} (primary melee swing); then aim stays fixed until
+ * that tag is cleared in `primaryMeleeAttackSystem.ts`.
  */
 import { query, hasComponent } from "bitecs"
 
@@ -137,13 +141,14 @@ export function movementSystem(ctx: SimCtx): void {
       MoveFacing.angle[eid] = Math.atan2(moved.appliedDy, moved.appliedDx)
     }
 
-    // Update aim facing toward weapon-target (mouse position)
-    const wtx = PlayerInput.weaponTargetX[eid]
-    const wty = PlayerInput.weaponTargetY[eid]
-    const fdx = wtx - Position.x[eid]
-    const fdy = wty - Position.y[eid]
-    if (fdx !== 0 || fdy !== 0) {
-      Facing.angle[eid] = Math.atan2(fdy, fdx)
+    if (!hasComponent(world, eid, SwingingWeapon)) {
+      const wtx = PlayerInput.weaponTargetX[eid]
+      const wty = PlayerInput.weaponTargetY[eid]
+      const fdx = wtx - Position.x[eid]
+      const fdy = wty - Position.y[eid]
+      if (fdx !== 0 || fdy !== 0) {
+        Facing.angle[eid] = Math.atan2(fdy, fdx)
+      }
     }
   }
 }

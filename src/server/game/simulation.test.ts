@@ -20,8 +20,10 @@ import {
   Equipment,
   ABILITY_INDEX,
   AbilitySlots,
+  Facing,
   Health,
   InvulnerableTag,
+  MoveFacing,
   Position,
   SpectatorTag,
   SwingingWeapon,
@@ -486,6 +488,54 @@ describe("primary melee attack", () => {
     expect(swing.hurtboxArcDeg).toBeGreaterThan(0)
     expect(swing.durationMs).toBeGreaterThan(0)
     expect(swing.dangerousWindowEndMs).toBeGreaterThan(swing.dangerousWindowStartMs)
+  })
+
+  it("freezes aim Facing during swing while MoveFacing still follows movement", () => {
+    const sim = createGameSimulation(Date.now())
+    const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    const px = ARENA_CENTER_X
+    const py = ARENA_CENTER_Y
+    Position.x[eid] = px
+    Position.y[eid] = py
+
+    sim.tick(
+      queueMap([
+        [
+          "user1",
+          emptyInput({
+            weaponPrimary: true,
+            seq: 1,
+            weaponTargetX: px + 200,
+            weaponTargetY: py,
+          }),
+        ],
+      ]),
+      Date.now(),
+    )
+
+    expect(hasComponent(sim.world, eid, SwingingWeapon)).toBe(true)
+    const lockedAimFacing = Facing.angle[eid]
+    expect(lockedAimFacing).toBeCloseTo(0, 5)
+
+    sim.tick(
+      queueMap([
+        [
+          "user1",
+          emptyInput({
+            left: true,
+            weaponPrimary: false,
+            seq: 2,
+            weaponTargetX: px - 200,
+            weaponTargetY: py,
+          }),
+        ],
+      ]),
+      Date.now(),
+    )
+
+    expect(hasComponent(sim.world, eid, SwingingWeapon)).toBe(true)
+    expect(Facing.angle[eid]).toBeCloseTo(lockedAimFacing, 5)
+    expect(MoveFacing.angle[eid]).toBeCloseTo(Math.PI, 1)
   })
 
   it("does not start a second swing while SwingingWeapon is active", () => {

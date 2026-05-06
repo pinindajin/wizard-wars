@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect, beforeEach } from "vitest"
 
 import { GameConnection } from "./GameConnection"
 import { RoomEvent } from "@/shared/roomEvents"
@@ -29,6 +29,9 @@ function makeFakeRoom() {
     },
     handlers,
     sent,
+    wildcardCount(): number {
+      return handlers.get("*")?.size ?? 0
+    },
   }
 }
 
@@ -47,6 +50,15 @@ describe("GameConnection send helpers + warning silence", () => {
   it("registers a wildcard handler for all server broadcasts", () => {
     expect(room.handlers.get("*")).toBeDefined()
     expect((room.handlers.get("*")?.size ?? 0) > 0).toBe(true)
+  })
+
+  it("removes the previous wildcard listener when wireRoomListeners runs again (reconnect)", () => {
+    const wire = (conn as unknown as { wireRoomListeners: () => void }).wireRoomListeners.bind(conn)
+    expect(room.wildcardCount()).toBe(1)
+    wire()
+    expect(room.wildcardCount()).toBe(1)
+    wire()
+    expect(room.wildcardCount()).toBe(1)
   })
 
   it("does NOT register specific handlers for server-only broadcasts (wildcard only)", () => {

@@ -104,7 +104,7 @@ export class BgmPlayer {
    * @param loop - Whether the new track should loop.
    */
   private _crossFadeTo(key: string, loop: boolean): void {
-    if (!this.scene.cache.audio.exists(key)) return
+    if (!this.scene.cache.audio?.exists(key)) return
 
     const incomingTrack = this.scene.sound.add(key, {
       volume: 0,

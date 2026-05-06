@@ -1,5 +1,6 @@
 import Phaser from "phaser"
 
+import { clientLogger } from "@/lib/clientLogger"
 import { HERO_CONFIGS } from "@/shared/balance-config/heroes"
 import { ABILITY_CONFIGS } from "@/shared/balance-config/abilities"
 import {
@@ -16,7 +17,7 @@ import {
 } from "@/shared/balance-config/arena"
 import {
   BASE_MOVE_SPEED_PX_PER_SEC,
-  DAMAGE_FLASH_MS,
+  HIT_FEEDBACK_FLASH_MS,
   PLAYER_WORLD_COLLISION_FOOTPRINT,
   SWING_MOVE_SPEED_MULTIPLIER,
   JUMP_SPRITE_Y_PIXELS_PER_SIM_Z,
@@ -220,6 +221,7 @@ interface PlayerRenderEntry {
 export class PlayerRenderSystem {
   private scene: Phaser.Scene
   private group: Phaser.GameObjects.Group
+  private readonly log = clientLogger.child({ area: "render", subsystem: "player" })
   private entries: Map<number, PlayerRenderEntry> = new Map()
 
   /** Set by Arena after connection is established. */
@@ -642,7 +644,7 @@ export class PlayerRenderSystem {
 
     const overlay = entry.channelOverlay
     if (!overlay.anims.isPlaying || overlay.anims.currentAnim?.key !== FIREBALL_CHANNEL_ANIM) {
-      if (this.scene.anims.exists(FIREBALL_CHANNEL_ANIM)) {
+      if (this.scene.anims?.exists(FIREBALL_CHANNEL_ANIM)) {
         overlay.play({ key: FIREBALL_CHANNEL_ANIM, repeat: -1 }, true)
       }
     }
@@ -685,7 +687,7 @@ export class PlayerRenderSystem {
 
     const overlay = entry.lavaLapOverlay
     if (!overlay.anims.isPlaying || overlay.anims.currentAnim?.key !== LAVA_LAP_ANIM) {
-      if (this.scene.anims.exists(LAVA_LAP_ANIM)) {
+      if (this.scene.anims?.exists(LAVA_LAP_ANIM)) {
         overlay.play({ key: LAVA_LAP_ANIM, repeat: -1 }, true)
       }
     }
@@ -694,12 +696,27 @@ export class PlayerRenderSystem {
     overlay.setVisible(true)
   }
 
-  /** Triggers a red damage flash on a player sprite. */
-  triggerDamageFlash(id: number): void {
+  /**
+   * Client-only: white hit-feedback flash for the player with this Colyseus id.
+   *
+   * @param userId - `playerId` in {@link ClientPlayerState} (Colyseus user id).
+   */
+  triggerHitFeedbackFlashForPlayerUserId(userId: string): void {
+    const id = this._entityIdForPlayerUserId(userId)
+    if (id === undefined) return
+    this.triggerHitFeedbackFlashByEntityId(id)
+  }
+
+  /**
+   * Client-only: white hit-feedback flash for a spawned client entity.
+   *
+   * @param id - Numeric client ECS id from `ClientPlayerState` keys.
+   */
+  triggerHitFeedbackFlashByEntityId(id: number): void {
     const entry = this.entries.get(id)
     if (!entry) return
-    entry.flashRemaining = DAMAGE_FLASH_MS
-    entry.sprite.setTint(0xff0000)
+    entry.flashRemaining = HIT_FEEDBACK_FLASH_MS
+    entry.sprite.setTint(0xffffff)
   }
 
   /** Handles a PlayerDeath event: hides name tag + HP bar, plays death state. */
@@ -751,8 +768,39 @@ export class PlayerRenderSystem {
       "primary_melee_attack",
       getDirectionFromAngle(payload.facingAngle),
     )
+    if (!this._canReplayMeleeAnimation(entry.sprite)) {
+      this.log.debug(
+        {
+          event: "playerRender.primaryMelee.skipped",
+          reason: "scene_or_sprite_inactive",
+          casterId: payload.casterId,
+        },
+        "Skipped primary melee replay; scene shutting down or sprite inactive",
+      )
+      return
+    }
     entry.sprite.play(animKey, false)
     entry.lastAnimKey = animKey
+  }
+
+  /**
+   * Returns whether {@link Phaser.GameObjects.Sprite#play} is safe for authoritative melee replay.
+   * Avoids throwing when Colyseus delivers combat events after Phaser scene shutdown.
+   *
+   * @param sprite - Local sprite for the caster.
+   * @returns True when the scene is live and the sprite can animate.
+   */
+  private _canReplayMeleeAnimation(sprite: Phaser.GameObjects.Sprite): boolean {
+    const status = this.scene.sys?.settings?.status
+    if (
+      status === Phaser.Scenes.SHUTDOWN ||
+      status === Phaser.Scenes.DESTROYED
+    ) {
+      return false
+    }
+    if (!sprite.active || sprite.scene == null) return false
+    const animMgr = sprite.anims?.animationManager ?? this.scene.anims
+    return animMgr != null
   }
 
   /**
@@ -964,7 +1012,7 @@ export class PlayerRenderSystem {
         entry.lastAnimKey = animKey
       }
 
-      // --- Damage flash ---
+      // --- Hit feedback white flash (tint cleared when flashRemaining hits 0) ---
       if (entry.flashRemaining > 0) {
         entry.flashRemaining -= delta
         if (entry.flashRemaining <= 0) {

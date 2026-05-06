@@ -8,6 +8,7 @@ import {
   animationConfigSchema,
   type AnimationToolSave,
 } from "@/shared/balance-config/animationConfig"
+import { isAnimationToolApiForbiddenInProduction } from "@/shared/dev/animationToolE2eGate"
 
 export const runtime = "nodejs"
 
@@ -16,7 +17,7 @@ function safeTimestamp(date: Date): string {
 }
 
 export async function POST(request: Request) {
-  if (process.env.NODE_ENV === "production") {
+  if (isAnimationToolApiForbiddenInProduction()) {
     return NextResponse.json({ error: "animation tool is dev-only" }, { status: 403 })
   }
 

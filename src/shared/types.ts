@@ -424,6 +424,11 @@ export type PlayerInputPayload = {
 /** Server → all: damage number floats. */
 export type DamageFloatPayload = {
   readonly targetId: string
+  /**
+   * Attributable player who dealt the hit, or `null` for environmental damage
+   * (lava, pit, etc.). Used for client-only dealer/take-hit feedback.
+   */
+  readonly attackerUserId: string | null
   readonly amount: number
   readonly x: number
   readonly y: number

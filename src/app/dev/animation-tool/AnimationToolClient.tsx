@@ -52,6 +52,19 @@ import {
   validateLadyWizardReplaceFile,
   withStripCacheBust,
 } from "@/app/dev/animation-tool/animationToolReplaceClient"
+import {
+  ANIMATION_TOOL_SFX_PREVIEW_VOLUME_LS,
+  clampPreviewVolumePercent,
+  parseStoredPreviewVolumePercent,
+} from "@/app/dev/animation-tool/animationToolPreviewVolume"
+import { AnimationToolSfxImportModal } from "@/app/dev/animation-tool/AnimationToolSfxImportModal"
+import { AnimationToolSfxWaveform } from "@/app/dev/animation-tool/AnimationToolSfxWaveform"
+import {
+  resolveArenaPackAudioSiteUrlForSfxKey,
+  siteAssetUrlToPublicDiskPathLabel,
+} from "@/shared/balance-config/arenaPackAudioUrls"
+import { walkFootstepCadenceMarkerTimesMs } from "@/shared/balance-config/animationToolWalkCadence"
+import { resolveSfxKeyForAction } from "@/shared/balance-config/animationToolSfx"
 
 const FRAME = LADY_WIZARD_FRAME_SIZE_PX
 const PREVIEW_SCALE = 1.45
@@ -241,6 +254,20 @@ function LegendTipRow(props: { label: ReactNode; testId?: string; children: Reac
   )
 }
 
+/**
+ * Stable `data-testid` for sidebar section expand/collapse controls (Playwright).
+ *
+ * @param title - Panel title string from `CollapsiblePanel`.
+ * @returns Test id such as `animation-tool-section-toggle-hero`.
+ */
+function collapsibleSectionToggleTestId(title: string): string {
+  const slug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+  return `animation-tool-section-toggle-${slug}`
+}
+
 function CollapsiblePanel(props: {
   readonly title: string
   readonly defaultOpen?: boolean
@@ -256,6 +283,7 @@ function CollapsiblePanel(props: {
         className="flex w-full items-center justify-between font-mono text-xs uppercase tracking-[0.3em] text-stone-500 hover:text-lime-200"
         aria-expanded={open}
         aria-controls={panelId}
+        data-testid={collapsibleSectionToggleTestId(title)}
         onClick={() => setOpen((value) => !value)}
       >
         <span>{title}</span>
@@ -398,8 +426,32 @@ function FrameTimeline(props: {
   readonly setPlaying: (playing: boolean) => void
   readonly setTimeMs: (timeMs: number) => void
   readonly playing: boolean
+  /** Resolved SFX preview URL from arena pack (+ cache bust), or `null` when no key. */
+  readonly sfxAudioSrc: string | null
+  /** Optional walk footstep cadence markers (ms) on the waveform. */
+  readonly cadenceMarkerTimesMs?: readonly number[]
+  /** Walk loop duration for cadence marker positions. */
+  readonly cadenceTimelineDurationMs?: number
+  /** Legend under waveform when cadence is shown. */
+  readonly cadenceLegend?: string
+  /** Animation-tool-only preview loudness (0–100). */
+  readonly previewVolumePercent: number
 }) {
-  const { actionId, config, frameCount, currentFrame, timeMs, setPlaying, setTimeMs, playing } = props
+  const {
+    actionId,
+    config,
+    frameCount,
+    currentFrame,
+    timeMs,
+    setPlaying,
+    setTimeMs,
+    playing,
+    sfxAudioSrc,
+    cadenceMarkerTimesMs,
+    cadenceTimelineDurationMs,
+    cadenceLegend,
+    previewVolumePercent,
+  } = props
   const fd = animationFrameDurationsMs(config)
   const fps = frameRateForDuration(frameCount, config.durationMs)
   const labelStride = Math.max(1, Math.ceil(frameCount / 8))
@@ -474,6 +526,14 @@ function FrameTimeline(props: {
           {Math.round(fps)} fps · {frameCount}f
         </div>
       </div>
+
+      <AnimationToolSfxWaveform
+        audioSrc={sfxAudioSrc}
+        previewVolumePercent={previewVolumePercent}
+        cadenceMarkerTimesMs={cadenceMarkerTimesMs}
+        cadenceTimelineDurationMs={cadenceTimelineDurationMs}
+        cadenceLegend={cadenceLegend}
+      />
 
       <div
         className="mt-3 grid gap-0.5"
@@ -875,6 +935,11 @@ export function AnimationToolClient() {
   const [megasheetRebuildStatus, setMegasheetRebuildStatus] = useState("")
   const [replaceErrorByKey, setReplaceErrorByKey] = useState<Record<string, string>>({})
   const [replaceUploadingKey, setReplaceUploadingKey] = useState<string | null>(null)
+  const [previewVolumePercent, setPreviewVolumePercent] = useState(85)
+  const [sfxImportOpen, setSfxImportOpen] = useState(false)
+  const [sfxImportBusy, setSfxImportBusy] = useState(false)
+  const [sfxImportError, setSfxImportError] = useState<string | null>(null)
+  const [sfxReloadToken, setSfxReloadToken] = useState(0)
   const rafRef = useRef<number | null>(null)
   const lastRafRef = useRef<number>(0)
 
@@ -894,6 +959,27 @@ export function AnimationToolClient() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    try {
+      setPreviewVolumePercent(
+        parseStoredPreviewVolumePercent(localStorage.getItem(ANIMATION_TOOL_SFX_PREVIEW_VOLUME_LS)),
+      )
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        ANIMATION_TOOL_SFX_PREVIEW_VOLUME_LS,
+        String(clampPreviewVolumePercent(previewVolumePercent)),
+      )
+    } catch {
+      /* ignore */
+    }
+  }, [previewVolumePercent])
 
   const actions = useMemo(() => getAnimationToolActions(heroId, config), [config, heroId])
   const action = actions.find((candidate) => candidate.id === actionId) ?? actions[0]!
@@ -925,6 +1011,21 @@ export function AnimationToolClient() {
       : timingDraft.durationMs
   const currentFrame = msToFrameIndexForAction(timeMs, actionConfig.durationMs, frameCount, fdTiming)
   const missingDirections = orderedCells.filter((cell) => cell.missing).map((cell) => cell.direction)
+  const resolvedSfxKey = resolveSfxKeyForAction(heroId, action.id)
+  const sfxPackSiteUrl = resolvedSfxKey ? resolveArenaPackAudioSiteUrlForSfxKey(resolvedSfxKey) : null
+  const sfxAudioSrc = sfxPackSiteUrl ? `${sfxPackSiteUrl}?v=${String(sfxReloadToken)}` : null
+  const sfxRuntimePathLabel = sfxPackSiteUrl ? siteAssetUrlToPublicDiskPathLabel(sfxPackSiteUrl) : null
+  const sfxDevImportMp3Label = resolvedSfxKey
+    ? `public/assets/sounds/${resolvedSfxKey}.mp3`
+    : null
+  const walkCadenceMarkerTimesMs = useMemo(
+    () => (action.id === "walk" ? walkFootstepCadenceMarkerTimesMs(actionConfig.durationMs) : undefined),
+    [action.id, actionConfig.durationMs],
+  )
+
+  useEffect(() => {
+    if (!resolvedSfxKey) setSfxImportOpen(false)
+  }, [resolvedSfxKey])
 
   useEffect(() => {
     if (!playing) {
@@ -1194,6 +1295,38 @@ export function AnimationToolClient() {
     }
   }, [])
 
+  const handleSfxImportSubmit = useCallback(
+    async (file: File) => {
+      const key = resolveSfxKeyForAction(heroId, action.id)
+      if (key == null) {
+        setSfxImportError("No SFX key mapped for this hero/action.")
+        return
+      }
+      setSfxImportBusy(true)
+      setSfxImportError(null)
+      try {
+        const form = new FormData()
+        form.set("file", file)
+        form.set("heroId", heroId)
+        form.set("actionId", action.id)
+        form.set("confirmReplace", "true")
+        const res = await fetch("/api/dev/animation-tool/import-sound", { method: "POST", body: form })
+        const body = (await res.json()) as { ok?: boolean; message?: string }
+        if (!res.ok || body.ok === false) {
+          setSfxImportError(body.message ?? `Import failed (${String(res.status)})`)
+          return
+        }
+        setSfxReloadToken((t) => t + 1)
+        setSfxImportOpen(false)
+      } catch (error) {
+        setSfxImportError(error instanceof Error ? error.message : "Import failed")
+      } finally {
+        setSfxImportBusy(false)
+      }
+    },
+    [action.id, heroId],
+  )
+
   const markerCopy =
     actionConfig.type === "spell"
       ? actionConfig.effectTiming === "before"
@@ -1347,6 +1480,58 @@ export function AnimationToolClient() {
                   </div>
                 ) : null,
               )}
+            </div>
+          </CollapsiblePanel>
+
+          <CollapsiblePanel title="Sound effect">
+            <div className="flex flex-col gap-3 font-mono text-[11px] text-stone-400" data-testid="animation-tool-sfx-panel">
+              {resolvedSfxKey ? (
+                <>
+                  <p>
+                    Phaser key: <span className="text-lime-200">{resolvedSfxKey}</span>
+                  </p>
+                  <p className="break-all text-stone-500">
+                    Runtime file (arena pack):{" "}
+                    <span className="text-stone-300">
+                      {sfxRuntimePathLabel ?? "— (no audio entry in arena-asset-pack.json)"}
+                    </span>
+                  </p>
+                  <p className="break-all text-stone-500">
+                    Replace via tool: <span className="text-stone-300">{sfxDevImportMp3Label}</span> (MP3 only)
+                  </p>
+                </>
+              ) : (
+                <p className="text-stone-500">
+                  No balance-config SFX key for this action (idle, death, stumble, and unmapped primaries have none
+                  here).
+                </p>
+              )}
+              <label className="flex flex-col gap-1 text-stone-300">
+                <span>
+                  Preview volume ({previewVolumePercent}%) — browser only; does not change in-game mix.
+                </span>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={previewVolumePercent}
+                  className="w-full accent-lime-400"
+                  data-testid="animation-tool-sfx-preview-volume"
+                  onChange={(event) => setPreviewVolumePercent(Number(event.target.value))}
+                />
+              </label>
+              <button
+                type="button"
+                className="rounded-lg border border-stone-600 bg-stone-950 px-3 py-2 text-sm text-stone-200 hover:border-lime-600 disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={resolvedSfxKey == null}
+                data-testid="animation-tool-sfx-change-open"
+                onClick={() => {
+                  setSfxImportError(null)
+                  setSfxImportOpen(true)
+                }}
+              >
+                Change sound…
+              </button>
             </div>
           </CollapsiblePanel>
 
@@ -1721,6 +1906,15 @@ export function AnimationToolClient() {
               setPlaying={setPlaying}
               setTimeMs={setTimeMs}
               playing={playing}
+              sfxAudioSrc={sfxAudioSrc}
+              cadenceMarkerTimesMs={walkCadenceMarkerTimesMs}
+              cadenceTimelineDurationMs={action.id === "walk" ? actionConfig.durationMs : undefined}
+              cadenceLegend={
+                action.id === "walk"
+                  ? "Walk step cadence (two footfalls per loop; click ticks for footstep preview)."
+                  : undefined
+              }
+              previewVolumePercent={previewVolumePercent}
             />
             {missingDirections.length > 0 ? (
               <p className="mt-3 rounded border border-amber-700/60 bg-amber-950/30 p-2 font-mono text-xs text-amber-200">
@@ -1764,6 +1958,21 @@ export function AnimationToolClient() {
           </section>
         </div>
       </section>
+
+      {resolvedSfxKey && sfxImportOpen ? (
+        <AnimationToolSfxImportModal
+          onClose={() => {
+            if (!sfxImportBusy) setSfxImportOpen(false)
+          }}
+          heroId={heroId}
+          actionId={action.id}
+          resolvedKey={resolvedSfxKey}
+          destinationPathLabel={sfxDevImportMp3Label ?? `public/assets/sounds/${resolvedSfxKey}.mp3`}
+          busy={sfxImportBusy}
+          error={sfxImportError}
+          onSubmit={handleSfxImportSubmit}
+        />
+      ) : null}
     </div>
   )
 }

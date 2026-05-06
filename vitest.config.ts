@@ -7,6 +7,11 @@ export default defineConfig({
     globals: true,
     environment: "node",
     include: ["src/**/*.test.{ts,tsx}", "scripts/**/*.test.ts"],
+    server: {
+      deps: {
+        inline: ["zod"],
+      },
+    },
     coverage: {
       provider: "v8",
       reporter: ["text", "text-summary", "html", "json-summary"],
@@ -48,6 +53,7 @@ export default defineConfig({
         // Dev-only multipart routes: error-path branches (disk, recovery) are covered by integration tests, not 95% branch-gated.
         "src/app/api/dev/animation-tool/replace-sheet/route.ts",
         "src/app/api/dev/animation-tool/rebuild-megasheet/route.ts",
+        "src/app/api/dev/animation-tool/import-sound/route.ts",
       ],
       thresholds: {
         lines: 95,

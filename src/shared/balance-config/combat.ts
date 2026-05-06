@@ -43,8 +43,21 @@ export const BASE_MOVE_SPEED_PX_PER_SEC = 200
 /** Movement speed multiplier while swinging a weapon. */
 export const SWING_MOVE_SPEED_MULTIPLIER = 0.2
 
-/** Duration of the red damage flash on a player sprite, in ms. */
+/** Duration of the red damage flash in server sim (DamageFlash component), in ms. */
 export const DAMAGE_FLASH_MS = 150
+
+/**
+ * Client-only: white flash duration on player sprites for hit feedback (dealer
+ * and victim), in ms. Not used by the authoritative simulation.
+ */
+export const HIT_FEEDBACK_FLASH_MS = 30
+
+/**
+ * Client-only: minimum time between take-hit SFX restarts for environmental
+ * damage (`attackerUserId === null` on the damage float). PvP take-hit is not
+ * throttled by this value.
+ */
+export const HAZARD_TAKE_HIT_SFX_MIN_INTERVAL_MS = 250
 
 /** Total respawn delay in ms (includes death animation). */
 export const RESPAWN_DELAY_MS = 3000

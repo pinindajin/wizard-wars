@@ -169,7 +169,7 @@
             {
                 "type": "audio",
                 "key": "sfx-axe-swing",
-                "url": ["/assets/sounds/sfx-axe-swing.mp3"]
+                "url": ["/assets/sounds/sfx-axe-swing.wav"]
             },
             {
                 "type": "audio",
@@ -179,12 +179,12 @@
             {
                 "type": "audio",
                 "key": "sfx-walk-step",
-                "url": ["/assets/sounds/sfx-walk-step.mp3"]
+                "url": ["/assets/sounds/dirt-walk-2.wav"]
             },
             {
                 "type": "audio",
                 "key": "sfx-jump",
-                "url": ["/assets/sounds/sfx-walk-step.mp3"]
+                "url": ["/assets/sounds/dirt-jump.wav"]
             },
             {
                 "type": "audio",
@@ -195,6 +195,16 @@
                 "type": "audio",
                 "key": "sfx-player-hit",
                 "url": ["/assets/sounds/sfx-player-hit.mp3"]
+            },
+            {
+                "type": "audio",
+                "key": "sfx-hit-deal",
+                "url": ["/assets/sounds/sfx-hit-deal.wav"]
+            },
+            {
+                "type": "audio",
+                "key": "sfx-hit-taken",
+                "url": ["/assets/sounds/sfx-hit-taken.mp3"]
             },
             {
                 "type": "audio",

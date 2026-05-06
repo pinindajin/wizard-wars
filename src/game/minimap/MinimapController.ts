@@ -35,8 +35,9 @@ function isUiInputFocused(): boolean {
 }
 
 function eventKey(e: KeyboardEvent): string {
-  if (e.key === " ") return "Space"
-  return e.key.length === 1 ? e.key.toLowerCase() : e.key
+  const key = e.key ?? ""
+  if (key === " ") return "Space"
+  return key.length === 1 ? key.toLowerCase() : key
 }
 
 function bindKey(key: string): string {

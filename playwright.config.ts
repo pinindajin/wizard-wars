@@ -38,6 +38,8 @@ export default defineConfig({
         process.env.DATABASE_URL ??
         "postgresql://ww_user:ww_pass@127.0.0.1:5436/wizardwars",
       WIZARD_WARS_E2E: "1",
+      /** Enables `/dev/animation-tool` when `NODE_ENV=production` (see `animation-tool/page.tsx`). */
+      WW_ALLOW_ANIMATION_TOOL_IN_PRODUCTION_E2E: "1",
       E2E_CLIENT_READY_TIMEOUT_MS: "800",
       ADMIN_PREFIX: process.env.ADMIN_PREFIX ?? "e2eadm",
     },

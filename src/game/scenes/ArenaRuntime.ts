@@ -36,8 +36,11 @@ import { KeyboardController } from "../input/KeyboardController"
 import { MouseController } from "../input/MouseController"
 import { registerLadyWizardAnims } from "../animation/LadyWizardAnimDefs"
 import { registerFireballAnims } from "../animation/FireballAnimDefs"
+import { SFX_KEYS } from "@/shared/balance-config/audio"
+import { resolveDamageFloatLocalFeedback } from "../hitFeedback/damageFloatLocalFeedback"
 import { BgmPlayer } from "../audio/BgmPlayer"
 import { SoundManager } from "../audio/SoundManager"
+import { WalkFootstepController } from "../audio/WalkFootstepController"
 import { MinimapController } from "../minimap/MinimapController"
 
 type ArenaRuntimeVisuals = {
@@ -78,6 +81,21 @@ export class ArenaRuntime {
   /** Active Colyseus room connection. */
   private connection!: GameConnection
 
+  /** Removes this runtime's room message handler from the active connection. */
+  private connectionUnsub?: () => void
+
+  /** Whether this runtime created the connection and should close it on teardown. */
+  private ownsConnection = false
+
+  /** Prevents async fallback connection setup from subscribing after teardown. */
+  private destroyed = false
+
+  /**
+   * Incremented on each {@link start} and {@link destroy}. Room handlers capture a
+   * snapshot generation so in-flight Colyseus deliveries cannot touch systems after teardown.
+   */
+  private messageGeneration = 0
+
   private projectileRenderSystem!: ProjectileRenderSystem
   private lightningBoltRenderSystem!: LightningBoltRenderSystem
   private combatTelegraphRenderSystem!: CombatTelegraphRenderSystem
@@ -91,10 +109,17 @@ export class ArenaRuntime {
 
   private bgmPlayer!: BgmPlayer
   private soundManager!: SoundManager
+  private walkFootstep!: WalkFootstepController
   private readonly log = clientLogger.child({ area: "netcode" })
 
   /** Whether the match has started (MatchGo received). */
   private matchStarted = false
+
+  /**
+   * Wall clock (ms) when hazard take-hit SFX last played; used to throttle
+   * environmental damage grunts only.
+   */
+  private lastHazardTakeHitSfxAtMs: number | null = null
 
   /** Pixel size of the loaded arena tilemap (for camera bounds). */
   private arenaWidthPx = 0
@@ -110,6 +135,8 @@ export class ArenaRuntime {
    * Phaser Editor has created the visual tilemap.
    */
   start(): void {
+    this.destroyed = false
+    this.messageGeneration++
     this._configureTilemap()
     this._createPlayerGroup()
     this._createSystems()
@@ -213,6 +240,9 @@ export class ArenaRuntime {
    */
   private _setupAudio(): void {
     this.soundManager = new SoundManager(this.scene)
+    this.walkFootstep = new WalkFootstepController(this.soundManager, () =>
+      this.playerRenderSystem.localPlayerId,
+    )
     this.bgmPlayer = new BgmPlayer(this.scene)
     this.bgmPlayer.startBattleMusic()
   }
@@ -229,6 +259,7 @@ export class ArenaRuntime {
 
     if (injected?.room) {
       this.connection = injected
+      this.ownsConnection = false
       this.log.info(
         { event: "arena.connection.injected", roomId: injected.room.roomId, sessionId: injected.room.sessionId },
         "Using injected game connection",
@@ -245,6 +276,7 @@ export class ArenaRuntime {
     }
 
     this.connection = new GameConnection()
+    this.ownsConnection = true
     this.log.info(
       { event: "arena.connection.fallback", reason: "missing_injected_connection" },
       "Opening fallback game connection",
@@ -255,6 +287,10 @@ export class ArenaRuntime {
     this.playerRenderSystem.localPlayerId = sub ?? null
     this.networkSyncSystem.localPlayerId = sub ?? null
     void this.connection.connect().then(() => {
+      if (this.destroyed) {
+        void this.connection.close()
+        return
+      }
       this._subscribeRoomEvents()
       this.connection.sendClientSceneReady()
       this.log.info({ event: "arena.scene_ready.sent", playerId: sub }, "Client scene ready sent")
@@ -265,7 +301,10 @@ export class ArenaRuntime {
    * Subscribes all relevant room message handlers to the active connection.
    */
   private _subscribeRoomEvents(): void {
-    this.connection.onMessage((message) => {
+    this.connectionUnsub?.()
+    const generation = this.messageGeneration
+    this.connectionUnsub = this.connection.onMessage((message) => {
+      if (this.destroyed || generation !== this.messageGeneration) return
       switch (message.type) {
         case WsEvent.GameStateSync: {
           const payload = message.payload as GameStateSyncPayload
@@ -281,6 +320,7 @@ export class ArenaRuntime {
           break
         case WsEvent.FireballLaunch:
           this.projectileRenderSystem.spawnFireball(message.payload as FireballLaunchPayload)
+          this.soundManager.play(SFX_KEYS.fireballCast)
           break
         case WsEvent.FireballBatchUpdate:
           this.projectileRenderSystem.applyBatchUpdate(message.payload as FireballBatchUpdatePayload)
@@ -288,17 +328,17 @@ export class ArenaRuntime {
         case WsEvent.FireballImpact: {
           const payload = message.payload as FireballImpactPayload
           this.projectileRenderSystem.destroyFireball(payload.id)
-          this.soundManager.play("sfx-fireball-impact")
+          this.soundManager.play(SFX_KEYS.fireballImpact)
           break
         }
         case WsEvent.LightningBolt:
           this.lightningBoltRenderSystem.spawnBolt(message.payload as LightningBoltPayload)
-          this.soundManager.play("sfx-lightning-cast")
+          this.soundManager.play(SFX_KEYS.lightningCast)
           break
         case WsEvent.PrimaryMeleeAttack: {
           const payload = message.payload as PrimaryMeleeAttackPayload
           this.playerRenderSystem.onPrimaryMeleeSwing(payload)
-          this.soundManager.play("sfx-axe-swing")
+          this.soundManager.play(SFX_KEYS.axeSwing)
           break
         }
         case WsEvent.CombatTelegraphStart:
@@ -316,14 +356,39 @@ export class ArenaRuntime {
           break
         case WsEvent.PlayerDeath:
           this.playerRenderSystem.onPlayerDeath(message.payload as PlayerDeathPayload)
-          this.soundManager.play("sfx-player-death")
+          this.soundManager.play(SFX_KEYS.playerDeath)
           break
         case WsEvent.PlayerRespawn:
           this.playerRenderSystem.onPlayerRespawn(message.payload as PlayerRespawnPayload)
           break
-        case WsEvent.DamageFloat:
-          this.damageFloatersSystem.spawn(message.payload as DamageFloatPayload)
+        case WsEvent.DamageFloat: {
+          const payload = message.payload as DamageFloatPayload
+          this.damageFloatersSystem.spawn(payload)
+          const decision = resolveDamageFloatLocalFeedback(
+            this.playerRenderSystem.localPlayerId,
+            payload,
+            Date.now(),
+            this.lastHazardTakeHitSfxAtMs,
+          )
+          this.lastHazardTakeHitSfxAtMs = decision.nextLastHazardTakeHitSfxAtMs
+          if (decision.flashVictimUserId) {
+            this.playerRenderSystem.triggerHitFeedbackFlashForPlayerUserId(
+              decision.flashVictimUserId,
+            )
+          }
+          if (decision.flashDealerUserId) {
+            this.playerRenderSystem.triggerHitFeedbackFlashForPlayerUserId(
+              decision.flashDealerUserId,
+            )
+          }
+          if (decision.playTakeHitSfx) {
+            this.soundManager.playRestarting(SFX_KEYS.hitTaken)
+          }
+          if (decision.playDealSfx) {
+            this.soundManager.play(SFX_KEYS.hitDeal)
+          }
           break
+        }
         case WsEvent.MatchGo:
           this._onMatchGo()
           break
@@ -425,6 +490,7 @@ export class ArenaRuntime {
       this.playerRenderSystem.localInputHistory.append(fullInput)
       this.connection.sendPlayerInput(fullInput)
     })
+    this.walkFootstep.tick(delta, keyboardInput)
     this.debugOverlaySystem.update()
     this.projectileRenderSystem.update(delta)
     this.combatTelegraphRenderSystem.update(
@@ -459,5 +525,30 @@ export class ArenaRuntime {
       | string
       | undefined
     return sub ?? null
+  }
+
+  /**
+   * Releases runtime-owned resources that outlive Phaser scene teardown.
+   *
+   * The lobby keeps a shared {@link GameConnection} alive while navigating
+   * between lobby and game routes, so each Arena scene must remove only its own
+   * room handler. Also destroys ECS-backed render state ({@link PlayerRenderSystem},
+   * {@link CombatTelegraphRenderSystem}) so sprites do not outlive the scene when the
+   * connection is reused. This method is intentionally idempotent because Phaser can
+   * emit multiple teardown events during game destruction.
+   */
+  destroy(): void {
+    if (this.destroyed) return
+    this.destroyed = true
+    this.messageGeneration++
+
+    this.connectionUnsub?.()
+    this.connectionUnsub = undefined
+    this.playerRenderSystem?.destroy()
+    this.combatTelegraphRenderSystem?.destroy()
+
+    if (this.ownsConnection) {
+      void this.connection?.close()
+    }
   }
 }
