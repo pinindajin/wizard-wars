@@ -465,6 +465,14 @@ export type LobbyKickedPayload = {
   readonly reason: string
 }
 
+/** Server → clients: administrator is closing the lobby/game. */
+export type LobbyAdminClosingPayload = {
+  readonly reason: "admin_closed"
+  readonly closeAtServerMs: number
+  readonly countdownMs: number
+  readonly message: string
+}
+
 /** Server → client: generic lobby error. */
 export type LobbyErrorPayload = {
   readonly message: string

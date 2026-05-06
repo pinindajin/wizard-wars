@@ -48,3 +48,6 @@ export const WS_PING_TIMEOUT_MS = 30_000
 
 /** Brief grace period for lobby disposal on last-leave. */
 export const LOBBY_DISPOSAL_GRACE_MS = 10_000
+
+/** Admin-close warning duration before connected clients are returned to browse. */
+export const ADMIN_CLOSE_COUNTDOWN_MS = 30_000
