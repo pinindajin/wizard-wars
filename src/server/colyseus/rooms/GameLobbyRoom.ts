@@ -77,6 +77,65 @@ export type AdminCloseLobbyResult =
       readonly countdownMs: number
     }
 
+export type AdminLobbyPlayerConnectionStatus = "connected" | "disconnected"
+export type AdminLobbyPlayerPlayStatus = "lobby_only" | "loading_game" | "in_game" | "scoreboard"
+
+export type AdminLobbyBandwidthSnapshot = {
+  readonly inboundBytes: number
+  readonly outboundBytes: number
+  readonly totalBytes: number
+}
+
+export type AdminLobbyPlayerSnapshot = {
+  readonly playerId: string
+  readonly username: string
+  readonly heroId: string
+  readonly isHost: boolean
+  readonly isReady: boolean
+  readonly clientSceneReady: boolean
+  readonly connectionStatus: AdminLobbyPlayerConnectionStatus
+  readonly playStatus: AdminLobbyPlayerPlayStatus
+  readonly lastSeenAt: string
+}
+
+export type AdminLobbySnapshot = {
+  readonly snapshotAvailable: true
+  readonly lobbyId: string
+  readonly phase: LobbyPhase
+  readonly createdAt: string
+  readonly uptimeMs: number
+  readonly connectedPlayerCount: number
+  readonly rosterPlayerCount: number
+  readonly maxPlayers: number
+  readonly hostPlayerId: string | null
+  readonly hostName: string
+  readonly bandwidth: AdminLobbyBandwidthSnapshot
+  readonly players: readonly AdminLobbyPlayerSnapshot[]
+}
+
+type AdminRosterEntry = PlayerData & {
+  connectionStatus: AdminLobbyPlayerConnectionStatus
+  lastSeenAtMs: number
+}
+
+type RawSender = Client["raw"]
+
+type MessageSource = {
+  on: (event: "message", listener: (data: unknown) => void) => void
+  off?: (event: "message", listener: (data: unknown) => void) => void
+  removeListener?: (event: "message", listener: (data: unknown) => void) => void
+}
+
+type BandwidthInstrumentedClient = Client & {
+  raw: RawSender
+  ref?: MessageSource
+}
+
+type BandwidthClientHooks = {
+  readonly originalRaw: RawSender
+  readonly onMessage: (data: unknown) => void
+}
+
 /**
  * Client-scene-ready deadline. When `WIZARD_WARS_E2E=1`, `E2E_CLIENT_READY_TIMEOUT_MS`
  * may shorten the wait (clamped 100–15000 ms). Ignored in production unless the opt-in is set.
@@ -207,6 +266,41 @@ function nativeSetTimeout(
   return { clear: () => globalThis.clearTimeout(id) }
 }
 
+/**
+ * Returns byte length for WebSocket payload shapes used by `ws`.
+ *
+ * @param value - Raw message or outbound buffer.
+ * @returns Number of payload bytes represented by the value.
+ */
+function rawPayloadByteLength(value: unknown): number {
+  if (typeof value === "string") {
+    return Buffer.byteLength(value)
+  }
+  if (value instanceof ArrayBuffer) {
+    return value.byteLength
+  }
+  if (ArrayBuffer.isView(value)) {
+    return value.byteLength
+  }
+  if (Array.isArray(value)) {
+    return value.reduce((sum, part) => sum + rawPayloadByteLength(part), 0)
+  }
+  return 0
+}
+
+/**
+ * Converts lobby phase into the dashboard's coarse player play status.
+ *
+ * @param phase - Current lobby FSM phase.
+ * @returns Dashboard play status for players in the room.
+ */
+function adminPlayStatusForPhase(phase: LobbyPhase): AdminLobbyPlayerPlayStatus {
+  if (phase === "LOBBY") return "lobby_only"
+  if (phase === "WAITING_FOR_CLIENTS" || phase === "COUNTDOWN") return "loading_game"
+  if (phase === "IN_PROGRESS") return "in_game"
+  return "scoreboard"
+}
+
 // ---------------------------------------------------------------------------
 // Room
 // ---------------------------------------------------------------------------
@@ -308,6 +402,21 @@ export class GameLobbyRoom extends Room {
    * to ignore duplicate / re-ordered inputs on arrival.
    */
   private readonly highestAcceptedSeqByPlayer = new Map<string, number>()
+
+  /** Wall-clock timestamp used by admin dashboard uptime calculations. */
+  private readonly adminCreatedAtMs = Date.now()
+
+  /** Room lifetime inbound payload bytes observed after clients join this room. */
+  private adminInboundBytes = 0
+
+  /** Room lifetime outbound payload bytes emitted through client transports. */
+  private adminOutboundBytes = 0
+
+  /** Dashboard roster that keeps disconnected players during reconnect grace. */
+  private readonly adminRoster = new Map<string, AdminRosterEntry>()
+
+  /** Transport hooks installed for per-room bandwidth accounting. */
+  private readonly bandwidthClientHooks = new Map<Client, BandwidthClientHooks>()
 
   // ---------------------------------------------------------------------------
   // Colyseus lifecycle
@@ -483,6 +592,8 @@ export class GameLobbyRoom extends Room {
     client.userData = pd
     this.joinOrder.push(auth.sub)
     playerLobbyIndex.set(auth.sub, this.roomId)
+    this.installBandwidthHooks(client)
+    this.markAdminPlayerConnected(pd)
 
     if (!this.hostPlayerId) {
       this.hostPlayerId = auth.sub
@@ -532,6 +643,8 @@ export class GameLobbyRoom extends Room {
   async onDrop(client: Client): Promise<void> {
     const pd = client.userData as PlayerData | undefined
     if (!pd) return
+    this.removeBandwidthHooks(client)
+    this.markAdminPlayerDisconnected(pd)
 
     if (this.isAdminClosing) {
       if (playerLobbyIndex.get(pd.playerId) === this.roomId) {
@@ -583,6 +696,8 @@ export class GameLobbyRoom extends Room {
   onReconnect(client: Client): void {
     const pd = client.userData as PlayerData | undefined
     if (!pd) return
+    this.installBandwidthHooks(client)
+    this.markAdminPlayerConnected(pd)
 
     if (this.isAdminClosing) {
       if (this.adminClosePayload) {
@@ -633,10 +748,12 @@ export class GameLobbyRoom extends Room {
   onLeave(client: Client): void {
     const pd = client.userData as PlayerData | undefined
     if (!pd) return
+    this.removeBandwidthHooks(client)
     if (this.isAdminClosing) {
       if (playerLobbyIndex.get(pd.playerId) === this.roomId) {
         playerLobbyIndex.delete(pd.playerId)
       }
+      this.markAdminPlayerDisconnected(pd)
       return
     }
     this.handlePlayerGone(pd)
@@ -661,6 +778,8 @@ export class GameLobbyRoom extends Room {
     this.adminCloseTimer?.clear()
     this.gameLoopTimer?.clear()
     this.clearMatchRuntimeState()
+    this.clearBandwidthHooks()
+    this.adminRoster.clear()
 
     logger.info(
       { event: "room.disposed", area: "netcode", side: "server", roomId: this.roomId },
@@ -671,6 +790,79 @@ export class GameLobbyRoom extends Room {
   // ---------------------------------------------------------------------------
   // Internal player lifecycle
   // ---------------------------------------------------------------------------
+
+  /**
+   * Adds transport hooks that count room-level inbound and outbound payload bytes.
+   *
+   * @param client - Colyseus client whose transport should be observed.
+   */
+  private installBandwidthHooks(client: Client): void {
+    if (this.bandwidthClientHooks.has(client)) return
+
+    const instrumented = client as BandwidthInstrumentedClient
+    const originalRaw = instrumented.raw.bind(instrumented) as RawSender
+    const onMessage = (data: unknown): void => {
+      this.adminInboundBytes += rawPayloadByteLength(data)
+    }
+
+    instrumented.raw = ((...args: Parameters<RawSender>) => {
+      this.adminOutboundBytes += rawPayloadByteLength(args[0])
+      return originalRaw(...args)
+    }) as RawSender
+    instrumented.ref?.on("message", onMessage)
+    this.bandwidthClientHooks.set(client, { originalRaw, onMessage })
+  }
+
+  /**
+   * Removes transport hooks installed by {@link installBandwidthHooks}.
+   *
+   * @param client - Client whose bandwidth hooks should be removed.
+   */
+  private removeBandwidthHooks(client: Client): void {
+    const hooks = this.bandwidthClientHooks.get(client)
+    if (!hooks) return
+
+    const instrumented = client as BandwidthInstrumentedClient
+    instrumented.raw = hooks.originalRaw
+    instrumented.ref?.off?.("message", hooks.onMessage)
+    instrumented.ref?.removeListener?.("message", hooks.onMessage)
+    this.bandwidthClientHooks.delete(client)
+  }
+
+  /**
+   * Removes all active transport hooks when the room is disposed.
+   */
+  private clearBandwidthHooks(): void {
+    for (const client of [...this.bandwidthClientHooks.keys()]) {
+      this.removeBandwidthHooks(client)
+    }
+  }
+
+  /**
+   * Records a player as connected in the admin dashboard roster.
+   *
+   * @param pd - Player data attached to the active client.
+   */
+  private markAdminPlayerConnected(pd: PlayerData): void {
+    this.adminRoster.set(pd.playerId, {
+      ...pd,
+      connectionStatus: "connected",
+      lastSeenAtMs: Date.now(),
+    })
+  }
+
+  /**
+   * Records a player as temporarily disconnected during reconnect grace.
+   *
+   * @param pd - Player data attached to the dropped client.
+   */
+  private markAdminPlayerDisconnected(pd: PlayerData): void {
+    this.adminRoster.set(pd.playerId, {
+      ...pd,
+      connectionStatus: "disconnected",
+      lastSeenAtMs: Date.now(),
+    })
+  }
 
   /**
    * Resets per-player input stream state when a client opens a new transport
@@ -705,6 +897,7 @@ export class GameLobbyRoom extends Room {
     this.clientReadySet.delete(pd.playerId)
     this.returnedToLobbySet.delete(pd.playerId)
     this.chatRateMap.delete(pd.playerId)
+    this.adminRoster.delete(pd.playerId)
 
     this.broadcast(RoomEvent.PlayerLeave, { playerId: pd.playerId })
 
@@ -1943,6 +2136,70 @@ export class GameLobbyRoom extends Room {
   // ---------------------------------------------------------------------------
   // Public accessors (testing / admin)
   // ---------------------------------------------------------------------------
+
+  /**
+   * Builds the dashboard snapshot for admin-only room introspection.
+   *
+   * @returns Current room metrics, roster, and bandwidth counters.
+   */
+  getAdminSnapshot(): AdminLobbySnapshot {
+    const now = Date.now()
+    const connectedPlayers = new Map<string, PlayerData>()
+    for (const client of this.clients) {
+      const pd = client.userData as PlayerData | undefined
+      if (!pd) continue
+      connectedPlayers.set(pd.playerId, pd)
+      if (!this.adminRoster.has(pd.playerId)) {
+        this.markAdminPlayerConnected(pd)
+      }
+    }
+
+    const orderedRoster = [...this.adminRoster.values()].sort((a, b) => {
+      const aIndex = this.joinOrder.indexOf(a.playerId)
+      const bIndex = this.joinOrder.indexOf(b.playerId)
+      return (
+        (aIndex === -1 ? Number.MAX_SAFE_INTEGER : aIndex) -
+        (bIndex === -1 ? Number.MAX_SAFE_INTEGER : bIndex)
+      )
+    })
+    const playStatus = adminPlayStatusForPhase(this.lobbyPhase)
+    const players = orderedRoster.map((entry): AdminLobbyPlayerSnapshot => {
+      const connected = connectedPlayers.get(entry.playerId)
+      const source = connected ?? entry
+      return {
+        playerId: source.playerId,
+        username: source.username,
+        heroId: source.heroId,
+        isHost: source.playerId === this.hostPlayerId,
+        isReady: source.isReady,
+        clientSceneReady: source.clientSceneReady,
+        connectionStatus: connected ? "connected" : entry.connectionStatus,
+        playStatus,
+        lastSeenAt: new Date(entry.lastSeenAtMs).toISOString(),
+      }
+    })
+    const hostName =
+      players.find((player) => player.playerId === this.hostPlayerId)?.username ?? ""
+
+    return {
+      snapshotAvailable: true,
+      lobbyId: this.roomId,
+      phase: this.lobbyPhase,
+      createdAt: new Date(this.adminCreatedAtMs).toISOString(),
+      uptimeMs: Math.max(0, now - this.adminCreatedAtMs),
+      connectedPlayerCount: this.clients.length,
+      rosterPlayerCount: this.adminRoster.size,
+      maxPlayers: MAX_PLAYERS_PER_MATCH,
+      hostPlayerId: this.hostPlayerId,
+      hostName,
+      bandwidth: {
+        inboundBytes: this.adminInboundBytes,
+        outboundBytes: this.adminOutboundBytes,
+        totalBytes: this.adminInboundBytes + this.adminOutboundBytes,
+      },
+      players,
+    }
+  }
 
   /**
    * Read-only accessor for the current lobby phase.
