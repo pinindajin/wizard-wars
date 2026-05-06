@@ -13,22 +13,26 @@ function mockScene() {
   const emitterDestroyFns: Array<ReturnType<typeof vi.fn>> = []
   const emitterStopFns: Array<ReturnType<typeof vi.fn>> = []
   const startFollowFns: Array<ReturnType<typeof vi.fn>> = []
+  const spriteRotationFns: Array<ReturnType<typeof vi.fn>> = []
   return {
     spriteDestroyFns,
     emitterDestroyFns,
     emitterStopFns,
     startFollowFns,
+    spriteRotationFns,
     scene: {
       add: {
         sprite: vi.fn(() => {
           const destroy = vi.fn()
+          const setRotation = vi.fn()
           spriteDestroyFns.push(destroy)
+          spriteRotationFns.push(setRotation)
           return {
             destroy,
             setScale: vi.fn(),
             setDepth: vi.fn(),
             play: vi.fn(),
-            setRotation: vi.fn(),
+            setRotation,
             setPosition: vi.fn(),
           }
         }),
@@ -91,6 +95,21 @@ describe("ProjectileRenderSystem", () => {
     sys.spawnFireball({ id: 3, ownerId: "u", x: 0, y: 0, vx: 1, vy: 0 })
     expect(scene.add.particles).toHaveBeenCalledTimes(1)
     expect(startFollowFns[0]).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ["east", 100, 0, 0],
+    ["west", -100, 0, Math.PI],
+    ["south", 0, 100, Math.PI / 2],
+    ["north", 0, -100, -Math.PI / 2],
+    ["southeast", 100, 100, Math.PI / 4],
+  ])("rotates fireball sprites toward %s travel", (_label, vx, vy, expected) => {
+    const { scene, spriteRotationFns } = mockScene()
+    const sys = new ProjectileRenderSystem(scene as never)
+
+    sys.spawnFireball({ id: 12, ownerId: "u", x: 0, y: 0, vx, vy })
+
+    expect(spriteRotationFns[0]).toHaveBeenCalledWith(expected)
   })
 
   it("creates the ember emitter at world origin so startFollow coords are not double-translated", () => {
