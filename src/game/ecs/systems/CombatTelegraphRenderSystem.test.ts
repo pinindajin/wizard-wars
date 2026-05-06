@@ -51,6 +51,16 @@ function baseConePayload(over: Partial<CombatTelegraphStartPayload> = {}): Comba
   }
 }
 
+function baseCapsulePayload(over: Partial<CombatTelegraphStartPayload> = {}): CombatTelegraphStartPayload {
+  return {
+    ...baseConePayload({
+      id: "capsule-1",
+      shape: { type: "capsule", lengthPx: 100, radiusPx: 20 },
+    }),
+    ...over,
+  }
+}
+
 function mockGraphics() {
   return {
     destroy: vi.fn(),
@@ -59,6 +69,7 @@ function mockGraphics() {
     fillStyle: vi.fn(),
     beginPath: vi.fn(),
     moveTo: vi.fn(),
+    lineTo: vi.fn(),
     arc: vi.fn(),
     closePath: vi.fn(),
     fillPath: vi.fn(),
@@ -127,6 +138,40 @@ describe("CombatTelegraphRenderSystem", () => {
     expect(gfx.clear).toHaveBeenCalled()
     expect(gfx.fillStyle).toHaveBeenCalledWith(TELEGRAPH_DANGER_FILL_COLOR, TELEGRAPH_DANGER_FILL_ALPHA)
     expect(gfx.fillPath).toHaveBeenCalled()
+  })
+
+  it("draws capsule telegraphs as one filled path without overlapping fill circles", () => {
+    const gfx = mockGraphics()
+    const scene = { add: { graphics: vi.fn(() => gfx) } }
+    const sys = new CombatTelegraphRenderSystem(scene as never)
+    wireCaster("u1", 100, 200)
+    sys.start(baseCapsulePayload())
+    sys.update(2_500)
+    expect(gfx.fillStyle).toHaveBeenCalledWith(TELEGRAPH_DANGER_FILL_COLOR, TELEGRAPH_DANGER_FILL_ALPHA)
+    expect(gfx.beginPath).toHaveBeenCalledTimes(1)
+    expect(gfx.moveTo).toHaveBeenCalledWith(100, 220)
+    expect(gfx.lineTo).toHaveBeenNthCalledWith(1, 200, 220)
+    expect(gfx.arc).toHaveBeenNthCalledWith(1, 200, 200, 20, Math.PI / 2, -Math.PI / 2, true)
+    expect(gfx.lineTo).toHaveBeenNthCalledWith(2, 100, 180)
+    expect(gfx.arc).toHaveBeenNthCalledWith(2, 100, 200, 20, -Math.PI / 2, Math.PI / 2, true)
+    expect(gfx.fillPath).toHaveBeenCalledTimes(1)
+    expect(gfx.fillCircle).not.toHaveBeenCalled()
+  })
+
+  it("draws zero-length capsule telegraphs as one fallback circle", () => {
+    const gfx = mockGraphics()
+    const scene = { add: { graphics: vi.fn(() => gfx) } }
+    const sys = new CombatTelegraphRenderSystem(scene as never)
+    wireCaster("u1", 100, 200)
+    sys.start(
+      baseCapsulePayload({
+        shape: { type: "capsule", lengthPx: 0, radiusPx: 20 },
+      }),
+    )
+    sys.update(2_500)
+    expect(gfx.fillCircle).toHaveBeenCalledWith(100, 200, 20)
+    expect(gfx.fillCircle).toHaveBeenCalledTimes(1)
+    expect(gfx.fillPath).not.toHaveBeenCalled()
   })
 
   it("draws no fill after dangerEnds but before endsAt when that interval exists", () => {
