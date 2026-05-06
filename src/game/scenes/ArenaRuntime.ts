@@ -320,6 +320,7 @@ export class ArenaRuntime {
           break
         case WsEvent.FireballLaunch:
           this.projectileRenderSystem.spawnFireball(message.payload as FireballLaunchPayload)
+          this.soundManager.play(SFX_KEYS.fireballCast)
           break
         case WsEvent.FireballBatchUpdate:
           this.projectileRenderSystem.applyBatchUpdate(message.payload as FireballBatchUpdatePayload)
@@ -327,17 +328,17 @@ export class ArenaRuntime {
         case WsEvent.FireballImpact: {
           const payload = message.payload as FireballImpactPayload
           this.projectileRenderSystem.destroyFireball(payload.id)
-          this.soundManager.play("sfx-fireball-impact")
+          this.soundManager.play(SFX_KEYS.fireballImpact)
           break
         }
         case WsEvent.LightningBolt:
           this.lightningBoltRenderSystem.spawnBolt(message.payload as LightningBoltPayload)
-          this.soundManager.play("sfx-lightning-cast")
+          this.soundManager.play(SFX_KEYS.lightningCast)
           break
         case WsEvent.PrimaryMeleeAttack: {
           const payload = message.payload as PrimaryMeleeAttackPayload
           this.playerRenderSystem.onPrimaryMeleeSwing(payload)
-          this.soundManager.play("sfx-axe-swing")
+          this.soundManager.play(SFX_KEYS.axeSwing)
           break
         }
         case WsEvent.CombatTelegraphStart:
@@ -355,7 +356,7 @@ export class ArenaRuntime {
           break
         case WsEvent.PlayerDeath:
           this.playerRenderSystem.onPlayerDeath(message.payload as PlayerDeathPayload)
-          this.soundManager.play("sfx-player-death")
+          this.soundManager.play(SFX_KEYS.playerDeath)
           break
         case WsEvent.PlayerRespawn:
           this.playerRenderSystem.onPlayerRespawn(message.payload as PlayerRespawnPayload)

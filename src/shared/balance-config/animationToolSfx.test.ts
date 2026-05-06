@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 
+import { SFX_KEYS } from "./audio"
 import { primaryAttackActionId } from "./animationConfig"
 import { resolveSfxKeyForAction } from "./animationToolSfx"
 import { HERO_CONFIGS } from "./heroes"
@@ -29,9 +30,9 @@ describe("resolveSfxKeyForAction", () => {
     expect(resolveSfxKeyForAction("red_wizard", "primary:ranger_cleaver")).toBeNull()
   })
 
-  it("returns null for behavior actions", () => {
+  it("returns null for behavior actions except walk footstep", () => {
     expect(resolveSfxKeyForAction("red_wizard", "idle")).toBeNull()
-    expect(resolveSfxKeyForAction("red_wizard", "walk")).toBeNull()
+    expect(resolveSfxKeyForAction("red_wizard", "walk")).toBe(SFX_KEYS.walkStep)
     expect(resolveSfxKeyForAction("red_wizard", "death")).toBeNull()
   })
 

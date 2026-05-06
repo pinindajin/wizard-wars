@@ -59,6 +59,11 @@ import {
 } from "@/app/dev/animation-tool/animationToolPreviewVolume"
 import { AnimationToolSfxImportModal } from "@/app/dev/animation-tool/AnimationToolSfxImportModal"
 import { AnimationToolSfxWaveform } from "@/app/dev/animation-tool/AnimationToolSfxWaveform"
+import {
+  resolveArenaPackAudioSiteUrlForSfxKey,
+  siteAssetUrlToPublicDiskPathLabel,
+} from "@/shared/balance-config/arenaPackAudioUrls"
+import { walkFootstepCadenceMarkerTimesMs } from "@/shared/balance-config/animationToolWalkCadence"
 import { resolveSfxKeyForAction } from "@/shared/balance-config/animationToolSfx"
 
 const FRAME = LADY_WIZARD_FRAME_SIZE_PX
@@ -249,6 +254,20 @@ function LegendTipRow(props: { label: ReactNode; testId?: string; children: Reac
   )
 }
 
+/**
+ * Stable `data-testid` for sidebar section expand/collapse controls (Playwright).
+ *
+ * @param title - Panel title string from `CollapsiblePanel`.
+ * @returns Test id such as `animation-tool-section-toggle-hero`.
+ */
+function collapsibleSectionToggleTestId(title: string): string {
+  const slug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+  return `animation-tool-section-toggle-${slug}`
+}
+
 function CollapsiblePanel(props: {
   readonly title: string
   readonly defaultOpen?: boolean
@@ -264,6 +283,7 @@ function CollapsiblePanel(props: {
         className="flex w-full items-center justify-between font-mono text-xs uppercase tracking-[0.3em] text-stone-500 hover:text-lime-200"
         aria-expanded={open}
         aria-controls={panelId}
+        data-testid={collapsibleSectionToggleTestId(title)}
         onClick={() => setOpen((value) => !value)}
       >
         <span>{title}</span>
@@ -406,8 +426,14 @@ function FrameTimeline(props: {
   readonly setPlaying: (playing: boolean) => void
   readonly setTimeMs: (timeMs: number) => void
   readonly playing: boolean
-  /** Resolved SFX preview URL, or `null` when no key. */
+  /** Resolved SFX preview URL from arena pack (+ cache bust), or `null` when no key. */
   readonly sfxAudioSrc: string | null
+  /** Optional walk footstep cadence markers (ms) on the waveform. */
+  readonly cadenceMarkerTimesMs?: readonly number[]
+  /** Walk loop duration for cadence marker positions. */
+  readonly cadenceTimelineDurationMs?: number
+  /** Legend under waveform when cadence is shown. */
+  readonly cadenceLegend?: string
   /** Animation-tool-only preview loudness (0–100). */
   readonly previewVolumePercent: number
 }) {
@@ -421,6 +447,9 @@ function FrameTimeline(props: {
     setTimeMs,
     playing,
     sfxAudioSrc,
+    cadenceMarkerTimesMs,
+    cadenceTimelineDurationMs,
+    cadenceLegend,
     previewVolumePercent,
   } = props
   const fd = animationFrameDurationsMs(config)
@@ -498,7 +527,13 @@ function FrameTimeline(props: {
         </div>
       </div>
 
-      <AnimationToolSfxWaveform audioSrc={sfxAudioSrc} previewVolumePercent={previewVolumePercent} />
+      <AnimationToolSfxWaveform
+        audioSrc={sfxAudioSrc}
+        previewVolumePercent={previewVolumePercent}
+        cadenceMarkerTimesMs={cadenceMarkerTimesMs}
+        cadenceTimelineDurationMs={cadenceTimelineDurationMs}
+        cadenceLegend={cadenceLegend}
+      />
 
       <div
         className="mt-3 grid gap-0.5"
@@ -977,9 +1012,16 @@ export function AnimationToolClient() {
   const currentFrame = msToFrameIndexForAction(timeMs, actionConfig.durationMs, frameCount, fdTiming)
   const missingDirections = orderedCells.filter((cell) => cell.missing).map((cell) => cell.direction)
   const resolvedSfxKey = resolveSfxKeyForAction(heroId, action.id)
-  const sfxAudioSrc = resolvedSfxKey
-    ? `/assets/sounds/${resolvedSfxKey}.mp3?v=${String(sfxReloadToken)}`
+  const sfxPackSiteUrl = resolvedSfxKey ? resolveArenaPackAudioSiteUrlForSfxKey(resolvedSfxKey) : null
+  const sfxAudioSrc = sfxPackSiteUrl ? `${sfxPackSiteUrl}?v=${String(sfxReloadToken)}` : null
+  const sfxRuntimePathLabel = sfxPackSiteUrl ? siteAssetUrlToPublicDiskPathLabel(sfxPackSiteUrl) : null
+  const sfxDevImportMp3Label = resolvedSfxKey
+    ? `public/assets/sounds/${resolvedSfxKey}.mp3`
     : null
+  const walkCadenceMarkerTimesMs = useMemo(
+    () => (action.id === "walk" ? walkFootstepCadenceMarkerTimesMs(actionConfig.durationMs) : undefined),
+    [action.id, actionConfig.durationMs],
+  )
 
   useEffect(() => {
     if (!resolvedSfxKey) setSfxImportOpen(false)
@@ -1449,12 +1491,19 @@ export function AnimationToolClient() {
                     Phaser key: <span className="text-lime-200">{resolvedSfxKey}</span>
                   </p>
                   <p className="break-all text-stone-500">
-                    Path: <span className="text-stone-300">public/assets/sounds/{resolvedSfxKey}.mp3</span>
+                    Runtime file (arena pack):{" "}
+                    <span className="text-stone-300">
+                      {sfxRuntimePathLabel ?? "— (no audio entry in arena-asset-pack.json)"}
+                    </span>
+                  </p>
+                  <p className="break-all text-stone-500">
+                    Replace via tool: <span className="text-stone-300">{sfxDevImportMp3Label}</span> (MP3 only)
                   </p>
                 </>
               ) : (
                 <p className="text-stone-500">
-                  No balance-config SFX key for this action (behaviors and unmapped primaries have none here).
+                  No balance-config SFX key for this action (idle, death, stumble, and unmapped primaries have none
+                  here).
                 </p>
               )}
               <label className="flex flex-col gap-1 text-stone-300">
@@ -1858,6 +1907,13 @@ export function AnimationToolClient() {
               setTimeMs={setTimeMs}
               playing={playing}
               sfxAudioSrc={sfxAudioSrc}
+              cadenceMarkerTimesMs={walkCadenceMarkerTimesMs}
+              cadenceTimelineDurationMs={action.id === "walk" ? actionConfig.durationMs : undefined}
+              cadenceLegend={
+                action.id === "walk"
+                  ? "Walk step cadence (two footfalls per loop; click ticks for footstep preview)."
+                  : undefined
+              }
               previewVolumePercent={previewVolumePercent}
             />
             {missingDirections.length > 0 ? (
@@ -1911,7 +1967,7 @@ export function AnimationToolClient() {
           heroId={heroId}
           actionId={action.id}
           resolvedKey={resolvedSfxKey}
-          destinationPathLabel={`public/assets/sounds/${resolvedSfxKey}.mp3`}
+          destinationPathLabel={sfxDevImportMp3Label ?? `public/assets/sounds/${resolvedSfxKey}.mp3`}
           busy={sfxImportBusy}
           error={sfxImportError}
           onSubmit={handleSfxImportSubmit}

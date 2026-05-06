@@ -191,6 +191,7 @@ describe("animation config", () => {
     expect(megasheetClipForAnimationActionKey("death")).toBe("death")
     expect(megasheetClipForAnimationActionKey("stumble")).toBe("stumble")
     expect(megasheetClipForAnimationActionKey("spell:fireball")).toBe("light_spell_cast")
+    expect(megasheetClipForAnimationActionKey("spell:jump")).toBe("jump")
     expect(megasheetClipForAnimationActionKey("spell:lightning_bolt")).toBe("heavy_spell_cast")
     expect(megasheetClipForAnimationActionKey("primary:red_wizard_cleaver")).toBe(
       "summoned_axe_swing",
@@ -227,6 +228,14 @@ describe("animation config", () => {
         },
       } as never)[0]!.config,
     ).toBe(ANIMATION_CONFIG.heroes.red_wizard.actions.idle)
+  })
+
+  it("maps Jump spell to jump megasheet and atlas clips in the animation tool list", () => {
+    const actions = getAnimationToolActions("red_wizard")
+    const jump = actions.find((a) => a.id === "spell:jump")
+    expect(jump).toBeDefined()
+    expect(jump!.atlasClipId).toBe("jump")
+    expect(jump!.megasheetClip).toBe("jump")
   })
 
   it("parses tool saves and exposes typed config helpers", () => {
