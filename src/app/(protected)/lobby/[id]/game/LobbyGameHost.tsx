@@ -43,6 +43,7 @@ import {
   type MinimapCorner,
 } from "./GameSettingsContext"
 import { useLobbyConnection } from "../LobbyConnectionProvider"
+import { AdminClosingModal } from "@/components/lobby/AdminClosingModal"
 import { MATCH_COUNTDOWN_DURATION_MS } from "@/shared/balance-config/lobby"
 import type { ShopStatePayload } from "@/shared/types"
 import KillFeed from "./KillFeed"
@@ -124,7 +125,7 @@ function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) 
   useEffect(() => {
     minimapCornerRef.current = minimapCorner
   }, [minimapCorner])
-  const { connection, lobbyState, localPlayerId } = useLobbyConnection()
+  const { connection, lobbyState, adminClosing, localPlayerId } = useLobbyConnection()
   const isHost =
     localPlayerId != null && localPlayerId === lobbyState?.hostPlayerId
 
@@ -423,6 +424,13 @@ function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) 
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-black">
+      {adminClosing ? (
+        <AdminClosingModal
+          payload={adminClosing}
+          onDone={() => router.replace("/browse")}
+        />
+      ) : null}
+
       <div
         id="phaser-container"
         data-testid="game-phaser-container"

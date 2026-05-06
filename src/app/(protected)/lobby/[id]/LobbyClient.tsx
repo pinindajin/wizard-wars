@@ -11,6 +11,7 @@ import {
   LobbyStatusPill,
 } from "@/components/lobby/LobbyChrome"
 import { LobbyIdlePill } from "@/components/lobby/LobbyIdlePill"
+import { AdminClosingModal } from "@/components/lobby/AdminClosingModal"
 import { HeroCard, HERO_CARD_CONFIGS } from "@/components/lobby/HeroCard"
 import { HERO_CONFIGS } from "@/shared/balance-config/heroes"
 import { MATCH_COUNTDOWN_DURATION_MS } from "@/shared/balance-config/lobby"
@@ -88,6 +89,7 @@ export default function LobbyClient() {
   const {
     connection,
     lobbyState,
+    adminClosing,
     localPlayerId,
     error: providerError,
     isConnected,
@@ -284,6 +286,13 @@ export default function LobbyClient() {
 
   return (
     <LobbyShell>
+      {adminClosing ? (
+        <AdminClosingModal
+          payload={adminClosing}
+          onDone={() => router.replace("/browse")}
+        />
+      ) : null}
+
       {countdownStart ? (
         <div className="pointer-events-none fixed inset-0 z-50">
           <CountdownOverlay

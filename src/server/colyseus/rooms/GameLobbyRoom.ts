@@ -38,10 +38,12 @@ import {
   LOBBY_IDLE_TIMEOUT_MS,
   LOBBY_CHAT_BUFFER_MAX,
   LOBBY_DISPOSAL_GRACE_MS,
+  ADMIN_CLOSE_COUNTDOWN_MS,
 } from "../../../shared/balance-config/lobby"
 import { DEFAULT_HERO_ID } from "../../../shared/balance-config/heroes"
 import { logger } from "../../logger"
 import { AbilitySlots, Equipment, ABILITY_INDEX } from "../../game/components"
+import { CLOSE_CODE_ADMIN_CLOSED } from "../../../shared/constants"
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -49,6 +51,31 @@ import { AbilitySlots, Equipment, ABILITY_INDEX } from "../../game/components"
 
 /** WebSocket close code passed to `Client.leave` when the host dissolves the lobby. */
 export const CLOSE_CODE_LOBBY_DISSOLVED = 4012
+
+export type AdminCloseLobbyInput = {
+  readonly adminUserId: string
+  readonly adminUsername: string
+  readonly confirmed: boolean
+}
+
+export type AdminCloseLobbyResult =
+  | {
+      readonly status: "confirmation_required"
+      readonly occupied: true
+      readonly playerCount: number
+      readonly lobbyPhase: LobbyPhase
+    }
+  | {
+      readonly status: "closed"
+      readonly occupied: false
+      readonly closeAtServerMs: null
+    }
+  | {
+      readonly status: "closing"
+      readonly occupied: true
+      readonly closeAtServerMs: number
+      readonly countdownMs: number
+    }
 
 /**
  * Client-scene-ready deadline. When `WIZARD_WARS_E2E=1`, `E2E_CLIENT_READY_TIMEOUT_MS`
@@ -86,6 +113,21 @@ function resolveLobbyIdleTimeoutMs(): number {
     return LOBBY_IDLE_TIMEOUT_MS
   }
   return Math.min(LOBBY_IDLE_TIMEOUT_MS, Math.max(100, parsed))
+}
+
+function resolveAdminCloseCountdownMs(): number {
+  if (process.env.VITEST !== "true" && process.env.WIZARD_WARS_E2E !== "1") {
+    return ADMIN_CLOSE_COUNTDOWN_MS
+  }
+  const raw = process.env.WIZARD_WARS_TEST_ADMIN_CLOSE_MS
+  if (raw === undefined || raw === "") {
+    return ADMIN_CLOSE_COUNTDOWN_MS
+  }
+  const parsed = Number.parseInt(raw, 10)
+  if (!Number.isFinite(parsed)) {
+    return ADMIN_CLOSE_COUNTDOWN_MS
+  }
+  return Math.min(ADMIN_CLOSE_COUNTDOWN_MS, Math.max(100, parsed))
 }
 
 /** Max lobby chat messages per player per rate-limit window. */
@@ -220,6 +262,15 @@ export class GameLobbyRoom extends Room {
   /** Empty-lobby disposal grace timer. */
   private disposalGraceTimer: { clear: () => void } | null = null
 
+  /** Final admin-close timer; only armed after the close notice is broadcast. */
+  private adminCloseTimer: { clear: () => void } | null = null
+
+  /** True once an admin close has begun. Freezes gameplay/lobby mutation. */
+  private isAdminClosing = false
+
+  /** Cached notice for reconnecting clients during the admin-close countdown. */
+  private adminClosePayload: import("../../../shared/types").LobbyAdminClosingPayload | null = null
+
   /**
    * Set of `playerId`s that have sent `client_scene_ready` during
    * `WAITING_FOR_CLIENTS`. Cleared on each new game start.
@@ -325,6 +376,10 @@ export class GameLobbyRoom extends Room {
     _client: Client,
     options: { token?: string },
   ): Promise<AuthUser> {
+    if (this.isAdminClosing) {
+      throw new Error("lobby is closing")
+    }
+
     const token = options?.token
     if (!token) {
       logger.warn(
@@ -478,6 +533,13 @@ export class GameLobbyRoom extends Room {
     const pd = client.userData as PlayerData | undefined
     if (!pd) return
 
+    if (this.isAdminClosing) {
+      if (playerLobbyIndex.get(pd.playerId) === this.roomId) {
+        playerLobbyIndex.delete(pd.playerId)
+      }
+      return
+    }
+
     if (
       this.lobbyPhase === "IN_PROGRESS" ||
       this.lobbyPhase === "SCOREBOARD" ||
@@ -522,6 +584,13 @@ export class GameLobbyRoom extends Room {
     const pd = client.userData as PlayerData | undefined
     if (!pd) return
 
+    if (this.isAdminClosing) {
+      if (this.adminClosePayload) {
+        client.send(RoomEvent.LobbyAdminClosing, this.adminClosePayload)
+      }
+      return
+    }
+
     playerLobbyIndex.set(pd.playerId, this.roomId)
 
     const joinPayload = { playerId: pd.playerId, username: pd.username }
@@ -564,6 +633,12 @@ export class GameLobbyRoom extends Room {
   onLeave(client: Client): void {
     const pd = client.userData as PlayerData | undefined
     if (!pd) return
+    if (this.isAdminClosing) {
+      if (playerLobbyIndex.get(pd.playerId) === this.roomId) {
+        playerLobbyIndex.delete(pd.playerId)
+      }
+      return
+    }
     this.handlePlayerGone(pd)
   }
 
@@ -583,6 +658,9 @@ export class GameLobbyRoom extends Room {
     this.clientReadyTimer?.clear()
     this.scoreboardTimer?.clear()
     this.disposalGraceTimer?.clear()
+    this.adminCloseTimer?.clear()
+    this.gameLoopTimer?.clear()
+    this.clearMatchRuntimeState()
 
     logger.info(
       { event: "room.disposed", area: "netcode", side: "server", roomId: this.roomId },
@@ -680,50 +758,62 @@ export class GameLobbyRoom extends Room {
    */
   private registerLobbyHandlers(): void {
     this.onMessage(RoomEvent.LobbyChat, (client: Client, payload: unknown) => {
+      if (this.isAdminClosing) return
       this.handleChat(client, payload)
     })
 
     this.onMessage(RoomEvent.LobbyHeroSelect, (client: Client, payload: unknown) => {
+      if (this.isAdminClosing) return
       this.handleHeroSelect(client, payload)
     })
 
     this.onMessage(RoomEvent.LobbyStartGame, (client: Client) => {
+      if (this.isAdminClosing) return
       this.handleStartGame(client)
     })
 
     this.onMessage(RoomEvent.LobbyEndGame, (client: Client) => {
+      if (this.isAdminClosing) return
       this.handleEndGame(client)
     })
 
     this.onMessage(RoomEvent.ClientSceneReady, (client: Client) => {
+      if (this.isAdminClosing) return
       this.handleClientSceneReady(client)
     })
 
     this.onMessage(RoomEvent.LobbyReturnToLobby, (client: Client) => {
+      if (this.isAdminClosing) return
       this.handleReturnToLobby(client)
     })
 
     this.onMessage(RoomEvent.LobbyEndLobby, (client: Client) => {
+      if (this.isAdminClosing) return
       this.handleEndLobby(client)
     })
 
     this.onMessage(RoomEvent.RequestResync, (client: Client) => {
+      if (this.isAdminClosing) return
       this.handleRequestResync(client)
     })
 
     this.onMessage(RoomEvent.PlayerInput, (client: Client, payload: unknown) => {
+      if (this.isAdminClosing) return
       this.handlePlayerInput(client, payload)
     })
 
     this.onMessage(RoomEvent.ShopPurchase, (client: Client, payload: unknown) => {
+      if (this.isAdminClosing) return
       this.handleShopPurchase(client, payload)
     })
 
     this.onMessage(RoomEvent.AssignAbility, (client: Client, payload: unknown) => {
+      if (this.isAdminClosing) return
       this.handleAssignAbility(client, payload)
     })
 
     this.onMessage("*", () => {
+      if (this.isAdminClosing) return
       this.resetInactivityTimer()
     })
   }
@@ -1370,12 +1460,9 @@ export class GameLobbyRoom extends Room {
     endReason: LobbyScoreboardPayload["endReason"],
     entries: ScoreboardEntry[],
   ): void {
-    // Stop the game loop
     this.gameLoopTimer?.clear()
     this.gameLoopTimer = null
-    this.simulation = null
-    this.inputQueue.clear()
-    this.highestAcceptedSeqByPlayer.clear()
+    this.clearMatchRuntimeState()
 
     this.lobbyPhase = "SCOREBOARD"
     this.returnedToLobbySet.clear()
@@ -1544,6 +1631,124 @@ export class GameLobbyRoom extends Room {
       { event: "room.dissolved", area: "netcode", side: "server", roomId: this.roomId, reason, phase: this.lobbyPhase },
       "[GameLobbyRoom] dissolved",
     )
+  }
+
+  async adminCloseLobby(input: AdminCloseLobbyInput): Promise<AdminCloseLobbyResult> {
+    const playerCount = this.clients.length
+    if (this.isAdminClosing && this.adminClosePayload) {
+      return {
+        status: "closing",
+        occupied: true,
+        closeAtServerMs: this.adminClosePayload.closeAtServerMs,
+        countdownMs: this.adminClosePayload.countdownMs,
+      }
+    }
+
+    if (playerCount > 0 && !input.confirmed) {
+      logger.warn(
+        {
+          event: "room.admin_close.rejected",
+          area: "admin",
+          side: "server",
+          roomId: this.roomId,
+          adminUserId: input.adminUserId,
+          phase: this.lobbyPhase,
+          playerCount,
+          reason: "confirmation_required",
+        },
+        "[GameLobbyRoom] admin close rejected",
+      )
+      return {
+        status: "confirmation_required",
+        occupied: true,
+        playerCount,
+        lobbyPhase: this.lobbyPhase,
+      }
+    }
+
+    this.isAdminClosing = true
+    await this.lock()
+    this.stopForAdminClose()
+
+    if (playerCount === 0) {
+      void this.disconnect(CLOSE_CODE_ADMIN_CLOSED)
+      logger.warn(
+        {
+          event: "room.admin_close.completed",
+          area: "admin",
+          side: "server",
+          roomId: this.roomId,
+          adminUserId: input.adminUserId,
+          phase: this.lobbyPhase,
+          playerCount,
+          immediate: true,
+        },
+        "[GameLobbyRoom] admin closed empty lobby",
+      )
+      return { status: "closed", occupied: false, closeAtServerMs: null }
+    }
+
+    const countdownMs = resolveAdminCloseCountdownMs()
+    const closeAtServerMs = Date.now() + countdownMs
+    this.adminClosePayload = {
+      reason: "admin_closed",
+      closeAtServerMs,
+      countdownMs,
+      message: "This lobby or game session is being ended by an admin.",
+    }
+    this.broadcast(RoomEvent.LobbyAdminClosing, this.adminClosePayload)
+    this.adminCloseTimer?.clear()
+    this.adminCloseTimer = nativeSetTimeout(() => {
+      this.adminCloseTimer = null
+      void this.disconnect(CLOSE_CODE_ADMIN_CLOSED)
+    }, countdownMs)
+
+    logger.warn(
+      {
+        event: "room.admin_close.started",
+        area: "admin",
+        side: "server",
+        roomId: this.roomId,
+        adminUserId: input.adminUserId,
+        adminUsername: input.adminUsername,
+        phase: this.lobbyPhase,
+        playerCount,
+        closeAtServerMs,
+        countdownMs,
+      },
+      "[GameLobbyRoom] admin close started",
+    )
+
+    return {
+      status: "closing",
+      occupied: true,
+      closeAtServerMs,
+      countdownMs,
+    }
+  }
+
+  private stopForAdminClose(): void {
+    this.clearLobbyIdleTimer()
+    this.countdownTimer?.clear()
+    this.countdownTimer = null
+    this.clientReadyTimer?.clear()
+    this.clientReadyTimer = null
+    this.scoreboardTimer?.clear()
+    this.scoreboardTimer = null
+    this.disposalGraceTimer?.clear()
+    this.disposalGraceTimer = null
+    this.gameLoopTimer?.clear()
+    this.gameLoopTimer = null
+    this.clearMatchRuntimeState()
+    this.clientReadySet.clear()
+    this.returnedToLobbySet.clear()
+  }
+
+  private clearMatchRuntimeState(): void {
+    this.simulation = null
+    this.economies.clear()
+    this.inputQueue.clear()
+    this.highestAcceptedSeqByPlayer.clear()
   }
 
   // ---------------------------------------------------------------------------

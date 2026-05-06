@@ -9,6 +9,7 @@ import {
   verifyToken,
 } from "@/server/auth"
 import { prisma } from "@/server/db"
+import { resolveEffectiveAdmin } from "@/server/admin/auth"
 
 export type LobbyListEntry = {
   readonly lobbyId: string
@@ -19,6 +20,18 @@ export type LobbyListEntry = {
   readonly maxPlayers: number
   readonly createdAt: string
 }
+
+export type LobbyListResponse = {
+  readonly lobbies: readonly LobbyListEntry[]
+  readonly viewer: {
+    readonly isAdmin: boolean
+  }
+}
+
+const emptyLobbyListResponse = (isAdmin: boolean): LobbyListResponse => ({
+  lobbies: [],
+  viewer: { isAdmin },
+})
 
 /**
  * GET /api/lobbies — Returns all open game_lobby rooms via Colyseus matchMaker.
@@ -32,6 +45,8 @@ export async function GET(): Promise<NextResponse> {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
+  let isAdmin = false
+
   try {
     const auth = await verifyToken(token)
     if (shouldVerifyUserOnProtected()) {
@@ -42,6 +57,8 @@ export async function GET(): Promise<NextResponse> {
         return response
       }
     }
+    const effectiveAdmin = await resolveEffectiveAdmin(prisma, auth)
+    isAdmin = effectiveAdmin.isAdmin
   } catch {
     return NextResponse.json({ error: "Invalid token" }, { status: 401 })
   }
@@ -55,7 +72,7 @@ export async function GET(): Promise<NextResponse> {
 
     if (!matchMaker) {
       console.error("[api/lobbies] global __wizardWarsMatchMaker missing — run via server.ts")
-      return NextResponse.json([], { status: 200 })
+      return NextResponse.json(emptyLobbyListResponse(isAdmin), { status: 200 })
     }
 
     const rooms = await matchMaker.query({ name: "game_lobby" })
@@ -71,8 +88,8 @@ export async function GET(): Promise<NextResponse> {
         createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : new Date().toISOString(),
       }))
 
-    return NextResponse.json(lobbies)
+    return NextResponse.json({ lobbies, viewer: { isAdmin } } satisfies LobbyListResponse)
   } catch {
-    return NextResponse.json([], { status: 200 })
+    return NextResponse.json(emptyLobbyListResponse(isAdmin), { status: 200 })
   }
 }

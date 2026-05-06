@@ -16,3 +16,6 @@ export const CHAT_RATE_LIMIT_WINDOW_MS = 5000
 
 /** Maximum chat message length in characters. */
 export const CHAT_MAX_MESSAGE_LENGTH = 200
+
+/** WebSocket close code for lobbies closed by an administrator. */
+export const CLOSE_CODE_ADMIN_CLOSED = 4013

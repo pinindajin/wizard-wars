@@ -3,6 +3,7 @@ import { Client, Room } from "@colyseus/sdk"
 import { getColyseusUrl } from "@/lib/endpoints"
 import { clientLogger } from "@/lib/clientLogger"
 import { RoomEvent, roomToWsEvent } from "@/shared/roomEvents"
+import { CLOSE_CODE_ADMIN_CLOSED } from "@/shared/constants"
 import type {
   PlayerInputPayload,
   ClientSceneReadyPayload,
@@ -45,6 +46,7 @@ export class GameConnection {
   private readonly messageHandlers = new Set<MessageHandler>()
   private readonly readyHandlers = new Set<() => void>()
   private readonly log = clientLogger.child({ area: "netcode" })
+  private _adminClosing = false
 
   constructor(args?: GameConnectionArgs) {
     this.client = new Client(args?.serverUrl ?? getColyseusUrl())
@@ -158,6 +160,7 @@ export class GameConnection {
     }
     this._ready = false
     this._lobbyPhase = null
+    this._adminClosing = false
     this.messageHandlers.clear()
     this.readyHandlers.clear()
   }
@@ -310,6 +313,9 @@ export class GameConnection {
       if (roomKey === RoomEvent.LobbyState && payload && typeof payload === "object") {
         this._lobbyPhase = (payload as LobbyStatePayload).phase
       }
+      if (roomKey === RoomEvent.LobbyAdminClosing) {
+        this._adminClosing = true
+      }
 
       const message: AnyWsMessage = { type: wsKey, payload }
       this.messageHandlers.forEach((handler) => handler(message))
@@ -317,7 +323,7 @@ export class GameConnection {
     this._wildcardMessageOff = typeof off === "function" ? off : undefined
 
     this._room.onLeave(async (code) => {
-      if (code === 1000) {
+      if (code === 1000 || code === CLOSE_CODE_ADMIN_CLOSED || this._adminClosing) {
         this.log.info(
           { event: "net.connection.closed", roomId: this._room?.roomId, sessionId: this._room?.sessionId, code },
           "Game room left cleanly",
@@ -325,6 +331,7 @@ export class GameConnection {
         this._room = null
         this._ready = false
         this._lobbyPhase = null
+        this._adminClosing = false
         return
       }
 

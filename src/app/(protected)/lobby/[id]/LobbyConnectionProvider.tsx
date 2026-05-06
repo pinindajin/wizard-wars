@@ -12,6 +12,7 @@ import {
 import { decodeJwt } from "jose"
 
 import type {
+  LobbyAdminClosingPayload,
   LobbyStatePayload,
   AnyWsMessage,
   MessageHandler,
@@ -22,6 +23,7 @@ import type { GameConnection } from "@/game/network/GameConnection"
 export type LobbyConnection = {
   connection: GameConnection | null
   lobbyState: LobbyStatePayload | null
+  adminClosing: LobbyAdminClosingPayload | null
   localPlayerId: string | null
   error: string | null
   isConnected: boolean
@@ -31,6 +33,7 @@ export type LobbyConnection = {
 export const LobbyContext = createContext<LobbyConnection>({
   connection: null,
   lobbyState: null,
+  adminClosing: null,
   localPlayerId: null,
   error: null,
   isConnected: false,
@@ -55,6 +58,7 @@ type Props = {
 export function LobbyConnectionProvider({ roomId, token, children }: Props) {
   const [connection, setConnection] = useState<GameConnection | null>(null)
   const [lobbyState, setLobbyState] = useState<LobbyStatePayload | null>(null)
+  const [adminClosing, setAdminClosing] = useState<LobbyAdminClosingPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
   const handlersRef = useRef(new Set<MessageHandler>())
 
@@ -86,6 +90,10 @@ export function LobbyConnectionProvider({ roomId, token, children }: Props) {
         conn.onMessage((message: AnyWsMessage) => {
           if (message.type === WsEvent.LobbyState) {
             setLobbyState(message.payload as LobbyStatePayload)
+          }
+
+          if (message.type === WsEvent.LobbyAdminClosing) {
+            setAdminClosing(message.payload as LobbyAdminClosingPayload)
           }
 
           if (message.type === WsEvent.LobbyHostTransfer) {
@@ -130,6 +138,7 @@ export function LobbyConnectionProvider({ roomId, token, children }: Props) {
       conn?.close()
       setConnection(null)
       setLobbyState(null)
+      setAdminClosing(null)
       setError(null)
     }
   }, [roomId, token])
@@ -146,6 +155,7 @@ export function LobbyConnectionProvider({ roomId, token, children }: Props) {
       value={{
         connection,
         lobbyState,
+        adminClosing,
         localPlayerId,
         error,
         isConnected: connection !== null,
