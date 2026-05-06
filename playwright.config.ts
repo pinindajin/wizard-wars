@@ -41,6 +41,7 @@ export default defineConfig({
       /** Enables `/dev/animation-tool` when `NODE_ENV=production` (see `animation-tool/page.tsx`). */
       WW_ALLOW_ANIMATION_TOOL_IN_PRODUCTION_E2E: "1",
       E2E_CLIENT_READY_TIMEOUT_MS: "800",
+      WIZARD_WARS_TEST_ADMIN_CLOSE_MS: "1500",
       ADMIN_PREFIX: process.env.ADMIN_PREFIX ?? "e2eadm",
     },
   },

@@ -38,10 +38,12 @@ import {
   LOBBY_IDLE_TIMEOUT_MS,
   LOBBY_CHAT_BUFFER_MAX,
   LOBBY_DISPOSAL_GRACE_MS,
+  ADMIN_CLOSE_COUNTDOWN_MS,
 } from "../../../shared/balance-config/lobby"
 import { DEFAULT_HERO_ID } from "../../../shared/balance-config/heroes"
 import { logger } from "../../logger"
 import { AbilitySlots, Equipment, ABILITY_INDEX } from "../../game/components"
+import { CLOSE_CODE_ADMIN_CLOSED } from "../../../shared/constants"
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -49,6 +51,90 @@ import { AbilitySlots, Equipment, ABILITY_INDEX } from "../../game/components"
 
 /** WebSocket close code passed to `Client.leave` when the host dissolves the lobby. */
 export const CLOSE_CODE_LOBBY_DISSOLVED = 4012
+
+export type AdminCloseLobbyInput = {
+  readonly adminUserId: string
+  readonly adminUsername: string
+  readonly confirmed: boolean
+}
+
+export type AdminCloseLobbyResult =
+  | {
+      readonly status: "confirmation_required"
+      readonly occupied: true
+      readonly playerCount: number
+      readonly lobbyPhase: LobbyPhase
+    }
+  | {
+      readonly status: "closed"
+      readonly occupied: false
+      readonly closeAtServerMs: null
+    }
+  | {
+      readonly status: "closing"
+      readonly occupied: true
+      readonly closeAtServerMs: number
+      readonly countdownMs: number
+    }
+
+export type AdminLobbyPlayerConnectionStatus = "connected" | "disconnected"
+export type AdminLobbyPlayerPlayStatus = "lobby_only" | "loading_game" | "in_game" | "scoreboard"
+
+export type AdminLobbyBandwidthSnapshot = {
+  readonly inboundBytes: number
+  readonly outboundBytes: number
+  readonly totalBytes: number
+}
+
+export type AdminLobbyPlayerSnapshot = {
+  readonly playerId: string
+  readonly username: string
+  readonly heroId: string
+  readonly isHost: boolean
+  readonly isReady: boolean
+  readonly clientSceneReady: boolean
+  readonly connectionStatus: AdminLobbyPlayerConnectionStatus
+  readonly playStatus: AdminLobbyPlayerPlayStatus
+  readonly lastSeenAt: string
+}
+
+export type AdminLobbySnapshot = {
+  readonly snapshotAvailable: true
+  readonly lobbyId: string
+  readonly phase: LobbyPhase
+  readonly createdAt: string
+  readonly uptimeMs: number
+  readonly connectedPlayerCount: number
+  readonly rosterPlayerCount: number
+  readonly maxPlayers: number
+  readonly hostPlayerId: string | null
+  readonly hostName: string
+  readonly bandwidth: AdminLobbyBandwidthSnapshot
+  readonly players: readonly AdminLobbyPlayerSnapshot[]
+}
+
+type AdminRosterEntry = PlayerData & {
+  connectionStatus: AdminLobbyPlayerConnectionStatus
+  lastSeenAtMs: number
+}
+
+type RawSender = Client["raw"]
+
+type MessageSource = {
+  on: (event: "message", listener: (data: unknown) => void) => void
+  off?: (event: "message", listener: (data: unknown) => void) => void
+  removeListener?: (event: "message", listener: (data: unknown) => void) => void
+}
+
+type BandwidthInstrumentedClient = Client & {
+  raw: RawSender
+  ref?: MessageSource
+}
+
+type BandwidthClientHooks = {
+  readonly originalRaw: RawSender
+  readonly onMessage: (data: unknown) => void
+}
 
 /**
  * Client-scene-ready deadline. When `WIZARD_WARS_E2E=1`, `E2E_CLIENT_READY_TIMEOUT_MS`
@@ -86,6 +172,21 @@ function resolveLobbyIdleTimeoutMs(): number {
     return LOBBY_IDLE_TIMEOUT_MS
   }
   return Math.min(LOBBY_IDLE_TIMEOUT_MS, Math.max(100, parsed))
+}
+
+function resolveAdminCloseCountdownMs(): number {
+  if (process.env.VITEST !== "true" && process.env.WIZARD_WARS_E2E !== "1") {
+    return ADMIN_CLOSE_COUNTDOWN_MS
+  }
+  const raw = process.env.WIZARD_WARS_TEST_ADMIN_CLOSE_MS
+  if (raw === undefined || raw === "") {
+    return ADMIN_CLOSE_COUNTDOWN_MS
+  }
+  const parsed = Number.parseInt(raw, 10)
+  if (!Number.isFinite(parsed)) {
+    return ADMIN_CLOSE_COUNTDOWN_MS
+  }
+  return Math.min(ADMIN_CLOSE_COUNTDOWN_MS, Math.max(100, parsed))
 }
 
 /** Max lobby chat messages per player per rate-limit window. */
@@ -165,6 +266,41 @@ function nativeSetTimeout(
   return { clear: () => globalThis.clearTimeout(id) }
 }
 
+/**
+ * Returns byte length for WebSocket payload shapes used by `ws`.
+ *
+ * @param value - Raw message or outbound buffer.
+ * @returns Number of payload bytes represented by the value.
+ */
+function rawPayloadByteLength(value: unknown): number {
+  if (typeof value === "string") {
+    return Buffer.byteLength(value)
+  }
+  if (value instanceof ArrayBuffer) {
+    return value.byteLength
+  }
+  if (ArrayBuffer.isView(value)) {
+    return value.byteLength
+  }
+  if (Array.isArray(value)) {
+    return value.reduce((sum, part) => sum + rawPayloadByteLength(part), 0)
+  }
+  return 0
+}
+
+/**
+ * Converts lobby phase into the dashboard's coarse player play status.
+ *
+ * @param phase - Current lobby FSM phase.
+ * @returns Dashboard play status for players in the room.
+ */
+function adminPlayStatusForPhase(phase: LobbyPhase): AdminLobbyPlayerPlayStatus {
+  if (phase === "LOBBY") return "lobby_only"
+  if (phase === "WAITING_FOR_CLIENTS" || phase === "COUNTDOWN") return "loading_game"
+  if (phase === "IN_PROGRESS") return "in_game"
+  return "scoreboard"
+}
+
 // ---------------------------------------------------------------------------
 // Room
 // ---------------------------------------------------------------------------
@@ -220,6 +356,15 @@ export class GameLobbyRoom extends Room {
   /** Empty-lobby disposal grace timer. */
   private disposalGraceTimer: { clear: () => void } | null = null
 
+  /** Final admin-close timer; only armed after the close notice is broadcast. */
+  private adminCloseTimer: { clear: () => void } | null = null
+
+  /** True once an admin close has begun. Freezes gameplay/lobby mutation. */
+  private isAdminClosing = false
+
+  /** Cached notice for reconnecting clients during the admin-close countdown. */
+  private adminClosePayload: import("../../../shared/types").LobbyAdminClosingPayload | null = null
+
   /**
    * Set of `playerId`s that have sent `client_scene_ready` during
    * `WAITING_FOR_CLIENTS`. Cleared on each new game start.
@@ -257,6 +402,21 @@ export class GameLobbyRoom extends Room {
    * to ignore duplicate / re-ordered inputs on arrival.
    */
   private readonly highestAcceptedSeqByPlayer = new Map<string, number>()
+
+  /** Wall-clock timestamp used by admin dashboard uptime calculations. */
+  private readonly adminCreatedAtMs = Date.now()
+
+  /** Room lifetime inbound payload bytes observed after clients join this room. */
+  private adminInboundBytes = 0
+
+  /** Room lifetime outbound payload bytes emitted through client transports. */
+  private adminOutboundBytes = 0
+
+  /** Dashboard roster that keeps disconnected players during reconnect grace. */
+  private readonly adminRoster = new Map<string, AdminRosterEntry>()
+
+  /** Transport hooks installed for per-room bandwidth accounting. */
+  private readonly bandwidthClientHooks = new Map<Client, BandwidthClientHooks>()
 
   // ---------------------------------------------------------------------------
   // Colyseus lifecycle
@@ -325,6 +485,10 @@ export class GameLobbyRoom extends Room {
     _client: Client,
     options: { token?: string },
   ): Promise<AuthUser> {
+    if (this.isAdminClosing) {
+      throw new Error("lobby is closing")
+    }
+
     const token = options?.token
     if (!token) {
       logger.warn(
@@ -428,6 +592,8 @@ export class GameLobbyRoom extends Room {
     client.userData = pd
     this.joinOrder.push(auth.sub)
     playerLobbyIndex.set(auth.sub, this.roomId)
+    this.installBandwidthHooks(client)
+    this.markAdminPlayerConnected(pd)
 
     if (!this.hostPlayerId) {
       this.hostPlayerId = auth.sub
@@ -477,6 +643,15 @@ export class GameLobbyRoom extends Room {
   async onDrop(client: Client): Promise<void> {
     const pd = client.userData as PlayerData | undefined
     if (!pd) return
+    this.removeBandwidthHooks(client)
+    this.markAdminPlayerDisconnected(pd)
+
+    if (this.isAdminClosing) {
+      if (playerLobbyIndex.get(pd.playerId) === this.roomId) {
+        playerLobbyIndex.delete(pd.playerId)
+      }
+      return
+    }
 
     if (
       this.lobbyPhase === "IN_PROGRESS" ||
@@ -521,6 +696,15 @@ export class GameLobbyRoom extends Room {
   onReconnect(client: Client): void {
     const pd = client.userData as PlayerData | undefined
     if (!pd) return
+    this.installBandwidthHooks(client)
+    this.markAdminPlayerConnected(pd)
+
+    if (this.isAdminClosing) {
+      if (this.adminClosePayload) {
+        client.send(RoomEvent.LobbyAdminClosing, this.adminClosePayload)
+      }
+      return
+    }
 
     playerLobbyIndex.set(pd.playerId, this.roomId)
 
@@ -564,6 +748,14 @@ export class GameLobbyRoom extends Room {
   onLeave(client: Client): void {
     const pd = client.userData as PlayerData | undefined
     if (!pd) return
+    this.removeBandwidthHooks(client)
+    if (this.isAdminClosing) {
+      if (playerLobbyIndex.get(pd.playerId) === this.roomId) {
+        playerLobbyIndex.delete(pd.playerId)
+      }
+      this.markAdminPlayerDisconnected(pd)
+      return
+    }
     this.handlePlayerGone(pd)
   }
 
@@ -583,6 +775,11 @@ export class GameLobbyRoom extends Room {
     this.clientReadyTimer?.clear()
     this.scoreboardTimer?.clear()
     this.disposalGraceTimer?.clear()
+    this.adminCloseTimer?.clear()
+    this.gameLoopTimer?.clear()
+    this.clearMatchRuntimeState()
+    this.clearBandwidthHooks()
+    this.adminRoster.clear()
 
     logger.info(
       { event: "room.disposed", area: "netcode", side: "server", roomId: this.roomId },
@@ -593,6 +790,79 @@ export class GameLobbyRoom extends Room {
   // ---------------------------------------------------------------------------
   // Internal player lifecycle
   // ---------------------------------------------------------------------------
+
+  /**
+   * Adds transport hooks that count room-level inbound and outbound payload bytes.
+   *
+   * @param client - Colyseus client whose transport should be observed.
+   */
+  private installBandwidthHooks(client: Client): void {
+    if (this.bandwidthClientHooks.has(client)) return
+
+    const instrumented = client as BandwidthInstrumentedClient
+    const originalRaw = instrumented.raw.bind(instrumented) as RawSender
+    const onMessage = (data: unknown): void => {
+      this.adminInboundBytes += rawPayloadByteLength(data)
+    }
+
+    instrumented.raw = ((...args: Parameters<RawSender>) => {
+      this.adminOutboundBytes += rawPayloadByteLength(args[0])
+      return originalRaw(...args)
+    }) as RawSender
+    instrumented.ref?.on("message", onMessage)
+    this.bandwidthClientHooks.set(client, { originalRaw, onMessage })
+  }
+
+  /**
+   * Removes transport hooks installed by {@link installBandwidthHooks}.
+   *
+   * @param client - Client whose bandwidth hooks should be removed.
+   */
+  private removeBandwidthHooks(client: Client): void {
+    const hooks = this.bandwidthClientHooks.get(client)
+    if (!hooks) return
+
+    const instrumented = client as BandwidthInstrumentedClient
+    instrumented.raw = hooks.originalRaw
+    instrumented.ref?.off?.("message", hooks.onMessage)
+    instrumented.ref?.removeListener?.("message", hooks.onMessage)
+    this.bandwidthClientHooks.delete(client)
+  }
+
+  /**
+   * Removes all active transport hooks when the room is disposed.
+   */
+  private clearBandwidthHooks(): void {
+    for (const client of [...this.bandwidthClientHooks.keys()]) {
+      this.removeBandwidthHooks(client)
+    }
+  }
+
+  /**
+   * Records a player as connected in the admin dashboard roster.
+   *
+   * @param pd - Player data attached to the active client.
+   */
+  private markAdminPlayerConnected(pd: PlayerData): void {
+    this.adminRoster.set(pd.playerId, {
+      ...pd,
+      connectionStatus: "connected",
+      lastSeenAtMs: Date.now(),
+    })
+  }
+
+  /**
+   * Records a player as temporarily disconnected during reconnect grace.
+   *
+   * @param pd - Player data attached to the dropped client.
+   */
+  private markAdminPlayerDisconnected(pd: PlayerData): void {
+    this.adminRoster.set(pd.playerId, {
+      ...pd,
+      connectionStatus: "disconnected",
+      lastSeenAtMs: Date.now(),
+    })
+  }
 
   /**
    * Resets per-player input stream state when a client opens a new transport
@@ -627,6 +897,7 @@ export class GameLobbyRoom extends Room {
     this.clientReadySet.delete(pd.playerId)
     this.returnedToLobbySet.delete(pd.playerId)
     this.chatRateMap.delete(pd.playerId)
+    this.adminRoster.delete(pd.playerId)
 
     this.broadcast(RoomEvent.PlayerLeave, { playerId: pd.playerId })
 
@@ -680,50 +951,62 @@ export class GameLobbyRoom extends Room {
    */
   private registerLobbyHandlers(): void {
     this.onMessage(RoomEvent.LobbyChat, (client: Client, payload: unknown) => {
+      if (this.isAdminClosing) return
       this.handleChat(client, payload)
     })
 
     this.onMessage(RoomEvent.LobbyHeroSelect, (client: Client, payload: unknown) => {
+      if (this.isAdminClosing) return
       this.handleHeroSelect(client, payload)
     })
 
     this.onMessage(RoomEvent.LobbyStartGame, (client: Client) => {
+      if (this.isAdminClosing) return
       this.handleStartGame(client)
     })
 
     this.onMessage(RoomEvent.LobbyEndGame, (client: Client) => {
+      if (this.isAdminClosing) return
       this.handleEndGame(client)
     })
 
     this.onMessage(RoomEvent.ClientSceneReady, (client: Client) => {
+      if (this.isAdminClosing) return
       this.handleClientSceneReady(client)
     })
 
     this.onMessage(RoomEvent.LobbyReturnToLobby, (client: Client) => {
+      if (this.isAdminClosing) return
       this.handleReturnToLobby(client)
     })
 
     this.onMessage(RoomEvent.LobbyEndLobby, (client: Client) => {
+      if (this.isAdminClosing) return
       this.handleEndLobby(client)
     })
 
     this.onMessage(RoomEvent.RequestResync, (client: Client) => {
+      if (this.isAdminClosing) return
       this.handleRequestResync(client)
     })
 
     this.onMessage(RoomEvent.PlayerInput, (client: Client, payload: unknown) => {
+      if (this.isAdminClosing) return
       this.handlePlayerInput(client, payload)
     })
 
     this.onMessage(RoomEvent.ShopPurchase, (client: Client, payload: unknown) => {
+      if (this.isAdminClosing) return
       this.handleShopPurchase(client, payload)
     })
 
     this.onMessage(RoomEvent.AssignAbility, (client: Client, payload: unknown) => {
+      if (this.isAdminClosing) return
       this.handleAssignAbility(client, payload)
     })
 
     this.onMessage("*", () => {
+      if (this.isAdminClosing) return
       this.resetInactivityTimer()
     })
   }
@@ -1370,12 +1653,9 @@ export class GameLobbyRoom extends Room {
     endReason: LobbyScoreboardPayload["endReason"],
     entries: ScoreboardEntry[],
   ): void {
-    // Stop the game loop
     this.gameLoopTimer?.clear()
     this.gameLoopTimer = null
-    this.simulation = null
-    this.inputQueue.clear()
-    this.highestAcceptedSeqByPlayer.clear()
+    this.clearMatchRuntimeState()
 
     this.lobbyPhase = "SCOREBOARD"
     this.returnedToLobbySet.clear()
@@ -1544,6 +1824,124 @@ export class GameLobbyRoom extends Room {
       { event: "room.dissolved", area: "netcode", side: "server", roomId: this.roomId, reason, phase: this.lobbyPhase },
       "[GameLobbyRoom] dissolved",
     )
+  }
+
+  async adminCloseLobby(input: AdminCloseLobbyInput): Promise<AdminCloseLobbyResult> {
+    const playerCount = this.clients.length
+    if (this.isAdminClosing && this.adminClosePayload) {
+      return {
+        status: "closing",
+        occupied: true,
+        closeAtServerMs: this.adminClosePayload.closeAtServerMs,
+        countdownMs: this.adminClosePayload.countdownMs,
+      }
+    }
+
+    if (playerCount > 0 && !input.confirmed) {
+      logger.warn(
+        {
+          event: "room.admin_close.rejected",
+          area: "admin",
+          side: "server",
+          roomId: this.roomId,
+          adminUserId: input.adminUserId,
+          phase: this.lobbyPhase,
+          playerCount,
+          reason: "confirmation_required",
+        },
+        "[GameLobbyRoom] admin close rejected",
+      )
+      return {
+        status: "confirmation_required",
+        occupied: true,
+        playerCount,
+        lobbyPhase: this.lobbyPhase,
+      }
+    }
+
+    this.isAdminClosing = true
+    await this.lock()
+    this.stopForAdminClose()
+
+    if (playerCount === 0) {
+      void this.disconnect(CLOSE_CODE_ADMIN_CLOSED)
+      logger.warn(
+        {
+          event: "room.admin_close.completed",
+          area: "admin",
+          side: "server",
+          roomId: this.roomId,
+          adminUserId: input.adminUserId,
+          phase: this.lobbyPhase,
+          playerCount,
+          immediate: true,
+        },
+        "[GameLobbyRoom] admin closed empty lobby",
+      )
+      return { status: "closed", occupied: false, closeAtServerMs: null }
+    }
+
+    const countdownMs = resolveAdminCloseCountdownMs()
+    const closeAtServerMs = Date.now() + countdownMs
+    this.adminClosePayload = {
+      reason: "admin_closed",
+      closeAtServerMs,
+      countdownMs,
+      message: "This lobby or game session is being ended by an admin.",
+    }
+    this.broadcast(RoomEvent.LobbyAdminClosing, this.adminClosePayload)
+    this.adminCloseTimer?.clear()
+    this.adminCloseTimer = nativeSetTimeout(() => {
+      this.adminCloseTimer = null
+      void this.disconnect(CLOSE_CODE_ADMIN_CLOSED)
+    }, countdownMs)
+
+    logger.warn(
+      {
+        event: "room.admin_close.started",
+        area: "admin",
+        side: "server",
+        roomId: this.roomId,
+        adminUserId: input.adminUserId,
+        adminUsername: input.adminUsername,
+        phase: this.lobbyPhase,
+        playerCount,
+        closeAtServerMs,
+        countdownMs,
+      },
+      "[GameLobbyRoom] admin close started",
+    )
+
+    return {
+      status: "closing",
+      occupied: true,
+      closeAtServerMs,
+      countdownMs,
+    }
+  }
+
+  private stopForAdminClose(): void {
+    this.clearLobbyIdleTimer()
+    this.countdownTimer?.clear()
+    this.countdownTimer = null
+    this.clientReadyTimer?.clear()
+    this.clientReadyTimer = null
+    this.scoreboardTimer?.clear()
+    this.scoreboardTimer = null
+    this.disposalGraceTimer?.clear()
+    this.disposalGraceTimer = null
+    this.gameLoopTimer?.clear()
+    this.gameLoopTimer = null
+    this.clearMatchRuntimeState()
+    this.clientReadySet.clear()
+    this.returnedToLobbySet.clear()
+  }
+
+  private clearMatchRuntimeState(): void {
+    this.simulation = null
+    this.economies.clear()
+    this.inputQueue.clear()
+    this.highestAcceptedSeqByPlayer.clear()
   }
 
   // ---------------------------------------------------------------------------
@@ -1738,6 +2136,70 @@ export class GameLobbyRoom extends Room {
   // ---------------------------------------------------------------------------
   // Public accessors (testing / admin)
   // ---------------------------------------------------------------------------
+
+  /**
+   * Builds the dashboard snapshot for admin-only room introspection.
+   *
+   * @returns Current room metrics, roster, and bandwidth counters.
+   */
+  getAdminSnapshot(): AdminLobbySnapshot {
+    const now = Date.now()
+    const connectedPlayers = new Map<string, PlayerData>()
+    for (const client of this.clients) {
+      const pd = client.userData as PlayerData | undefined
+      if (!pd) continue
+      connectedPlayers.set(pd.playerId, pd)
+      if (!this.adminRoster.has(pd.playerId)) {
+        this.markAdminPlayerConnected(pd)
+      }
+    }
+
+    const orderedRoster = [...this.adminRoster.values()].sort((a, b) => {
+      const aIndex = this.joinOrder.indexOf(a.playerId)
+      const bIndex = this.joinOrder.indexOf(b.playerId)
+      return (
+        (aIndex === -1 ? Number.MAX_SAFE_INTEGER : aIndex) -
+        (bIndex === -1 ? Number.MAX_SAFE_INTEGER : bIndex)
+      )
+    })
+    const playStatus = adminPlayStatusForPhase(this.lobbyPhase)
+    const players = orderedRoster.map((entry): AdminLobbyPlayerSnapshot => {
+      const connected = connectedPlayers.get(entry.playerId)
+      const source = connected ?? entry
+      return {
+        playerId: source.playerId,
+        username: source.username,
+        heroId: source.heroId,
+        isHost: source.playerId === this.hostPlayerId,
+        isReady: source.isReady,
+        clientSceneReady: source.clientSceneReady,
+        connectionStatus: connected ? "connected" : entry.connectionStatus,
+        playStatus,
+        lastSeenAt: new Date(entry.lastSeenAtMs).toISOString(),
+      }
+    })
+    const hostName =
+      players.find((player) => player.playerId === this.hostPlayerId)?.username ?? ""
+
+    return {
+      snapshotAvailable: true,
+      lobbyId: this.roomId,
+      phase: this.lobbyPhase,
+      createdAt: new Date(this.adminCreatedAtMs).toISOString(),
+      uptimeMs: Math.max(0, now - this.adminCreatedAtMs),
+      connectedPlayerCount: this.clients.length,
+      rosterPlayerCount: this.adminRoster.size,
+      maxPlayers: MAX_PLAYERS_PER_MATCH,
+      hostPlayerId: this.hostPlayerId,
+      hostName,
+      bandwidth: {
+        inboundBytes: this.adminInboundBytes,
+        outboundBytes: this.adminOutboundBytes,
+        totalBytes: this.adminInboundBytes + this.adminOutboundBytes,
+      },
+      players,
+    }
+  }
 
   /**
    * Read-only accessor for the current lobby phase.

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const prismaMock = vi.hoisted(() => ({
   user: {
@@ -19,6 +19,11 @@ import { cookies } from "next/headers"
 import { GET } from "./route"
 
 describe("GET /api/lobbies", () => {
+  beforeEach(() => {
+    prismaMock.user.findUnique.mockReset()
+    prismaMock.user.findUnique.mockResolvedValue(null)
+  })
+
   it("returns 401 without token", async () => {
     vi.mocked(cookies).mockResolvedValueOnce({
       get: () => undefined,
@@ -44,12 +49,18 @@ describe("GET /api/lobbies", () => {
     } as never)
     const res = await GET()
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual([])
+    expect(await res.json()).toEqual({ lobbies: [], viewer: { isAdmin: false } })
     vi.unstubAllEnvs()
   })
 
-  it("returns lobby list when matchMaker present", async () => {
+  it("returns lobby list and viewer admin status when matchMaker present", async () => {
     vi.stubEnv("AUTH_SECRET", "test-secret-32-chars-minimum-required")
+    prismaMock.user.findUnique.mockResolvedValueOnce({
+      id: "u1",
+      username: "A",
+      usernameLower: "a",
+      isAdmin: true,
+    })
     const { signToken } = await import("@/server/auth")
     const token = await signToken({ sub: "u1", username: "A" })
     vi.mocked(cookies).mockResolvedValueOnce({
@@ -75,8 +86,9 @@ describe("GET /api/lobbies", () => {
     const res = await GET()
     expect(res.status).toBe(200)
     const body = await res.json()
-    expect(Array.isArray(body)).toBe(true)
-    expect(body[0].lobbyId).toBe("r1")
+    expect(body.viewer.isAdmin).toBe(true)
+    expect(Array.isArray(body.lobbies)).toBe(true)
+    expect(body.lobbies[0].lobbyId).toBe("r1")
     delete (globalThis as { __wizardWarsMatchMaker?: unknown }).__wizardWarsMatchMaker
     vi.unstubAllEnvs()
   })

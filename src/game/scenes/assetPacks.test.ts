@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest"
+import sharp from "sharp"
 
 import bootPack from "../../../public/assets/boot-asset-pack.json"
 import preloadPack from "../../../public/assets/preload-asset-pack.json"
@@ -13,6 +14,10 @@ type PackFile = {
   readonly type: string
   readonly key: string
   readonly url: string | readonly string[]
+  readonly frameConfig?: {
+    readonly frameWidth: number
+    readonly frameHeight: number
+  }
 }
 
 /**
@@ -28,6 +33,19 @@ function collectUrls(files: readonly PackFile[]): string[] {
     else for (const u of f.url) out.push(u)
   }
   return out
+}
+
+/**
+ * Finds an asset-pack entry by key.
+ *
+ * @param files - Pack file entries.
+ * @param key - Phaser asset key to find.
+ * @returns Matching pack file.
+ */
+function packFileForKey(files: readonly PackFile[], key: string): PackFile {
+  const file = files.find((f) => f.key === key)
+  expect(file, `expected asset pack file for key ${key}`).toBeDefined()
+  return file!
 }
 
 describe("asset pack URLs are absolute", () => {
@@ -54,6 +72,29 @@ describe("asset pack URLs are absolute", () => {
     expect(urls).toContain("/assets/sprites/abilities/fireball-fly.png")
     expect(urls).toContain("/assets/sprites/abilities/fireball-channel.png")
     expect(urls).toContain("/assets/sprites/abilities/ember.png")
+  })
+
+  it("fireball sheet metadata matches Phaser frame configs", async () => {
+    const files = (arenaPack as { arena: { files: PackFile[] } }).arena.files
+    const fly = packFileForKey(files, "fireball")
+    const channel = packFileForKey(files, "fireball-channel")
+
+    expect(fly.frameConfig).toEqual({ frameWidth: 256, frameHeight: 256 })
+    expect(channel.frameConfig).toEqual({ frameWidth: 64, frameHeight: 64 })
+
+    const flyMeta = await sharp("public/assets/sprites/abilities/fireball-fly.png").metadata()
+    const channelMeta = await sharp("public/assets/sprites/abilities/fireball-channel.png").metadata()
+
+    expect({ width: flyMeta.width, height: flyMeta.height }).toEqual({
+      width: 1280,
+      height: 256,
+    })
+    expect({ width: channelMeta.width, height: channelMeta.height }).toEqual({
+      width: 512,
+      height: 64,
+    })
+    expect(flyMeta.width! / fly.frameConfig!.frameWidth).toBe(5)
+    expect(channelMeta.width! / channel.frameConfig!.frameWidth).toBe(8)
   })
 
   it("arena pack exposes prop sprites for Phaser Editor visual placement", () => {

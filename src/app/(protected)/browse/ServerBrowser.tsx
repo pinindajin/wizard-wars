@@ -14,6 +14,7 @@ import {
 import { fetchWsAuthToken } from "@/lib/fetch-ws-auth-token"
 import { getColyseusUrl } from "@/lib/endpoints"
 import type { LobbyListEntry } from "@/app/api/lobbies/route"
+import type { LobbyListResponse } from "@/app/api/lobbies/route"
 import { btnGhost, btnPrimary, cardRow, metaText } from "@/lib/ui/lobbyStyles"
 
 const POLL_INTERVAL_MS = 5000
@@ -44,13 +45,13 @@ const PHASE_TONES: Record<
  *
  * @returns Array of LobbyListEntry objects.
  */
-async function fetchLobbies(): Promise<LobbyListEntry[]> {
+async function fetchLobbies(): Promise<LobbyListResponse> {
   try {
     const res = await fetch("/api/lobbies", { credentials: "include" })
-    if (!res.ok) return []
-    return (await res.json()) as LobbyListEntry[]
+    if (!res.ok) return { lobbies: [], viewer: { isAdmin: false } }
+    return (await res.json()) as LobbyListResponse
   } catch {
-    return []
+    return { lobbies: [], viewer: { isAdmin: false } }
   }
 }
 
@@ -72,22 +73,29 @@ function getLobbyMeta(lobby: LobbyListEntry): string {
 export default function ServerBrowser() {
   const router = useRouter()
   const [lobbies, setLobbies] = useState<LobbyListEntry[]>([])
+  const [isAdmin, setIsAdmin] = useState(false)
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
+  const [closingLobbyId, setClosingLobbyId] = useState<string | null>(null)
+  const [confirmClose, setConfirmClose] = useState<{
+    lobby: LobbyListEntry
+    playerCount: number
+  } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   /** Loads the current lobby list and updates state. */
   const loadLobbies = useCallback(async () => {
     const data = await fetchLobbies()
-    setLobbies(data)
+    setLobbies([...data.lobbies])
+    setIsAdmin(data.viewer.isAdmin)
     setLoading(false)
   }, [])
 
   // Initial load + polling
   useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises, react-hooks/set-state-in-effect
-    loadLobbies()
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadLobbies()
     pollRef.current = setInterval(() => void loadLobbies(), POLL_INTERVAL_MS)
     return () => {
       if (pollRef.current !== null) clearInterval(pollRef.current)
@@ -137,6 +145,47 @@ export default function ServerBrowser() {
     [router],
   )
 
+  const requestCloseLobby = useCallback(
+    async (lobby: LobbyListEntry, confirmed = false) => {
+      if (!confirmed && lobby.playerCount > 0) {
+        setConfirmClose({ lobby, playerCount: lobby.playerCount })
+        return
+      }
+
+      setClosingLobbyId(lobby.lobbyId)
+      setError(null)
+      try {
+        const res = await fetch(`/api/lobbies/${encodeURIComponent(lobby.lobbyId)}/close`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ confirmed }),
+        })
+        const body = (await res.json().catch(() => ({}))) as {
+          readonly error?: string
+          readonly playerCount?: number
+        }
+        if (res.status === 409 && body.error === "confirmation_required") {
+          setConfirmClose({
+            lobby,
+            playerCount: typeof body.playerCount === "number" ? body.playerCount : lobby.playerCount,
+          })
+          return
+        }
+        if (!res.ok) {
+          throw new Error(body.error ?? "Failed to close lobby")
+        }
+        setConfirmClose(null)
+        await loadLobbies()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to close lobby")
+      } finally {
+        setClosingLobbyId(null)
+      }
+    },
+    [loadLobbies],
+  )
+
   /**
    * Navigates back to the home / chat page.
    */
@@ -179,6 +228,44 @@ export default function ServerBrowser() {
           </LobbyStatusPill>
         }
       >
+        {confirmClose ? (
+          <div
+            className="fixed inset-0 z-[150] flex items-center justify-center bg-black/75 px-6 text-center backdrop-blur-sm"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Confirm close lobby"
+            data-testid="close-lobby-confirm"
+          >
+            <div className="w-full max-w-md rounded-2xl border border-red-400/30 bg-slate-950 p-6 shadow-2xl shadow-red-950/40">
+              <p className={metaText}>Confirm Close</p>
+              <h2 className="mt-3 text-2xl font-black text-white">
+                Close occupied lobby?
+              </h2>
+              <p className="mt-3 text-sm leading-6 text-slate-300">
+                {confirmClose.playerCount} player{confirmClose.playerCount === 1 ? "" : "s"} will see a
+                30 second admin-close countdown before returning to the browser.
+              </p>
+              <div className="mt-6 flex flex-col gap-2 sm:flex-row">
+                <button
+                  className={btnGhost}
+                  type="button"
+                  onClick={() => setConfirmClose(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className={`${btnPrimary} bg-red-600 hover:bg-red-500`}
+                  type="button"
+                  disabled={closingLobbyId === confirmClose.lobby.lobbyId}
+                  onClick={() => void requestCloseLobby(confirmClose.lobby, true)}
+                >
+                  {closingLobbyId === confirmClose.lobby.lobbyId ? "Closing..." : "Close Lobby"}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         {error && (
           <div className="mb-4 rounded-2xl border border-red-500/35 bg-red-950/35 px-4 py-3 text-sm text-red-100">
             {error}
@@ -215,6 +302,7 @@ export default function ServerBrowser() {
             {lobbies.map((lobby) => (
               <div
                 key={lobby.lobbyId}
+                data-testid={`lobby-row-${lobby.lobbyId}`}
                 className={`${cardRow} hover:border-white/18 hover:bg-white/5`}
               >
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -246,6 +334,16 @@ export default function ServerBrowser() {
                     >
                       {lobby.lobbyPhase === "IN_PROGRESS" ? "In Progress" : "Join Lobby"}
                     </button>
+                    {isAdmin ? (
+                      <button
+                        className={`${btnGhost} border-red-900/50 text-red-300 hover:bg-red-900/20`}
+                        onClick={() => void requestCloseLobby(lobby)}
+                        disabled={closingLobbyId === lobby.lobbyId}
+                        type="button"
+                      >
+                        {closingLobbyId === lobby.lobbyId ? "Closing..." : "Close"}
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               </div>

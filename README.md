@@ -29,6 +29,7 @@ open http://localhost:3000
 |-----|---------|
 | [http://localhost:3000/dev/sprite-viewer](http://localhost:3000/dev/sprite-viewer) | Inspect shipped lady-wizard strip PNGs from `public/assets/sprites/heroes/lady-wizard/sheets/atlas.json` with collision and alpha-edge overlays (no auth, no game session). |
 | [http://localhost:3000/dev/animation-tool](http://localhost:3000/dev/animation-tool) | Tune hero animation timing across all 8 directions at once. Run with `bun run dev:animation-tool` (starts Docker Postgres `db`/`db-shadow` then the full app server, same bootstrap as `dev:hybrid`); save local snapshots to `tools/animation/output/`, then commit runtime timing by running `bun run dev:animation-sync`. Disabled in production. |
+| [http://localhost:3000/dev/lobby-dashboard](http://localhost:3000/dev/lobby-dashboard) | Admin-only lobby/game dashboard with live roster, bandwidth, and close-lobby controls. |
 | `http://localhost:3000/dev/phaser` | Phaser Editor bootstrap (minimal Phaser mount). |
 
 Optional Playwright visual capture for the sprite viewer: `WW_SPRITE_VIEWER_VISUAL=1 bunx playwright test tests/e2e/sprite-viewer.spec.ts` (writes `test-results/sprite-viewer-detail.png`).

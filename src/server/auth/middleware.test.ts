@@ -25,6 +25,7 @@ describe("auth middleware helpers", () => {
     expect(isProtectedPath("/lobby/abc")).toBe(true)
     expect(isProtectedPath("/browse")).toBe(true)
     expect(isProtectedPath("/dev/admin")).toBe(true)
+    expect(isProtectedPath("/dev/lobby-dashboard")).toBe(true)
     expect(isProtectedPath("/login")).toBe(false)
   })
 

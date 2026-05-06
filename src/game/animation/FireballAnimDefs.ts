@@ -18,8 +18,10 @@ export const FIREBALL_CHANNEL_ANIM = "fireball-channel"
 /** Animation key consumed by `PlayerRenderSystem` while a player is in lava. */
 export const LAVA_LAP_ANIM = "lava-lap"
 
-/** Frame count baked into both fireball strips by `scripts/build-fireball-sheets.ts`. */
-const FRAME_COUNT = 8
+/** Frame count baked into the in-flight fireball strip by `scripts/build-fireball-sheets.ts`. */
+const FIREBALL_FLY_FRAME_COUNT = 5
+/** Frame count baked into the cast/channel fireball strip. */
+const FIREBALL_CHANNEL_FRAME_COUNT = 8
 
 /** Channel cycles fast to read as a building cast. */
 const CHANNEL_FPS = 14
@@ -45,7 +47,7 @@ export const registerFireballAnims = (
       key: FIREBALL_FLY_ANIM,
       frames: animManager.generateFrameNumbers(FIREBALL_FLY_TEXTURE, {
         start: 0,
-        end: FRAME_COUNT - 1,
+        end: FIREBALL_FLY_FRAME_COUNT - 1,
       }),
       frameRate: FLY_FPS,
       repeat: -1,
@@ -57,7 +59,7 @@ export const registerFireballAnims = (
       key: FIREBALL_CHANNEL_ANIM,
       frames: animManager.generateFrameNumbers(FIREBALL_CHANNEL_TEXTURE, {
         start: 0,
-        end: FRAME_COUNT - 1,
+        end: FIREBALL_CHANNEL_FRAME_COUNT - 1,
       }),
       frameRate: CHANNEL_FPS,
       repeat: -1,
