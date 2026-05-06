@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server"
 
+import { isAnimationToolApiForbiddenInProduction } from "@/shared/dev/animationToolE2eGate"
+
 import { buildLadyWizardMegasheet } from "../../../../../../scripts/build-lady-wizard-megasheet"
 
 export const runtime = "nodejs"
 
 export async function POST(): Promise<NextResponse> {
-  if (process.env.NODE_ENV === "production") {
+  if (isAnimationToolApiForbiddenInProduction()) {
     return NextResponse.json(
       { ok: false, code: "forbidden", message: "animation tool is dev-only" },
       { status: 403 },

@@ -12,6 +12,7 @@ import {
 import type { AnimationActionId } from "@/shared/balance-config/animationConfig"
 import { resolveSfxKeyForAction } from "@/shared/balance-config/animationToolSfx"
 import { VALID_HERO_IDS } from "@/shared/balance-config/heroes"
+import { isAnimationToolApiForbiddenInProduction } from "@/shared/dev/animationToolE2eGate"
 
 export const runtime = "nodejs"
 
@@ -83,7 +84,7 @@ async function archiveExistingIfPresent(livePath: string, sfxKey: string, now: D
  * @param request - Multipart body: `file`, `heroId`, `actionId`, `confirmReplace` === `"true"`.
  */
 export async function POST(request: Request): Promise<NextResponse> {
-  if (process.env.NODE_ENV === "production") {
+  if (isAnimationToolApiForbiddenInProduction()) {
     return err("forbidden", "animation tool is dev-only", 403)
   }
 

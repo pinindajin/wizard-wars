@@ -1,6 +1,8 @@
 import type { Metadata } from "next"
 import { unstable_noStore as noStore } from "next/cache"
 
+import { isAnimationToolPageUnavailableInProduction } from "@/shared/dev/animationToolE2eGate"
+
 import { AnimationToolClient } from "./AnimationToolClient"
 
 export const metadata: Metadata = {
@@ -14,30 +16,10 @@ export const metadata: Metadata = {
  */
 export const dynamic = "force-dynamic"
 
-/**
- * Production server may enable the tool only for automated tests (never set on real hosts).
- *
- * @returns True when `/dev/animation-tool` should render in a production Node process.
- */
-function allowAnimationToolInProduction(): boolean {
-  return (
-    process.env.WIZARD_WARS_E2E === "1" ||
-    process.env.WW_ALLOW_ANIMATION_TOOL_IN_PRODUCTION_E2E === "1"
-  )
-}
-
-/**
- * Returns true when the animation tool page body must not render (production without E2E gate).
- */
-function isAnimationToolUnavailable(): boolean {
-  if (process.env.NODE_ENV !== "production") return false
-  return !allowAnimationToolInProduction()
-}
-
 export default function AnimationToolPage() {
   noStore()
 
-  if (isAnimationToolUnavailable()) {
+  if (isAnimationToolPageUnavailableInProduction()) {
     return (
       <main className="min-h-screen bg-zinc-950 p-8 text-zinc-100">
         <div className="mx-auto max-w-2xl rounded border border-amber-700/60 bg-amber-950/30 p-6">

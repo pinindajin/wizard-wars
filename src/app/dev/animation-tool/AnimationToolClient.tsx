@@ -254,6 +254,20 @@ function LegendTipRow(props: { label: ReactNode; testId?: string; children: Reac
   )
 }
 
+/**
+ * Stable `data-testid` for sidebar section expand/collapse controls (Playwright).
+ *
+ * @param title - Panel title string from `CollapsiblePanel`.
+ * @returns Test id such as `animation-tool-section-toggle-hero`.
+ */
+function collapsibleSectionToggleTestId(title: string): string {
+  const slug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+  return `animation-tool-section-toggle-${slug}`
+}
+
 function CollapsiblePanel(props: {
   readonly title: string
   readonly defaultOpen?: boolean
@@ -269,6 +283,7 @@ function CollapsiblePanel(props: {
         className="flex w-full items-center justify-between font-mono text-xs uppercase tracking-[0.3em] text-stone-500 hover:text-lime-200"
         aria-expanded={open}
         aria-controls={panelId}
+        data-testid={collapsibleSectionToggleTestId(title)}
         onClick={() => setOpen((value) => !value)}
       >
         <span>{title}</span>
