@@ -14,6 +14,7 @@ import {
   PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
 } from "@/shared/balance-config/combat"
 import {
+  AbilityRuntime,
   Cooldown,
   DeadTag,
   DyingTag,
@@ -25,6 +26,7 @@ import {
   InvulnerableTag,
   MoveFacing,
   Position,
+  RespawnTimer,
   SpectatorTag,
   SwingingWeapon,
 } from "@/server/game/components"
@@ -32,7 +34,7 @@ import {
   primaryMeleeAttackIdToIndex,
   PRIMARY_MELEE_ATTACK_CONFIGS,
 } from "@/shared/balance-config/equipment"
-import { TICK_MS } from "@/shared/balance-config"
+import { JUMP_CHARGE_RECHARGE_MS, JUMP_MAX_CHARGES, TICK_MS } from "@/shared/balance-config"
 import type { PlayerInputPayload } from "@/shared/types"
 
 let nextSeq = 1
@@ -351,6 +353,77 @@ describe("movement system", () => {
 })
 
 describe("buildGameStateSyncPayload", () => {
+  it("exposes ability runtime state for the player HUD", () => {
+    const sim = createGameSimulation(Date.now())
+    sim.addPlayer("user1", "Alice", "red_wizard", 0)
+
+    const snap = sim.buildGameStateSyncPayload(10_000).players[0]!
+
+    expect(snap.abilityStates.jump).toMatchObject({
+      charges: JUMP_MAX_CHARGES,
+      maxCharges: JUMP_MAX_CHARGES,
+      cooldownEndsAtServerTimeMs: null,
+      rechargeEndsAtServerTimeMs: null,
+    })
+    expect(snap.abilityStates.fireball).toMatchObject({
+      cooldownEndsAtServerTimeMs: null,
+      charges: null,
+    })
+  })
+
+  it("emits ability state deltas when jump charges change", () => {
+    const sim = createGameSimulation(Date.now())
+    const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    AbilitySlots.slot1[eid] = ABILITY_INDEX.jump
+    const now = 10_000
+
+    const output = sim.tick(
+      queueMap([["user1", emptyInput({ abilitySlot: 1, seq: 1 })]]),
+      now,
+    )
+    const delta = output.playerDeltas.find((d) => d.id === eid)
+
+    expect(delta?.abilityStates?.jump.charges).toBe(JUMP_MAX_CHARGES - 1)
+    expect(delta?.abilityStates?.jump.rechargeEndsAtServerTimeMs).toBeCloseTo(
+      now + Math.ceil(JUMP_CHARGE_RECHARGE_MS / TICK_MS) * TICK_MS,
+    )
+
+    const output2 = sim.tick(new Map(), now + TICK_MS)
+    const delta2 = output2.playerDeltas.find((d) => d.id === eid)
+    expect(delta2?.abilityStates).toBeUndefined()
+  })
+
+  it("restores jump charges and clears recharge state on respawn", () => {
+    const now = 10_000
+    const sim = createGameSimulation(now)
+    const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
+
+    AbilityRuntime.jumpCharges[eid] = 0
+    AbilityRuntime.jumpRechargeReadyTick[eid] = 999
+    AbilityRuntime.jumpRechargeEndsAtMs[eid] = now + JUMP_CHARGE_RECHARGE_MS
+    addComponent(sim.world, eid, DeadTag)
+    addComponent(sim.world, eid, RespawnTimer)
+    RespawnTimer.fireAtMs[eid] = now
+    RespawnTimer.spawnX[eid] = ARENA_SPAWN_POINTS[0]!.x
+    RespawnTimer.spawnY[eid] = ARENA_SPAWN_POINTS[0]!.y
+    RespawnTimer.facingAngle[eid] = 0
+
+    const output = sim.tick(new Map(), now)
+
+    expect(output.playerRespawns).toHaveLength(1)
+    expect(hasComponent(sim.world, eid, DeadTag)).toBe(false)
+    expect(AbilityRuntime.jumpCharges[eid]).toBe(JUMP_MAX_CHARGES)
+    expect(AbilityRuntime.jumpRechargeReadyTick[eid]).toBe(0)
+    expect(AbilityRuntime.jumpRechargeEndsAtMs[eid]).toBe(0)
+
+    const snap = sim.buildGameStateSyncPayload(now).players[0]!
+    expect(snap.abilityStates.jump).toMatchObject({
+      charges: JUMP_MAX_CHARGES,
+      rechargeEndsAtServerTimeMs: null,
+      cooldownEndsAtServerTimeMs: null,
+    })
+  })
+
   it("includes fireballs after a cast completes", () => {
     const sim = createGameSimulation(Date.now())
     sim.addPlayer("user1", "Alice", "red_wizard", 0)

@@ -2,8 +2,30 @@ import { describe, expect, it } from "vitest"
 
 import { localWalkFootstepGatesPass } from "./WalkFootstepController"
 import { ClientPlayerState } from "../ecs/components"
+import type { AbilityRuntimeStates } from "@/shared/types"
 
 type LocalPlayerRow = (typeof ClientPlayerState)[number]
+
+function abilityStates(): AbilityRuntimeStates {
+  return {
+    fireball: {
+      cooldownEndsAtServerTimeMs: null,
+      cooldownDurationMs: null,
+      charges: null,
+      maxCharges: null,
+      rechargeEndsAtServerTimeMs: null,
+      rechargeDurationMs: null,
+    },
+    jump: {
+      cooldownEndsAtServerTimeMs: null,
+      cooldownDurationMs: null,
+      charges: 4,
+      maxCharges: 4,
+      rechargeEndsAtServerTimeMs: null,
+      rechargeDurationMs: null,
+    },
+  }
+}
 
 const baseState: LocalPlayerRow = {
   playerId: "p1",
@@ -21,6 +43,7 @@ const baseState: LocalPlayerRow = {
   invulnerable: false,
   jumpZ: 0,
   jumpStartedInLava: false,
+  abilityStates: abilityStates(),
 }
 
 describe("localWalkFootstepGatesPass", () => {

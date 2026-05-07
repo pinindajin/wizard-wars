@@ -18,6 +18,7 @@ import {
   PlayerInput,
   Casting,
   Cooldown,
+  AbilityRuntime,
   AbilitySlots,
   QuickItemSlots,
   Health,
@@ -52,7 +53,8 @@ import {
   DEFAULT_PLAYER_HEALTH,
   TICK_MS,
   LIGHTNING_TELEGRAPH_DANGER_LEAD_MS,
-  JUMP_COOLDOWN_MS,
+  JUMP_CHARGE_RECHARGE_MS,
+  JUMP_MAX_CHARGES,
   JUMP_INITIAL_VZ_PX_PER_SEC,
   JUMP_AIRBORNE_COLLIDER_EPSILON_PX,
 } from "../../../shared/balance-config"
@@ -78,8 +80,10 @@ const COOLDOWN_TICKS: Record<string, number> = {
   fireball: Math.ceil(FIREBALL_COOLDOWN_MS / TICK_MS),
   lightning_bolt: Math.ceil(LIGHTNING_COOLDOWN_MS / TICK_MS),
   healing_potion: Math.ceil(HEALING_POTION_CAST_MS / TICK_MS),
-  jump: Math.ceil(JUMP_COOLDOWN_MS / TICK_MS),
 }
+
+/** Tick duration for restoring one jump charge. */
+const JUMP_RECHARGE_TICKS = Math.ceil(JUMP_CHARGE_RECHARGE_MS / TICK_MS)
 
 /** Returns the hero id stored on an entity, falling back to the default index. */
 function heroIdForCaster(eid: number): string {
@@ -126,14 +130,78 @@ function isCooldownReady(eid: number, abilityId: string, currentTick: number): b
 }
 
 /** Sets the cooldown for an ability. */
-function setCooldown(eid: number, abilityId: string, currentTick: number): void {
+function setCooldown(
+  eid: number,
+  abilityId: string,
+  currentTick: number,
+  serverTimeMs: number,
+): void {
   const cd = COOLDOWN_TICKS[abilityId] ?? 0
+  const endsAtMs = cd > 0 ? serverTimeMs + cd * TICK_MS : 0
   switch (abilityId) {
-    case "fireball":       Cooldown.fireball[eid]       = currentTick + cd; break
-    case "lightning_bolt": Cooldown.lightningBolt[eid] = currentTick + cd; break
-    case "healing_potion": Cooldown.healingPotion[eid] = currentTick + cd; break
-    case "jump":           Cooldown.jump[eid]          = currentTick + cd; break
+    case "fireball":
+      Cooldown.fireball[eid] = currentTick + cd
+      AbilityRuntime.fireballCooldownEndsAtMs[eid] = endsAtMs
+      break
+    case "lightning_bolt":
+      Cooldown.lightningBolt[eid] = currentTick + cd
+      AbilityRuntime.lightningBoltCooldownEndsAtMs[eid] = endsAtMs
+      break
+    case "healing_potion":
+      Cooldown.healingPotion[eid] = currentTick + cd
+      AbilityRuntime.healingPotionCooldownEndsAtMs[eid] = endsAtMs
+      break
   }
+}
+
+/**
+ * Starts jump recharge when charges are below maximum and no timer is active.
+ *
+ * @param eid - Player entity id.
+ * @param currentTick - Current authoritative simulation tick.
+ * @param serverTimeMs - Current authoritative server wall-clock time.
+ */
+function ensureJumpRecharge(eid: number, currentTick: number, serverTimeMs: number): void {
+  if (AbilityRuntime.jumpCharges[eid] >= JUMP_MAX_CHARGES) return
+  if (AbilityRuntime.jumpRechargeReadyTick[eid] > 0) return
+  AbilityRuntime.jumpRechargeReadyTick[eid] = currentTick + JUMP_RECHARGE_TICKS
+  AbilityRuntime.jumpRechargeEndsAtMs[eid] = serverTimeMs + JUMP_RECHARGE_TICKS * TICK_MS
+}
+
+/**
+ * Restores ready jump charges before new cast validation.
+ *
+ * @param eid - Player entity id.
+ * @param currentTick - Current authoritative simulation tick.
+ * @param serverTimeMs - Current authoritative server wall-clock time.
+ */
+function refreshJumpCharges(eid: number, currentTick: number, serverTimeMs: number): void {
+  const readyTick = AbilityRuntime.jumpRechargeReadyTick[eid]
+  if (readyTick <= 0 || currentTick < readyTick) return
+
+  AbilityRuntime.jumpCharges[eid] = Math.min(
+    JUMP_MAX_CHARGES,
+    AbilityRuntime.jumpCharges[eid] + 1,
+  )
+
+  AbilityRuntime.jumpRechargeReadyTick[eid] = 0
+  AbilityRuntime.jumpRechargeEndsAtMs[eid] = 0
+  ensureJumpRecharge(eid, currentTick, serverTimeMs)
+}
+
+/**
+ * Consumes a jump charge and maintains the active recharge timer.
+ *
+ * @param eid - Player entity id.
+ * @param currentTick - Current authoritative simulation tick.
+ * @param serverTimeMs - Current authoritative server wall-clock time.
+ * @returns True when a charge was consumed.
+ */
+function consumeJumpCharge(eid: number, currentTick: number, serverTimeMs: number): boolean {
+  if (AbilityRuntime.jumpCharges[eid] <= 0) return false
+  AbilityRuntime.jumpCharges[eid]--
+  ensureJumpRecharge(eid, currentTick, serverTimeMs)
+  return true
 }
 
 // ─── Cast completion handlers ────────────────────────────────────────────
@@ -303,7 +371,12 @@ function applyHealingPotion(ctx: SimCtx, eid: number): void {
  * @param ctx - Shared simulation context.
  */
 export function castingSystem(ctx: SimCtx): void {
-  const { world, currentTick } = ctx
+  const { world, currentTick, serverTimeMs } = ctx
+
+  // ── 0. Recharge charge-based abilities before accepting new inputs ───
+  for (const eid of query(world, [PlayerTag])) {
+    refreshJumpCharges(eid, currentTick, serverTimeMs)
+  }
 
   // ── 1. Complete active casts ─────────────────────────────────────────
   for (const eid of query(world, [PlayerTag, Casting])) {
@@ -348,7 +421,7 @@ export function castingSystem(ctx: SimCtx): void {
     }
 
     if (currentTick >= Casting.animationEndsAtTick[eid]) {
-      setCooldown(eid, abilityId, currentTick)
+      setCooldown(eid, abilityId, currentTick, serverTimeMs)
       removeComponent(world, eid, Casting)
     }
   }
@@ -376,7 +449,7 @@ export function castingSystem(ctx: SimCtx): void {
       if (!jumpCfg) continue
       if (hasComponent(world, eid, SwingingWeapon)) continue
       if (hasComponent(world, eid, Knockback)) continue
-      if (!isCooldownReady(eid, "jump", currentTick)) continue
+      if (!consumeJumpCharge(eid, currentTick, serverTimeMs)) continue
 
       const jumpStartedInLava = TerrainState.kind[eid] === TERRAIN_KIND.lava ? 1 : 0
       addComponent(world, eid, JumpArc)
@@ -385,7 +458,6 @@ export function castingSystem(ctx: SimCtx): void {
       JumpArc.startedInLava[eid] = jumpStartedInLava
       TerrainState.kind[eid] = TERRAIN_KIND.land
       TerrainState.lavaDamageCarry[eid] = 0
-      setCooldown(eid, "jump", currentTick)
       ctx.abilitySfxEvents.push({ sfxKey: jumpCfg.castSfxKey })
       continue
     }
@@ -447,7 +519,7 @@ export function castingSystem(ctx: SimCtx): void {
     if (itemId === "healing_potion") {
       if (!isCooldownReady(eid, "healing_potion", currentTick)) continue
       applyHealingPotion(ctx, eid)
-      setCooldown(eid, "healing_potion", currentTick)
+      setCooldown(eid, "healing_potion", currentTick, serverTimeMs)
       // Consume one charge
       switch (qSlot) {
         case 0: QuickItemSlots.slot0Charges[eid]--; break

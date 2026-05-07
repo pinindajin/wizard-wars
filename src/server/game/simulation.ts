@@ -18,6 +18,7 @@ import {
   Gold,
   Hero,
   Cooldown,
+  AbilityRuntime,
   Equipment,
   AbilitySlots,
   QuickItemSlots,
@@ -40,6 +41,7 @@ import {
   STARTING_LIVES,
   STARTING_GOLD,
   PLAYER_RADIUS_PX,
+  JUMP_MAX_CHARGES,
 } from "../../shared/balance-config"
 import { DEFAULT_HERO_ID, getHeroPrimaryMeleeAttackId } from "../../shared/balance-config/heroes"
 import {
@@ -66,6 +68,7 @@ import type {
   PlayerTerrainState,
   FireballSnapshot,
   AbilitySfxPayload,
+  AbilityRuntimeStates,
 } from "../../shared/types"
 
 import { inputSystem } from "./systems/inputSystem"
@@ -89,6 +92,7 @@ import { computePlayerAnimState, getCastingAbilityId } from "./playerAnimState"
 import { computePlayerMoveState } from "./playerMoveState"
 import { playerDeltaSystem } from "./systems/playerDeltaSystem"
 import { projectileDeltaSystem } from "./systems/projectileDeltaSystem"
+import { abilityRuntimeStatesForPlayer } from "./abilityRuntimeState"
 
 /**
  * Maps internal last-processed input seq to wire payloads (nonnegative int).
@@ -182,6 +186,7 @@ export type PlayerPrevState = {
   jumpZ: number
   jumpStartedInLava: boolean
   terrainState: PlayerTerrainState
+  abilityStates: AbilityRuntimeStates
   lastProcessedInputSeq: number
 }
 
@@ -397,6 +402,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     addComponent(world, eid, Gold)
     addComponent(world, eid, Hero)
     addComponent(world, eid, Cooldown)
+    addComponent(world, eid, AbilityRuntime)
     addComponent(world, eid, Equipment)
     addComponent(world, eid, AbilitySlots)
     addComponent(world, eid, QuickItemSlots)
@@ -422,6 +428,12 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     Cooldown.primaryMelee[eid] = 0
     Cooldown.healingPotion[eid] = 0
     Cooldown.jump[eid] = 0
+    AbilityRuntime.fireballCooldownEndsAtMs[eid] = 0
+    AbilityRuntime.lightningBoltCooldownEndsAtMs[eid] = 0
+    AbilityRuntime.healingPotionCooldownEndsAtMs[eid] = 0
+    AbilityRuntime.jumpCharges[eid] = JUMP_MAX_CHARGES
+    AbilityRuntime.jumpRechargeReadyTick[eid] = 0
+    AbilityRuntime.jumpRechargeEndsAtMs[eid] = 0
 
     Equipment.primaryMeleeAttackIndex[eid] = primaryMeleeAttackIdToIndex(
       getHeroPrimaryMeleeAttackId(heroId),
@@ -489,6 +501,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       jumpZ: 0,
       jumpStartedInLava: false,
       terrainState: "land",
+      abilityStates: abilityRuntimeStatesForPlayer(eid, currentTick),
       lastProcessedInputSeq: 0,
     })
     // `-1`: no input processed yet; first client `seq: 0` is accepted in `tick`.
@@ -574,6 +587,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       const jumpStartedInLava =
         hasComponent(world, eid, JumpArc) && JumpArc.startedInLava[eid] === 1
       const terrainState = TERRAIN_KIND_TO_STATE[TerrainState.kind[eid]] ?? "land"
+      const abilityStates = abilityRuntimeStatesForPlayer(eid, currentTick)
       const lastProcessedInputSeq = lastProcessedSeqForNetworkPayload(
         lastProcessedInputSeqByPlayer,
         userId,
@@ -599,6 +613,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
         jumpZ,
         jumpStartedInLava,
         terrainState,
+        abilityStates,
         lastProcessedInputSeq,
       })
     }

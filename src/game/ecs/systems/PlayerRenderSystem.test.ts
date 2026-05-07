@@ -77,6 +77,27 @@ type TestRenderEntry = {
   smoothTargetY: number
 }
 
+function abilityStates() {
+  return {
+    fireball: {
+      cooldownEndsAtServerTimeMs: null,
+      cooldownDurationMs: null,
+      charges: null,
+      maxCharges: null,
+      rechargeEndsAtServerTimeMs: null,
+      rechargeDurationMs: null,
+    },
+    jump: {
+      cooldownEndsAtServerTimeMs: null,
+      cooldownDurationMs: null,
+      charges: 4,
+      maxCharges: 4,
+      rechargeEndsAtServerTimeMs: null,
+      rechargeDurationMs: null,
+    },
+  }
+}
+
 function snap(over: Partial<PlayerSnapshot> & Pick<PlayerSnapshot, "id" | "playerId">): PlayerSnapshot {
   return {
     id: over.id,
@@ -99,6 +120,7 @@ function snap(over: Partial<PlayerSnapshot> & Pick<PlayerSnapshot, "id" | "playe
     invulnerable: over.invulnerable ?? false,
     jumpZ: over.jumpZ ?? 0,
     jumpStartedInLava: over.jumpStartedInLava ?? false,
+    abilityStates: over.abilityStates ?? abilityStates(),
     lastProcessedInputSeq: over.lastProcessedInputSeq ?? 0,
   }
 }

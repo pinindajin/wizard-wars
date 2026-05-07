@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation"
 import { fetchWsAuthToken } from "@/lib/fetch-ws-auth-token"
 import { WsEvent } from "@/shared/events"
 import type {
+  AbilityRuntimeStates,
   LobbyPhase,
   LobbyStatePayload,
   MatchCountdownStartPayload,
@@ -15,6 +16,7 @@ import type {
   PlayerDeathPayload,
   GameStateSyncPayload,
   PlayerBatchUpdatePayload,
+  ShopStatePayload,
 } from "@/shared/types"
 
 import WaitingForPlayersOverlay from "./WaitingForPlayersOverlay"
@@ -45,9 +47,16 @@ import {
 import { useLobbyConnection } from "../LobbyConnectionProvider"
 import { AdminClosingModal } from "@/components/lobby/AdminClosingModal"
 import { MATCH_COUNTDOWN_DURATION_MS } from "@/shared/balance-config/lobby"
-import type { ShopStatePayload } from "@/shared/types"
 import KillFeed from "./KillFeed"
 import { formatKillFeedLine } from "@/lib/kill-feed-format"
+import {
+  EMPTY_ABILITY_RUNTIME_STATES,
+  abilityStatesFromBatchDelta,
+  abilityStatesFromFullSync,
+  estimateServerNowMs,
+  sampleServerClock,
+  type ServerClockSample,
+} from "./abilityRuntimeHudState"
 
 const KILL_FEED_MAX = 5
 const KILL_FEED_TTL_MS = 8000
@@ -147,6 +156,12 @@ function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) 
     LobbyScoreboardPayload["endReason"] | null
   >(null)
   const [shopState, setShopState] = useState<ShopStatePayload | null>(null)
+  const [abilityStates, setAbilityStates] = useState<AbilityRuntimeStates>(
+    () => EMPTY_ABILITY_RUNTIME_STATES,
+  )
+  const [serverClockSample, setServerClockSample] =
+    useState<ServerClockSample | null>(null)
+  const [serverNowMs, setServerNowMs] = useState(() => Date.now())
   /** HUD placeholders until wired to game sync messages. */
   const health = 100
   const maxHealth = 100
@@ -177,6 +192,13 @@ function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) 
   }, [])
 
   useEffect(() => {
+    const id = window.setInterval(() => {
+      setServerNowMs(estimateServerNowMs(serverClockSample))
+    }, 100)
+    return () => window.clearInterval(id)
+  }, [serverClockSample])
+
+  useEffect(() => {
     if (!connection) return
     const unsub = connection.onMessage((message) => {
       switch (message.type) {
@@ -205,14 +227,21 @@ function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) 
           setCountdownStart(null)
           setIsSpectating(false)
           entityToPlayerRef.current = new Map()
+          setAbilityStates(EMPTY_ABILITY_RUNTIME_STATES)
+          setServerClockSample(null)
+          setServerNowMs(Date.now())
           break
         case WsEvent.GameStateSync: {
           const payload = message.payload as GameStateSyncPayload
+          const clock = sampleServerClock(payload.serverTimeMs)
+          setServerClockSample(clock)
+          setServerNowMs(estimateServerNowMs(clock))
           const m = new Map<number, string>()
           for (const pl of payload.players) {
             m.set(pl.id, pl.playerId)
           }
           entityToPlayerRef.current = m
+          setAbilityStates(abilityStatesFromFullSync(payload, localPlayerId))
           if (localPlayerId) {
             const me = payload.players.find((p) => p.playerId === localPlayerId)
             if (me && me.lives === 0) setIsSpectating(true)
@@ -222,8 +251,14 @@ function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) 
         }
         case WsEvent.PlayerBatchUpdate: {
           const payload = message.payload as PlayerBatchUpdatePayload
+          const clock = sampleServerClock(payload.serverTimeMs)
+          setServerClockSample(clock)
+          setServerNowMs(estimateServerNowMs(clock))
           if (!localPlayerId) break
           const map = entityToPlayerRef.current
+          setAbilityStates((current) =>
+            abilityStatesFromBatchDelta(current, payload, localPlayerId, map),
+          )
           for (const d of payload.deltas) {
             if (map.get(d.id) !== localPlayerId) continue
             if (d.lives === undefined) continue
@@ -554,7 +589,11 @@ function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) 
 
           {!isSpectating && (
             <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 flex-col items-center gap-2">
-              <AbilityBar slots={abilitySlots} />
+              <AbilityBar
+                slots={abilitySlots}
+                abilityStates={abilityStates}
+                serverNowMs={serverNowMs}
+              />
               <QuickItemBar slots={quickItems} />
             </div>
           )}

@@ -27,6 +27,10 @@ import { computePlayerAnimState, getCastingAbilityId } from "../playerAnimState"
 import { computePlayerMoveState } from "../playerMoveState"
 import type { SimCtx } from "../simulation"
 import type { PlayerDelta } from "../../../shared/types"
+import {
+  abilityRuntimeStatesEqual,
+  abilityRuntimeStatesForPlayer,
+} from "../abilityRuntimeState"
 
 /**
  * Runs the player delta system for one tick.
@@ -56,6 +60,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
     const jumpStartedInLava =
       hasComponent(world, eid, JumpArc) && JumpArc.startedInLava[eid] === 1
     const terrainState = TERRAIN_KIND_TO_STATE[TerrainState.kind[eid]] ?? "land"
+    const abilityStates = abilityRuntimeStatesForPlayer(eid, ctx.currentTick)
     const lastProcessedInputSeq = Math.max(
       0,
       lastProcessedInputSeqByPlayer.get(userId) ?? 0,
@@ -79,6 +84,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
         jumpZ,
         jumpStartedInLava,
         terrainState,
+        abilityStates,
         lastProcessedInputSeq,
       })
       prevPlayerStates.set(eid, {
@@ -97,6 +103,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
         jumpZ,
         jumpStartedInLava,
         terrainState,
+        abilityStates,
         lastProcessedInputSeq,
       })
       continue
@@ -121,6 +128,9 @@ export function playerDeltaSystem(ctx: SimCtx): void {
         ? { jumpStartedInLava }
         : {}),
       ...(terrainState !== prev.terrainState ? { terrainState } : {}),
+      ...(!abilityRuntimeStatesEqual(abilityStates, prev.abilityStates)
+        ? { abilityStates }
+        : {}),
       ...(lastProcessedInputSeq !== prev.lastProcessedInputSeq
         ? { lastProcessedInputSeq }
         : {}),
@@ -142,6 +152,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
       delta.jumpZ !== undefined ||
       delta.jumpStartedInLava !== undefined ||
       delta.terrainState !== undefined ||
+      delta.abilityStates !== undefined ||
       delta.lastProcessedInputSeq !== undefined
 
     if (changed) {
@@ -161,6 +172,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
       prev.jumpZ = jumpZ
       prev.jumpStartedInLava = jumpStartedInLava
       prev.terrainState = terrainState
+      prev.abilityStates = abilityStates
       prev.lastProcessedInputSeq = lastProcessedInputSeq
     }
   }

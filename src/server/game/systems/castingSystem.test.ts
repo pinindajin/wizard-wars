@@ -1,9 +1,10 @@
-import { addComponent, addEntity, createWorld, hasComponent } from "bitecs"
+import { addComponent, addEntity, createWorld, hasComponent, removeComponent } from "bitecs"
 import { afterEach, describe, expect, it } from "vitest"
 
 import {
   ABILITY_INDEX,
   AbilitySlots,
+  AbilityRuntime,
   Casting,
   Cooldown,
   DyingTag,
@@ -13,6 +14,7 @@ import {
   PlayerTag,
   Position,
   Velocity,
+  JumpArc,
 } from "../components"
 import { createCommandBuffer } from "../commandBuffer"
 import type { SimCtx } from "../simulation"
@@ -23,6 +25,11 @@ import {
   msToTickOffset,
   type AnimationActionConfig,
 } from "../../../shared/balance-config/animationConfig"
+import {
+  JUMP_CHARGE_RECHARGE_MS,
+  JUMP_MAX_CHARGES,
+  TICK_MS,
+} from "../../../shared/balance-config"
 
 const originalFireballConfig = structuredClone(
   ANIMATION_CONFIG.heroes.red_wizard.actions["spell:fireball"],
@@ -80,6 +87,7 @@ function addCaster(world: ReturnType<typeof createWorld>, x = 100, y = 100): num
   addComponent(world, eid, Facing)
   addComponent(world, eid, Hero)
   addComponent(world, eid, Cooldown)
+  addComponent(world, eid, AbilityRuntime)
   addComponent(world, eid, AbilitySlots)
   addComponent(world, eid, PlayerInput)
   Position.x[eid] = x
@@ -89,6 +97,10 @@ function addCaster(world: ReturnType<typeof createWorld>, x = 100, y = 100): num
   Cooldown.fireball[eid] = 0
   Cooldown.lightningBolt[eid] = 0
   Cooldown.healingPotion[eid] = 0
+  Cooldown.jump[eid] = 0
+  AbilityRuntime.jumpCharges[eid] = JUMP_MAX_CHARGES
+  AbilityRuntime.jumpRechargeReadyTick[eid] = 0
+  AbilityRuntime.jumpRechargeEndsAtMs[eid] = 0
   AbilitySlots.slot0[eid] = ABILITY_INDEX.fireball
   AbilitySlots.slot1[eid] = ABILITY_INDEX.lightning_bolt
   AbilitySlots.slot2[eid] = -1
@@ -99,6 +111,103 @@ function addCaster(world: ReturnType<typeof createWorld>, x = 100, y = 100): num
   PlayerInput.abilityTargetY[eid] = y
   return eid
 }
+
+describe("castingSystem jump charges", () => {
+  const jumpRechargeTicks = Math.ceil(JUMP_CHARGE_RECHARGE_MS / TICK_MS)
+
+  function addJumpCaster(world: ReturnType<typeof createWorld>): number {
+    const caster = addCaster(world)
+    AbilitySlots.slot2[caster] = ABILITY_INDEX.jump
+    PlayerInput.abilitySlot[caster] = 2
+    return caster
+  }
+
+  it("spends one charge and starts a recharge timer on accepted jump", () => {
+    const world = createWorld()
+    const caster = addJumpCaster(world)
+    const ctx = emptyCtx({
+      world,
+      currentTick: 20,
+      serverTimeMs: 1_000,
+    })
+
+    castingSystem(ctx)
+
+    expect(hasComponent(world, caster, JumpArc)).toBe(true)
+    expect(AbilityRuntime.jumpCharges[caster]).toBe(JUMP_MAX_CHARGES - 1)
+    expect(AbilityRuntime.jumpRechargeReadyTick[caster]).toBe(20 + jumpRechargeTicks)
+    expect(AbilityRuntime.jumpRechargeEndsAtMs[caster]).toBeCloseTo(
+      1_000 + jumpRechargeTicks * TICK_MS,
+    )
+    expect(Cooldown.jump[caster]).toBe(0)
+    expect(ctx.abilitySfxEvents).toEqual([{ sfxKey: "sfx-jump" }])
+  })
+
+  it("allows another jump before recharge completes when a charge remains", () => {
+    const world = createWorld()
+    const caster = addJumpCaster(world)
+    const ctx = emptyCtx({
+      world,
+      currentTick: 20,
+      serverTimeMs: 1_000,
+    })
+
+    castingSystem(ctx)
+    const firstRechargeTick = AbilityRuntime.jumpRechargeReadyTick[caster]
+    removeComponent(world, caster, JumpArc)
+    PlayerInput.abilitySlot[caster] = 2
+    ctx.currentTick = 21
+    ctx.serverTimeMs = 1_000 + TICK_MS
+    ctx.abilitySfxEvents = []
+
+    castingSystem(ctx)
+
+    expect(hasComponent(world, caster, JumpArc)).toBe(true)
+    expect(AbilityRuntime.jumpCharges[caster]).toBe(JUMP_MAX_CHARGES - 2)
+    expect(AbilityRuntime.jumpRechargeReadyTick[caster]).toBe(firstRechargeTick)
+    expect(ctx.abilitySfxEvents).toEqual([{ sfxKey: "sfx-jump" }])
+  })
+
+  it("rejects zero-charge jump without arc, charge consumption, or sfx", () => {
+    const world = createWorld()
+    const caster = addJumpCaster(world)
+    AbilityRuntime.jumpCharges[caster] = 0
+    AbilityRuntime.jumpRechargeReadyTick[caster] = 1_000
+    AbilityRuntime.jumpRechargeEndsAtMs[caster] = 20_000
+    const ctx = emptyCtx({
+      world,
+      currentTick: 20,
+      serverTimeMs: 1_000,
+    })
+
+    castingSystem(ctx)
+
+    expect(hasComponent(world, caster, JumpArc)).toBe(false)
+    expect(AbilityRuntime.jumpCharges[caster]).toBe(0)
+    expect(AbilityRuntime.jumpRechargeReadyTick[caster]).toBe(1_000)
+    expect(ctx.abilitySfxEvents).toEqual([])
+  })
+
+  it("restores a charge before validating same-tick jump input", () => {
+    const world = createWorld()
+    const caster = addJumpCaster(world)
+    AbilityRuntime.jumpCharges[caster] = 0
+    AbilityRuntime.jumpRechargeReadyTick[caster] = 50
+    AbilityRuntime.jumpRechargeEndsAtMs[caster] = 5_000
+    const ctx = emptyCtx({
+      world,
+      currentTick: 50,
+      serverTimeMs: 5_000,
+    })
+
+    castingSystem(ctx)
+
+    expect(hasComponent(world, caster, JumpArc)).toBe(true)
+    expect(AbilityRuntime.jumpCharges[caster]).toBe(0)
+    expect(AbilityRuntime.jumpRechargeReadyTick[caster]).toBe(50 + jumpRechargeTicks)
+    expect(ctx.abilitySfxEvents).toEqual([{ sfxKey: "sfx-jump" }])
+  })
+})
 
 describe("castingSystem animation timing", () => {
   afterEach(() => {
