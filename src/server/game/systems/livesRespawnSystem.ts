@@ -22,6 +22,7 @@ import {
   Health,
   Lives,
   Cooldown,
+  AbilityRuntime,
   Casting,
   Knockback,
   RespawnTimer,
@@ -46,6 +47,7 @@ import {
   DEATH_ANIM_MS,
   INVULNERABLE_WINDOW_MS,
   TICK_MS,
+  JUMP_MAX_CHARGES,
 } from "../../../shared/balance-config"
 
 const INVULNERABLE_TICKS = Math.ceil(INVULNERABLE_WINDOW_MS / TICK_MS)
@@ -104,7 +106,7 @@ function respawnPlayer(
   spawnY: number,
   facingAngle: number,
 ): void {
-  const { world, currentTick, serverTimeMs, entityPlayerMap, playerRespawns } = ctx
+  const { world, currentTick, entityPlayerMap, playerRespawns } = ctx
 
   Position.x[eid] = spawnX
   Position.y[eid] = spawnY
@@ -130,6 +132,12 @@ function respawnPlayer(
   Cooldown.primaryMelee[eid] = 0
   Cooldown.healingPotion[eid] = 0
   Cooldown.jump[eid] = 0
+  AbilityRuntime.fireballCooldownEndsAtMs[eid] = 0
+  AbilityRuntime.lightningBoltCooldownEndsAtMs[eid] = 0
+  AbilityRuntime.healingPotionCooldownEndsAtMs[eid] = 0
+  AbilityRuntime.jumpCharges[eid] = JUMP_MAX_CHARGES
+  AbilityRuntime.jumpRechargeReadyTick[eid] = 0
+  AbilityRuntime.jumpRechargeEndsAtMs[eid] = 0
 
   // Invulnerability expiry stored in ticks
   // We store it on a side field; InvulnerableTag is just a presence marker.

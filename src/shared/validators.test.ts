@@ -9,6 +9,27 @@ import {
 } from "@/shared/validators"
 import type { GameStateSyncPayload, PlayerDeathPayload } from "@/shared/types"
 
+function validAbilityStates() {
+  return {
+    fireball: {
+      cooldownEndsAtServerTimeMs: null,
+      cooldownDurationMs: null,
+      charges: null,
+      maxCharges: null,
+      rechargeEndsAtServerTimeMs: null,
+      rechargeDurationMs: null,
+    },
+    jump: {
+      cooldownEndsAtServerTimeMs: null,
+      cooldownDurationMs: null,
+      charges: 4,
+      maxCharges: 4,
+      rechargeEndsAtServerTimeMs: null,
+      rechargeDurationMs: null,
+    },
+  }
+}
+
 describe("signupUsernameSchema", () => {
   it("accepts valid usernames", () => {
     expect(signupUsernameSchema.safeParse("abc").success).toBe(true)
@@ -130,6 +151,7 @@ describe("parseGameStateSyncPayload", () => {
           invulnerable: false,
           jumpZ: 0,
           jumpStartedInLava: false,
+          abilityStates: validAbilityStates(),
           lastProcessedInputSeq: 0,
         },
       ],
@@ -189,6 +211,52 @@ describe("parseGameStateSyncPayload", () => {
             invulnerable: false,
             jumpZ: 0,
             jumpStartedInLava: false,
+            abilityStates: validAbilityStates(),
+            lastProcessedInputSeq: 0,
+          },
+        ],
+        fireballs: [],
+        seq: 0,
+        serverTimeMs: 1,
+      } as never),
+    ).toThrow()
+  })
+
+  it("rejects malformed ability runtime state", () => {
+    expect(() =>
+      parseGameStateSyncPayload({
+        players: [
+          {
+            id: 1,
+            playerId: "u",
+            username: "x",
+            x: 0,
+            y: 0,
+            vx: 0,
+            vy: 0,
+            facingAngle: 0,
+            moveFacingAngle: 0,
+            health: 1,
+            maxHealth: 1,
+            lives: 1,
+            heroId: "red_wizard",
+            animState: "idle",
+            moveState: "idle",
+            terrainState: "land",
+            castingAbilityId: null,
+            invulnerable: false,
+            jumpZ: 0,
+            jumpStartedInLava: false,
+            abilityStates: {
+              jump: {
+                cooldownEndsAtServerTimeMs: null,
+                cooldownDurationMs: null,
+                charges: -1,
+                maxCharges: 4,
+                rechargeEndsAtServerTimeMs: null,
+                rechargeDurationMs: null,
+              },
+            },
             lastProcessedInputSeq: 0,
           },
         ],

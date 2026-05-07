@@ -3,7 +3,8 @@ import {
   LIGHTNING_COOLDOWN_MS,
   FIREBALL_CAST_MS,
   LIGHTNING_CAST_MS,
-  JUMP_COOLDOWN_MS,
+  JUMP_CHARGE_RECHARGE_MS,
+  JUMP_MAX_CHARGES,
 } from "./combat"
 import { DamageProperty, combineDamageProperties } from "./damage"
 
@@ -20,6 +21,11 @@ export type AbilityConfig = {
   readonly castMs: number
   /** Cooldown after cast animation completes, in ms. */
   readonly cooldownMs: number
+  /** Optional charge budget and recharge timing for charge-based abilities. */
+  readonly charges?: {
+    readonly maxCharges: number
+    readonly rechargeMs: number
+  }
   /** Damage properties bitmask (0 if no damage). */
   readonly damageProperties: number
   /** SFX key for the cast sound. */
@@ -58,7 +64,11 @@ export const ABILITY_CONFIGS: Record<string, AbilityConfig> = {
     /** Jump does not use `Casting`; vertical arc is `JumpArc`, horizontal movement is movementSystem. */
     quick: true,
     castMs: 0,
-    cooldownMs: JUMP_COOLDOWN_MS,
+    cooldownMs: 0,
+    charges: {
+      maxCharges: JUMP_MAX_CHARGES,
+      rechargeMs: JUMP_CHARGE_RECHARGE_MS,
+    },
     damageProperties: 0,
     castSfxKey: "sfx-jump",
     castMoveSpeedMultiplier: 1.0,

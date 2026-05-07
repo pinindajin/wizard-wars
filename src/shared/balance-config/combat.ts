@@ -126,8 +126,10 @@ export const LIGHTNING_COOLDOWN_MS = 4000
 export const JUMP_GRAVITY_PX_PER_SEC2 = 2400
 /** Initial upward velocity when a jump begins (world px/s). */
 export const JUMP_INITIAL_VZ_PX_PER_SEC = 640
-/** Ability cooldown starting when jump is accepted (ms). */
-export const JUMP_COOLDOWN_MS = 2500
+/** Maximum jump charges available before recharge stops. */
+export const JUMP_MAX_CHARGES = 4
+/** Time to restore one spent jump charge. */
+export const JUMP_CHARGE_RECHARGE_MS = 5000
 /**
  * Minimum simulated `jumpZ` (px) to treat the player as airborne for collider splitting.
  * Must stay consistent across server movement, world resolve, and client replay (r5).

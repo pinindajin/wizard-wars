@@ -7,6 +7,27 @@ import {
   fireballPreviewLineFor,
 } from "./DebugOverlaySystem"
 import { ClientPlayerState, ClientRenderPos } from "../components"
+
+function abilityStates() {
+  return {
+    fireball: {
+      cooldownEndsAtServerTimeMs: null,
+      cooldownDurationMs: null,
+      charges: null,
+      maxCharges: null,
+      rechargeEndsAtServerTimeMs: null,
+      rechargeDurationMs: null,
+    },
+    jump: {
+      cooldownEndsAtServerTimeMs: null,
+      cooldownDurationMs: null,
+      charges: 4,
+      maxCharges: 4,
+      rechargeEndsAtServerTimeMs: null,
+      rechargeDurationMs: null,
+    },
+  }
+}
 import { addEntity, clientEntities, removeEntity } from "../world"
 
 function clearClientWorld() {
@@ -62,6 +83,7 @@ function addPlayer(
     invulnerable: false,
     jumpZ: 0,
     jumpStartedInLava: false,
+    abilityStates: abilityStates(),
     ...overrides,
   }
 }

@@ -18,6 +18,27 @@ import {
 } from "@/shared/balance-config"
 import type { CombatTelegraphStartPayload } from "@/shared/types"
 import { ClientPlayerState, ClientRenderPos } from "../components"
+
+function abilityStates() {
+  return {
+    fireball: {
+      cooldownEndsAtServerTimeMs: null,
+      cooldownDurationMs: null,
+      charges: null,
+      maxCharges: null,
+      rechargeEndsAtServerTimeMs: null,
+      rechargeDurationMs: null,
+    },
+    jump: {
+      cooldownEndsAtServerTimeMs: null,
+      cooldownDurationMs: null,
+      charges: 4,
+      maxCharges: 4,
+      rechargeEndsAtServerTimeMs: null,
+      rechargeDurationMs: null,
+    },
+  }
+}
 import { CombatTelegraphRenderSystem } from "./CombatTelegraphRenderSystem"
 
 /** Phaser scene status numbers (see `node_modules/phaser/src/scene/const.js`). */
@@ -94,6 +115,7 @@ function wireCaster(casterId: string, x: number, y: number): void {
     invulnerable: false,
     jumpZ: 0,
     jumpStartedInLava: false,
+    abilityStates: abilityStates(),
   }
   ClientRenderPos[1] = { x, y }
 }

@@ -299,6 +299,7 @@ export class PlayerRenderSystem {
         invulnerable: snap.invulnerable,
         jumpZ: snap.jumpZ,
         jumpStartedInLava: snap.jumpStartedInLava,
+        abilityStates: snap.abilityStates,
       }
       this.onAuthoritativePosition(snap.id, snap.x, snap.y, "full_sync")
 
