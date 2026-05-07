@@ -75,6 +75,8 @@ function addAttacker(world: ReturnType<typeof createWorld>, x: number, y: number
   Equipment.primaryMeleeAttackIndex[eid] = 0
   Cooldown.primaryMelee[eid] = 0
   PlayerInput.weaponPrimary[eid] = 1
+  PlayerInput.weaponTargetX[eid] = x + Math.cos(facing) * 100
+  PlayerInput.weaponTargetY[eid] = y + Math.sin(facing) * 100
   return eid
 }
 
@@ -117,6 +119,41 @@ describe("primaryMeleeAttackSystem", () => {
     expect(active.startTick).toBe(20)
     expect(active.facingAngle).toBe(0)
     expect(active.hitTargets.size).toBe(0)
+  })
+
+  it("captures new swing facing from the latest weapon target", () => {
+    const world = createWorld()
+    const eid = addAttacker(world, 100, 100, 0)
+    PlayerInput.weaponTargetX[eid] = 0
+    PlayerInput.weaponTargetY[eid] = 100
+    const ctx = emptyCtx({
+      world,
+      currentTick: 20,
+      entityPlayerMap: new Map([[eid, "attacker"]]),
+    })
+
+    primaryMeleeAttackSystem(ctx)
+
+    expect(Facing.angle[eid]).toBeCloseTo(Math.PI, 5)
+    expect(ctx.primaryMeleeAttacks[0]!.facingAngle).toBeCloseTo(Math.PI, 5)
+    expect(ctx.combatTelegraphStarts[0]!.directionRad).toBeCloseTo(Math.PI, 5)
+    expect(ctx.activeMeleeAttacks.get(eid)!.facingAngle).toBeCloseTo(Math.PI, 5)
+  })
+
+  it("falls back to previous facing when weapon target is exactly at the caster", () => {
+    const world = createWorld()
+    const eid = addAttacker(world, 100, 100, Math.PI / 2)
+    PlayerInput.weaponTargetX[eid] = 100
+    PlayerInput.weaponTargetY[eid] = 100
+    const ctx = emptyCtx({
+      world,
+      currentTick: 20,
+      entityPlayerMap: new Map([[eid, "attacker"]]),
+    })
+
+    primaryMeleeAttackSystem(ctx)
+
+    expect(ctx.primaryMeleeAttacks[0]!.facingAngle).toBeCloseTo(Math.PI / 2, 5)
   })
 
   it("uses empty caster id when the entity-player map has no entry", () => {

@@ -611,6 +611,77 @@ describe("primary melee attack", () => {
     expect(MoveFacing.angle[eid]).toBeCloseTo(Math.PI, 1)
   })
 
+  it("recaptures held primary facing when the next swing starts", () => {
+    const sim = createGameSimulation(Date.now())
+    const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    const px = ARENA_CENTER_X
+    const py = ARENA_CENTER_Y
+    Position.x[eid] = px
+    Position.y[eid] = py
+
+    const first = sim.tick(
+      queueMap([
+        [
+          "user1",
+          emptyInput({
+            weaponPrimary: true,
+            seq: 1,
+            weaponTargetX: px + 200,
+            weaponTargetY: py,
+          }),
+        ],
+      ]),
+      Date.now(),
+    )
+    expect(first.primaryMeleeAttacks[0]!.facingAngle).toBeCloseTo(0, 5)
+
+    const midSwing = sim.tick(
+      queueMap([
+        [
+          "user1",
+          emptyInput({
+            weaponPrimary: true,
+            seq: 2,
+            weaponTargetX: px - 200,
+            weaponTargetY: py,
+          }),
+        ],
+      ]),
+      Date.now(),
+    )
+    expect(midSwing.primaryMeleeAttacks).toHaveLength(0)
+    expect(Facing.angle[eid]).toBeCloseTo(0, 5)
+
+    const swingTicks = Math.ceil(
+      PRIMARY_MELEE_ATTACK_CONFIGS.red_wizard_cleaver.durationMs / TICK_MS,
+    )
+    let chainedFacing: number | null = null
+    for (let i = 0; i < swingTicks + 2; i++) {
+      const output = sim.tick(
+        queueMap([
+          [
+            "user1",
+            emptyInput({
+              weaponPrimary: true,
+              seq: i + 3,
+              weaponTargetX: px - 200,
+              weaponTargetY: py,
+            }),
+          ],
+        ]),
+        Date.now(),
+      )
+      if (output.primaryMeleeAttacks.length > 0) {
+        chainedFacing = output.primaryMeleeAttacks[0]!.facingAngle
+        break
+      }
+    }
+
+    expect(chainedFacing).not.toBeNull()
+    expect(chainedFacing!).toBeCloseTo(Math.PI, 5)
+    expect(Facing.angle[eid]).toBeCloseTo(Math.PI, 5)
+  })
+
   it("does not start a second swing while SwingingWeapon is active", () => {
     const sim = createGameSimulation(Date.now())
     sim.addPlayer("a", "A", "red_wizard", 0)

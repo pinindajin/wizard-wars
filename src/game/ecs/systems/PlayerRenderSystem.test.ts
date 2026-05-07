@@ -673,6 +673,54 @@ describe("PlayerRenderSystem.onPrimaryMeleeSwing", () => {
     expect(sprite.play.mock.calls[1]).toEqual([expectedKey, false])
   })
 
+  it("keeps the payload melee direction while state facing changes mid-swing", () => {
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    sys.localPlayerId = "p1"
+
+    sys.applyFullSync(
+      sync([
+        snap({
+          id: 1,
+          playerId: "p1",
+          x: OPEN_TEST_POINT.x,
+          y: OPEN_TEST_POINT.y,
+          animState: "primary_melee_attack",
+          facingAngle: 0,
+        }),
+      ]),
+    )
+
+    const spriteFn = scene.add.sprite as ReturnType<typeof vi.fn>
+    const sprite = spriteFn.mock.results[0]!.value as { play: ReturnType<typeof vi.fn> }
+    const eastSwingKey = getAnimKey(
+      "primary_melee_attack",
+      getDirectionFromAngle(0),
+    )
+    const westSwingKey = getAnimKey(
+      "primary_melee_attack",
+      getDirectionFromAngle(Math.PI),
+    )
+
+    sys.onPrimaryMeleeSwing(meleeSwingPayload({ facingAngle: 0 }))
+    expect(sprite.play).toHaveBeenLastCalledWith(eastSwingKey, false)
+
+    sprite.play.mockClear()
+    ClientPlayerState[1]!.facingAngle = Math.PI
+    sys.update(0, { up: false, down: false, left: false, right: false })
+
+    expect(sprite.play).not.toHaveBeenCalled()
+
+    ClientPlayerState[1]!.animState = "idle"
+    sys.update(0, { up: false, down: false, left: false, right: false })
+    sprite.play.mockClear()
+
+    ClientPlayerState[1]!.animState = "primary_melee_attack"
+    sys.update(0, { up: false, down: false, left: false, right: false })
+
+    expect(sprite.play).toHaveBeenLastCalledWith(westSwingKey, true)
+  })
+
   it("no-ops when casterId does not match any spawned player", () => {
     const { scene, group } = mockSceneAndGroup()
     const sys = new PlayerRenderSystem(scene as never, group as never)

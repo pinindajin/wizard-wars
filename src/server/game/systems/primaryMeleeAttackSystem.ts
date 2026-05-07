@@ -78,11 +78,12 @@ export function primaryMeleeAttackSystem(ctx: SimCtx): void {
     if (hasComponent(world, eid, JumpArc) && JumpArc.z[eid] > JUMP_AIRBORNE_COLLIDER_EPSILON_PX) continue
 
     const swingTicks = Math.ceil(timing.durationMs / TICK_MS)
+    const facing = resolveSwingStartFacing(eid)
+    Facing.angle[eid] = facing
 
     addComponent(world, eid, SwingingWeapon)
     Cooldown.primaryMelee[eid] = currentTick + swingTicks
 
-    const facing = Facing.angle[eid]
     const casterUserId = entityPlayerMap.get(eid) ?? ""
     const telegraphId = combatTelegraphId("primary", casterUserId, attackId, currentTick)
 
@@ -126,6 +127,19 @@ export function primaryMeleeAttackSystem(ctx: SimCtx): void {
       dangerousWindowEndMs: timing.dangerousWindowEndMs,
     })
   }
+}
+
+/**
+ * Captures the melee direction from the latest weapon target at the instant a
+ * new swing starts. This intentionally does not rely on `movementSystem` having
+ * updated `Facing.angle`, because chained held swings can start on the same
+ * tick that the previous `SwingingWeapon` tag expires.
+ */
+function resolveSwingStartFacing(eid: number): number {
+  const dx = PlayerInput.weaponTargetX[eid] - Position.x[eid]
+  const dy = PlayerInput.weaponTargetY[eid] - Position.y[eid]
+  if (dx === 0 && dy === 0) return Facing.angle[eid]
+  return Math.atan2(dy, dx)
 }
 
 /**

@@ -185,6 +185,8 @@ interface PlayerRenderEntry {
   flashRemaining: number
   /** Last known animState + direction key to avoid redundant anim calls. */
   lastAnimKey: string
+  /** Payload-derived melee key held for the duration of the active swing. */
+  lockedPrimaryMeleeAnimKey: string | null
   /**
    * Remaining ms in the current "smooth replay correction" window. When > 0
    * each sim step is blended from the predicted position toward
@@ -512,6 +514,7 @@ export class PlayerRenderSystem {
       invulnTime: 0,
       flashRemaining: 0,
       lastAnimKey: "",
+      lockedPrimaryMeleeAnimKey: null,
       smoothRemainingMs: 0,
       smoothTargetX: x,
       smoothTargetY: y,
@@ -782,6 +785,7 @@ export class PlayerRenderSystem {
     }
     entry.sprite.play(animKey, false)
     entry.lastAnimKey = animKey
+    entry.lockedPrimaryMeleeAnimKey = animKey
   }
 
   /**
@@ -1006,8 +1010,16 @@ export class PlayerRenderSystem {
             localMoveIntent,
             state.moveFacingAngle,
           )
+      if (state.animState !== "primary_melee_attack") {
+        entry.lockedPrimaryMeleeAnimKey = null
+      }
+
       const direction = getDirectionFromAngle(angleForSprite)
-      const animKey = getAnimKey(state.animState, direction)
+      const animKey =
+        state.animState === "primary_melee_attack" &&
+        entry.lockedPrimaryMeleeAnimKey !== null
+          ? entry.lockedPrimaryMeleeAnimKey
+          : getAnimKey(state.animState, direction)
       if (animKey !== entry.lastAnimKey) {
         entry.sprite.play(animKey, true)
         entry.lastAnimKey = animKey
