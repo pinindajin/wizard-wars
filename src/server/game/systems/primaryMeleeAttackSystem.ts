@@ -78,7 +78,7 @@ export function primaryMeleeAttackSystem(ctx: SimCtx): void {
     if (hasComponent(world, eid, JumpArc) && JumpArc.z[eid] > JUMP_AIRBORNE_COLLIDER_EPSILON_PX) continue
 
     const swingTicks = Math.ceil(timing.durationMs / TICK_MS)
-    const facing = resolveSwingStartFacing(eid)
+    const facing = resolveSwingStartFacing(ctx, eid)
     Facing.angle[eid] = facing
 
     addComponent(world, eid, SwingingWeapon)
@@ -135,9 +135,14 @@ export function primaryMeleeAttackSystem(ctx: SimCtx): void {
  * updated `Facing.angle`, because chained held swings can start on the same
  * tick that the previous `SwingingWeapon` tag expires.
  */
-function resolveSwingStartFacing(eid: number): number {
-  const dx = PlayerInput.weaponTargetX[eid] - Position.x[eid]
-  const dy = PlayerInput.weaponTargetY[eid] - Position.y[eid]
+function resolveSwingStartFacing(ctx: SimCtx, eid: number): number {
+  const playerId = ctx.entityPlayerMap.get(eid)
+  const freshestAim =
+    playerId !== undefined ? ctx.freshestWeaponAimByPlayer?.get(playerId) : undefined
+  const targetX = freshestAim?.weaponTargetX ?? PlayerInput.weaponTargetX[eid]
+  const targetY = freshestAim?.weaponTargetY ?? PlayerInput.weaponTargetY[eid]
+  const dx = targetX - Position.x[eid]
+  const dy = targetY - Position.y[eid]
   if (dx === 0 && dy === 0) return Facing.angle[eid]
   return Math.atan2(dy, dx)
 }

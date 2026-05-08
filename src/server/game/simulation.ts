@@ -196,6 +196,12 @@ export type FireballPrevState = {
   y: number
 }
 
+/** Latest received weapon cursor for latency-sensitive swing facing snapshots. */
+export type FreshestWeaponAim = {
+  weaponTargetX: number
+  weaponTargetY: number
+}
+
 // ─── SimCtx ───────────────────────────────────────────────────────────────
 
 /**
@@ -222,6 +228,12 @@ export type SimCtx = {
   fireballCreatedAtTickMap: Map<number, number>
 
   inputMap: Map<string, PlayerInputPayload>
+  /**
+   * Freshest currently queued weapon aim per player. This lets primary melee
+   * snapshot direction from the latest received cursor while movement, casts,
+   * and ACKs continue to consume the FIFO input queue one payload per tick.
+   */
+  freshestWeaponAimByPlayer?: Map<string, FreshestWeaponAim>
   /**
    * Highest client input `seq` this entity processed so far. Surfaced in
    * deltas + snapshots so the client can drive rewind-and-replay.
@@ -661,11 +673,19 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     currentTick++
 
     const inputMap = new Map<string, PlayerInputPayload>()
+    const freshestWeaponAimByPlayer = new Map<string, FreshestWeaponAim>()
     for (const [userId, queue] of perPlayerInputs) {
       const lastSeq = lastProcessedInputSeqByPlayer.get(userId) ?? 0
       // Drop already-processed inputs at the head of the queue.
       while (queue.length > 0 && queue[0].seq <= lastSeq) {
         queue.shift()
+      }
+      const freshest = queue[queue.length - 1]
+      if (freshest !== undefined) {
+        freshestWeaponAimByPlayer.set(userId, {
+          weaponTargetX: freshest.weaponTargetX,
+          weaponTargetY: freshest.weaponTargetY,
+        })
       }
       const next = queue[0]
       if (next !== undefined) {
@@ -687,6 +707,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       fireballOwnerMap,
       fireballCreatedAtTickMap,
       inputMap,
+      freshestWeaponAimByPlayer,
       lastProcessedInputSeqByPlayer,
       commandBuffer,
       matchStartedAtMs,
