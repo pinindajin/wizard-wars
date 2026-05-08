@@ -4,6 +4,27 @@ import { ClientPosition, ClientPlayerState } from "../components"
 import { addEntity, clientEntities, hasEntity, removeEntity } from "../world"
 import type { GameStateSyncPayload, PlayerSnapshot } from "@/shared/types"
 
+function abilityStates() {
+  return {
+    fireball: {
+      cooldownEndsAtServerTimeMs: null,
+      cooldownDurationMs: null,
+      charges: null,
+      maxCharges: null,
+      rechargeEndsAtServerTimeMs: null,
+      rechargeDurationMs: null,
+    },
+    jump: {
+      cooldownEndsAtServerTimeMs: null,
+      cooldownDurationMs: null,
+      charges: 4,
+      maxCharges: 4,
+      rechargeEndsAtServerTimeMs: null,
+      rechargeDurationMs: null,
+    },
+  }
+}
+
 function baseSnapshot(over: Partial<PlayerSnapshot> & { id: number; playerId: string }): PlayerSnapshot {
   return {
     id: over.id,
@@ -26,6 +47,7 @@ function baseSnapshot(over: Partial<PlayerSnapshot> & { id: number; playerId: st
     invulnerable: over.invulnerable ?? false,
     jumpZ: over.jumpZ ?? 0,
     jumpStartedInLava: over.jumpStartedInLava ?? false,
+    abilityStates: over.abilityStates ?? abilityStates(),
     lastProcessedInputSeq: over.lastProcessedInputSeq ?? 0,
   }
 }
@@ -87,6 +109,7 @@ describe("NetworkSyncSystem.applyFullSync (r5 despawn)", () => {
       invulnerable: false,
       jumpZ: 0,
       jumpStartedInLava: false,
+      abilityStates: abilityStates(),
     }
     const snap = baseSnapshot({ id: 3, playerId: "only" })
     system.applyFullSync({ players: [snap], fireballs: [], seq: 0, serverTimeMs: 3 })
@@ -172,5 +195,36 @@ describe("NetworkSyncSystem.applyBatchUpdate", () => {
       25,
       "batch_update",
     )
+  })
+
+  it("applies ability runtime state from full sync and batch deltas", () => {
+    const system = new NetworkSyncSystem()
+    const updated = {
+      ...abilityStates(),
+      jump: {
+        cooldownEndsAtServerTimeMs: 6_000,
+        cooldownDurationMs: 5_000,
+        charges: 0,
+        maxCharges: 4,
+        rechargeEndsAtServerTimeMs: 6_000,
+        rechargeDurationMs: 5_000,
+      },
+    }
+
+    system.applyFullSync({
+      players: [baseSnapshot({ id: 1, playerId: "p1" })],
+      fireballs: [],
+      seq: 0,
+      serverTimeMs: 1,
+    })
+    system.applyBatchUpdate({
+      deltas: [{ id: 1, abilityStates: updated }],
+      removedIds: [],
+      seq: 0,
+      serverTimeMs: 2,
+    })
+
+    expect(ClientPlayerState[1]!.abilityStates.jump.charges).toBe(0)
+    expect(ClientPlayerState[1]!.abilityStates.jump.cooldownEndsAtServerTimeMs).toBe(6_000)
   })
 })

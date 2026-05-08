@@ -130,6 +130,20 @@ export const Cooldown = {
   jump: new Uint32Array(MAX_ENTITIES),
 }
 
+/**
+ * Client-visible ability runtime state.
+ * Cooldown fields store server wall-clock end times; jump fields store charge
+ * state and the simulation tick/server time when the active recharge completes.
+ */
+export const AbilityRuntime = {
+  fireballCooldownEndsAtMs: new Float64Array(MAX_ENTITIES),
+  lightningBoltCooldownEndsAtMs: new Float64Array(MAX_ENTITIES),
+  healingPotionCooldownEndsAtMs: new Float64Array(MAX_ENTITIES),
+  jumpCharges: new Uint8Array(MAX_ENTITIES),
+  jumpRechargeReadyTick: new Uint32Array(MAX_ENTITIES),
+  jumpRechargeEndsAtMs: new Float64Array(MAX_ENTITIES),
+}
+
 /** Post-respawn invulnerability; expires at this simulation tick. */
 export const Invulnerable = {
   expiresAtTick: new Uint32Array(MAX_ENTITIES),

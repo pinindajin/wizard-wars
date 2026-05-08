@@ -104,6 +104,22 @@ export const playerMoveStateSchema = z.enum([
 
 export const playerTerrainStateSchema = z.enum(["land", "lava", "cliff"])
 
+/** Server-authoritative HUD runtime state for one ability. */
+export const abilityRuntimeStateSchema = z.object({
+  cooldownEndsAtServerTimeMs: z.number().finite().nonnegative().nullable(),
+  cooldownDurationMs: z.number().finite().nonnegative().nullable(),
+  charges: z.number().int().nonnegative().nullable(),
+  maxCharges: z.number().int().nonnegative().nullable(),
+  rechargeEndsAtServerTimeMs: z.number().finite().nonnegative().nullable(),
+  rechargeDurationMs: z.number().finite().nonnegative().nullable(),
+})
+
+/** Ability id keyed runtime state map for HUD rendering. */
+export const abilityRuntimeStatesSchema = z.record(
+  z.string().min(1).max(64),
+  abilityRuntimeStateSchema,
+)
+
 /** Single player row in `GameStateSync`. */
 export const playerSnapshotSchema = z.object({
   id: z.number().int().nonnegative(),
@@ -126,6 +142,7 @@ export const playerSnapshotSchema = z.object({
   invulnerable: z.boolean(),
   jumpZ: z.number().finite().nonnegative(),
   jumpStartedInLava: z.boolean(),
+  abilityStates: abilityRuntimeStatesSchema,
   lastProcessedInputSeq: z.number().int().nonnegative(),
 })
 

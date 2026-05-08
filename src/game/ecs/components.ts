@@ -1,4 +1,9 @@
-import type { PlayerAnimState, PlayerMoveState, PlayerTerrainState } from "@/shared/types"
+import type {
+  AbilityRuntimeStates,
+  PlayerAnimState,
+  PlayerMoveState,
+  PlayerTerrainState,
+} from "@/shared/types"
 
 /**
  * Client ECS component records.
@@ -34,6 +39,8 @@ export const ClientPlayerState: Record<
     jumpZ: number
     /** True when current jump arc began in lava (server); used for airborne collider replay. */
     jumpStartedInLava: boolean
+    /** Server-authoritative cooldown and charge state for ability HUD rendering. */
+    abilityStates: AbilityRuntimeStates
   }
 > = {}
 

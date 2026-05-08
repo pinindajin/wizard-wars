@@ -167,7 +167,8 @@ export class CombatTelegraphRenderSystem {
   }
 
   /**
-   * Draws a capsule telegraph using circles plus connecting quad.
+   * Draws a capsule telegraph as one filled path so transparent fills do not
+   * stack where the rectangular body meets the end caps.
    */
   private _drawCapsule(
     gfx: Phaser.GameObjects.Graphics,
@@ -185,17 +186,17 @@ export class CombatTelegraphRenderSystem {
       return
     }
 
+    const angle = Math.atan2(dy, dx)
     const nx = -dy / len
     const ny = dx / len
     gfx.beginPath()
     gfx.moveTo(ax + nx * radiusPx, ay + ny * radiusPx)
     gfx.lineTo(bx + nx * radiusPx, by + ny * radiusPx)
-    gfx.lineTo(bx - nx * radiusPx, by - ny * radiusPx)
+    gfx.arc(bx, by, radiusPx, angle + Math.PI / 2, angle - Math.PI / 2, true)
     gfx.lineTo(ax - nx * radiusPx, ay - ny * radiusPx)
+    gfx.arc(ax, ay, radiusPx, angle - Math.PI / 2, angle + Math.PI / 2, true)
     gfx.closePath()
     gfx.fillPath()
-    gfx.fillCircle(ax, ay, radiusPx)
-    gfx.fillCircle(bx, by, radiusPx)
   }
 
   /**

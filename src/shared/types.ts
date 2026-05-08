@@ -123,6 +123,19 @@ export type PlayerMoveState =
 /** Authoritative terrain/hazard state for a player footprint. */
 export type PlayerTerrainState = "land" | "lava" | "cliff"
 
+/** Server-authoritative runtime state for one ability. */
+export type AbilityRuntimeState = {
+  readonly cooldownEndsAtServerTimeMs: number | null
+  readonly cooldownDurationMs: number | null
+  readonly charges: number | null
+  readonly maxCharges: number | null
+  readonly rechargeEndsAtServerTimeMs: number | null
+  readonly rechargeDurationMs: number | null
+}
+
+/** Ability id → runtime state exposed to clients for HUD rendering. */
+export type AbilityRuntimeStates = Record<string, AbilityRuntimeState>
+
 /** A snapshot of a single player's position and state (sent in batch updates). */
 export type PlayerSnapshot = {
   readonly id: number // bitECS entity id
@@ -151,6 +164,8 @@ export type PlayerSnapshot = {
   readonly jumpZ: number
   /** True when the active jump arc began in lava (escape jump). */
   readonly jumpStartedInLava: boolean
+  /** Server-authoritative cooldown and charge state for ability HUD rendering. */
+  readonly abilityStates: AbilityRuntimeStates
   /**
    * Highest client input `seq` the server has processed for this player.
    * Used by the client to drive rewind-and-replay reconciliation.
@@ -176,6 +191,7 @@ export type PlayerDelta = {
   readonly invulnerable?: boolean
   readonly jumpZ?: number
   readonly jumpStartedInLava?: boolean
+  readonly abilityStates?: AbilityRuntimeStates
   /** Highest client input `seq` the server has processed for this player. */
   readonly lastProcessedInputSeq?: number
 }

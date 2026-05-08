@@ -1,6 +1,7 @@
 "use client"
 
 import { ABILITY_CONFIGS } from "@/shared/balance-config/abilities"
+import type { AbilityRuntimeState, AbilityRuntimeStates } from "@/shared/types"
 import {
   useGameKeybinds,
   type GameKeybindActionId,
@@ -23,6 +24,53 @@ function formatHotkeyLabel(key: string): string {
   return key
 }
 
+/**
+ * Formats a remaining cooldown duration as an MMO-style seconds number.
+ *
+ * @param remainingMs - Remaining duration in milliseconds.
+ * @returns Ceiling seconds text, or null when no countdown should render.
+ */
+function formatCountdownLabel(remainingMs: number): string | null {
+  if (remainingMs <= 0) return null
+  return String(Math.max(1, Math.ceil(remainingMs / 1000)))
+}
+
+/**
+ * Returns positive remaining milliseconds until a server-time deadline.
+ *
+ * @param endsAtServerTimeMs - Server-time deadline, or null.
+ * @param serverNowMs - Estimated current server time.
+ * @returns Remaining milliseconds, clamped at zero.
+ */
+function remainingMs(endsAtServerTimeMs: number | null | undefined, serverNowMs: number): number {
+  if (endsAtServerTimeMs == null) return 0
+  return Math.max(0, endsAtServerTimeMs - serverNowMs)
+}
+
+/**
+ * Resolves visual cooldown state for a slot.
+ *
+ * @param state - Ability runtime state from the server.
+ * @param serverNowMs - Estimated current server time.
+ * @returns Overlay kind and countdown label for the slot.
+ */
+function resolveCooldownVisual(
+  state: AbilityRuntimeState | undefined,
+  serverNowMs: number,
+): { kind: "heavy" | "light" | null; label: string | null } {
+  const cooldownMs = remainingMs(state?.cooldownEndsAtServerTimeMs, serverNowMs)
+  if (cooldownMs > 0) {
+    return { kind: "heavy", label: formatCountdownLabel(cooldownMs) }
+  }
+
+  const rechargeMs = remainingMs(state?.rechargeEndsAtServerTimeMs, serverNowMs)
+  if (rechargeMs > 0) {
+    return { kind: "light", label: formatCountdownLabel(rechargeMs) }
+  }
+
+  return { kind: null, label: null }
+}
+
 /** Props for AbilityBar. */
 type AbilityBarProps = {
   /**
@@ -30,6 +78,10 @@ type AbilityBarProps = {
    * or null if the slot is empty.
    */
   readonly slots: readonly (string | null)[]
+  /** Server-authoritative ability runtime state keyed by ability id. */
+  readonly abilityStates?: AbilityRuntimeStates
+  /** Estimated current server wall-clock time for countdown labels. */
+  readonly serverNowMs: number
 }
 
 /**
@@ -38,22 +90,28 @@ type AbilityBarProps = {
  *
  * @param props - AbilityBarProps.
  */
-export default function AbilityBar({ slots }: AbilityBarProps) {
+export default function AbilityBar({
+  slots,
+  abilityStates = {},
+  serverNowMs,
+}: AbilityBarProps) {
   const keybinds = useGameKeybinds()
 
   return (
     <div className="flex items-end gap-2">
       {slots.map((abilityId, idx) => {
         const config = abilityId ? ABILITY_CONFIGS[abilityId] : null
-        const fraction = 0
+        const runtimeState = abilityId ? abilityStates[abilityId] : undefined
         const hotkey = formatHotkeyLabel(keybinds[ABILITY_KEYBINDS[idx]!] ?? "")
 
         return (
           <AbilitySlot
             key={idx}
+            index={idx}
             hotkey={hotkey}
             abilityName={config?.displayName ?? null}
-            cooldownFraction={fraction}
+            runtimeState={runtimeState}
+            serverNowMs={serverNowMs}
             isEmpty={!abilityId}
           />
         )
@@ -64,9 +122,11 @@ export default function AbilityBar({ slots }: AbilityBarProps) {
 
 /** Props for an individual ability slot. */
 type AbilitySlotProps = {
+  readonly index: number
   readonly hotkey: string
   readonly abilityName: string | null
-  readonly cooldownFraction: number
+  readonly runtimeState: AbilityRuntimeState | undefined
+  readonly serverNowMs: number
   readonly isEmpty: boolean
 }
 
@@ -78,49 +138,57 @@ type AbilitySlotProps = {
  * @param props - AbilitySlotProps.
  */
 function AbilitySlot({
+  index,
   hotkey,
   abilityName,
-  cooldownFraction,
+  runtimeState,
+  serverNowMs,
   isEmpty,
 }: AbilitySlotProps) {
-  const r = 22
-  const circumference = 2 * Math.PI * r
-  const dashOffset = circumference * (1 - cooldownFraction)
+  const cooldown = resolveCooldownVisual(runtimeState, serverNowMs)
+  const chargeCount = runtimeState?.charges
 
   return (
     <div className="relative flex flex-col items-center gap-1">
       {/* Slot box */}
       <div
+        data-testid={`ability-slot-${index}`}
         className={`relative flex h-14 w-14 items-center justify-center rounded-lg border text-xs font-bold ${
           isEmpty
             ? "border-gray-700 bg-gray-900/60 text-gray-700"
             : "border-purple-600 bg-gray-900/80 text-white"
         }`}
       >
-        <span className="text-center text-xs leading-tight px-1">
+        <span className="z-10 text-center text-xs leading-tight px-1">
           {isEmpty ? "—" : abilityName?.slice(0, 4) ?? "?"}
         </span>
 
-        {cooldownFraction > 0 && (
-          <svg
-            className="absolute inset-0 -rotate-90"
-            width="56"
-            height="56"
-            viewBox="0 0 56 56"
-            aria-hidden="true"
+        {chargeCount != null && (
+          <span
+            className="absolute -right-1 -top-1 z-30 min-w-[18px] rounded-full bg-purple-200 px-1 text-center text-[11px] font-bold leading-tight text-purple-950"
+            data-testid={`ability-slot-${index}-charge-count`}
           >
-            <circle
-              cx="28"
-              cy="28"
-              r={r}
-              fill="none"
-              stroke="rgba(0,0,0,0.7)"
-              strokeWidth="4"
-              strokeDasharray={circumference}
-              strokeDashoffset={dashOffset}
-              strokeLinecap="round"
-            />
-          </svg>
+            {chargeCount}
+          </span>
+        )}
+
+        {cooldown.kind && (
+          <div
+            className={`absolute inset-0 z-20 rounded-lg ${
+              cooldown.kind === "heavy" ? "bg-black/75" : "bg-black/35"
+            }`}
+            data-cooldown-kind={cooldown.kind}
+            data-testid={`ability-slot-${index}-cooldown-overlay`}
+          />
+        )}
+
+        {cooldown.label && (
+          <span
+            className="absolute inset-0 z-30 flex items-center justify-center text-lg font-black leading-none text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]"
+            data-testid={`ability-slot-${index}-cooldown-countdown`}
+          >
+            {cooldown.label}
+          </span>
         )}
       </div>
 
