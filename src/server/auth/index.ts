@@ -16,6 +16,7 @@ export { hashPassword, verifyPassword } from "./password"
 export { createAuthCookie, createClearAuthCookie } from "./cookies"
 export { findExistingAuthUser, requireExistingAuthUser } from "./existingUser"
 export { shouldVerifyUserOnProtected } from "./protectedVerification"
+export { buildRequestUrl } from "./requestUrl"
 export {
   PROTECTED_PATHNAME_HEADER,
   buildSessionExpiredLoginPath,

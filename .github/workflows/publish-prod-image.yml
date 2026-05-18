@@ -1,0 +1,139 @@
+name: Publish Production Image
+
+on:
+  push:
+    branches: [prod]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  attestations: write
+  id-token: write
+
+env:
+  AUTH_SECRET: test-secret-32-chars-minimum-required
+  DATABASE_URL: postgresql://ww_user:ww_pass@localhost:5432/wizardwars
+  IMAGE_NAME: ghcr.io/pinindajin/wizard-wars
+
+jobs:
+  publish:
+    name: Test, Build, Publish, Deploy
+    if: github.ref_name == 'prod'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ww_user
+          POSTGRES_PASSWORD: ww_pass
+          POSTGRES_DB: wizardwars
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.2.0"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: bunx prisma generate
+
+      - name: Run Prisma migrations
+        run: bunx prisma migrate deploy
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Unit tests with coverage
+        run: bun run test:coverage
+
+      - name: Integration tests
+        run: bun run test:integration
+
+      - name: Build Next.js app
+        run: bun run build
+
+      - name: Install Playwright Chromium
+        run: bunx playwright install --with-deps chromium
+
+      - name: E2E tests
+        run: bun run test:e2e
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:prod
+            ${{ env.IMAGE_NAME }}:prod-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Attest Docker image
+        if: github.event.repository.private == false
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Trigger Dokploy deployment
+        env:
+          DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
+          DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
+          DOKPLOY_WIZARD_WARS_APP_ID: ${{ secrets.DOKPLOY_WIZARD_WARS_APP_ID }}
+        run: |
+          missing=()
+          [ -n "$DOKPLOY_URL" ] || missing+=("DOKPLOY_URL")
+          [ -n "$DOKPLOY_API_KEY" ] || missing+=("DOKPLOY_API_KEY")
+          [ -n "$DOKPLOY_WIZARD_WARS_APP_ID" ] || missing+=("DOKPLOY_WIZARD_WARS_APP_ID")
+
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf 'Missing required GitHub secret(s): %s\n' "${missing[*]}" >&2
+            exit 1
+          fi
+
+          case "$DOKPLOY_URL" in
+            https://*) ;;
+            *)
+              printf 'DOKPLOY_URL must start with https:// before sending DOKPLOY_API_KEY\n' >&2
+              exit 1
+              ;;
+          esac
+
+          dokploy_url="${DOKPLOY_URL%/}"
+          curl -fsS --connect-timeout 10 --max-time 60 --retry 3 --retry-all-errors \
+            -X POST "$dokploy_url/api/application.deploy" \
+            -H "accept: application/json" \
+            -H "content-type: application/json" \
+            -H "x-api-key: $DOKPLOY_API_KEY" \
+            -d "{\"applicationId\":\"$DOKPLOY_WIZARD_WARS_APP_ID\"}"

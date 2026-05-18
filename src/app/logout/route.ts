@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 
-import { createClearAuthCookie } from "@/server/auth"
+import { buildRequestUrl, createClearAuthCookie } from "@/server/auth"
 
 /**
  * Clears the current auth cookie and redirects the browser to the login page.
@@ -9,7 +9,7 @@ import { createClearAuthCookie } from "@/server/auth"
  * @returns Redirect response with auth cookie cleared.
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const response = NextResponse.redirect(new URL("/login", request.url))
+  const response = NextResponse.redirect(buildRequestUrl(request, "/login"))
   response.headers.append("set-cookie", createClearAuthCookie())
   return response
 }

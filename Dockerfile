@@ -35,5 +35,5 @@ COPY --from=builder /app/middleware.ts ./
 
 EXPOSE 3000
 
-# Run migrations at container startup (DATABASE_URL is injected by Render at runtime).
+# Run migrations at container startup with the platform-injected DATABASE_URL.
 CMD ["sh", "-c", "bunx prisma migrate deploy && bun run start"]

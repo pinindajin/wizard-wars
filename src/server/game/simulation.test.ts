@@ -34,6 +34,7 @@ import {
   primaryMeleeAttackIdToIndex,
   PRIMARY_MELEE_ATTACK_CONFIGS,
 } from "@/shared/balance-config/equipment"
+import { getPrimaryAttackAnimationConfigByAttackId } from "@/shared/balance-config/animationConfig"
 import { JUMP_CHARGE_RECHARGE_MS, JUMP_MAX_CHARGES, TICK_MS } from "@/shared/balance-config"
 import type { PlayerInputPayload } from "@/shared/types"
 
@@ -671,6 +672,71 @@ describe("primary melee attack", () => {
         ]),
         Date.now(),
       )
+      if (output.primaryMeleeAttacks.length > 0) {
+        chainedFacing = output.primaryMeleeAttacks[0]!.facingAngle
+        break
+      }
+    }
+
+    expect(chainedFacing).not.toBeNull()
+    expect(chainedFacing!).toBeCloseTo(Math.PI, 5)
+    expect(Facing.angle[eid]).toBeCloseTo(Math.PI, 5)
+  })
+
+  it("recaptures held primary facing from the freshest queued weapon target", () => {
+    const sim = createGameSimulation(Date.now())
+    const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    const px = ARENA_CENTER_X
+    const py = ARENA_CENTER_Y
+    Position.x[eid] = px
+    Position.y[eid] = py
+
+    const first = sim.tick(
+      queueMap([
+        [
+          "user1",
+          emptyInput({
+            weaponPrimary: true,
+            seq: 1,
+            weaponTargetX: px + 200,
+            weaponTargetY: py,
+          }),
+        ],
+      ]),
+      Date.now(),
+    )
+    expect(first.primaryMeleeAttacks[0]!.facingAngle).toBeCloseTo(0, 5)
+
+    const swingTicks = Math.ceil(
+      getPrimaryAttackAnimationConfigByAttackId("red_wizard_cleaver").durationMs / TICK_MS,
+    )
+    const queue: PlayerInputPayload[] = []
+    for (let i = 0; i < swingTicks; i++) {
+      queue.push(
+        emptyInput({
+          weaponPrimary: true,
+          seq: i + 2,
+          weaponTargetX: px + 200,
+          weaponTargetY: py,
+        }),
+      )
+    }
+
+    const aimChangeTick = Math.floor(swingTicks / 2)
+    let chainedFacing: number | null = null
+    for (let i = 0; i < swingTicks + 2; i++) {
+      if (i >= aimChangeTick) {
+        queue.push(
+          emptyInput({
+            weaponPrimary: true,
+            seq: swingTicks + 2 + i,
+            weaponTargetX: px - 200,
+            weaponTargetY: py,
+          }),
+        )
+      }
+
+      const output = sim.tick(new Map([["user1", queue]]), Date.now())
       if (output.primaryMeleeAttacks.length > 0) {
         chainedFacing = output.primaryMeleeAttacks[0]!.facingAngle
         break
