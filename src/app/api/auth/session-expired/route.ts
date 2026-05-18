@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 
 import {
+  buildRequestUrl,
   buildSessionExpiredLoginPath,
   createClearAuthCookie,
   sanitizeRelativeNext,
@@ -14,9 +15,7 @@ import {
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const next = sanitizeRelativeNext(request.nextUrl.searchParams.get("next"))
-  const response = NextResponse.redirect(
-    new URL(buildSessionExpiredLoginPath(next), request.url),
-  )
+  const response = NextResponse.redirect(buildRequestUrl(request, buildSessionExpiredLoginPath(next)))
   response.headers.append("set-cookie", createClearAuthCookie())
   return response
 }

@@ -54,6 +54,12 @@ Animation timing is authored in milliseconds and executed on the fixed 60 Hz sim
 
 Repository: `github.com/pinindajin/wizard-wars` (private)
 
+## Deployment
+
+Current migration target: Dokploy on the existing DigitalOcean droplet at `wizard-wars.pinindajin.online`.
+Production images are published from the `prod` branch to `ghcr.io/pinindajin/wizard-wars:prod`.
+Render remains the fallback host until the DigitalOcean health and gameplay smoke checks pass.
+
 ## Tech Stack
 
 - **Frontend**: Next.js 16 App Router, Phaser 4, React 19, Tailwind CSS 4
@@ -61,4 +67,4 @@ Repository: `github.com/pinindajin/wizard-wars` (private)
 - **Game Logic**: bitECS 0.4, server-authoritative 60 Hz simulation with per-player input queue (seq + clientSendTimeMs), enriched snapshots (velocity + move state + `lastProcessedInputSeq` + `serverTimeMs`), client rewind-and-replay reconciliation with shared world-collision math, and a per-remote interpolation buffer with bounded velocity extrapolation
 - **Database**: PostgreSQL 16
 - **CI**: GitHub Actions (unit + integration)
-- **Hosting**: Render
+- **Hosting**: Dokploy on DigitalOcean migration target; Render fallback during cutover

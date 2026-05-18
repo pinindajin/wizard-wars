@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server"
 
 import { AUTH_COOKIE_NAME } from "./constants"
 import { verifyToken } from "./jwt"
+import { buildRequestUrl } from "./requestUrl"
 import { PROTECTED_PATHNAME_HEADER } from "./sessionRedirect"
 import type { AuthUser } from "../../shared/types"
 
@@ -72,7 +73,7 @@ export const requireAuthRedirect = async (request: NextRequest): Promise<NextRes
   if (user) {
     return null
   }
-  const loginUrl = new URL("/login", request.url)
+  const loginUrl = buildRequestUrl(request, "/login")
   loginUrl.searchParams.set("next", request.nextUrl.pathname)
   return NextResponse.redirect(loginUrl)
 }
