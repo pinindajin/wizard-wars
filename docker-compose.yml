@@ -7,8 +7,8 @@ services:
       POSTGRES_PASSWORD: ww_pass
       POSTGRES_DB: wizardwars
     ports:
-      # Host port: avoid clashes with other local Postgres containers (5433 is common).
-      - "5436:5432"
+      # Override host port with WW_DB_HOST_PORT for isolated local test runs.
+      - "${WW_DB_HOST_PORT:-5436}:5432"
     volumes:
       - ww_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -25,7 +25,7 @@ services:
       POSTGRES_PASSWORD: ww_pass
       POSTGRES_DB: wizardwars_shadow
     ports:
-      - "5434:5432"
+      - "${WW_SHADOW_DB_HOST_PORT:-5434}:5432"
     volumes:
       - ww_pgdata_shadow:/var/lib/postgresql/data
     healthcheck:
@@ -40,7 +40,7 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "${WW_APP_HOST_PORT:-3000}:3000"
     env_file:
       - .env.docker
     depends_on:
