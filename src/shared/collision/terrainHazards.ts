@@ -1,14 +1,13 @@
 import {
   ARENA_CLIFF_COLLIDERS,
   ARENA_LAVA_COLLIDERS,
-  ARENA_LAVA_TRANSITION_COLLIDERS,
   ARENA_NON_HAZARD_COLLIDERS,
   ARENA_PROP_COLLIDERS,
   ARENA_WORLD_COLLIDERS,
 } from "../balance-config/arena"
 import { JUMP_AIRBORNE_LAVA_COLLISION_MIN_Z_PX } from "../balance-config/combat"
 import type { PlayerTerrainState } from "../types"
-import type { ArenaPropColliderRect } from "./worldCollision"
+import type { ArenaPropColliderRect, WorldCandidateGate } from "./worldCollision"
 
 export type TerrainColliderMode = PlayerTerrainState
 
@@ -59,6 +58,33 @@ export function terrainStateAtPosition(x: number, y: number): PlayerTerrainState
 }
 
 /**
+ * Returns whether a grounded lava movement candidate remains inside lava.
+ *
+ * @param x - Candidate player center x in world pixels.
+ * @param y - Candidate player center y in world pixels.
+ * @returns True when the candidate center still samples as lava.
+ */
+export function groundedLavaCandidateCanOccupy(x: number, y: number): boolean {
+  return terrainStateAtPosition(x, y) === "lava"
+}
+
+/**
+ * Returns the optional candidate gate for movement in the current terrain state.
+ *
+ * @param jumpZ - Simulated jump height in world pixels.
+ * @param terrainState - Current authoritative terrain state.
+ * @returns Candidate predicate for grounded lava, or undefined for normal movement.
+ */
+export function worldCandidateGateForPlayerState(
+  jumpZ: number,
+  terrainState: PlayerTerrainState,
+): WorldCandidateGate | undefined {
+  if (jumpZ > 0) return undefined
+  if (terrainState !== "lava") return undefined
+  return groundedLavaCandidateCanOccupy
+}
+
+/**
  * Returns static colliders for horizontal movement / resolve for the given jump height and terrain.
  *
  * @param jumpZ - Simulated vertical offset (world px); `0` when grounded.
@@ -84,7 +110,6 @@ export function worldCollidersForPlayerState(
       ...ARENA_PROP_COLLIDERS,
       ...ARENA_NON_HAZARD_COLLIDERS,
       ...ARENA_CLIFF_COLLIDERS,
-      ...ARENA_LAVA_TRANSITION_COLLIDERS,
     ]
   }
   if (terrainState === "cliff") {

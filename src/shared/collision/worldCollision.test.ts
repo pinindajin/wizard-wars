@@ -226,6 +226,72 @@ describe("moveWithinWorld", () => {
       blockedY: false,
     })
   })
+
+  it("applies candidate gates to otherwise legal full steps", () => {
+    const out = moveWithinWorld(
+      40,
+      40,
+      10,
+      0,
+      fixtureFootprint,
+      fixtureBounds,
+      [],
+      (nextX) => nextX <= 45,
+    )
+
+    expect(out).toEqual({
+      x: 40,
+      y: 40,
+      appliedDx: 0,
+      appliedDy: 0,
+      blockedX: true,
+      blockedY: false,
+    })
+  })
+
+  it("applies candidate gates to X-first fallback candidates", () => {
+    const out = moveWithinWorld(
+      40,
+      40,
+      10,
+      5,
+      fixtureFootprint,
+      fixtureBounds,
+      [],
+      (nextX) => nextX <= 45,
+    )
+
+    expect(out).toEqual({
+      x: 40,
+      y: 45,
+      appliedDx: 0,
+      appliedDy: 5,
+      blockedX: true,
+      blockedY: false,
+    })
+  })
+
+  it("applies candidate gates to Y-first fallback candidates", () => {
+    const out = moveWithinWorld(
+      40,
+      40,
+      5,
+      10,
+      fixtureFootprint,
+      fixtureBounds,
+      [],
+      (_nextX, nextY) => nextY <= 45,
+    )
+
+    expect(out).toEqual({
+      x: 45,
+      y: 40,
+      appliedDx: 5,
+      appliedDy: 0,
+      blockedX: false,
+      blockedY: true,
+    })
+  })
 })
 
 describe("resolveAgainstWorld", () => {

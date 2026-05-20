@@ -62,11 +62,13 @@ import type { PlayerSnapshot, PrimaryMeleeAttackPayload } from "@/shared/types"
 import { getAnimKey, getDirectionFromAngle } from "../../animation/LadyWizardAnimDefs"
 import { HERO_CONFIGS } from "@/shared/balance-config/heroes"
 import {
+  ARENA_LAVA_COLLIDERS,
   ARENA_SPAWN_POINTS,
   ARENA_WORLD_COLLIDERS,
   PLAYER_WORLD_COLLISION_OFFSET_Y_PX,
   PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
 } from "@/shared/balance-config"
+import { terrainStateAtPosition } from "@/shared/collision/terrainHazards"
 import { REPLAY_SMOOTHING_MS } from "@/shared/balance-config/rendering"
 
 const OPEN_TEST_POINT = ARENA_SPAWN_POINTS[0]!
@@ -174,6 +176,7 @@ function mockSceneAndGroup() {
             return sprite
           }),
           setAlpha: vi.fn(),
+          setVisible: vi.fn(),
         }
         return sprite
       }),
@@ -446,6 +449,31 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     const after = sys._getLocalSimForTest(1)
     expect(after?.simCurrX).toBeGreaterThan(start.x)
     expect(after?.simCurrY).toBe(start.y)
+  })
+
+  it("keeps local lava prediction inside lava instead of walking onto land", () => {
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    sys.localPlayerId = "p1"
+    const lava = ARENA_LAVA_COLLIDERS.find((rect) => rect.x === 320 && rect.y === 128)!
+    const start = {
+      x: lava.x + lava.width / 2,
+      y: lava.y + lava.height / 2,
+    }
+    sys.applyFullSync(sync([snap({
+      id: 1,
+      playerId: "p1",
+      x: start.x,
+      y: start.y,
+      terrainState: "lava",
+    })]))
+
+    sys.update(400, { up: false, down: false, left: false, right: true })
+
+    const after = sys._getLocalSimForTest(1)
+    expect(after).not.toBeNull()
+    expect(terrainStateAtPosition(after!.simCurrX, after!.simCurrY)).toBe("lava")
+    expect(after!.simCurrX).toBeLessThan(lava.x + lava.width)
   })
 
   it("snaps to a legal smooth target when blocker-gated smoothing cannot reach it", () => {

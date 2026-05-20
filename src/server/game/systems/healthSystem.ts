@@ -27,10 +27,33 @@ import {
   Hero,
   HERO_INDEX_TO_ID,
   JumpArc,
+  TerrainState,
+  TERRAIN_KIND,
 } from "../components"
 import type { SimCtx, DeathEvent } from "../simulation"
 import { DAMAGE_FLASH_MS, JUMP_AIRBORNE_COLLIDER_EPSILON_PX } from "../../../shared/balance-config"
 import { getBehaviorAnimationConfig } from "../../../shared/balance-config/animationConfig"
+import { terrainStateAtPosition } from "../../../shared/collision/terrainHazards"
+
+/**
+ * Reclassifies terrain immediately when external knockback cancels an airborne jump.
+ *
+ * @param eid - Player entity whose jump was cancelled.
+ */
+function reclassifyTerrainAfterJumpCancel(eid: number): void {
+  const sampled = terrainStateAtPosition(Position.x[eid], Position.y[eid])
+  if (sampled === "lava") {
+    TerrainState.kind[eid] = TERRAIN_KIND.lava
+    return
+  }
+  if (sampled === "cliff") {
+    TerrainState.kind[eid] = TERRAIN_KIND.cliff
+    TerrainState.lavaDamageCarry[eid] = 0
+    return
+  }
+  TerrainState.kind[eid] = TERRAIN_KIND.land
+  TerrainState.lavaDamageCarry[eid] = 0
+}
 
 /**
  * Runs the health system for one tick.
@@ -77,6 +100,7 @@ export function healthSystem(ctx: SimCtx): void {
         removeComponent(world, targetEid, JumpArc)
         JumpArc.z[targetEid] = 0
         JumpArc.vz[targetEid] = 0
+        reclassifyTerrainAfterJumpCancel(targetEid)
       }
       addComponent(world, targetEid, Knockback)
       Knockback.impulseX[targetEid] = knockbackX

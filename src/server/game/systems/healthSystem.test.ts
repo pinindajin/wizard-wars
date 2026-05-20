@@ -1,10 +1,22 @@
 import { addComponent, addEntity, createWorld } from "bitecs"
 import { describe, expect, it } from "vitest"
 
-import { Health, Hero, PlayerTag, Position } from "../components"
+import {
+  Health,
+  Hero,
+  JumpArc,
+  PlayerTag,
+  Position,
+  TerrainState,
+  TERRAIN_KIND,
+} from "../components"
 import { createCommandBuffer } from "../commandBuffer"
 import type { SimCtx } from "../simulation"
-import { DEFAULT_PLAYER_HEALTH } from "../../../shared/balance-config/combat"
+import { ARENA_CLIFF_COLLIDERS, ARENA_LAVA_COLLIDERS } from "../../../shared/balance-config/arena"
+import {
+  DEFAULT_PLAYER_HEALTH,
+  JUMP_AIRBORNE_COLLIDER_EPSILON_PX,
+} from "../../../shared/balance-config/combat"
 import { healthSystem } from "./healthSystem"
 
 function emptyCtx(overrides: Partial<SimCtx> = {}): SimCtx {
@@ -117,5 +129,69 @@ describe("healthSystem damage floats", () => {
     healthSystem(ctx)
 
     expect(ctx.damageFloats[0]!.attackerUserId).toBeNull()
+  })
+
+  it("reclassifies lava terrain when knockback cancels an airborne jump", () => {
+    const world = createWorld()
+    const eid = addEntity(world)
+    const lava = ARENA_LAVA_COLLIDERS[1]!
+    for (const component of [PlayerTag, Position, Health, Hero, JumpArc, TerrainState]) {
+      addComponent(world, eid, component)
+    }
+    Position.x[eid] = lava.x + lava.width / 2
+    Position.y[eid] = lava.y + lava.height / 2
+    Health.current[eid] = DEFAULT_PLAYER_HEALTH
+    Health.max[eid] = DEFAULT_PLAYER_HEALTH
+    Hero.typeIndex[eid] = 0
+    JumpArc.z[eid] = JUMP_AIRBORNE_COLLIDER_EPSILON_PX + 1
+    TerrainState.kind[eid] = TERRAIN_KIND.land
+
+    healthSystem(emptyCtx({
+      world,
+      damageRequests: [{
+        targetEid: eid,
+        damage: 1,
+        killerUserId: "caster",
+        killerAbilityId: "fireball",
+        knockbackX: 1,
+        knockbackY: 0,
+        knockbackPx: 20,
+      }],
+    }))
+
+    expect(TerrainState.kind[eid]).toBe(TERRAIN_KIND.lava)
+  })
+
+  it("reclassifies cliff terrain when knockback cancels an airborne jump", () => {
+    const world = createWorld()
+    const eid = addEntity(world)
+    const cliff = ARENA_CLIFF_COLLIDERS[0]!
+    for (const component of [PlayerTag, Position, Health, Hero, JumpArc, TerrainState]) {
+      addComponent(world, eid, component)
+    }
+    Position.x[eid] = cliff.x + cliff.width / 2
+    Position.y[eid] = cliff.y + cliff.height / 2
+    Health.current[eid] = DEFAULT_PLAYER_HEALTH
+    Health.max[eid] = DEFAULT_PLAYER_HEALTH
+    Hero.typeIndex[eid] = 0
+    JumpArc.z[eid] = JUMP_AIRBORNE_COLLIDER_EPSILON_PX + 1
+    TerrainState.kind[eid] = TERRAIN_KIND.land
+    TerrainState.lavaDamageCarry[eid] = 0.5
+
+    healthSystem(emptyCtx({
+      world,
+      damageRequests: [{
+        targetEid: eid,
+        damage: 1,
+        killerUserId: "caster",
+        killerAbilityId: "fireball",
+        knockbackX: 1,
+        knockbackY: 0,
+        knockbackPx: 20,
+      }],
+    }))
+
+    expect(TerrainState.kind[eid]).toBe(TERRAIN_KIND.cliff)
+    expect(TerrainState.lavaDamageCarry[eid]).toBe(0)
   })
 })
