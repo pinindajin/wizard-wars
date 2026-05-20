@@ -4,6 +4,7 @@ import { LocalInputHistory } from "../../network/LocalInputHistory"
 import { reconcileLocal } from "./ReconciliationSystem"
 import {
   ARENA_HEIGHT,
+  ARENA_LAVA_COLLIDERS,
   ARENA_SPAWN_POINTS,
   ARENA_WIDTH,
   ARENA_WORLD_COLLIDERS,
@@ -16,6 +17,7 @@ import {
   SWIFT_BOOTS_SPEED_BONUS,
   TICK_DT_SEC,
 } from "@/shared/balance-config"
+import { terrainStateAtPosition } from "@/shared/collision/terrainHazards"
 import { resolveAgainstWorld } from "@/shared/collision/worldCollision"
 import type { PlayerInputPayload } from "@/shared/types"
 
@@ -201,5 +203,27 @@ describe("reconcileLocal", () => {
     expect(r.targetX).toBe(start.x)
     expect(r.targetY).toBe(start.y)
     expect(r.correction).toBe("none")
+  })
+
+  it("replays lava movement without walking onto land", () => {
+    const lava = ARENA_LAVA_COLLIDERS.find((rect) => rect.x === 320 && rect.y === 128)!
+    const start = {
+      x: lava.x + lava.width / 2,
+      y: lava.y + lava.height / 2,
+    }
+    const history = new LocalInputHistory()
+    for (let seq = 20; seq < 60; seq++) {
+      history.append(input({ seq, right: true }))
+    }
+
+    const r = reconcileLocal(
+      { ...start, lastProcessedInputSeq: 19 },
+      history,
+      start,
+      { ...noopCtx, terrainState: "lava" },
+    )
+
+    expect(terrainStateAtPosition(r.targetX, r.targetY)).toBe("lava")
+    expect(r.targetX).toBeLessThan(lava.x + lava.width)
   })
 })

@@ -1,3 +1,4 @@
+import { hasComponent, removeComponent } from "bitecs"
 import { Room, type Client } from "colyseus"
 import { randomUUID } from "node:crypto"
 
@@ -42,8 +43,18 @@ import {
 } from "../../../shared/balance-config/lobby"
 import { DEFAULT_HERO_ID } from "../../../shared/balance-config/heroes"
 import { logger } from "../../logger"
-import { AbilitySlots, Equipment, ABILITY_INDEX } from "../../game/components"
+import {
+  AbilitySlots,
+  Equipment,
+  ABILITY_INDEX,
+  JumpArc,
+  Position,
+  TerrainState,
+  TERRAIN_KIND,
+  Velocity,
+} from "../../game/components"
 import { CLOSE_CODE_ADMIN_CLOSED } from "../../../shared/constants"
+import { terrainStateAtPosition } from "../../../shared/collision/terrainHazards"
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -1005,6 +1016,13 @@ export class GameLobbyRoom extends Room {
       this.handleAssignAbility(client, payload)
     })
 
+    if (process.env.WIZARD_WARS_E2E === "1") {
+      this.onMessage("e2e_set_player_position", (client: Client, payload: unknown) => {
+        if (this.isAdminClosing) return
+        this.handleE2eSetPlayerPosition(client, payload)
+      })
+    }
+
     this.onMessage("*", () => {
       if (this.isAdminClosing) return
       this.resetInactivityTimer()
@@ -1104,6 +1122,43 @@ export class GameLobbyRoom extends Room {
         "[GameLobbyRoom] player input queue capped",
       )
     }
+  }
+
+  /**
+   * Repositions the requesting player for deterministic Playwright terrain tests.
+   * Registered only when `WIZARD_WARS_E2E=1`; ignored outside live matches.
+   *
+   * @param client - Client whose player entity should move.
+   * @param payload - Raw payload with numeric `x` and `y`.
+   */
+  private handleE2eSetPlayerPosition(client: Client, payload: unknown): void {
+    if (process.env.WIZARD_WARS_E2E !== "1") return
+    if (this.lobbyPhase !== "IN_PROGRESS" || !this.simulation) return
+
+    const data = payload as { readonly x?: unknown; readonly y?: unknown } | null
+    const x = typeof data?.x === "number" ? data.x : Number.NaN
+    const y = typeof data?.y === "number" ? data.y : Number.NaN
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return
+
+    const pd = client.userData as PlayerData | undefined
+    if (!pd) return
+    const eid = this.simulation.playerEntityMap.get(pd.playerId)
+    if (eid === undefined) return
+
+    Position.x[eid] = x
+    Position.y[eid] = y
+    Velocity.vx[eid] = 0
+    Velocity.vy[eid] = 0
+    if (hasComponent(this.simulation.world, eid, JumpArc)) {
+      removeComponent(this.simulation.world, eid, JumpArc)
+      JumpArc.z[eid] = 0
+      JumpArc.vz[eid] = 0
+      JumpArc.startedInLava[eid] = 0
+    }
+
+    TerrainState.kind[eid] = TERRAIN_KIND[terrainStateAtPosition(x, y)]
+    TerrainState.lavaDamageCarry[eid] = 0
+    this.sendInProgressHydrationToClient(client, { includeLobbyState: false })
   }
 
   /**

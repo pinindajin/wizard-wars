@@ -6,11 +6,34 @@
  */
 import { query, hasComponent } from "bitecs"
 
-import { Position, Radius, PlayerTag, DyingTag, DeadTag, SpectatorTag } from "../components"
+import {
+  Position,
+  PlayerTag,
+  DyingTag,
+  DeadTag,
+  SpectatorTag,
+  JumpArc,
+  TerrainState,
+  TERRAIN_KIND_TO_STATE,
+} from "../components"
 import type { SimCtx } from "../simulation"
 import { PLAYER_RADIUS_PX } from "../../../shared/balance-config"
+import { worldCandidateGateForPlayerState } from "../../../shared/collision/worldCollidersForPlayer"
 
 const DIAMETER = PLAYER_RADIUS_PX * 2
+
+/**
+ * Returns whether a player collision displacement may keep its new position.
+ *
+ * @param world - ECS world containing the player entity.
+ * @param eid - Player entity id.
+ */
+function canKeepCollisionDisplacement(world: SimCtx["world"], eid: number): boolean {
+  const jumpZ = hasComponent(world, eid, JumpArc) ? JumpArc.z[eid] : 0
+  const terrainState = TERRAIN_KIND_TO_STATE[TerrainState.kind[eid]] ?? "land"
+  const candidateGate = worldCandidateGateForPlayerState(jumpZ, terrainState)
+  return candidateGate?.(Position.x[eid], Position.y[eid]) ?? true
+}
 
 /**
  * Runs the player collision system for one tick.
@@ -45,11 +68,24 @@ export function playerCollisionSystem(ctx: SimCtx): void {
       const nx = dx / dist
       const ny = dy / dist
       const half = overlap / 2
+      const ax = Position.x[a]
+      const ay = Position.y[a]
+      const bx = Position.x[b]
+      const by = Position.y[b]
 
       Position.x[a] -= nx * half
       Position.y[a] -= ny * half
       Position.x[b] += nx * half
       Position.y[b] += ny * half
+
+      if (!canKeepCollisionDisplacement(world, a)) {
+        Position.x[a] = ax
+        Position.y[a] = ay
+      }
+      if (!canKeepCollisionDisplacement(world, b)) {
+        Position.x[b] = bx
+        Position.y[b] = by
+      }
     }
   }
 }

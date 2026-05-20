@@ -51,7 +51,10 @@ import {
 } from "../../../shared/balance-config"
 import { ABILITY_CONFIGS } from "../../../shared/balance-config/abilities"
 import { moveWithinWorld } from "../../../shared/collision/worldCollision"
-import { worldCollidersForPlayerState } from "../../../shared/collision/worldCollidersForPlayer"
+import {
+  worldCandidateGateForPlayerState,
+  worldCollidersForPlayerState,
+} from "../../../shared/collision/worldCollidersForPlayer"
 import { normalizedMoveFromWASD } from "../../../shared/movementIntent"
 
 const ARENA_BOUNDS = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
@@ -123,6 +126,7 @@ export function movementSystem(ctx: SimCtx): void {
     const worldColliders = worldCollidersForPlayerState(jumpZForCollider, terrainState, {
       jumpStartedInLava,
     })
+    const candidateGate = worldCandidateGateForPlayerState(jumpZForCollider, terrainState)
     const moved = moveWithinWorld(
       Position.x[eid],
       Position.y[eid],
@@ -131,6 +135,7 @@ export function movementSystem(ctx: SimCtx): void {
       PLAYER_WORLD_COLLISION_FOOTPRINT,
       ARENA_BOUNDS,
       worldColliders,
+      candidateGate,
     )
     Velocity.vx[eid] = moved.appliedDx / TICK_DT_SEC
     Velocity.vy[eid] = moved.appliedDy / TICK_DT_SEC

@@ -78,8 +78,9 @@ export const ARENA_CLIFF_COLLIDERS: readonly {
 }[] = GENERATED_ARENA_CLIFF_COLLIDERS
 
 /**
- * Non-walkable rectangles that overlap hybrid lava but extend outside it; used only
- * while `terrainState === "lava"` so lava–cliff boundaries stay solid. Regenerate via `bun run build:arena-colliders`.
+ * Generated lava transition rectangles retained for arena parity checks. Grounded
+ * lava movement now uses terrain center containment instead of these colliders.
+ * Regenerate via `bun run build:arena-colliders`.
  */
 export const ARENA_LAVA_TRANSITION_COLLIDERS: readonly {
   x: number
