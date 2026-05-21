@@ -5,11 +5,17 @@ How the engineering skills should consume this repo's domain documentation when 
 ## Before exploring, read these
 
 - **`CONTEXT-MAP.md`** at the repo root. It defines this repo's domain contexts and points at the context docs relevant to each area.
+- **`docs/glossary.md`** for cross-context domain vocabulary.
 - **The relevant context `CONTEXT.md` file** listed in `CONTEXT-MAP.md` for the code or issue being touched.
 - **`docs/adr/`** for system-wide decisions that touch the area you're about to work in.
 - **`docs/contexts/<context>/adr/`** for context-specific decisions, when that directory exists.
+- **`docs/contexts/<context>/*.md`** for context-specific protocols, state machines, or performance notes.
+- **`docs/retros/`** for concise incident writeups and implementation lessons.
+- **`docs/roadmaps/`** for approved future-facing plans. Treat roadmaps as intent, not current behavior.
 
 If any of these files don't exist, proceed silently. Don't flag their absence; don't suggest creating them upfront. The producer skill (`/grill-with-docs`) creates them lazily when terms or decisions actually get resolved.
+
+Repo docs are canonical for active engineering context. The Obsidian vault remains the home for raw research, session logs, brainstorming, personal notes, and historical working memory.
 
 ## Context layout
 

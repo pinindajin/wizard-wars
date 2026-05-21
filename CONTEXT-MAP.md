@@ -21,3 +21,12 @@ This repo uses multiple domain contexts. Read the context most relevant to the w
 - Context `CONTEXT.md` files are created lazily as terminology and decisions get settled.
 
 System-wide architectural decisions live in `docs/adr/`. Context-specific ADRs may live under `docs/contexts/<context>/adr/`.
+
+Supporting repo docs:
+
+- `docs/glossary.md` owns cross-context domain vocabulary.
+- `docs/contexts/realtime-rooms/protocols.md` owns the durable event protocol summary.
+- `docs/retros/` owns concise incident/learning writeups that affect future engineering work.
+- `docs/roadmaps/` owns future-facing plans that are not current architecture truth.
+
+The Obsidian vault at `/Users/jakemcbride/Personal/Development/ObsidianVault/Projects/wizard-wars/` remains the source for raw research, session history, and personal synthesis.
