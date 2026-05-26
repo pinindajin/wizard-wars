@@ -278,6 +278,8 @@ export type SimCtx = {
   activeMeleeAttacks: Map<number, ActiveMeleeAttack>
   /** Active combat telegraphs keyed by telegraph id for reconnect/full sync. */
   activeCombatTelegraphs: Map<string, CombatTelegraphStartPayload>
+  /** Respawn invulnerability expiry tick keyed by player eid for this simulation world. */
+  invulnerableExpiresAtTickByEntity: Map<number, number>
 
   // ── Written by playerDeltaSystem and projectileDeltaSystem ──
   playerDeltas: PlayerDelta[]
@@ -373,6 +375,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
   const lastProcessedInputSeqByPlayer = new Map<string, number>()
   const activeMeleeAttacks = new Map<number, ActiveMeleeAttack>()
   const activeCombatTelegraphs = new Map<string, CombatTelegraphStartPayload>()
+  const invulnerableExpiresAtTickByEntity = new Map<number, number>()
 
   let currentTick = 0
   let hostEndSignal = false
@@ -542,6 +545,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     prevPlayerStates.delete(eid)
     lastProcessedInputSeqByPlayer.delete(userId)
     activeMeleeAttacks.delete(eid)
+    invulnerableExpiresAtTickByEntity.delete(eid)
     for (const [id, telegraph] of activeCombatTelegraphs) {
       if (telegraph.casterId === userId) activeCombatTelegraphs.delete(id)
     }
@@ -733,6 +737,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       killStats,
       activeMeleeAttacks,
       activeCombatTelegraphs,
+      invulnerableExpiresAtTickByEntity,
       playerDeltas: [],
       fireballDeltas: [],
     }

@@ -34,7 +34,7 @@ const KNOCKBACK_SPEED_PPS = 800
 const ARENA_BOUNDS = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
 
 /**
- * Applies a terrain-aware knockback step to grounded lava players.
+ * Applies a terrain-aware knockback step to player entities.
  *
  * @param world - ECS world containing the player entity.
  * @param eid - Player entity id.
@@ -50,12 +50,6 @@ function applyPlayerKnockbackStep(
   const jumpZ = hasComponent(world, eid, JumpArc) ? JumpArc.z[eid] : 0
   const terrainState = TERRAIN_KIND_TO_STATE[TerrainState.kind[eid]] ?? "land"
   const candidateGate = worldCandidateGateForPlayerState(jumpZ, terrainState)
-  if (!candidateGate) {
-    Position.x[eid] += stepX
-    Position.y[eid] += stepY
-    return
-  }
-
   const colliders = worldCollidersForPlayerState(jumpZ, terrainState, {
     jumpStartedInLava:
       hasComponent(world, eid, JumpArc) && JumpArc.startedInLava[eid] === 1,

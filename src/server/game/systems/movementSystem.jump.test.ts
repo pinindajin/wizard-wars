@@ -60,6 +60,7 @@ function emptyCtx(overrides: Partial<SimCtx> = {}): SimCtx {
     killStats: new Map(),
     activeMeleeAttacks: new Map(),
     activeCombatTelegraphs: new Map(),
+    invulnerableExpiresAtTickByEntity: new Map(),
     playerDeltas: [],
     fireballDeltas: [],
     abilitySfxEvents: [],
