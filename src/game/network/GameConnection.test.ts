@@ -113,6 +113,65 @@ describe("GameConnection send helpers + warning silence", () => {
     })
   })
 
+  it("forwards server performance status through the wildcard message bridge", () => {
+    const seen: unknown[] = []
+    conn.onMessage((message) => {
+      seen.push(message)
+    })
+
+    const payload = {
+      serverTimeMs: 1000,
+      degraded: true,
+      reasons: ["dropped_debt"],
+      metrics: {
+        windowMs: 1000,
+        droppedDebtMs: 16,
+        catchUpCallbacks: 0,
+        inputQueueDrops: 0,
+        simDurationMs: 5,
+        broadcastDurationMs: 1,
+        eventLoopLagMs: 0,
+        processCpuPercent: 10,
+        heapUsedBytes: 1,
+        rssBytes: 2,
+        activeRooms: 1,
+        connectedClients: 1,
+      },
+    }
+    room.triggerMessage(RoomEvent.ServerPerformanceStatus, payload)
+
+    expect(seen).toContainEqual({
+      type: WsEvent.ServerPerformanceStatus,
+      payload,
+    })
+  })
+
+  it("notifies connection health subscribers during reconnect transitions", async () => {
+    const health: string[] = []
+    conn.onConnectionHealthChange((next) => {
+      health.push(next)
+    })
+    const reconnect = vi.fn().mockResolvedValue(room)
+    ;(conn as unknown as { client: { reconnect: typeof reconnect } }).client = { reconnect }
+
+    await room.triggerLeave(1006)
+
+    expect(health).toEqual(["reconnecting", "connected"])
+  })
+
+  it("notifies connection health subscribers when reconnect fails", async () => {
+    const health: string[] = []
+    conn.onConnectionHealthChange((next) => {
+      health.push(next)
+    })
+    const reconnect = vi.fn().mockRejectedValue(new Error("gone"))
+    ;(conn as unknown as { client: { reconnect: typeof reconnect } }).client = { reconnect }
+
+    await room.triggerLeave(1006)
+
+    expect(health).toEqual(["reconnecting", "disconnected"])
+  })
+
   it("does not attempt reconnect after LobbyAdminClosing", async () => {
     const reconnect = vi.fn()
     ;(conn as unknown as { client: { reconnect: typeof reconnect } }).client = { reconnect }

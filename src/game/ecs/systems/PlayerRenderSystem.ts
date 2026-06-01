@@ -67,6 +67,7 @@ import {
   type LocalAckState,
   type LocalReplayContext,
 } from "./ReconciliationSystem"
+import type { RubberbandCorrection } from "@/shared/performanceIndicators"
 import { LocalInputHistory } from "../../network/LocalInputHistory"
 import { RemoteInterpolationBuffer } from "./RemoteInterpolationBuffer"
 
@@ -238,6 +239,9 @@ export class PlayerRenderSystem {
   /** Per-remote snapshot buffer used by the remote render path. */
   readonly remoteBuffer: RemoteInterpolationBuffer =
     new RemoteInterpolationBuffer()
+
+  /** Optional React bridge for local correction classifications. */
+  private predictionCorrectionHandler?: (correction: RubberbandCorrection) => void
 
   /**
    * Offset from server clock to local clock, roughly `serverTime - Date.now()`.
@@ -438,6 +442,7 @@ export class PlayerRenderSystem {
     }
     const simCurr = { x: entry.simCurrX, y: entry.simCurrY }
     const result = reconcileLocal(ack, this.localInputHistory, simCurr, ctx)
+    this.predictionCorrectionHandler?.(result.correction)
 
     if (result.correction === "snap") {
       // Snap collapses both prev and curr so render interpolation does
@@ -455,6 +460,17 @@ export class PlayerRenderSystem {
       entry.smoothRemainingMs = REPLAY_SMOOTHING_MS
     }
     // "none": keep sim + render as-is.
+  }
+
+  /**
+   * Installs a bridge for local prediction correction diagnostics.
+   *
+   * @param handler - Optional callback invoked after each local ACK reconciliation.
+   */
+  setPredictionCorrectionHandler(
+    handler: ((correction: RubberbandCorrection) => void) | undefined,
+  ): void {
+    this.predictionCorrectionHandler = handler
   }
 
   /**

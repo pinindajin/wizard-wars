@@ -5,7 +5,11 @@ import {
   QUICK_ITEM_SLOT_COUNT,
 } from "./balance-config/economy"
 import { MAX_PLAYERS_PER_MATCH } from "./balance-config/lobby"
-import type { GameStateSyncPayload, PlayerDeathPayload } from "./types"
+import type {
+  GameStateSyncPayload,
+  PlayerDeathPayload,
+  ServerPerformanceStatusPayload,
+} from "./types"
 
 /** Username: alphanumeric + underscore, 3-20 chars, must be trimmed before comparison. */
 const USERNAME_REGEX = /^[a-zA-Z0-9_]+$/
@@ -208,6 +212,36 @@ export const playerDeathPayloadSchema = z.object({
   killerUsername: z.string().max(64).optional(),
 })
 
+/** Server performance degradation reason values. */
+export const serverPerformanceStatusReasonSchema = z.enum([
+  "dropped_debt",
+  "catch_up",
+  "input_queue_drops",
+  "event_loop_lag",
+  "broadcast_slow",
+])
+
+/** Server → clients: low-rate server loop performance status. */
+export const serverPerformanceStatusPayloadSchema = z.object({
+  serverTimeMs: z.number().finite().nonnegative(),
+  degraded: z.boolean(),
+  reasons: z.array(serverPerformanceStatusReasonSchema).max(5),
+  metrics: z.object({
+    windowMs: z.number().finite().nonnegative(),
+    droppedDebtMs: z.number().finite().nonnegative(),
+    catchUpCallbacks: z.number().int().nonnegative(),
+    inputQueueDrops: z.number().int().nonnegative(),
+    simDurationMs: z.number().finite().nonnegative(),
+    broadcastDurationMs: z.number().finite().nonnegative(),
+    eventLoopLagMs: z.number().finite().nonnegative(),
+    processCpuPercent: z.number().finite().nonnegative(),
+    heapUsedBytes: z.number().int().nonnegative(),
+    rssBytes: z.number().int().nonnegative(),
+    activeRooms: z.number().int().nonnegative(),
+    connectedClients: z.number().int().nonnegative(),
+  }),
+})
+
 /**
  * Parses and returns a `PlayerDeathPayload` (throws if invalid).
  * Call on the server before every `broadcast` of this message.
@@ -226,4 +260,16 @@ export function parseGameStateSyncPayload(
   input: Readonly<unknown> | GameStateSyncPayload,
 ): GameStateSyncPayload {
   return gameStateSyncPayloadSchema.parse(input) as GameStateSyncPayload
+}
+
+/**
+ * Parses and returns a `ServerPerformanceStatusPayload` (throws if invalid).
+ *
+ * @param input - Unknown payload received from the room.
+ * @returns Validated server performance status payload.
+ */
+export function parseServerPerformanceStatusPayload(
+  input: Readonly<unknown> | ServerPerformanceStatusPayload,
+): ServerPerformanceStatusPayload {
+  return serverPerformanceStatusPayloadSchema.parse(input) as ServerPerformanceStatusPayload
 }

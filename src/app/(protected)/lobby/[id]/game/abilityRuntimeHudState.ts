@@ -81,3 +81,23 @@ export function abilityStatesFromBatchDelta(
   }
   return current
 }
+
+/**
+ * Returns whether a player batch includes local-player fields owned by React HUD.
+ *
+ * @param payload - Player batch update payload.
+ * @param localPlayerId - Current user's player id.
+ * @param entityToPlayer - Entity id → player id map from full sync.
+ * @returns True when React HUD state should be recalculated for this batch.
+ */
+export function playerBatchHasHudRelevantChanges(
+  payload: PlayerBatchUpdatePayload,
+  localPlayerId: string | null,
+  entityToPlayer: ReadonlyMap<number, string>,
+): boolean {
+  if (!localPlayerId) return false
+  return payload.deltas.some((delta) => {
+    if (entityToPlayer.get(delta.id) !== localPlayerId) return false
+    return delta.abilityStates !== undefined || delta.lives !== undefined
+  })
+}

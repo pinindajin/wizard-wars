@@ -32,7 +32,19 @@ const playerRenderMock = vi.hoisted(() => ({
   update: vi.fn(),
   getLocalPlayerRenderPos: vi.fn(() => null),
   localInputHistory: { append: vi.fn() },
+  setPredictionCorrectionHandler: vi.fn(),
   destroy: vi.fn(),
+}))
+
+const keyboardControllerMock = vi.hoisted(() => ({
+  enable: vi.fn(),
+  collectInput: vi.fn(),
+  collectMoveIntent: vi.fn(),
+}))
+
+const mouseControllerMock = vi.hoisted(() => ({
+  enable: vi.fn(),
+  collectInput: vi.fn(),
 }))
 
 vi.mock("phaser", () => {
@@ -127,17 +139,11 @@ vi.mock("../ecs/systems/NetworkSyncSystem", () => ({
 }))
 
 vi.mock("../input/KeyboardController", () => ({
-  KeyboardController: vi.fn().mockImplementation(() => ({
-    enable: vi.fn(),
-    collectInput: vi.fn(),
-  })),
+  KeyboardController: vi.fn().mockImplementation(() => keyboardControllerMock),
 }))
 
 vi.mock("../input/MouseController", () => ({
-  MouseController: vi.fn().mockImplementation(() => ({
-    enable: vi.fn(),
-    collectInput: vi.fn(),
-  })),
+  MouseController: vi.fn().mockImplementation(() => mouseControllerMock),
 }))
 
 vi.mock("../audio/BgmPlayer", () => ({
@@ -291,6 +297,29 @@ describe("ArenaRuntime lifecycle", () => {
     vi.clearAllMocks()
     telegraphMock.start.mockClear()
     playerRenderMock.onPrimaryMeleeSwing.mockClear()
+    keyboardControllerMock.collectMoveIntent.mockReturnValue({
+      up: false,
+      down: false,
+      left: false,
+      right: false,
+    })
+    keyboardControllerMock.collectInput.mockImplementation((seq: number) => ({
+      up: false,
+      down: false,
+      left: false,
+      right: false,
+      abilitySlot: null,
+      abilityTargetX: 0,
+      abilityTargetY: 0,
+      useQuickItemSlot: null,
+      seq,
+    }))
+    mouseControllerMock.collectInput.mockReturnValue({
+      weaponPrimary: false,
+      weaponSecondary: false,
+      weaponTargetX: 0,
+      weaponTargetY: 0,
+    })
   })
 
   it("unsubscribes from the shared GameConnection exactly once when destroyed", () => {
@@ -390,5 +419,29 @@ describe("ArenaRuntime lifecycle", () => {
     })
 
     expect(soundPlaySpy).toHaveBeenCalledWith(SFX_KEYS.fireballCast)
+  })
+
+  it("sends a fresh input sequence for each fixed sim step in one render frame", () => {
+    const { runtime, connection } = makeRuntime()
+    let seq = 0
+    connection.nextSeq.mockImplementation(() => seq++)
+    playerRenderMock.update.mockImplementation(
+      (_delta: number, _intent: unknown, onSimStep?: () => void) => {
+        onSimStep?.()
+        onSimStep?.()
+        onSimStep?.()
+      },
+    )
+
+    runtime.start()
+    connection.emit({ type: WsEvent.MatchGo, payload: {} })
+    runtime.update(0, 51)
+
+    expect(connection.sendPlayerInput.mock.calls.map(([input]) => input.seq)).toEqual([
+      0,
+      1,
+      2,
+    ])
+    expect(keyboardControllerMock.collectMoveIntent).toHaveBeenCalled()
   })
 })

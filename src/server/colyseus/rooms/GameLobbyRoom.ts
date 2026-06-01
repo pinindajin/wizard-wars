@@ -1,6 +1,7 @@
 import { hasComponent, removeComponent } from "bitecs"
 import { Room, type Client } from "colyseus"
 import { randomUUID } from "node:crypto"
+import { performance } from "node:perf_hooks"
 
 import { verifyToken } from "../../auth"
 import { createGameSimulation, type GameSimulation } from "../../game/simulation"
@@ -12,12 +13,15 @@ import { ARENA_SPAWN_POINTS } from "../../../shared/balance-config/arena"
 import { RoomEvent } from "../../../shared/roomEvents"
 import type {
   AuthUser,
+  FireballBatchUpdatePayload,
   LobbyPhase,
   LobbyPlayer,
   LobbyStatePayload,
   LobbyChatPayload,
   LobbyHostTransferPayload,
   LobbyScoreboardPayload,
+  PlayerDelta,
+  ServerPerformanceStatusPayload,
   ScoreboardEntry,
 } from "../../../shared/types"
 import {
@@ -28,6 +32,7 @@ import {
   assignAbilityPayloadSchema,
   parseGameStateSyncPayload,
   parsePlayerDeathPayload,
+  parseServerPerformanceStatusPayload,
 } from "../../../shared/validators"
 import {
   MAX_PLAYERS_PER_MATCH,
@@ -55,6 +60,16 @@ import {
 } from "../../game/components"
 import { CLOSE_CODE_ADMIN_CLOSED } from "../../../shared/constants"
 import { terrainStateAtPosition } from "../../../shared/collision/terrainHazards"
+import {
+  classifyServerPerformance,
+  serverPerformanceStatusKey,
+  SERVER_PERFORMANCE_STATUS_MIN_INTERVAL_MS,
+} from "../../../shared/performanceIndicators"
+import {
+  PERFORMANCE_STATUS_WINDOW_MS,
+  resolveGamePerformanceConfig,
+} from "../../game/performanceConfig"
+import { mergeFireballBatch, mergePlayerBatch } from "../../game/networkBatching"
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -62,6 +77,8 @@ import { terrainStateAtPosition } from "../../../shared/collision/terrainHazards
 
 /** WebSocket close code passed to `Client.leave` when the host dissolves the lobby. */
 export const CLOSE_CODE_LOBBY_DISSOLVED = 4012
+
+const activeGameLoopRoomIds = new Set<string>()
 
 export type AdminCloseLobbyInput = {
   readonly adminUserId: string
@@ -408,6 +425,44 @@ export class GameLobbyRoom extends Room {
     import("../../../shared/types").PlayerInputPayload[]
   >()
 
+  /** Runtime knobs for network cadence and performance reporting. */
+  private readonly performanceConfig = resolveGamePerformanceConfig()
+
+  /** Pending player visual deltas awaiting the next network flush. */
+  private pendingPlayerDeltaBatches: PlayerDelta[][] = []
+
+  /** Pending fireball visual deltas/removals awaiting the next network flush. */
+  private pendingFireballBatches: Array<
+    Pick<FireballBatchUpdatePayload, "deltas" | "removedIds">
+  > = []
+
+  /** Monotonic sequence for player batch payloads. */
+  private playerBatchSeq = 0
+
+  /** Monotonic sequence for fireball batch payloads. */
+  private fireballBatchSeq = 0
+
+  /** Last wall-clock time a cadence-limited network batch was flushed. */
+  private lastNetworkFlushAtMs = 0
+
+  /** Expected perf-clock time for the next loop callback. */
+  private expectedNextTickAtPerfMs = 0
+
+  /** Start of the current server performance aggregation window. */
+  private performanceWindowStartedAtPerfMs = performance.now()
+
+  /** CPU sample at the start of the current performance window. */
+  private performanceWindowCpuStart = process.cpuUsage()
+
+  private performanceDroppedDebtMs = 0
+  private performanceCatchUpCallbacks = 0
+  private performanceInputQueueDrops = 0
+  private performanceSimDurationMs = 0
+  private performanceBroadcastDurationMs = 0
+  private performanceEventLoopLagMs = 0
+  private lastPerformanceStatusKey = "nominal"
+  private lastPerformanceStatusBroadcastAtMs = 0
+
   /**
    * Highest `seq` accepted from each player across the queue lifetime, used
    * to ignore duplicate / re-ordered inputs on arrival.
@@ -425,6 +480,12 @@ export class GameLobbyRoom extends Room {
 
   /** Dashboard roster that keeps disconnected players during reconnect grace. */
   private readonly adminRoster = new Map<string, AdminRosterEntry>()
+
+  /** Delayed in-progress simulation cleanup for players inside reconnect grace. */
+  private readonly inProgressPlayerCleanupTimers = new Map<
+    string,
+    { clear: () => void }
+  >()
 
   /** Transport hooks installed for per-room bandwidth accounting. */
   private readonly bandwidthClientHooks = new Map<Client, BandwidthClientHooks>()
@@ -498,6 +559,20 @@ export class GameLobbyRoom extends Room {
   ): Promise<AuthUser> {
     if (this.isAdminClosing) {
       throw new Error("lobby is closing")
+    }
+    if (this.isTerminalInProgressRoom()) {
+      logger.warn(
+        {
+          event: "room.auth.rejected",
+          area: "netcode",
+          side: "server",
+          roomId: this.roomId,
+          phase: this.lobbyPhase,
+          reason: "terminal_in_progress_room",
+        },
+        "[GameLobbyRoom] auth rejected",
+      )
+      throw new Error("match is no longer available")
     }
 
     const token = options?.token
@@ -588,6 +663,23 @@ export class GameLobbyRoom extends Room {
    * @param auth - Verified auth data returned from `onAuth`.
    */
   onJoin(client: Client, _options: unknown, auth: AuthUser): void {
+    if (this.isTerminalInProgressRoom()) {
+      logger.warn(
+        {
+          event: "room.join.rejected",
+          area: "netcode",
+          side: "server",
+          roomId: this.roomId,
+          playerId: auth.sub,
+          sessionId: client.sessionId,
+          phase: this.lobbyPhase,
+          reason: "terminal_in_progress_room",
+        },
+        "[GameLobbyRoom] join rejected",
+      )
+      throw new Error("match is no longer available")
+    }
+
     if (this.disposalGraceTimer) {
       this.disposalGraceTimer.clear()
       this.disposalGraceTimer = null
@@ -601,7 +693,10 @@ export class GameLobbyRoom extends Room {
       clientSceneReady: false,
     }
     client.userData = pd
-    this.joinOrder.push(auth.sub)
+    this.clearInProgressPlayerCleanup(auth.sub)
+    if (!this.joinOrder.includes(auth.sub)) {
+      this.joinOrder.push(auth.sub)
+    }
     playerLobbyIndex.set(auth.sub, this.roomId)
     this.installBandwidthHooks(client)
     this.markAdminPlayerConnected(pd)
@@ -688,7 +783,7 @@ export class GameLobbyRoom extends Room {
             },
             "[GameLobbyRoom] reconnection window expired",
           )
-          this.handlePlayerGone(pd)
+          this.handlePlayerGone(pd, { reconnectGraceElapsed: true })
         },
       )
     } else {
@@ -718,6 +813,7 @@ export class GameLobbyRoom extends Room {
     }
 
     playerLobbyIndex.set(pd.playerId, this.roomId)
+    this.clearInProgressPlayerCleanup(pd.playerId)
 
     const joinPayload = { playerId: pd.playerId, username: pd.username }
     client.send(RoomEvent.PlayerJoin, joinPayload)
@@ -788,6 +884,7 @@ export class GameLobbyRoom extends Room {
     this.disposalGraceTimer?.clear()
     this.adminCloseTimer?.clear()
     this.gameLoopTimer?.clear()
+    this.clearInProgressPlayerCleanupTimers()
     this.clearMatchRuntimeState()
     this.clearBandwidthHooks()
     this.adminRoster.clear()
@@ -876,6 +973,95 @@ export class GameLobbyRoom extends Room {
   }
 
   /**
+   * Cancels delayed simulation cleanup for one in-progress player.
+   *
+   * @param playerId - Player whose cleanup timer should be cleared.
+   */
+  private clearInProgressPlayerCleanup(playerId: string): void {
+    const timer = this.inProgressPlayerCleanupTimers.get(playerId)
+    if (!timer) return
+    timer.clear()
+    this.inProgressPlayerCleanupTimers.delete(playerId)
+  }
+
+  /** Cancels all delayed in-progress player cleanup timers. */
+  private clearInProgressPlayerCleanupTimers(): void {
+    for (const timer of this.inProgressPlayerCleanupTimers.values()) {
+      timer.clear()
+    }
+    this.inProgressPlayerCleanupTimers.clear()
+  }
+
+  /**
+   * Schedules in-progress player simulation cleanup after reconnect grace.
+   *
+   * @param playerId - Player whose simulation state should expire.
+   */
+  private scheduleInProgressPlayerCleanup(playerId: string): void {
+    this.clearInProgressPlayerCleanup(playerId)
+    this.inProgressPlayerCleanupTimers.set(
+      playerId,
+      nativeSetTimeout(() => {
+        this.inProgressPlayerCleanupTimers.delete(playerId)
+        if (this.clients.some((client) => {
+          const pd = client.userData as PlayerData | undefined
+          return pd?.playerId === playerId
+        })) {
+          return
+        }
+        this.removeInProgressPlayerState(playerId)
+      }, RECONNECT_WINDOW_MS),
+    )
+  }
+
+  /**
+   * Removes a player from in-progress runtime state after reconnect grace.
+   *
+   * @param playerId - Player to remove from match runtime state.
+   */
+  private removeInProgressPlayerState(playerId: string): void {
+    this.clearInProgressPlayerCleanup(playerId)
+    this.simulation?.removePlayer(playerId)
+    this.inputQueue.delete(playerId)
+    this.highestAcceptedSeqByPlayer.delete(playerId)
+    this.economies.delete(playerId)
+
+    const hasRemainingSimulationPlayers =
+      (this.simulation?.playerEntityMap.size ?? 0) > 0
+    if (
+      this.lobbyPhase === "IN_PROGRESS" &&
+      this.clients.length === 0 &&
+      !hasRemainingSimulationPlayers
+    ) {
+      this.gameLoopTimer?.clear()
+      this.gameLoopTimer = null
+      this.clearMatchRuntimeState()
+      this.disposalGraceTimer?.clear()
+      this.disposalGraceTimer = null
+      logger.info(
+        {
+          event: "room.in_progress.empty_terminal",
+          area: "netcode",
+          side: "server",
+          roomId: this.roomId,
+          phase: this.lobbyPhase,
+          expiredPlayerId: playerId,
+        },
+        "[GameLobbyRoom] empty in-progress room closed",
+      )
+      void this.disconnect()
+    }
+  }
+
+  /**
+   * Returns true when the room is still labelled in-progress but no match
+   * runtime exists, so late joins cannot be safely hydrated.
+   */
+  private isTerminalInProgressRoom(): boolean {
+    return this.lobbyPhase === "IN_PROGRESS" && this.simulation === null
+  }
+
+  /**
    * Resets per-player input stream state when a client opens a new transport
    * (browser tab refresh) so the client can restart `seq` at 0. Clears
    * duplicate-drop bookkeeping and, when the sim still has the entity, resets
@@ -900,7 +1086,10 @@ export class GameLobbyRoom extends Room {
    *
    * @param pd - The departing player's data.
    */
-  private handlePlayerGone(pd: PlayerData): void {
+  private handlePlayerGone(
+    pd: PlayerData,
+    opts?: { readonly reconnectGraceElapsed?: boolean },
+  ): void {
     if (playerLobbyIndex.get(pd.playerId) === this.roomId) {
       playerLobbyIndex.delete(pd.playerId)
     }
@@ -918,6 +1107,14 @@ export class GameLobbyRoom extends Room {
 
     this.joinOrder = this.joinOrder.filter((id) => id !== pd.playerId)
     this.updateMetadataPlayerCount()
+
+    if (this.lobbyPhase === "IN_PROGRESS" && this.simulation) {
+      if (opts?.reconnectGraceElapsed) {
+        this.removeInProgressPlayerState(pd.playerId)
+      } else {
+        this.scheduleInProgressPlayerCleanup(pd.playerId)
+      }
+    }
 
     if (this.lobbyPhase === "WAITING_FOR_CLIENTS") {
       this.checkAllClientsReady()
@@ -1106,6 +1303,7 @@ export class GameLobbyRoom extends Room {
     // Cap queue: drop from the front if it grows unbounded.
     while (queue.length > INPUT_QUEUE_CAP_PER_PLAYER) {
       queue.shift()
+      this.performanceInputQueueDrops += 1
       logger.warn(
         {
           event: "room.player_input.queue_cap_drop",
@@ -1678,6 +1876,9 @@ export class GameLobbyRoom extends Room {
     this.broadcast(RoomEvent.GameStateSync, gameStateSync)
 
     // Start the fixed-rate game loop (see TICK_MS; 60 Hz by default).
+    activeGameLoopRoomIds.add(this.roomId)
+    this.resetNetworkBatchingState(Date.now())
+    this.resetPerformanceWindow(performance.now())
     this.gameLoopTimer = nativeSetInterval(() => {
       this.runGameTick()
     }, TICK_MS)
@@ -1993,15 +2194,214 @@ export class GameLobbyRoom extends Room {
   }
 
   private clearMatchRuntimeState(): void {
+    this.clearInProgressPlayerCleanupTimers()
     this.simulation = null
     this.economies.clear()
     this.inputQueue.clear()
     this.highestAcceptedSeqByPlayer.clear()
+    activeGameLoopRoomIds.delete(this.roomId)
+    this.pendingPlayerDeltaBatches = []
+    this.pendingFireballBatches = []
   }
 
   // ---------------------------------------------------------------------------
   // Game tick
   // ---------------------------------------------------------------------------
+
+  /**
+   * Resets low-rate network batching state at match start.
+   *
+   * @param nowMs - Current wall-clock time.
+   */
+  private resetNetworkBatchingState(nowMs: number): void {
+    this.pendingPlayerDeltaBatches = []
+    this.pendingFireballBatches = []
+    this.playerBatchSeq = 0
+    this.fireballBatchSeq = 0
+    this.lastNetworkFlushAtMs = nowMs
+  }
+
+  /**
+   * Resets the server performance aggregation window.
+   *
+   * @param nowPerfMs - Current performance-clock time.
+   */
+  private resetPerformanceWindow(nowPerfMs: number): void {
+    this.performanceWindowStartedAtPerfMs = nowPerfMs
+    this.performanceWindowCpuStart = process.cpuUsage()
+    this.performanceDroppedDebtMs = 0
+    this.performanceCatchUpCallbacks = 0
+    this.performanceInputQueueDrops = 0
+    this.performanceSimDurationMs = 0
+    this.performanceBroadcastDurationMs = 0
+    this.performanceEventLoopLagMs = 0
+    this.expectedNextTickAtPerfMs = nowPerfMs + TICK_MS
+  }
+
+  /**
+   * Records event-loop lateness for the current tick.
+   *
+   * @param nowPerfMs - Current performance-clock time.
+   */
+  private recordLoopTiming(nowPerfMs: number): void {
+    if (this.expectedNextTickAtPerfMs <= 0) {
+      this.expectedNextTickAtPerfMs = nowPerfMs + TICK_MS
+      return
+    }
+    const lagMs = Math.max(0, nowPerfMs - this.expectedNextTickAtPerfMs)
+    this.performanceEventLoopLagMs = Math.max(this.performanceEventLoopLagMs, lagMs)
+    if (lagMs > TICK_MS) {
+      this.performanceDroppedDebtMs += lagMs
+      this.performanceCatchUpCallbacks += Math.floor(lagMs / TICK_MS)
+    }
+    this.expectedNextTickAtPerfMs = nowPerfMs + TICK_MS
+  }
+
+  /**
+   * Returns whether cadence-limited visual batches should flush now.
+   *
+   * @param serverTimeMs - Current wall-clock time.
+   * @returns True when pending visual deltas should be broadcast room-wide.
+   */
+  private shouldFlushVisualBatches(serverTimeMs: number): boolean {
+    return (
+      serverTimeMs - this.lastNetworkFlushAtMs >=
+      this.performanceConfig.netSendIntervalMs
+    )
+  }
+
+  /**
+   * Returns whether any cadence-limited room-wide visual payload is queued.
+   *
+   * @returns True when a player or projectile batch is waiting to flush.
+   */
+  private hasPendingVisualBatches(): boolean {
+    return (
+      this.pendingPlayerDeltaBatches.length > 0 ||
+      this.pendingFireballBatches.length > 0
+    )
+  }
+
+  /**
+   * Sends owner-only ACK deltas so reconciliation is not delayed by visual cadence.
+   *
+   * @param playerDeltas - Player deltas from the current simulation tick.
+   * @param serverTimeMs - Current server wall-clock time.
+   */
+  private sendOwnerAckDeltas(
+    playerDeltas: readonly PlayerDelta[],
+    serverTimeMs: number,
+  ): void {
+    const sim = this.simulation
+    if (!sim) return
+    for (const delta of playerDeltas) {
+      if (
+        delta.lastProcessedInputSeq === undefined ||
+        delta.x === undefined ||
+        delta.y === undefined
+      ) {
+        continue
+      }
+      const playerId = sim.entityPlayerMap.get(delta.id)
+      if (!playerId) continue
+      const client = this.findClientByUserId(playerId)
+      if (!client) continue
+      client.send(RoomEvent.PlayerBatchUpdate, {
+        deltas: [
+          {
+            id: delta.id,
+            x: delta.x,
+            y: delta.y,
+            lastProcessedInputSeq: delta.lastProcessedInputSeq,
+          },
+        ],
+        removedIds: [],
+        seq: this.playerBatchSeq++,
+        serverTimeMs,
+      })
+    }
+  }
+
+  /**
+   * Flushes pending room-wide visual movement/projectile batches.
+   *
+   * @param serverTimeMs - Current server wall-clock time.
+   */
+  private flushPendingVisualBatches(serverTimeMs: number): void {
+    if (this.pendingPlayerDeltaBatches.length > 0) {
+      const deltas = mergePlayerBatch(this.pendingPlayerDeltaBatches)
+      this.pendingPlayerDeltaBatches = []
+      if (deltas.length > 0) {
+        this.broadcast(RoomEvent.PlayerBatchUpdate, {
+          deltas,
+          removedIds: [],
+          seq: this.playerBatchSeq++,
+          serverTimeMs,
+        })
+      }
+    }
+
+    if (this.pendingFireballBatches.length > 0) {
+      const fireballs = mergeFireballBatch(this.pendingFireballBatches)
+      this.pendingFireballBatches = []
+      if (fireballs.deltas.length > 0 || fireballs.removedIds.length > 0) {
+        this.broadcast(RoomEvent.FireballBatchUpdate, {
+          ...fireballs,
+          seq: this.fireballBatchSeq++,
+        })
+      }
+    }
+    this.lastNetworkFlushAtMs = serverTimeMs
+  }
+
+  /**
+   * Broadcasts low-rate server performance status when state changes or remains degraded.
+   *
+   * @param serverTimeMs - Current server wall-clock time.
+   */
+  private maybeBroadcastServerPerformanceStatus(serverTimeMs: number): void {
+    const nowPerfMs = performance.now()
+    const windowMs = nowPerfMs - this.performanceWindowStartedAtPerfMs
+    if (windowMs < PERFORMANCE_STATUS_WINDOW_MS) return
+
+    const cpu = process.cpuUsage(this.performanceWindowCpuStart)
+    const memory = process.memoryUsage()
+    const metrics: ServerPerformanceStatusPayload["metrics"] = {
+      windowMs,
+      droppedDebtMs: this.performanceDroppedDebtMs,
+      catchUpCallbacks: this.performanceCatchUpCallbacks,
+      inputQueueDrops: this.performanceInputQueueDrops,
+      simDurationMs: this.performanceSimDurationMs,
+      broadcastDurationMs: this.performanceBroadcastDurationMs,
+      eventLoopLagMs: this.performanceEventLoopLagMs,
+      processCpuPercent: ((cpu.user + cpu.system) / 1000 / windowMs) * 100,
+      heapUsedBytes: memory.heapUsed,
+      rssBytes: memory.rss,
+      activeRooms: activeGameLoopRoomIds.size,
+      connectedClients: this.clients.length,
+    }
+    const classification = classifyServerPerformance(metrics)
+    const key = serverPerformanceStatusKey(classification)
+    const shouldBroadcast =
+      key !== this.lastPerformanceStatusKey ||
+      (classification.degraded &&
+        serverTimeMs - this.lastPerformanceStatusBroadcastAtMs >=
+          SERVER_PERFORMANCE_STATUS_MIN_INTERVAL_MS)
+
+    if (shouldBroadcast) {
+      const payload = parseServerPerformanceStatusPayload({
+        serverTimeMs,
+        degraded: classification.degraded,
+        reasons: classification.reasons,
+        metrics,
+      })
+      this.broadcast(RoomEvent.ServerPerformanceStatus, payload)
+      this.lastPerformanceStatusKey = key
+      this.lastPerformanceStatusBroadcastAtMs = serverTimeMs
+    }
+
+    this.resetPerformanceWindow(nowPerfMs)
+  }
 
   /**
    * Runs one game simulation tick, broadcasts deltas and events to all clients.
@@ -2015,29 +2415,31 @@ export class GameLobbyRoom extends Room {
       return
     }
 
+    const tickStartedAtPerfMs = performance.now()
+    this.recordLoopTiming(tickStartedAtPerfMs)
     const serverTimeMs = Date.now()
+    const simStartedAtPerfMs = performance.now()
     const output = this.simulation.tick(this.inputQueue, serverTimeMs)
+    this.performanceSimDurationMs += performance.now() - simStartedAtPerfMs
+
+    const broadcastStartedAtPerfMs = performance.now()
+    if (output.playerDeltas.length > 0) {
+      this.pendingPlayerDeltaBatches.push([...output.playerDeltas])
+    }
+    if (output.fireballDeltas.length > 0 || output.fireballRemovedIds.length > 0) {
+      this.pendingFireballBatches.push({
+        deltas: output.fireballDeltas,
+        removedIds: output.fireballRemovedIds,
+      })
+    }
 
     if (
-      output.playerDeltas.length > 0 ||
-      output.fireballDeltas.length > 0 ||
-      output.fireballRemovedIds.length > 0
+      this.hasPendingVisualBatches() &&
+      this.shouldFlushVisualBatches(serverTimeMs)
     ) {
-      if (output.playerDeltas.length > 0) {
-        this.broadcast(RoomEvent.PlayerBatchUpdate, {
-          deltas: output.playerDeltas,
-          removedIds: [],
-          seq: 0,
-          serverTimeMs,
-        })
-      }
-      if (output.fireballDeltas.length > 0 || output.fireballRemovedIds.length > 0) {
-        this.broadcast(RoomEvent.FireballBatchUpdate, {
-          deltas: output.fireballDeltas,
-          removedIds: output.fireballRemovedIds,
-          seq: 0,
-        })
-      }
+      this.flushPendingVisualBatches(serverTimeMs)
+    } else if (output.playerDeltas.length > 0) {
+      this.sendOwnerAckDeltas(output.playerDeltas, serverTimeMs)
     }
 
     for (const launch of output.fireballLaunches) {
@@ -2080,6 +2482,8 @@ export class GameLobbyRoom extends Room {
     if (output.matchEnded) {
       this.transitionToScoreboard(output.matchEnded.reason, output.matchEnded.entries)
     }
+    this.performanceBroadcastDurationMs += performance.now() - broadcastStartedAtPerfMs
+    this.maybeBroadcastServerPerformanceStatus(serverTimeMs)
   }
 
   /**

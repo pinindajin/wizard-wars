@@ -17,6 +17,8 @@ import { summarizePayload } from "@/shared/logging/sanitize"
 /** Reconnect window in ms. Colyseus will attempt reconnect within this window. */
 const RECONNECT_WINDOW_MS = 60_000
 
+export type ConnectionHealth = "connected" | "reconnecting" | "disconnected" | "error"
+
 /**
  * Options accepted when joining a Colyseus room.
  */
@@ -45,8 +47,10 @@ export class GameConnection {
   private readonly token: string
   private readonly messageHandlers = new Set<MessageHandler>()
   private readonly readyHandlers = new Set<() => void>()
+  private readonly connectionHealthHandlers = new Set<(health: ConnectionHealth) => void>()
   private readonly log = clientLogger.child({ area: "netcode" })
   private _adminClosing = false
+  private _connectionHealth: ConnectionHealth = "disconnected"
 
   constructor(args?: GameConnectionArgs) {
     this.client = new Client(args?.serverUrl ?? getColyseusUrl())
@@ -88,6 +92,21 @@ export class GameConnection {
     }
   }
 
+  /**
+   * Registers a callback for connection health changes.
+   *
+   * @param handler - Handler called whenever connection health changes.
+   * @returns Unsubscribe function.
+   */
+  onConnectionHealthChange(
+    handler: (health: ConnectionHealth) => void,
+  ): () => void {
+    this.connectionHealthHandlers.add(handler)
+    return () => {
+      this.connectionHealthHandlers.delete(handler)
+    }
+  }
+
   /** The active Colyseus Room instance, or null before connect(). */
   get room(): Room | null {
     return this._room
@@ -104,6 +123,7 @@ export class GameConnection {
     this.log.info({ event: "net.connect.start", roomId }, "Joining game room by id")
     try {
       this._room = await this.client.joinById(roomId, { token: this.token })
+      this.setConnectionHealth("connected")
       this.log.info(
         { event: "net.connect.success", roomId, sessionId: this._room.sessionId },
         "Joined game room",
@@ -135,6 +155,7 @@ export class GameConnection {
       const { token, lobbyId } = JSON.parse(raw) as { token: string; lobbyId: string }
       this.log.info({ event: "net.connect.start", roomId: lobbyId }, "Joining game room from sessionStorage")
       this._room = await this.client.joinById(lobbyId, { token })
+      this.setConnectionHealth("connected")
       this.log.info(
         { event: "net.connect.success", roomId: lobbyId, sessionId: this._room.sessionId },
         "Joined game room",
@@ -158,11 +179,13 @@ export class GameConnection {
       await this._room.leave()
       this._room = null
     }
+    this.setConnectionHealth("disconnected")
     this._ready = false
     this._lobbyPhase = null
     this._adminClosing = false
     this.messageHandlers.clear()
     this.readyHandlers.clear()
+    this.connectionHealthHandlers.clear()
   }
 
   /**
@@ -181,6 +204,11 @@ export class GameConnection {
   /** Whether the socket is currently connected. */
   isConnected(): boolean {
     return this._room !== null
+  }
+
+  /** Current coarse connection health. */
+  get connectionHealth(): ConnectionHealth {
+    return this._connectionHealth
   }
 
   /** Access to the underlying Colyseus session ID. */
@@ -329,6 +357,7 @@ export class GameConnection {
           "Game room left cleanly",
         )
         this._room = null
+        this.setConnectionHealth("disconnected")
         this._ready = false
         this._lobbyPhase = null
         this._adminClosing = false
@@ -344,7 +373,9 @@ export class GameConnection {
             { event: "net.reconnect.start", roomId: previousRoomId, sessionId: previousSessionId, code },
             "Unexpected room leave; attempting reconnect",
           )
+          this.setConnectionHealth("reconnecting")
           this._room = await this.client.reconnect(this._room.reconnectionToken, RECONNECT_WINDOW_MS)
+          this.setConnectionHealth("connected")
           this.log.info(
             { event: "net.reconnect.success", roomId: this._room.roomId, sessionId: this._room.sessionId },
             "Reconnected to game room",
@@ -354,6 +385,7 @@ export class GameConnection {
       } catch (err) {
         this.log.warn({ event: "net.reconnect.failed", err, code }, "Reconnect failed")
         this._room = null
+        this.setConnectionHealth("disconnected")
         this._ready = false
         this._lobbyPhase = null
       }
@@ -364,9 +396,21 @@ export class GameConnection {
         { event: "net.connection.error", roomId: this._room?.roomId, sessionId: this._room?.sessionId, code, message },
         "Game room connection error",
       )
+      this.setConnectionHealth("error")
       this._ready = false
       this._lobbyPhase = null
     })
+  }
+
+  /**
+   * Updates connection health and notifies subscribers once per transition.
+   *
+   * @param health - New connection health value.
+   */
+  private setConnectionHealth(health: ConnectionHealth): void {
+    if (this._connectionHealth === health) return
+    this._connectionHealth = health
+    this.connectionHealthHandlers.forEach((handler) => handler(health))
   }
 
   private send(

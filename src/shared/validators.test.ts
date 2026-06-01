@@ -1,13 +1,19 @@
 import { describe, it, expect } from "vitest"
 import {
   signupUsernameSchema,
-  loginUsernameSchema,
   chatMessagePayloadSchema,
   playerInputPayloadSchema,
   parseGameStateSyncPayload,
   parsePlayerDeathPayload,
+  parseServerPerformanceStatusPayload,
 } from "@/shared/validators"
-import type { GameStateSyncPayload, PlayerDeathPayload } from "@/shared/types"
+import type {
+  GameStateSyncPayload,
+  PlayerDeathPayload,
+  ServerPerformanceStatusPayload,
+} from "@/shared/types"
+import { WsEvent } from "@/shared/events"
+import { RoomEvent, roomToWsEvent } from "@/shared/roomEvents"
 
 function validAbilityStates() {
   return {
@@ -109,7 +115,8 @@ describe("playerInputPayloadSchema", () => {
   })
 
   it("requires clientSendTimeMs to be present", () => {
-    const { clientSendTimeMs: _drop, ...withoutTime } = validInput
+    const withoutTime: Partial<typeof validInput> = { ...validInput }
+    delete withoutTime.clientSendTimeMs
     expect(playerInputPayloadSchema.safeParse(withoutTime).success).toBe(false)
   })
 
@@ -123,6 +130,49 @@ describe("playerInputPayloadSchema", () => {
     expect(
       playerInputPayloadSchema.safeParse({ ...validInput, clientSendTimeMs: Number.NaN }).success,
     ).toBe(false)
+  })
+})
+
+describe("ServerPerformanceStatus protocol", () => {
+  const validStatus: ServerPerformanceStatusPayload = {
+    serverTimeMs: 1_700_000_000_000,
+    degraded: true,
+    reasons: ["dropped_debt", "catch_up", "input_queue_drops"],
+    metrics: {
+      windowMs: 1_000,
+      droppedDebtMs: 16.67,
+      catchUpCallbacks: 2,
+      inputQueueDrops: 1,
+      simDurationMs: 5,
+      broadcastDurationMs: 3,
+      eventLoopLagMs: 20,
+      processCpuPercent: 85,
+      heapUsedBytes: 1024,
+      rssBytes: 2048,
+      activeRooms: 1,
+      connectedClients: 2,
+    },
+  }
+
+  it("bridges the server performance room event to the websocket event", () => {
+    expect(RoomEvent.ServerPerformanceStatus).toBe("server_performance_status")
+    expect(WsEvent.ServerPerformanceStatus).toBe("SERVER_PERFORMANCE_STATUS")
+    expect(roomToWsEvent[RoomEvent.ServerPerformanceStatus]).toBe(
+      WsEvent.ServerPerformanceStatus,
+    )
+  })
+
+  it("parses valid server performance status payloads", () => {
+    expect(parseServerPerformanceStatusPayload(validStatus)).toEqual(validStatus)
+  })
+
+  it("rejects unknown server performance status reasons", () => {
+    expect(() =>
+      parseServerPerformanceStatusPayload({
+        ...validStatus,
+        reasons: ["mystery"],
+      } as never),
+    ).toThrow()
   })
 })
 

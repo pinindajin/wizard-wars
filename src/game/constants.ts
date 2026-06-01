@@ -41,3 +41,15 @@ export const WW_MINIMAP_CORNER_REGISTRY_KEY = "wwMinimapCorner"
  * preload hooks and on completion.
  */
 export const WW_LOADER_STATUS_REGISTRY_KEY = "wwLoaderStatus"
+
+/**
+ * Phaser registry key for the React performance-indicator correction bridge.
+ */
+export const WW_PREDICTION_CORRECTION_CALLBACK_REGISTRY_KEY =
+  "wwPredictionCorrectionCallback"
+
+/**
+ * Phaser registry key for the React active-input bridge used by stale connection checks.
+ */
+export const WW_ACTIVE_LOCAL_INPUT_CALLBACK_REGISTRY_KEY =
+  "wwActiveLocalInputCallback"

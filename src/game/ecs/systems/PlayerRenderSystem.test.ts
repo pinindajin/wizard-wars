@@ -279,6 +279,25 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     }
   })
 
+  it("reports local reconciliation corrections to the runtime bridge", () => {
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    const corrections: string[] = []
+    sys.localPlayerId = "p1"
+    sys.setPredictionCorrectionHandler((correction) => {
+      corrections.push(correction)
+    })
+    sys.applyFullSync(sync([snap({ id: 1, playerId: "p1", x: 10, y: 10 })]))
+
+    sys.onLocalAck(1, {
+      x: 200,
+      y: 200,
+      lastProcessedInputSeq: 0,
+    })
+
+    expect(corrections).toEqual(["snap"])
+  })
+
   it("renders remote players from the interpolation buffer after a snapshot", () => {
     const { scene, group } = mockSceneAndGroup()
     const sys = new PlayerRenderSystem(scene as never, group as never)

@@ -7,6 +7,7 @@ import {
   abilityStatesFromBatchDelta,
   abilityStatesFromFullSync,
   estimateServerNowMs,
+  playerBatchHasHudRelevantChanges,
   sampleServerClock,
 } from "./abilityRuntimeHudState"
 
@@ -135,5 +136,48 @@ describe("ability runtime HUD state", () => {
         entityToPlayer,
       ),
     ).toBe(current)
+  })
+
+  it("detects HUD-relevant local batch deltas without treating position ACKs as HUD work", () => {
+    const entityToPlayer = new Map([[1, "local"]])
+
+    expect(
+      playerBatchHasHudRelevantChanges(
+        {
+          deltas: [{ id: 1, x: 10, y: 20, lastProcessedInputSeq: 5 }],
+          removedIds: [],
+          seq: 0,
+          serverTimeMs: 1,
+        },
+        "local",
+        entityToPlayer,
+      ),
+    ).toBe(false)
+
+    expect(
+      playerBatchHasHudRelevantChanges(
+        {
+          deltas: [{ id: 1, lives: 0 }],
+          removedIds: [],
+          seq: 0,
+          serverTimeMs: 1,
+        },
+        "local",
+        entityToPlayer,
+      ),
+    ).toBe(true)
+
+    expect(
+      playerBatchHasHudRelevantChanges(
+        {
+          deltas: [{ id: 1, abilityStates: abilityStates(0) }],
+          removedIds: [],
+          seq: 0,
+          serverTimeMs: 1,
+        },
+        "local",
+        entityToPlayer,
+      ),
+    ).toBe(true)
   })
 })
