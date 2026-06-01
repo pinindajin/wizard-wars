@@ -1,15 +1,28 @@
 import { addComponent, hasComponent } from "bitecs"
 import { describe, expect, it } from "vitest"
 
-import { ABILITY_INDEX, AbilitySlots, Health, JumpArc, Position } from "@/server/game/components"
+import {
+  ABILITY_INDEX,
+  AbilitySlots,
+  Health,
+  JumpArc,
+  Position,
+  TerrainState,
+  TERRAIN_KIND,
+} from "@/server/game/components"
+import { computePlayerAnimState } from "@/server/game/playerAnimState"
+import { computePlayerMoveState } from "@/server/game/playerMoveState"
 import { createGameSimulation } from "@/server/game/simulation"
 import {
+  ARENA_CLIFF_COLLIDERS,
   ARENA_HEIGHT,
+  ARENA_LAVA_COLLIDERS,
   ARENA_NON_WALKABLE_COLLIDERS,
   ARENA_WIDTH,
   ARENA_WORLD_COLLIDERS,
 } from "@/shared/balance-config/arena"
 import { PLAYER_WORLD_COLLISION_FOOTPRINT } from "@/shared/balance-config/combat"
+import { terrainStateAtPosition } from "@/shared/collision/terrainHazards"
 import { canOccupyWorldPosition } from "@/shared/collision/worldCollision"
 import type { PlayerInputPayload } from "@/shared/types"
 
@@ -143,5 +156,89 @@ describe("jump pit landing (integration)", () => {
         ARENA_WORLD_COLLIDERS,
       ),
     ).toBe(true)
+  })
+
+  it("blocks grounded lava players from walking onto land", () => {
+    const sim = createGameSimulation(Date.now())
+    const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    const lava = ARENA_LAVA_COLLIDERS.find((rect) => rect.x === 320 && rect.y === 128)!
+
+    Position.x[eid] = lava.x + lava.width / 2
+    Position.y[eid] = lava.y + lava.height / 2
+    TerrainState.kind[eid] = TERRAIN_KIND.lava
+
+    for (let tick = 0; tick < 40; tick++) {
+      sim.tick(queue(input({ right: true, seq: tick })), Date.now() + tick * 16.667)
+    }
+
+    expect(terrainStateAtPosition(Position.x[eid], Position.y[eid])).toBe("lava")
+    expect(Position.x[eid]).toBeLessThan(lava.x + lava.width)
+    expect(TerrainState.kind[eid]).toBe(TERRAIN_KIND.lava)
+  })
+
+  it("lets a lava player escape to land with jump", () => {
+    const sim = createGameSimulation(Date.now())
+    const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    const lava = ARENA_LAVA_COLLIDERS.find((rect) => rect.x === 320 && rect.y === 128)!
+
+    AbilitySlots.slot1[eid] = ABILITY_INDEX.jump
+    Position.x[eid] = lava.x + lava.width / 2
+    Position.y[eid] = lava.y + lava.height / 2
+    TerrainState.kind[eid] = TERRAIN_KIND.lava
+
+    for (let tick = 0; tick < 90; tick++) {
+      sim.tick(
+        queue(input({ up: true, abilitySlot: tick === 0 ? 1 : null, seq: tick })),
+        Date.now() + tick * 16.667,
+      )
+      if (!hasComponent(sim.world, eid, JumpArc) && tick > 2) break
+    }
+
+    expect(hasComponent(sim.world, eid, JumpArc)).toBe(false)
+    expect(terrainStateAtPosition(Position.x[eid], Position.y[eid])).toBe("land")
+    expect(TerrainState.kind[eid]).toBe(TERRAIN_KIND.land)
+  })
+
+  it("keeps a jump landing in lava from walking out afterward", () => {
+    const sim = createGameSimulation(Date.now())
+    const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    const lava = ARENA_LAVA_COLLIDERS.find((rect) => rect.x === 320 && rect.y === 128)!
+
+    Position.x[eid] = lava.x + lava.width / 2
+    Position.y[eid] = lava.y + lava.height / 2
+    addComponent(sim.world, eid, JumpArc)
+    JumpArc.z[eid] = 1
+    JumpArc.vz[eid] = -1000
+
+    sim.tick(new Map(), Date.now())
+    expect(TerrainState.kind[eid]).toBe(TERRAIN_KIND.lava)
+
+    for (let tick = 1; tick < 41; tick++) {
+      sim.tick(queue(input({ right: true, seq: tick })), Date.now() + tick * 16.667)
+    }
+
+    expect(terrainStateAtPosition(Position.x[eid], Position.y[eid])).toBe("lava")
+    expect(Position.x[eid]).toBeLessThan(lava.x + lava.width)
+    expect(TerrainState.kind[eid]).toBe(TERRAIN_KIND.lava)
+  })
+
+  it("turns a cliff landing into rooted stumble slide", () => {
+    const sim = createGameSimulation(Date.now())
+    const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    const cliff = ARENA_CLIFF_COLLIDERS[0]!
+
+    Position.x[eid] = cliff.x + cliff.width / 2
+    Position.y[eid] = cliff.y + cliff.height / 2
+    const startX = Position.x[eid]
+    addComponent(sim.world, eid, JumpArc)
+    JumpArc.z[eid] = 1
+    JumpArc.vz[eid] = -1000
+
+    sim.tick(new Map(), Date.now())
+
+    expect(TerrainState.kind[eid]).toBe(TERRAIN_KIND.cliff)
+    expect(computePlayerAnimState(sim.world, eid)).toBe("stumble")
+    expect(computePlayerMoveState(sim.world, eid)).toBe("rooted")
+    expect(Position.x[eid]).toBeGreaterThan(startX)
   })
 })

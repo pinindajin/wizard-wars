@@ -73,6 +73,17 @@ export function jumpPhysicsSystem(ctx: SimCtx): void {
 
     const gx = Position.x[eid]
     const gy = Position.y[eid]
+    const terrainState = terrainStateAtPosition(gx, gy)
+    if (terrainState === "lava") {
+      TerrainState.kind[eid] = TERRAIN_KIND.lava
+      continue
+    }
+    if (terrainState === "cliff") {
+      TerrainState.kind[eid] = TERRAIN_KIND.cliff
+      TerrainState.lavaDamageCarry[eid] = 0
+      continue
+    }
+
     const landing = resolveJumpLandingWithGrace(
       gx,
       gy,
@@ -89,17 +100,6 @@ export function jumpPhysicsSystem(ctx: SimCtx): void {
       Position.x[eid] = landing.x
       Position.y[eid] = landing.y
       TerrainState.kind[eid] = TERRAIN_KIND.land
-      TerrainState.lavaDamageCarry[eid] = 0
-      continue
-    }
-
-    const terrainState = terrainStateAtPosition(gx, gy)
-    if (terrainState === "lava") {
-      TerrainState.kind[eid] = TERRAIN_KIND.lava
-      continue
-    }
-    if (terrainState === "cliff") {
-      TerrainState.kind[eid] = TERRAIN_KIND.cliff
       TerrainState.lavaDamageCarry[eid] = 0
       continue
     }

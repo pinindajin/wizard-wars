@@ -18,7 +18,10 @@ import {
   worldStepFromIntent,
 } from "@/shared/movementIntent"
 import { moveWithinWorld } from "@/shared/collision/worldCollision"
-import { worldCollidersForPlayerState } from "@/shared/collision/worldCollidersForPlayer"
+import {
+  worldCandidateGateForPlayerState,
+  worldCollidersForPlayerState,
+} from "@/shared/collision/worldCollidersForPlayer"
 import type { PlayerInputPayload, PlayerMoveState, PlayerTerrainState } from "@/shared/types"
 
 import type { LocalInputHistory } from "../../network/LocalInputHistory"
@@ -122,6 +125,7 @@ function stepReplay(
   const colliders = worldCollidersForPlayerState(ctx.jumpZ, ctx.terrainState, {
     jumpStartedInLava: ctx.jumpStartedInLava,
   })
+  const candidateGate = worldCandidateGateForPlayerState(ctx.jumpZ, ctx.terrainState)
   const moved = moveWithinWorld(
     x,
     y,
@@ -130,6 +134,7 @@ function stepReplay(
     PLAYER_WORLD_COLLISION_FOOTPRINT,
     ARENA_BOUNDS,
     colliders,
+    candidateGate,
   )
   return { x: moved.x, y: moved.y }
 }

@@ -44,6 +44,9 @@ export type WorldMoveResult = {
   readonly blockedY: boolean
 }
 
+/** Extra candidate predicate for movement rules that are not rectangle blockers. */
+export type WorldCandidateGate = (x: number, y: number) => boolean
+
 /** Context used to resolve a just-landed jump near a hazard edge. */
 export type JumpLandingGraceContext = {
   readonly movementX: number
@@ -166,6 +169,7 @@ export function canOccupyWorldPosition(
  * @param footprint - Axis-aligned oval footprint radii in world pixels.
  * @param bounds - Arena bounds `{ width, height }`.
  * @param worldColliders - Static world rectangles.
+ * @param canOccupyCandidate - Optional extra legality check after bounds/colliders pass.
  * @returns Final legal position plus the actually-applied movement delta.
  */
 export function moveWithinWorld(
@@ -176,9 +180,11 @@ export function moveWithinWorld(
   footprint: WorldCollisionFootprint,
   bounds: ArenaBounds,
   worldColliders: readonly ArenaPropColliderRect[],
+  canOccupyCandidate?: WorldCandidateGate,
 ): WorldMoveResult {
   const canMoveTo = (nextX: number, nextY: number) =>
-    canOccupyWorldPosition(nextX, nextY, footprint, bounds, worldColliders)
+    canOccupyWorldPosition(nextX, nextY, footprint, bounds, worldColliders) &&
+    (canOccupyCandidate?.(nextX, nextY) ?? true)
 
   if (canMoveTo(x + stepX, y + stepY)) {
     return {

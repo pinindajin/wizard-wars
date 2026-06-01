@@ -62,6 +62,7 @@ function emptyCtx(overrides: Partial<SimCtx> = {}): SimCtx {
     killStats: new Map(),
     activeMeleeAttacks: new Map(),
     activeCombatTelegraphs: new Map(),
+    invulnerableExpiresAtTickByEntity: new Map(),
     playerDeltas: [],
     fireballDeltas: [],
     ...overrides,
@@ -117,6 +118,21 @@ describe("terrain hazards", () => {
     const total = ctx.damageRequests.reduce((sum, req) => sum + req.damage, 0)
     expect(total).toBe(LAVA_DAMAGE_PER_SECOND)
     expect(ctx.damageRequests.every((req) => req.killerAbilityId === "lava")).toBe(true)
+  })
+
+  it("continues processing players after earlier land and lava players", () => {
+    const lava = ARENA_LAVA_COLLIDERS[1]!
+    const world = createWorld()
+    const landPlayer = addPlayerAt(world, 1000, 1000)
+    const lavaPlayer = addPlayerAt(world, lava.x + lava.width / 2, lava.y + lava.height / 2)
+    const laterLavaPlayer = addPlayerAt(world, lava.x + lava.width / 2, lava.y + lava.height / 2)
+    const ctx = emptyCtx({ world })
+
+    terrainHazardSystem(ctx)
+
+    expect(TerrainState.kind[landPlayer]).toBe(TERRAIN_KIND.land)
+    expect(TerrainState.kind[lavaPlayer]).toBe(TERRAIN_KIND.lava)
+    expect(TerrainState.kind[laterLavaPlayer]).toBe(TERRAIN_KIND.lava)
   })
 
   it("slides cliff players toward lava without damage", () => {

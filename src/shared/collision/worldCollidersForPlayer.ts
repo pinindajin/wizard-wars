@@ -6,7 +6,10 @@
 
 import { ARENA_PROP_COLLIDERS, ARENA_WORLD_COLLIDERS } from "../balance-config/arena"
 import type { ArenaPropColliderRect } from "./worldCollision"
-export { worldCollidersForPlayerState } from "./terrainHazards"
+export {
+  worldCandidateGateForPlayerState,
+  worldCollidersForPlayerState,
+} from "./terrainHazards"
 
 /**
  * Returns the rectangle list used for player world collision given authoritative jump height.

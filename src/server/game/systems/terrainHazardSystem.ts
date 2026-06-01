@@ -57,23 +57,23 @@ export function terrainHazardSystem(ctx: SimCtx): void {
           killerAbilityId: "lava",
         })
       }
-      return
+      continue
     }
 
     TerrainState.lavaDamageCarry[eid] = 0
     if (sampled !== "cliff" && TerrainState.kind[eid] !== TERRAIN_KIND.cliff) {
       TerrainState.kind[eid] = TERRAIN_KIND.land
-      return
+      continue
     }
 
     TerrainState.kind[eid] = TERRAIN_KIND.cliff
     const target = nearestLavaCenter(Position.x[eid], Position.y[eid])
-    if (!target) return
+    if (!target) continue
 
     const dx = target.x - Position.x[eid]
     const dy = target.y - Position.y[eid]
     const dist = Math.sqrt(dx * dx + dy * dy)
-    if (dist <= 0.001) return
+    if (dist <= 0.001) continue
 
     const step = CLIFF_SLIDE_SPEED_PX_PER_SEC * TICK_DT_SEC
     const applied = Math.min(step, dist)

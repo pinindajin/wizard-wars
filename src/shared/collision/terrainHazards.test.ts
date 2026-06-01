@@ -2,20 +2,24 @@ import { describe, expect, it } from "vitest"
 
 import {
   ARENA_CLIFF_COLLIDERS,
+  ARENA_HEIGHT,
   ARENA_LAVA_COLLIDERS,
   ARENA_LAVA_TRANSITION_COLLIDERS,
   ARENA_NON_HAZARD_COLLIDERS,
   ARENA_PROP_COLLIDERS,
+  ARENA_WIDTH,
   ARENA_WORLD_COLLIDERS,
 } from "../balance-config/arena"
+import { PLAYER_WORLD_COLLISION_FOOTPRINT } from "../balance-config/combat"
 import {
+  groundedLavaCandidateCanOccupy,
   nearestLavaCenter,
   pointInRects,
   rectsOverlap,
   terrainStateAtPosition,
   worldCollidersForPlayerState,
 } from "./terrainHazards"
-import type { ArenaPropColliderRect } from "./worldCollision"
+import { canOccupyWorldPosition, type ArenaPropColliderRect } from "./worldCollision"
 
 const rect: ArenaPropColliderRect = { x: 10, y: 20, width: 30, height: 40 }
 
@@ -51,7 +55,7 @@ describe("terrain geometry helpers", () => {
 })
 
 describe("worldCollidersForPlayerState", () => {
-  it("blocks all hazards on land and submerged lava path adds transition strips", () => {
+  it("blocks all hazards on land and submerged lava path does not eject valid lava", () => {
     expect(worldCollidersForPlayerState(0, "land")).toBe(ARENA_WORLD_COLLIDERS)
 
     const lavaColliders = worldCollidersForPlayerState(0, "lava")
@@ -60,10 +64,21 @@ describe("worldCollidersForPlayerState", () => {
     expect(lavaColliders).toEqual(expect.arrayContaining([...ARENA_PROP_COLLIDERS]))
     expect(lavaColliders).toEqual(expect.arrayContaining([...ARENA_CLIFF_COLLIDERS]))
     if (ARENA_LAVA_TRANSITION_COLLIDERS.length > 0) {
-      expect(lavaColliders).toEqual(
-        expect.arrayContaining([...ARENA_LAVA_TRANSITION_COLLIDERS]),
-      )
+      expect(lavaColliders).not.toContain(ARENA_LAVA_TRANSITION_COLLIDERS[0])
     }
+
+    const bounds = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
+    expect(
+      canOccupyWorldPosition(
+        2208,
+        96,
+        PLAYER_WORLD_COLLISION_FOOTPRINT,
+        bounds,
+        lavaColliders,
+      ),
+    ).toBe(true)
+    expect(groundedLavaCandidateCanOccupy(2208, 96)).toBe(true)
+    expect(groundedLavaCandidateCanOccupy(425, 160)).toBe(false)
   })
 
   it("uses props only in the last ticks of an arc (low jumpZ) from land", () => {

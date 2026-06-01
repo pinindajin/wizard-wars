@@ -35,7 +35,10 @@ import {
   worldStepFromIntent,
 } from "@/shared/movementIntent"
 import { moveWithinWorld } from "@/shared/collision/worldCollision"
-import { worldCollidersForPlayerState } from "@/shared/collision/worldCollidersForPlayer"
+import {
+  worldCandidateGateForPlayerState,
+  worldCollidersForPlayerState,
+} from "@/shared/collision/worldCollidersForPlayer"
 import {
   ClientPosition,
   ClientPlayerState,
@@ -888,6 +891,10 @@ export class PlayerRenderSystem {
       const colliders = worldCollidersForPlayerState(state.jumpZ ?? 0, state.terrainState, {
         jumpStartedInLava: state.jumpStartedInLava ?? false,
       })
+      const candidateGate = worldCandidateGateForPlayerState(
+        state.jumpZ ?? 0,
+        state.terrainState,
+      )
       if (
         this._canPredictMovement(state, localMoveIntent, castMoveMult)
       ) {
@@ -907,6 +914,7 @@ export class PlayerRenderSystem {
           PLAYER_WORLD_COLLISION_FOOTPRINT,
           ARENA_BOUNDS,
           colliders,
+          candidateGate,
         )
         entry.simCurrX = moved.x
         entry.simCurrY = moved.y
@@ -930,6 +938,7 @@ export class PlayerRenderSystem {
           PLAYER_WORLD_COLLISION_FOOTPRINT,
           ARENA_BOUNDS,
           colliders,
+          candidateGate,
         )
         entry.simCurrX = moved.x
         entry.simCurrY = moved.y

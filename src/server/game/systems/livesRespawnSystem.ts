@@ -106,7 +106,13 @@ function respawnPlayer(
   spawnY: number,
   facingAngle: number,
 ): void {
-  const { world, currentTick, entityPlayerMap, playerRespawns } = ctx
+  const {
+    world,
+    currentTick,
+    entityPlayerMap,
+    playerRespawns,
+    invulnerableExpiresAtTickByEntity,
+  } = ctx
 
   Position.x[eid] = spawnX
   Position.y[eid] = spawnY
@@ -139,14 +145,7 @@ function respawnPlayer(
   AbilityRuntime.jumpRechargeReadyTick[eid] = 0
   AbilityRuntime.jumpRechargeEndsAtMs[eid] = 0
 
-  // Invulnerability expiry stored in ticks
-  // We store it on a side field; InvulnerableTag is just a presence marker.
-  // Use Cooldown as proxy: track invuln via a dedicated expiry check.
-  // Since there's no dedicated numeric field on InvulnerableTag, we track
-  // expiry in the simulation ctx's prevPlayerStates or via a tick comparison.
-  // For simplicity, use a module-level WeakMap-like side map via ctx.
-  // NOTE: InvulnerableTag is removed by invulnerabilityCleanup (below).
-  setInvulnExpiry(eid, currentTick + INVULNERABLE_TICKS)
+  invulnerableExpiresAtTickByEntity.set(eid, currentTick + INVULNERABLE_TICKS)
 
   const userId = entityPlayerMap.get(eid) ?? ""
   playerRespawns.push({
@@ -157,29 +156,26 @@ function respawnPlayer(
   })
 }
 
-// ── Invulnerability expiry side-storage ──────────────────────────────────
-// Cannot store per-entity tick on InvulnerableTag (pure tag, no fields).
-// Use a module-level Map (eid → expiresAtTick).
-const invulnExpiry = new Map<number, number>()
-
-function setInvulnExpiry(eid: number, tick: number): void {
-  invulnExpiry.set(eid, tick)
-}
-
 /**
  * Runs the lives-respawn system for one tick.
  *
  * @param ctx - Shared simulation context.
  */
 export function livesRespawnSystem(ctx: SimCtx): void {
-  const { world, currentTick, serverTimeMs, entityPlayerMap, playerDeaths } = ctx
+  const {
+    world,
+    currentTick,
+    serverTimeMs,
+    entityPlayerMap,
+    playerDeaths,
+    invulnerableExpiresAtTickByEntity,
+  } = ctx
 
   // ── 1. Remove expired invulnerability ────────────────────────────────
-  for (const [eid, expiresAt] of invulnExpiry) {
-    if (currentTick >= expiresAt && hasComponent(world, eid, InvulnerableTag)) {
-      removeComponent(world, eid, InvulnerableTag)
-      invulnExpiry.delete(eid)
-    }
+  for (const [eid, expiresAt] of invulnerableExpiresAtTickByEntity) {
+    if (currentTick < expiresAt) continue
+    if (hasComponent(world, eid, InvulnerableTag)) removeComponent(world, eid, InvulnerableTag)
+    invulnerableExpiresAtTickByEntity.delete(eid)
   }
 
   // ── 2. Fire pending respawn timers ────────────────────────────────────
