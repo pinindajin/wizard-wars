@@ -1,6 +1,9 @@
 import { addComponent, hasComponent } from "bitecs"
 import { describe, it, expect } from "vitest"
-import { createGameSimulation } from "@/server/game/simulation"
+import {
+  HELD_INPUT_STALE_TICKS,
+  createGameSimulation,
+} from "@/server/game/simulation"
 import {
   ARENA_CENTER_X,
   ARENA_CENTER_Y,
@@ -308,6 +311,34 @@ describe("movement system", () => {
     const step1 = spawnY - y1
     const step2 = y1 - y2
     expect(Math.abs(step2 - step1)).toBeLessThan(0.01)
+  })
+
+  it("expires retained held movement after the stale-input threshold", () => {
+    const sim = createGameSimulation(Date.now())
+    sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    const eid = sim.playerEntityMap.get("user1")!
+
+    sim.tick(
+      queueMap([["user1", emptyInput({ up: true, seq: 901 })]]),
+      Date.now() + 17,
+    )
+
+    let previousY = sim
+      .buildGameStateSyncPayload(Date.now())
+      .players.find((pl) => pl.id === eid)!.y
+    for (let i = 0; i < HELD_INPUT_STALE_TICKS + 2; i++) {
+      sim.tick(new Map(), Date.now() + (i + 2) * 17)
+      const nextY = sim
+        .buildGameStateSyncPayload(Date.now())
+        .players.find((pl) => pl.id === eid)!.y
+      previousY = nextY
+    }
+
+    sim.tick(new Map(), Date.now() + 999)
+    const finalY = sim
+      .buildGameStateSyncPayload(Date.now())
+      .players.find((pl) => pl.id === eid)!.y
+    expect(finalY).toBeCloseTo(previousY, 5)
   })
 
   it("clears edge-triggered abilitySlot on empty-queue ticks (cause C guard)", () => {

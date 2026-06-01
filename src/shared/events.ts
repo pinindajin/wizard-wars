@@ -63,6 +63,9 @@ export const WsEvent = {
 
   // Resync
   RequestResync: "REQUEST_RESYNC",
+
+  // Performance / diagnostics
+  ServerPerformanceStatus: "SERVER_PERFORMANCE_STATUS",
 } as const
 
 export type WsEvent = (typeof WsEvent)[keyof typeof WsEvent]

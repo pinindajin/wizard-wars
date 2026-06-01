@@ -246,6 +246,35 @@ export type FireballBatchUpdatePayload = {
   readonly seq: number
 }
 
+/** Server loop degradation reasons surfaced to the performance indicator UI. */
+export type ServerPerformanceStatusReason =
+  | "dropped_debt"
+  | "catch_up"
+  | "input_queue_drops"
+  | "event_loop_lag"
+  | "broadcast_slow"
+
+/** Aggregated server loop and process metrics for one status window. */
+export type ServerPerformanceStatusPayload = {
+  readonly serverTimeMs: number
+  readonly degraded: boolean
+  readonly reasons: readonly ServerPerformanceStatusReason[]
+  readonly metrics: {
+    readonly windowMs: number
+    readonly droppedDebtMs: number
+    readonly catchUpCallbacks: number
+    readonly inputQueueDrops: number
+    readonly simDurationMs: number
+    readonly broadcastDurationMs: number
+    readonly eventLoopLagMs: number
+    readonly processCpuPercent: number
+    readonly heapUsedBytes: number
+    readonly rssBytes: number
+    readonly activeRooms: number
+    readonly connectedClients: number
+  }
+}
+
 /** Server → all: play a one-shot ability sound by manifest key. */
 export type AbilitySfxPayload = {
   readonly sfxKey: string

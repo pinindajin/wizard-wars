@@ -59,6 +59,7 @@ When adding a room event, update the shared event constant, payload type, valida
 | `combat_telegraph_end` | Server to clients | End/cancel a client-rendered telegraph. |
 | `ability_sfx` | Server to clients | Ability sound cue. |
 | `damage_float` | Server to clients | Floating combat text and local hit feedback. |
+| `server_performance_status` | Server to clients | Server loop health snapshot for client warning indicators and operator diagnostics. |
 
 ## Shop Events
 
@@ -83,4 +84,7 @@ When adding a room event, update the shared event constant, payload type, valida
 - Server remains authoritative for match state and combat outcomes.
 - Clients may render telegraphs and VFX from server-seeded timing/geometry, but they do not decide damage.
 - Input payloads are sequence-numbered, validated by the room, queued per player, capped, and consumed by the simulation at most once per player per tick.
+- Player and fireball movement deltas may be cadence-limited by `WW_NET_SEND_RATE_HZ`, but owner ACKs, full syncs, death/respawn, shop/economy, ability SFX, combat events, and performance status are sent immediately.
+- `lastProcessedInputSeq` advancement is not allowed to wait for the visual delta cadence; when needed, the owner receives a minimal ACK-only player delta.
+- `server_performance_status` is emitted on degraded-state changes, or at most once per second while degraded. Its `server_cpu` client indicator name is retained for parity with Seas of Aleryn, but the signal means "server loop degraded".
 - Full hydration should include enough lobby/shop/game state for reconnect and resync paths to recover without relying on stale client memory.

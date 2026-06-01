@@ -17,10 +17,12 @@ import type {
   GameStateSyncPayload,
   PlayerBatchUpdatePayload,
   ShopStatePayload,
+  ServerPerformanceStatusPayload,
 } from "@/shared/types"
 
 import WaitingForPlayersOverlay from "./WaitingForPlayersOverlay"
 import LoadingOverlay from "./LoadingOverlay"
+import PerformanceIssueOverlay from "./PerformanceIssueOverlay"
 import CountdownOverlay from "./CountdownOverlay"
 import { useLoaderStatus } from "./useLoaderStatus"
 import {
@@ -54,9 +56,11 @@ import {
   abilityStatesFromBatchDelta,
   abilityStatesFromFullSync,
   estimateServerNowMs,
+  playerBatchHasHudRelevantChanges,
   sampleServerClock,
   type ServerClockSample,
 } from "./abilityRuntimeHudState"
+import { usePerformanceIndicators } from "./usePerformanceIndicators"
 
 const KILL_FEED_MAX = 5
 const KILL_FEED_TTL_MS = 8000
@@ -83,6 +87,7 @@ export default function LobbyGameHost({ lobbyId }: LobbyGameHostProps) {
         className="flex h-screen w-screen flex-col items-center justify-center gap-4 bg-black px-6 text-center text-gray-200"
         data-testid="game-connect-error"
       >
+        <PerformanceIssueOverlay issues={["lost_connection"]} />
         <p className="max-w-md text-sm">{providerError}</p>
         <Link
           href="/browse"
@@ -135,6 +140,15 @@ function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) 
     minimapCornerRef.current = minimapCorner
   }, [minimapCorner])
   const { connection, lobbyState, adminClosing, localPlayerId } = useLobbyConnection()
+  const {
+    issues: performanceIssues,
+    recordActiveLocalInput,
+    recordAuthoritativeMessage,
+    recordPredictionCorrection,
+    setConnectionHealth,
+    setForcedIssues,
+    setServerPerformanceStatus,
+  } = usePerformanceIndicators()
   const isHost =
     localPlayerId != null && localPlayerId === lobbyState?.hostPlayerId
 
@@ -200,6 +214,24 @@ function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) 
 
   useEffect(() => {
     if (!connection) return
+    return connection.onConnectionHealthChange((health) => {
+      setConnectionHealth(health)
+    })
+  }, [connection, setConnectionHealth])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const w = window as Window & {
+      __wwSetPerformanceIssues?: typeof setForcedIssues
+    }
+    w.__wwSetPerformanceIssues = setForcedIssues
+    return () => {
+      delete w.__wwSetPerformanceIssues
+    }
+  }, [setForcedIssues])
+
+  useEffect(() => {
+    if (!connection) return
     const unsub = connection.onMessage((message) => {
       switch (message.type) {
         case WsEvent.LobbyState: {
@@ -233,6 +265,7 @@ function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) 
           break
         case WsEvent.GameStateSync: {
           const payload = message.payload as GameStateSyncPayload
+          recordAuthoritativeMessage()
           const clock = sampleServerClock(payload.serverTimeMs)
           setServerClockSample(clock)
           setServerNowMs(estimateServerNowMs(clock))
@@ -251,6 +284,13 @@ function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) 
         }
         case WsEvent.PlayerBatchUpdate: {
           const payload = message.payload as PlayerBatchUpdatePayload
+          recordAuthoritativeMessage()
+          const hudRelevant = playerBatchHasHudRelevantChanges(
+            payload,
+            localPlayerId,
+            entityToPlayerRef.current,
+          )
+          if (!hudRelevant) break
           const clock = sampleServerClock(payload.serverTimeMs)
           setServerClockSample(clock)
           setServerNowMs(estimateServerNowMs(clock))
@@ -265,6 +305,10 @@ function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) 
             if (d.lives === 0) setIsSpectating(true)
             else setIsSpectating(false)
           }
+          break
+        }
+        case WsEvent.ServerPerformanceStatus: {
+          setServerPerformanceStatus(message.payload as ServerPerformanceStatusPayload)
           break
         }
         case WsEvent.PlayerDeath: {
@@ -304,7 +348,12 @@ function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) 
       }
     })
     return unsub
-  }, [connection, localPlayerId])
+  }, [
+    connection,
+    localPlayerId,
+    recordAuthoritativeMessage,
+    setServerPerformanceStatus,
+  ])
 
   useEffect(() => {
     if (!connection) return
@@ -331,6 +380,8 @@ function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) 
           localPlayerId,
           keybinds: keybindsRef.current,
           minimapCorner: minimapCornerRef.current,
+          onPredictionCorrection: recordPredictionCorrection,
+          onActiveLocalInput: recordActiveLocalInput,
         })
         destroyGame = mounted.destroy
         setGameHost(mounted.game as unknown as LoaderStatusHost)
@@ -352,7 +403,14 @@ function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) 
       setGameHost(null)
       destroyGame?.()
     }
-  }, [connection, localPlayerId, lobbyId, mountGeneration])
+  }, [
+    connection,
+    localPlayerId,
+    lobbyId,
+    mountGeneration,
+    recordActiveLocalInput,
+    recordPredictionCorrection,
+  ])
 
   /**
    * Keeps the Phaser registry aligned when the provider applies async keybind
@@ -472,6 +530,8 @@ function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) 
         ref={containerRef}
         className="absolute inset-0"
       />
+
+      <PerformanceIssueOverlay issues={performanceIssues} />
 
       {phaserError && (
         <div

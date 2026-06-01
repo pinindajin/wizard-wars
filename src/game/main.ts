@@ -3,15 +3,18 @@ import type Phaser from "phaser"
 import type { KeybindConfig } from "@/shared/gameKeybinds/lobbyKeybinds"
 import type { MinimapCorner } from "@/shared/settings-config"
 import type { GameConnection } from "./network/GameConnection"
+import type { RubberbandCorrection } from "@/shared/performanceIndicators"
 
 import { createGame } from "./index"
 
 /** Re-export for Arena and tests. */
 export {
+  WW_ACTIVE_LOCAL_INPUT_CALLBACK_REGISTRY_KEY,
   WW_GAME_CONNECTION_REGISTRY_KEY,
   WW_KEYBIND_CONFIG_REGISTRY_KEY,
   WW_LOCAL_PLAYER_ID_REGISTRY_KEY,
   WW_MINIMAP_CORNER_REGISTRY_KEY,
+  WW_PREDICTION_CORRECTION_CALLBACK_REGISTRY_KEY,
 } from "./constants"
 
 /** Options passed from the React host component to mount the Phaser game. */
@@ -32,6 +35,10 @@ export interface MountGameOptions {
   keybinds?: KeybindConfig
   /** Persisted compact minimap corner. */
   minimapCorner?: MinimapCorner
+  /** Reports local prediction reconciliation classifications to React. */
+  onPredictionCorrection?: (correction: RubberbandCorrection) => void
+  /** Reports active local input samples to React for stale-message gating. */
+  onActiveLocalInput?: () => void
 }
 
 /** Handle returned from {@link mountGame}. */
@@ -51,7 +58,17 @@ export type MountedGame = {
  * @returns An object containing the `game` handle and a `destroy` teardown fn.
  */
 export const mountGame = (options: MountGameOptions): MountedGame => {
-  const { containerId, lobbyId, token, gameConnection, localPlayerId, keybinds, minimapCorner } = options
+  const {
+    containerId,
+    lobbyId,
+    token,
+    gameConnection,
+    localPlayerId,
+    keybinds,
+    minimapCorner,
+    onPredictionCorrection,
+    onActiveLocalInput,
+  } = options
 
   sessionStorage.setItem(
     "ww_join_options",
@@ -63,6 +80,8 @@ export const mountGame = (options: MountGameOptions): MountedGame => {
     localPlayerId,
     keybinds,
     minimapCorner,
+    onPredictionCorrection,
+    onActiveLocalInput,
   })
 
   if (typeof window !== "undefined") {

@@ -2,14 +2,17 @@ import Phaser from "phaser"
 
 import { gameConfig } from "./config"
 import {
+  WW_ACTIVE_LOCAL_INPUT_CALLBACK_REGISTRY_KEY,
   WW_GAME_CONNECTION_REGISTRY_KEY,
   WW_KEYBIND_CONFIG_REGISTRY_KEY,
   WW_LOCAL_PLAYER_ID_REGISTRY_KEY,
   WW_MINIMAP_CORNER_REGISTRY_KEY,
+  WW_PREDICTION_CORRECTION_CALLBACK_REGISTRY_KEY,
 } from "./constants"
 import type { KeybindConfig } from "@/shared/gameKeybinds/lobbyKeybinds"
 import type { MinimapCorner } from "@/shared/settings-config"
 import type { GameConnection } from "./network/GameConnection"
+import type { RubberbandCorrection } from "@/shared/performanceIndicators"
 
 /** Optional injection of the layout-owned Colyseus adapter (single session per user). */
 export type CreateGameOptions = {
@@ -20,6 +23,10 @@ export type CreateGameOptions = {
   readonly keybinds?: KeybindConfig
   /** Persisted compact minimap corner from React settings. */
   readonly minimapCorner?: MinimapCorner
+  /** Reports local prediction reconciliation classifications to React. */
+  readonly onPredictionCorrection?: (correction: RubberbandCorrection) => void
+  /** Reports active local input samples to React for stale-message gating. */
+  readonly onActiveLocalInput?: () => void
 }
 
 /**
@@ -37,8 +44,15 @@ export const createGame = (
   const localPlayerId = options?.localPlayerId
   const keybinds = options?.keybinds
   const minimapCorner = options?.minimapCorner
+  const onPredictionCorrection = options?.onPredictionCorrection
+  const onActiveLocalInput = options?.onActiveLocalInput
   const needRegistryBoot =
-    injected != null || localPlayerId != null || keybinds != null || minimapCorner != null
+    injected != null ||
+    localPlayerId != null ||
+    keybinds != null ||
+    minimapCorner != null ||
+    onPredictionCorrection != null ||
+    onActiveLocalInput != null
   const callbacks: Phaser.Types.Core.GameConfig["callbacks"] = {
     preBoot: (game) => {
       if (needRegistryBoot) {
@@ -53,6 +67,18 @@ export const createGame = (
         }
         if (minimapCorner) {
           game.registry.set(WW_MINIMAP_CORNER_REGISTRY_KEY, minimapCorner)
+        }
+        if (onPredictionCorrection) {
+          game.registry.set(
+            WW_PREDICTION_CORRECTION_CALLBACK_REGISTRY_KEY,
+            onPredictionCorrection,
+          )
+        }
+        if (onActiveLocalInput) {
+          game.registry.set(
+            WW_ACTIVE_LOCAL_INPUT_CALLBACK_REGISTRY_KEY,
+            onActiveLocalInput,
+          )
         }
       }
       ;(globalThis as unknown as { __wwGame?: Phaser.Game }).__wwGame = game
