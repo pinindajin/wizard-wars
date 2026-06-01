@@ -9,6 +9,7 @@ import {
   WW_KEYBIND_CONFIG_REGISTRY_KEY,
 } from "@/game/constants"
 import type { PlayerInputPayload } from "@/shared/types"
+import type { MoveIntent } from "@/shared/movementIntent"
 
 import { keyStringToKeyCode } from "./keyStringToKeyCode"
 
@@ -188,6 +189,23 @@ export class KeyboardController {
       abilityTargetY: worldPointer.y,
       useQuickItemSlot,
       seq,
+    }
+  }
+
+  /**
+   * Collects only held movement state for local prediction and audio.
+   *
+   * @returns Current movement intent without consuming edge-triggered actions or sequence numbers.
+   */
+  collectMoveIntent(): MoveIntent {
+    if (!this._enabled || this._isUiInputFocused() || this._isGameplayInputBlocked()) {
+      return { up: false, down: false, left: false, right: false }
+    }
+    return {
+      up: this._anyDown("moveUp"),
+      down: this._anyDown("moveDown"),
+      left: this._anyDown("moveLeft"),
+      right: this._anyDown("moveRight"),
     }
   }
 

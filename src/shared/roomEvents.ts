@@ -66,6 +66,9 @@ export const RoomEvent = {
 
   // Resync
   RequestResync: "request_resync",
+
+  // Performance / diagnostics
+  ServerPerformanceStatus: "server_performance_status",
 } as const
 
 export type RoomEvent = (typeof RoomEvent)[keyof typeof RoomEvent]

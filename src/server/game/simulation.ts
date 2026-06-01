@@ -93,6 +93,10 @@ import { computePlayerMoveState } from "./playerMoveState"
 import { playerDeltaSystem } from "./systems/playerDeltaSystem"
 import { projectileDeltaSystem } from "./systems/projectileDeltaSystem"
 import { abilityRuntimeStatesForPlayer } from "./abilityRuntimeState"
+import { TICK_MS } from "../../shared/balance-config/rendering"
+
+export const HELD_INPUT_STALE_MS = 250
+export const HELD_INPUT_STALE_TICKS = Math.ceil(HELD_INPUT_STALE_MS / TICK_MS)
 
 /**
  * Maps internal last-processed input seq to wire payloads (nonnegative int).
@@ -373,6 +377,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
   const prevFireballStates = new Map<number, FireballPrevState>()
   const killStats = new Map<string, KillStats>()
   const lastProcessedInputSeqByPlayer = new Map<string, number>()
+  const lastInputTickByPlayer = new Map<string, number>()
   const activeMeleeAttacks = new Map<number, ActiveMeleeAttack>()
   const activeCombatTelegraphs = new Map<string, CombatTelegraphStartPayload>()
   const invulnerableExpiresAtTickByEntity = new Map<number, number>()
@@ -521,6 +526,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     })
     // `-1`: no input processed yet; first client `seq: 0` is accepted in `tick`.
     lastProcessedInputSeqByPlayer.set(userId, -1)
+    lastInputTickByPlayer.set(userId, currentTick)
 
     return eid
   }
@@ -544,6 +550,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     playerHeroIdMap.delete(userId)
     prevPlayerStates.delete(eid)
     lastProcessedInputSeqByPlayer.delete(userId)
+    lastInputTickByPlayer.delete(userId)
     activeMeleeAttacks.delete(eid)
     invulnerableExpiresAtTickByEntity.delete(eid)
     for (const [id, telegraph] of activeCombatTelegraphs) {
@@ -568,6 +575,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
    */
   function resetClientInputStream(userId: string): void {
     lastProcessedInputSeqByPlayer.set(userId, -1)
+    lastInputTickByPlayer.set(userId, currentTick)
   }
 
   // ── buildGameStateSyncPayload ───────────────────────────────────────
@@ -696,7 +704,30 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
         inputMap.set(userId, next)
         queue.shift()
         lastProcessedInputSeqByPlayer.set(userId, next.seq)
+        lastInputTickByPlayer.set(userId, currentTick)
       }
+    }
+
+    for (const userId of playerEntityMap.keys()) {
+      if (inputMap.has(userId)) continue
+      const lastInputTick = lastInputTickByPlayer.get(userId) ?? currentTick
+      if (currentTick - lastInputTick <= HELD_INPUT_STALE_TICKS) continue
+      inputMap.set(userId, {
+        up: false,
+        down: false,
+        left: false,
+        right: false,
+        abilitySlot: null,
+        abilityTargetX: 0,
+        abilityTargetY: 0,
+        weaponPrimary: false,
+        weaponSecondary: false,
+        weaponTargetX: 0,
+        weaponTargetY: 0,
+        useQuickItemSlot: null,
+        seq: Math.max(0, lastProcessedInputSeqByPlayer.get(userId) ?? 0),
+        clientSendTimeMs: serverTimeMs,
+      })
     }
 
     const ctx: SimCtx = {

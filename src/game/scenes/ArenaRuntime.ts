@@ -22,8 +22,11 @@ import {
   WW_GAME_CONNECTION_REGISTRY_KEY,
   WW_DEBUG_MODE_REGISTRY_KEY,
   WW_LOCAL_PLAYER_ID_REGISTRY_KEY,
+  WW_PREDICTION_CORRECTION_CALLBACK_REGISTRY_KEY,
+  WW_ACTIVE_LOCAL_INPUT_CALLBACK_REGISTRY_KEY,
 } from "../constants"
 import type { MinimapCorner } from "@/shared/settings-config"
+import type { RubberbandCorrection } from "@/shared/performanceIndicators"
 import { GameConnection } from "../network/GameConnection"
 import { PlayerRenderSystem } from "../ecs/systems/PlayerRenderSystem"
 import { ProjectileRenderSystem } from "../ecs/systems/ProjectileRenderSystem"
@@ -47,17 +50,42 @@ type ArenaRuntimeVisuals = {
   arenaMap: Phaser.Tilemaps.Tilemap
 }
 
-const INACTIVE_PLAYER_INPUT = {
+const INACTIVE_MOVE_INTENT = {
   up: false,
   down: false,
   left: false,
   right: false,
-  abilitySlot: null,
-  abilityTargetX: 0,
-  abilityTargetY: 0,
-  useQuickItemSlot: null,
-  seq: 0,
 } as const
+
+type FullInputForActivity = {
+  readonly up: boolean
+  readonly down: boolean
+  readonly left: boolean
+  readonly right: boolean
+  readonly abilitySlot: number | null
+  readonly useQuickItemSlot: number | null
+  readonly weaponPrimary: boolean
+  readonly weaponSecondary: boolean
+}
+
+/**
+ * Returns whether an outbound input contains local player activity.
+ *
+ * @param input - Full player input payload shape relevant to activity detection.
+ * @returns True when the input should count for connection stale-message gating.
+ */
+function isActiveLocalInput(input: FullInputForActivity): boolean {
+  return (
+    input.up ||
+    input.down ||
+    input.left ||
+    input.right ||
+    input.weaponPrimary ||
+    input.weaponSecondary ||
+    input.abilitySlot !== null ||
+    input.useQuickItemSlot !== null
+  )
+}
 
 /**
  * Wall-clock fields injected into the outgoing payload at send time. Keeping
@@ -111,6 +139,7 @@ export class ArenaRuntime {
   private soundManager!: SoundManager
   private walkFootstep!: WalkFootstepController
   private readonly log = clientLogger.child({ area: "netcode" })
+  private activeLocalInputHandler?: () => void
 
   /** Whether the match has started (MatchGo received). */
   private matchStarted = false
@@ -173,6 +202,14 @@ export class ArenaRuntime {
    */
   private _createSystems(): void {
     this.playerRenderSystem = new PlayerRenderSystem(this.scene, this.playerGroup)
+    this.playerRenderSystem.setPredictionCorrectionHandler(
+      this.scene.game.registry.get(
+        WW_PREDICTION_CORRECTION_CALLBACK_REGISTRY_KEY,
+      ) as ((correction: RubberbandCorrection) => void) | undefined,
+    )
+    this.activeLocalInputHandler = this.scene.game.registry.get(
+      WW_ACTIVE_LOCAL_INPUT_CALLBACK_REGISTRY_KEY,
+    ) as (() => void) | undefined
     this.networkSyncSystem = new NetworkSyncSystem({
       onBatchReceived: () => {
         this.playerRenderSystem.markBatchReceived()
@@ -471,16 +508,19 @@ export class ArenaRuntime {
   update(_time: number, delta: number): void {
     if (!this.matchStarted) return
 
-    const keyboardInput = this.connection.isConnected()
-      ? this.keyboardController.collectInput(this.connection.nextSeq())
-      : INACTIVE_PLAYER_INPUT
+    const localMoveIntent = this.connection.isConnected()
+      ? this.keyboardController.collectMoveIntent()
+      : INACTIVE_MOVE_INTENT
 
     // Run one local send per committed prediction tick (fixed 60 Hz),
     // not per render frame. Threading the callback through
     // `PlayerRenderSystem.update` keeps the accumulator + sim + send
     // loop synchronized inside a single system boundary.
-    this.playerRenderSystem.update(delta, keyboardInput, () => {
+    this.playerRenderSystem.update(delta, localMoveIntent, () => {
       if (!this.connection.isConnected()) return
+      const keyboardInput = this.keyboardController.collectInput(
+        this.connection.nextSeq(),
+      )
       const mouseInput = this.mouseController.collectInput()
       const fullInput = {
         ...keyboardInput,
@@ -489,8 +529,11 @@ export class ArenaRuntime {
       }
       this.playerRenderSystem.localInputHistory.append(fullInput)
       this.connection.sendPlayerInput(fullInput)
+      if (isActiveLocalInput(fullInput)) {
+        this.activeLocalInputHandler?.()
+      }
     })
-    this.walkFootstep.tick(delta, keyboardInput)
+    this.walkFootstep.tick(delta, localMoveIntent)
     this.debugOverlaySystem.update()
     this.projectileRenderSystem.update(delta)
     this.combatTelegraphRenderSystem.update(
