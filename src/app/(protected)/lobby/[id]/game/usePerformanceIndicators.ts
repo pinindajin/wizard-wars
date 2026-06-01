@@ -10,6 +10,7 @@ import type {
 import {
   LOST_CONNECTION_STALE_MS,
   PERFORMANCE_ISSUE_ORDER,
+  SERVER_PERFORMANCE_STATUS_STALE_MS,
   createRubberbandState,
   isAuthoritativeMessageStale,
   isRubberbanding,
@@ -36,6 +37,11 @@ type UsePerformanceIndicatorsResult = {
   readonly setForcedIssues: (issues: readonly PerformanceIssueKind[]) => void
 }
 
+type ReceivedServerPerformanceStatus = {
+  readonly status: ServerPerformanceStatusPayload
+  readonly receivedAtMs: number
+}
+
 /**
  * Returns active performance issues in stable visual priority order.
  *
@@ -56,8 +62,8 @@ function orderedIssues(
 export function usePerformanceIndicators(): UsePerformanceIndicatorsResult {
   const [connectionHealth, setConnectionHealth] =
     useState<ConnectionHealth>("connected")
-  const [serverStatus, setServerPerformanceStatus] =
-    useState<ServerPerformanceStatusPayload | null>(null)
+  const [serverStatus, setServerStatus] =
+    useState<ReceivedServerPerformanceStatus | null>(null)
   const [rubberbandState, setRubberbandState] = useState<RubberbandState>(() =>
     createRubberbandState(),
   )
@@ -104,6 +110,15 @@ export function usePerformanceIndicators(): UsePerformanceIndicatorsResult {
     [],
   )
 
+  const setServerPerformanceStatus = useCallback(
+    (status: ServerPerformanceStatusPayload | null) => {
+      const now = Date.now()
+      setClockNowMs(now)
+      setServerStatus(status ? { status, receivedAtMs: now } : null)
+    },
+    [],
+  )
+
   const setForcedIssues = useCallback(
     (issues: readonly PerformanceIssueKind[]) => {
       setForcedIssuesState(orderedIssues(new Set(issues)))
@@ -124,7 +139,11 @@ export function usePerformanceIndicators(): UsePerformanceIndicatorsResult {
     if (connectionHealth !== "connected" || staleWhileActive) {
       active.add("lost_connection")
     }
-    if (serverStatus?.degraded) {
+    const hasFreshServerDegradation =
+      serverStatus?.status.degraded === true &&
+      clockNowMs - serverStatus.receivedAtMs <= SERVER_PERFORMANCE_STATUS_STALE_MS
+
+    if (hasFreshServerDegradation) {
       active.add("server_cpu")
     }
     if (isRubberbanding(rubberbandState, clockNowMs)) {

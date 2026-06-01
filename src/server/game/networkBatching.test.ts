@@ -26,4 +26,28 @@ describe("server network batching", () => {
       removedIds: [4, 5],
     })
   })
+
+  it("drops stale fireball removals when a later delta reuses the id", () => {
+    const merged = mergeFireballBatch([
+      { deltas: [], removedIds: [7] },
+      { deltas: [{ id: 7, x: 25, y: 35 }], removedIds: [] },
+    ])
+
+    expect(merged).toEqual({
+      deltas: [{ id: 7, x: 25, y: 35 }],
+      removedIds: [],
+    })
+  })
+
+  it("drops stale fireball deltas when a later removal wins for the id", () => {
+    const merged = mergeFireballBatch([
+      { deltas: [{ id: 8, x: 50, y: 60 }], removedIds: [] },
+      { deltas: [], removedIds: [8] },
+    ])
+
+    expect(merged).toEqual({
+      deltas: [],
+      removedIds: [8],
+    })
+  })
 })

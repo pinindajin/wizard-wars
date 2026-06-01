@@ -2217,6 +2217,18 @@ export class GameLobbyRoom extends Room {
   }
 
   /**
+   * Returns whether any cadence-limited room-wide visual payload is queued.
+   *
+   * @returns True when a player or projectile batch is waiting to flush.
+   */
+  private hasPendingVisualBatches(): boolean {
+    return (
+      this.pendingPlayerDeltaBatches.length > 0 ||
+      this.pendingFireballBatches.length > 0
+    )
+  }
+
+  /**
    * Sends owner-only ACK deltas so reconciliation is not delayed by visual cadence.
    *
    * @param playerDeltas - Player deltas from the current simulation tick.
@@ -2357,25 +2369,23 @@ export class GameLobbyRoom extends Room {
     this.performanceSimDurationMs += performance.now() - simStartedAtPerfMs
 
     const broadcastStartedAtPerfMs = performance.now()
+    if (output.playerDeltas.length > 0) {
+      this.pendingPlayerDeltaBatches.push([...output.playerDeltas])
+    }
+    if (output.fireballDeltas.length > 0 || output.fireballRemovedIds.length > 0) {
+      this.pendingFireballBatches.push({
+        deltas: output.fireballDeltas,
+        removedIds: output.fireballRemovedIds,
+      })
+    }
+
     if (
-      output.playerDeltas.length > 0 ||
-      output.fireballDeltas.length > 0 ||
-      output.fireballRemovedIds.length > 0
+      this.hasPendingVisualBatches() &&
+      this.shouldFlushVisualBatches(serverTimeMs)
     ) {
-      if (output.playerDeltas.length > 0) {
-        this.pendingPlayerDeltaBatches.push([...output.playerDeltas])
-      }
-      if (output.fireballDeltas.length > 0 || output.fireballRemovedIds.length > 0) {
-        this.pendingFireballBatches.push({
-          deltas: output.fireballDeltas,
-          removedIds: output.fireballRemovedIds,
-        })
-      }
-      if (this.shouldFlushVisualBatches(serverTimeMs)) {
-        this.flushPendingVisualBatches(serverTimeMs)
-      } else {
-        this.sendOwnerAckDeltas(output.playerDeltas, serverTimeMs)
-      }
+      this.flushPendingVisualBatches(serverTimeMs)
+    } else if (output.playerDeltas.length > 0) {
+      this.sendOwnerAckDeltas(output.playerDeltas, serverTimeMs)
     }
 
     for (const launch of output.fireballLaunches) {

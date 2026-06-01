@@ -31,6 +31,7 @@ export function mergeFireballBatch(
   const removedIds = new Set<number>()
   for (const batch of batches) {
     for (const delta of batch.deltas) {
+      removedIds.delete(delta.id)
       deltas.set(delta.id, delta)
     }
     for (const id of batch.removedIds) {

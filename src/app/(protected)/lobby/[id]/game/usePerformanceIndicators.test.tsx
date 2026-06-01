@@ -72,4 +72,24 @@ describe("usePerformanceIndicators", () => {
 
     vi.useRealTimers()
   })
+
+  it("clears stale degraded server status when reports stop arriving", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(1_000)
+
+    const { result } = renderHook(() => usePerformanceIndicators())
+
+    act(() => {
+      result.current.setServerPerformanceStatus(degradedStatus())
+    })
+    expect(result.current.issues).toEqual(["server_cpu"])
+
+    act(() => {
+      vi.setSystemTime(4_001)
+      vi.advanceTimersByTime(3_001)
+    })
+    expect(result.current.issues).toEqual([])
+
+    vi.useRealTimers()
+  })
 })

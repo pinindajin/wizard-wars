@@ -244,6 +244,9 @@ function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) 
             setCountdownStart(null)
             setKillFeedRows([])
           }
+          if (payload.phase !== "IN_PROGRESS") {
+            setServerPerformanceStatus(null)
+          }
           break
         }
         case WsEvent.MatchCountdownStart: {
@@ -262,6 +265,7 @@ function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) 
           setAbilityStates(EMPTY_ABILITY_RUNTIME_STATES)
           setServerClockSample(null)
           setServerNowMs(Date.now())
+          setServerPerformanceStatus(null)
           break
         case WsEvent.GameStateSync: {
           const payload = message.payload as GameStateSyncPayload
@@ -330,6 +334,7 @@ function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) 
           setScoreboardEndReason(payload.endReason)
           setPhase("SCOREBOARD")
           setKillFeedRows([])
+          setServerPerformanceStatus(null)
           break
         }
         case WsEvent.ShopState: {
