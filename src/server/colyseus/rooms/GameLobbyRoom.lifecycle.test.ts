@@ -52,7 +52,10 @@ describe("GameLobbyRoom lifecycle", () => {
   it("disconnects immediately when final in-progress player cleanup leaves the room empty", () => {
     const room = roomWithClients(0)
     const roomInternals = getRoomInternals(room)
-    const removePlayer = vi.fn()
+    const playerEntityMap = new Map([["player-1", 1]])
+    const removePlayer = vi.fn((playerId: string) => {
+      playerEntityMap.delete(playerId)
+    })
     const clearLoop = vi.fn()
     const disconnect = vi.fn()
     Object.assign(roomInternals as object, {
@@ -61,7 +64,7 @@ describe("GameLobbyRoom lifecycle", () => {
       lobbyPhase: "IN_PROGRESS",
       simulation: {
         removePlayer,
-        playerEntityMap: new Map([["player-1", 1]]),
+        playerEntityMap,
       },
     })
 
@@ -75,10 +78,16 @@ describe("GameLobbyRoom lifecycle", () => {
     expect(disconnect).toHaveBeenCalledOnce()
   })
 
-  it("keeps an in-progress match alive when another client remains connected", () => {
-    const room = roomWithClients(1)
+  it("keeps an empty in-progress room alive while another disconnected player remains in reconnect grace", () => {
+    const room = roomWithClients(0)
     const roomInternals = getRoomInternals(room)
-    const removePlayer = vi.fn()
+    const playerEntityMap = new Map([
+      ["expired-player", 1],
+      ["grace-player", 2],
+    ])
+    const removePlayer = vi.fn((playerId: string) => {
+      playerEntityMap.delete(playerId)
+    })
     const clearLoop = vi.fn()
     const disconnect = vi.fn()
     Object.assign(roomInternals as object, {
@@ -87,7 +96,35 @@ describe("GameLobbyRoom lifecycle", () => {
       lobbyPhase: "IN_PROGRESS",
       simulation: {
         removePlayer,
-        playerEntityMap: new Map([["expired-player", 1]]),
+        playerEntityMap,
+      },
+    })
+
+    roomInternals.removeInProgressPlayerState("expired-player")
+
+    expect(removePlayer).toHaveBeenCalledWith("expired-player")
+    expect(playerEntityMap.has("grace-player")).toBe(true)
+    expect(clearLoop).not.toHaveBeenCalled()
+    expect(roomInternals.simulation).not.toBeNull()
+    expect(disconnect).not.toHaveBeenCalled()
+  })
+
+  it("keeps an in-progress match alive when another client remains connected", () => {
+    const room = roomWithClients(1)
+    const roomInternals = getRoomInternals(room)
+    const playerEntityMap = new Map([["expired-player", 1]])
+    const removePlayer = vi.fn((playerId: string) => {
+      playerEntityMap.delete(playerId)
+    })
+    const clearLoop = vi.fn()
+    const disconnect = vi.fn()
+    Object.assign(roomInternals as object, {
+      disconnect,
+      gameLoopTimer: { clear: clearLoop },
+      lobbyPhase: "IN_PROGRESS",
+      simulation: {
+        removePlayer,
+        playerEntityMap,
       },
     })
 

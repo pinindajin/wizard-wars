@@ -1026,7 +1026,13 @@ export class GameLobbyRoom extends Room {
     this.highestAcceptedSeqByPlayer.delete(playerId)
     this.economies.delete(playerId)
 
-    if (this.lobbyPhase === "IN_PROGRESS" && this.clients.length === 0) {
+    const hasRemainingSimulationPlayers =
+      (this.simulation?.playerEntityMap.size ?? 0) > 0
+    if (
+      this.lobbyPhase === "IN_PROGRESS" &&
+      this.clients.length === 0 &&
+      !hasRemainingSimulationPlayers
+    ) {
       this.gameLoopTimer?.clear()
       this.gameLoopTimer = null
       this.clearMatchRuntimeState()
