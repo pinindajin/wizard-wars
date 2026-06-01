@@ -560,6 +560,20 @@ export class GameLobbyRoom extends Room {
     if (this.isAdminClosing) {
       throw new Error("lobby is closing")
     }
+    if (this.isTerminalInProgressRoom()) {
+      logger.warn(
+        {
+          event: "room.auth.rejected",
+          area: "netcode",
+          side: "server",
+          roomId: this.roomId,
+          phase: this.lobbyPhase,
+          reason: "terminal_in_progress_room",
+        },
+        "[GameLobbyRoom] auth rejected",
+      )
+      throw new Error("match is no longer available")
+    }
 
     const token = options?.token
     if (!token) {
@@ -649,6 +663,23 @@ export class GameLobbyRoom extends Room {
    * @param auth - Verified auth data returned from `onAuth`.
    */
   onJoin(client: Client, _options: unknown, auth: AuthUser): void {
+    if (this.isTerminalInProgressRoom()) {
+      logger.warn(
+        {
+          event: "room.join.rejected",
+          area: "netcode",
+          side: "server",
+          roomId: this.roomId,
+          playerId: auth.sub,
+          sessionId: client.sessionId,
+          phase: this.lobbyPhase,
+          reason: "terminal_in_progress_room",
+        },
+        "[GameLobbyRoom] join rejected",
+      )
+      throw new Error("match is no longer available")
+    }
+
     if (this.disposalGraceTimer) {
       this.disposalGraceTimer.clear()
       this.disposalGraceTimer = null
@@ -999,12 +1030,29 @@ export class GameLobbyRoom extends Room {
       this.gameLoopTimer?.clear()
       this.gameLoopTimer = null
       this.clearMatchRuntimeState()
-      this.disposalGraceTimer = nativeSetTimeout(() => {
-        if (this.clients.length === 0) {
-          this.disconnect()
-        }
-      }, LOBBY_DISPOSAL_GRACE_MS)
+      this.disposalGraceTimer?.clear()
+      this.disposalGraceTimer = null
+      logger.info(
+        {
+          event: "room.in_progress.empty_terminal",
+          area: "netcode",
+          side: "server",
+          roomId: this.roomId,
+          phase: this.lobbyPhase,
+          expiredPlayerId: playerId,
+        },
+        "[GameLobbyRoom] empty in-progress room closed",
+      )
+      void this.disconnect()
     }
+  }
+
+  /**
+   * Returns true when the room is still labelled in-progress but no match
+   * runtime exists, so late joins cannot be safely hydrated.
+   */
+  private isTerminalInProgressRoom(): boolean {
+    return this.lobbyPhase === "IN_PROGRESS" && this.simulation === null
   }
 
   /**
