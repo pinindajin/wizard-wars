@@ -33,7 +33,7 @@ import {
 import type { SimCtx, DeathEvent } from "../simulation"
 import { DAMAGE_FLASH_MS, JUMP_AIRBORNE_COLLIDER_EPSILON_PX } from "../../../shared/balance-config"
 import { getBehaviorAnimationConfig } from "../../../shared/balance-config/animationConfig"
-import { terrainStateAtPosition } from "../../../shared/collision/terrainHazards"
+import { terrainStateAtPositionIndexed } from "../../../shared/collision/indexedWorldCollision"
 
 /**
  * Reclassifies terrain immediately when external knockback cancels an airborne jump.
@@ -41,7 +41,7 @@ import { terrainStateAtPosition } from "../../../shared/collision/terrainHazards
  * @param eid - Player entity whose jump was cancelled.
  */
 function reclassifyTerrainAfterJumpCancel(eid: number): void {
-  const sampled = terrainStateAtPosition(Position.x[eid], Position.y[eid])
+  const sampled = terrainStateAtPositionIndexed(Position.x[eid], Position.y[eid])
   if (sampled === "lava") {
     TerrainState.kind[eid] = TERRAIN_KIND.lava
     return

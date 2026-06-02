@@ -50,11 +50,9 @@ import {
   TICK_DT_SEC,
 } from "../../../shared/balance-config"
 import { ABILITY_CONFIGS } from "../../../shared/balance-config/abilities"
-import { moveWithinWorld } from "../../../shared/collision/worldCollision"
-import {
-  worldCandidateGateForPlayerState,
-  worldCollidersForPlayerState,
-} from "../../../shared/collision/worldCollidersForPlayer"
+import { moveWithinWorldIndexed } from "../../../shared/collision/indexedWorldCollision"
+import { terrainColliderSetForPlayerState } from "../../../shared/collision/arenaSpatialIndexes"
+import { worldCandidateGateForPlayerState } from "../../../shared/collision/worldCollidersForPlayer"
 import { normalizedMoveFromWASD } from "../../../shared/movementIntent"
 
 const ARENA_BOUNDS = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
@@ -123,18 +121,18 @@ export function movementSystem(ctx: SimCtx): void {
     const terrainState = TERRAIN_KIND_TO_STATE[TerrainState.kind[eid]] ?? "land"
     const jumpStartedInLava =
       hasComponent(world, eid, JumpArc) && JumpArc.startedInLava[eid] === 1
-    const worldColliders = worldCollidersForPlayerState(jumpZForCollider, terrainState, {
+    const worldColliderSet = terrainColliderSetForPlayerState(jumpZForCollider, terrainState, {
       jumpStartedInLava,
     })
     const candidateGate = worldCandidateGateForPlayerState(jumpZForCollider, terrainState)
-    const moved = moveWithinWorld(
+    const moved = moveWithinWorldIndexed(
       Position.x[eid],
       Position.y[eid],
       stepX,
       stepY,
       PLAYER_WORLD_COLLISION_FOOTPRINT,
       ARENA_BOUNDS,
-      worldColliders,
+      worldColliderSet,
       candidateGate,
     )
     Velocity.vx[eid] = moved.appliedDx / TICK_DT_SEC
