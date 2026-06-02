@@ -23,11 +23,9 @@ import {
   PLAYER_WORLD_COLLISION_FOOTPRINT,
   TICK_DT_SEC,
 } from "../../../shared/balance-config"
-import { moveWithinWorld } from "../../../shared/collision/worldCollision"
-import {
-  worldCandidateGateForPlayerState,
-  worldCollidersForPlayerState,
-} from "../../../shared/collision/worldCollidersForPlayer"
+import { terrainColliderSetForPlayerState } from "../../../shared/collision/arenaSpatialIndexes"
+import { moveWithinWorldIndexed } from "../../../shared/collision/indexedWorldCollision"
+import { worldCandidateGateForPlayerState } from "../../../shared/collision/worldCollidersForPlayer"
 
 /** Pixels-per-second the knockback travels (budget drains at this rate). */
 const KNOCKBACK_SPEED_PPS = 800
@@ -50,18 +48,18 @@ function applyPlayerKnockbackStep(
   const jumpZ = hasComponent(world, eid, JumpArc) ? JumpArc.z[eid] : 0
   const terrainState = TERRAIN_KIND_TO_STATE[TerrainState.kind[eid]] ?? "land"
   const candidateGate = worldCandidateGateForPlayerState(jumpZ, terrainState)
-  const colliders = worldCollidersForPlayerState(jumpZ, terrainState, {
+  const colliderSet = terrainColliderSetForPlayerState(jumpZ, terrainState, {
     jumpStartedInLava:
       hasComponent(world, eid, JumpArc) && JumpArc.startedInLava[eid] === 1,
   })
-  const moved = moveWithinWorld(
+  const moved = moveWithinWorldIndexed(
     Position.x[eid],
     Position.y[eid],
     stepX,
     stepY,
     PLAYER_WORLD_COLLISION_FOOTPRINT,
     ARENA_BOUNDS,
-    colliders,
+    colliderSet,
     candidateGate,
   )
   Position.x[eid] = moved.x
