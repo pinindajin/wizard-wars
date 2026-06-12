@@ -1,5 +1,5 @@
 import { mkdirSync, readFileSync, writeFileSync, copyFileSync } from "node:fs"
-import { basename, dirname, resolve } from "node:path"
+import { basename, dirname, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
 import sharp from "sharp"
@@ -12,6 +12,18 @@ type RawImage = {
 
 type Rect = { x: number; y: number; width: number; height: number }
 type Component = Rect & { area: number }
+type Mask = {
+  readonly data: Uint8Array
+  readonly width: number
+  readonly height: number
+}
+type RegionClass = 0 | 1 | 2 | 3
+type ClassifiedGrid = {
+  readonly cells: Uint8Array
+  readonly cols: number
+  readonly rows: number
+  readonly cellSize: number
+}
 type PropDef = {
   readonly id: string
   readonly label: string
@@ -30,16 +42,23 @@ type Placement = {
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(SCRIPT_DIR, "..")
 
-const SOURCE_BASE = "C:/Users/pinin/Downloads/map-base.png"
-const SOURCE_OBJECTS = "C:/Users/pinin/Downloads/map-objects.png"
-const SOURCE_TARGET = "C:/Users/pinin/Downloads/map-with-objects.png"
-
 const ARENA_WIDTH = 1402
 const ARENA_HEIGHT = 1122
+const REGION_CELL_PX = 4
 const PROP_DIR = resolve(ROOT, "public/assets/sprites/arena-props")
 const MAP_DIR = resolve(ROOT, "public/assets/maps")
 const REVIEW_DIR = resolve(ROOT, "public/assets/arena-review/native-map")
+const SOURCE_IMAGE_DIR = resolve(REVIEW_DIR, "source-images")
+const MASK_DIR = resolve(REVIEW_DIR, "source-masks")
 const BASE_OUT = resolve(MAP_DIR, "arena-base.png")
+const SOURCE_BASE = process.env.WW_ARENA_SOURCE_BASE ?? resolve(SOURCE_IMAGE_DIR, "map-base.png")
+const SOURCE_OBJECTS = process.env.WW_ARENA_SOURCE_OBJECTS ?? resolve(SOURCE_IMAGE_DIR, "map-objects.png")
+const SOURCE_TARGET = process.env.WW_ARENA_SOURCE_TARGET ?? resolve(SOURCE_IMAGE_DIR, "map-with-objects.png")
+
+const REGION_NONE: RegionClass = 0
+const REGION_WALKABLE: RegionClass = 1
+const REGION_LAVA: RegionClass = 2
+const REGION_CLIFF: RegionClass = 3
 
 const PROP_IDS = [
   ["large-obelisk", "Large Obelisk"],
@@ -108,141 +127,464 @@ const PLACEMENTS: readonly Placement[] = [
   { propId: "lava-spire-cluster", x: 1240, y: 1008, scale: 0.28, flipX: true },
 ]
 
-function rectsOverlap(a: Rect, b: Rect): boolean {
+let WALKABLE_MASK = createMask()
+let LAVA_MASK = createMask()
+let CLIFF_MASK = createMask()
+let WALKABLE_RECTS: readonly Rect[] = []
+let LAVA_RECTS: readonly Rect[] = []
+let CLIFF_RECTS: readonly Rect[] = []
+
+function createMask(fill = 0): Mask {
+  return {
+    data: new Uint8Array(ARENA_WIDTH * ARENA_HEIGHT).fill(fill),
+    width: ARENA_WIDTH,
+    height: ARENA_HEIGHT,
+  }
+}
+
+function maskIndex(x: number, y: number): number {
+  return y * ARENA_WIDTH + x
+}
+
+function fillEllipse(mask: Mask, cx: number, cy: number, rx: number, ry: number): void {
+  const x0 = Math.max(0, Math.floor(cx - rx))
+  const x1 = Math.min(mask.width - 1, Math.ceil(cx + rx))
+  const y0 = Math.max(0, Math.floor(cy - ry))
+  const y1 = Math.min(mask.height - 1, Math.ceil(cy + ry))
+  const rxSq = rx * rx
+  const rySq = ry * ry
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      const dx = x - cx
+      const dy = y - cy
+      if ((dx * dx) / rxSq + (dy * dy) / rySq <= 1) {
+        mask.data[maskIndex(x, y)] = 1
+      }
+    }
+  }
+}
+
+function fillPolygon(mask: Mask, points: readonly { x: number; y: number }[]): void {
+  const minY = Math.max(0, Math.floor(Math.min(...points.map((p) => p.y))))
+  const maxY = Math.min(mask.height - 1, Math.ceil(Math.max(...points.map((p) => p.y))))
+  for (let y = minY; y <= maxY; y++) {
+    const intersections: number[] = []
+    for (let i = 0; i < points.length; i++) {
+      const a = points[i]!
+      const b = points[(i + 1) % points.length]!
+      if ((a.y <= y && b.y > y) || (b.y <= y && a.y > y)) {
+        intersections.push(a.x + ((y - a.y) * (b.x - a.x)) / (b.y - a.y))
+      }
+    }
+    intersections.sort((a, b) => a - b)
+    for (let i = 0; i < intersections.length; i += 2) {
+      const x0 = Math.max(0, Math.ceil(intersections[i] ?? 0))
+      const x1 = Math.min(mask.width - 1, Math.floor(intersections[i + 1] ?? -1))
+      for (let x = x0; x <= x1; x++) {
+        mask.data[maskIndex(x, y)] = 1
+      }
+    }
+  }
+}
+
+function fillRotatedRect(
+  mask: Mask,
+  cx: number,
+  cy: number,
+  width: number,
+  height: number,
+  degrees: number,
+): void {
+  const theta = (degrees * Math.PI) / 180
+  const cos = Math.cos(theta)
+  const sin = Math.sin(theta)
+  const hw = width / 2
+  const hh = height / 2
+  const corners = [
+    { x: -hw, y: -hh },
+    { x: hw, y: -hh },
+    { x: hw, y: hh },
+    { x: -hw, y: hh },
+  ].map((p) => ({
+    x: cx + p.x * cos - p.y * sin,
+    y: cy + p.x * sin + p.y * cos,
+  }))
+  fillPolygon(mask, corners)
+}
+
+function drawWalkableMask(mask: Mask): void {
+  fillEllipse(mask, 701, 558, 468, 312)
+  fillPolygon(mask, [
+    { x: 666, y: 124 },
+    { x: 737, y: 124 },
+    { x: 737, y: 252 },
+    { x: 666, y: 252 },
+  ])
+  fillPolygon(mask, [
+    { x: 646, y: 786 },
+    { x: 765, y: 786 },
+    { x: 765, y: 1084 },
+    { x: 646, y: 1084 },
+  ])
+  fillPolygon(mask, [
+    { x: 0, y: 538 },
+    { x: 245, y: 538 },
+    { x: 245, y: 528 },
+    { x: 432, y: 528 },
+    { x: 432, y: 606 },
+    { x: 245, y: 606 },
+    { x: 245, y: 594 },
+    { x: 0, y: 594 },
+  ])
+  fillPolygon(mask, [
+    { x: 970, y: 528 },
+    { x: 1158, y: 528 },
+    { x: 1158, y: 538 },
+    { x: 1402, y: 538 },
+    { x: 1402, y: 594 },
+    { x: 1158, y: 594 },
+    { x: 1158, y: 606 },
+    { x: 970, y: 606 },
+  ])
+
+  fillEllipse(mask, 164, 151, 128, 94)
+  fillEllipse(mask, 1238, 151, 128, 94)
+  fillRotatedRect(mask, 312, 259, 182, 54, 43)
+  fillRotatedRect(mask, 1090, 259, 182, 54, -43)
+
+  fillEllipse(mask, 103, 394, 103, 76)
+  fillEllipse(mask, 1299, 394, 103, 76)
+  fillPolygon(mask, [
+    { x: 72, y: 470 },
+    { x: 130, y: 470 },
+    { x: 150, y: 538 },
+    { x: 50, y: 538 },
+  ])
+  fillPolygon(mask, [
+    { x: 1272, y: 470 },
+    { x: 1330, y: 470 },
+    { x: 1352, y: 538 },
+    { x: 1252, y: 538 },
+  ])
+
+  fillEllipse(mask, 171, 858, 106, 91)
+  fillEllipse(mask, 1231, 858, 106, 91)
+  fillRotatedRect(mask, 319, 785, 178, 56, -34)
+  fillRotatedRect(mask, 1083, 785, 178, 56, 34)
+  fillRotatedRect(mask, 62, 986, 156, 54, -48)
+  fillRotatedRect(mask, 1340, 986, 156, 54, 48)
+}
+
+function isLavaSeed(r: number, g: number, b: number): boolean {
+  return r >= 118 && g >= 24 && g <= 165 && b <= 78 && r - g >= 38 && g - b >= 8
+}
+
+function integralMask(mask: Mask): Uint32Array {
+  const stride = mask.width + 1
+  const integral = new Uint32Array((mask.width + 1) * (mask.height + 1))
+  for (let y = 0; y < mask.height; y++) {
+    let row = 0
+    for (let x = 0; x < mask.width; x++) {
+      row += mask.data[maskIndex(x, y)] ?? 0
+      integral[(y + 1) * stride + x + 1] = integral[y * stride + x + 1]! + row
+    }
+  }
+  return integral
+}
+
+function countInIntegral(
+  integral: Uint32Array,
+  width: number,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+): number {
+  const stride = width + 1
   return (
-    a.x < b.x + b.width &&
-    a.x + a.width > b.x &&
-    a.y < b.y + b.height &&
-    a.y + a.height > b.y
+    integral[y1 * stride + x1]! -
+    integral[y0 * stride + x1]! -
+    integral[y1 * stride + x0]! +
+    integral[y0 * stride + x0]!
   )
 }
 
-function subtractRect(source: Rect, cut: Rect): Rect[] {
-  if (!rectsOverlap(source, cut)) return [source]
-
-  const sx1 = source.x + source.width
-  const sy1 = source.y + source.height
-  const cx0 = Math.max(source.x, cut.x)
-  const cy0 = Math.max(source.y, cut.y)
-  const cx1 = Math.min(sx1, cut.x + cut.width)
-  const cy1 = Math.min(sy1, cut.y + cut.height)
-  const out: Rect[] = []
-
-  if (cy0 > source.y) out.push({ x: source.x, y: source.y, width: source.width, height: cy0 - source.y })
-  if (cy1 < sy1) out.push({ x: source.x, y: cy1, width: source.width, height: sy1 - cy1 })
-  if (cx0 > source.x) out.push({ x: source.x, y: cy0, width: cx0 - source.x, height: cy1 - cy0 })
-  if (cx1 < sx1) out.push({ x: cx1, y: cy0, width: sx1 - cx1, height: cy1 - cy0 })
-
-  return out.filter((rect) => rect.width > 0 && rect.height > 0)
+function dilateMask(mask: Mask, iterations: number): Mask {
+  let current = mask.data
+  for (let step = 0; step < iterations; step++) {
+    const next = current.slice()
+    for (let y = 1; y < mask.height - 1; y++) {
+      for (let x = 1; x < mask.width - 1; x++) {
+        const i = maskIndex(x, y)
+        if (current[i]) continue
+        if (
+          current[i - 1] ||
+          current[i + 1] ||
+          current[i - mask.width] ||
+          current[i + mask.width] ||
+          current[i - mask.width - 1] ||
+          current[i - mask.width + 1] ||
+          current[i + mask.width - 1] ||
+          current[i + mask.width + 1]
+        ) {
+          next[i] = 1
+        }
+      }
+    }
+    current = next
+  }
+  return { data: current, width: mask.width, height: mask.height }
 }
 
-function subtractMany(sources: readonly Rect[], cuts: readonly Rect[]): Rect[] {
-  const out: Rect[] = []
-  for (const source of sources) {
-    let pieces = [source]
-    for (const cut of cuts) {
-      pieces = pieces.flatMap((piece) => subtractRect(piece, cut))
+function erodeMask(mask: Mask, iterations: number): Mask {
+  let current = mask.data
+  for (let step = 0; step < iterations; step++) {
+    const next = current.slice()
+    for (let y = 1; y < mask.height - 1; y++) {
+      for (let x = 1; x < mask.width - 1; x++) {
+        const i = maskIndex(x, y)
+        if (!current[i]) continue
+        if (
+          !current[i - 1] ||
+          !current[i + 1] ||
+          !current[i - mask.width] ||
+          !current[i + mask.width] ||
+          !current[i - mask.width - 1] ||
+          !current[i - mask.width + 1] ||
+          !current[i + mask.width - 1] ||
+          !current[i + mask.width + 1]
+        ) {
+          next[i] = 0
+        }
+      }
     }
-    out.push(...pieces)
+    current = next
+  }
+  return { data: current, width: mask.width, height: mask.height }
+}
+
+function retainLargeComponents(mask: Mask, minArea: number): Mask {
+  const seen = new Uint8Array(mask.data.length)
+  const out = createMask()
+  const q = new Int32Array(mask.data.length)
+  const component: number[] = []
+  for (let start = 0; start < mask.data.length; start++) {
+    if (!mask.data[start] || seen[start]) continue
+    let head = 0
+    let tail = 0
+    let touchesEdge = false
+    component.length = 0
+    q[tail++] = start
+    seen[start] = 1
+    while (head < tail) {
+      const i = q[head++]!
+      component.push(i)
+      const x = i % mask.width
+      const y = Math.floor(i / mask.width)
+      if (x <= 1 || y <= 1 || x >= mask.width - 2 || y >= mask.height - 2) touchesEdge = true
+      const neighbors = [i - 1, i + 1, i - mask.width, i + mask.width]
+      for (const n of neighbors) {
+        if (n < 0 || n >= mask.data.length || seen[n] || !mask.data[n]) continue
+        const nx = n % mask.width
+        if (Math.abs(nx - x) > 1) continue
+        seen[n] = 1
+        q[tail++] = n
+      }
+    }
+    if (component.length >= minArea || touchesEdge) {
+      for (const i of component) out.data[i] = 1
+    }
   }
   return out
-    .filter((rect) => rect.width > 0 && rect.height > 0)
-    .sort((a, b) => a.y - b.y || a.x - b.x || a.width - b.width || a.height - b.height)
 }
 
-const WALKABLE_RECTS: readonly Rect[] = [
-  { x: 432, y: 252, width: 536, height: 592 },
-  { x: 666, y: 130, width: 72, height: 122 },
-  { x: 238, y: 535, width: 230, height: 66 },
-  { x: 936, y: 535, width: 230, height: 66 },
-  { x: 665, y: 790, width: 78, height: 230 },
-  { x: 332, y: 760, width: 155, height: 155 },
-  { x: 911, y: 760, width: 155, height: 155 },
-  { x: 82, y: 775, width: 178, height: 178 },
-  { x: 1144, y: 775, width: 178, height: 178 },
-  { x: 64, y: 118, width: 224, height: 170 },
-  { x: 1115, y: 118, width: 224, height: 170 },
-  { x: 55, y: 316, width: 154, height: 154 },
-  { x: 1194, y: 316, width: 154, height: 154 },
-  { x: 297, y: 180, width: 190, height: 72 },
-  { x: 916, y: 180, width: 190, height: 72 },
-  { x: 294, y: 871, width: 126, height: 82 },
-  { x: 983, y: 871, width: 126, height: 82 },
-]
+function buildLavaMask(base: RawImage, walkable: Mask): Mask {
+  const seed = createMask()
+  for (let i = 0, p = 0; i < seed.data.length; i++, p += 4) {
+    if (walkable.data[i]) continue
+    if (isLavaSeed(base.data[p]!, base.data[p + 1]!, base.data[p + 2]!)) {
+      seed.data[i] = 1
+    }
+  }
+  const integral = integralMask(seed)
+  const dense = createMask()
+  const radius = 10
+  for (let y = 0; y < ARENA_HEIGHT; y++) {
+    const y0 = Math.max(0, y - radius)
+    const y1 = Math.min(ARENA_HEIGHT, y + radius + 1)
+    for (let x = 0; x < ARENA_WIDTH; x++) {
+      const i = maskIndex(x, y)
+      if (walkable.data[i]) continue
+      const x0 = Math.max(0, x - radius)
+      const x1 = Math.min(ARENA_WIDTH, x + radius + 1)
+      if (countInIntegral(integral, ARENA_WIDTH, x0, y0, x1, y1) >= 30) {
+        dense.data[i] = 1
+      }
+    }
+  }
+  const closed = erodeMask(dilateMask(dense, 8), 3)
+  const lava = retainLargeComponents(closed, 1600)
+  const nonLavaStone = createMask()
+  fillEllipse(nonLavaStone, 452, 990, 92, 58)
+  fillEllipse(nonLavaStone, 950, 990, 92, 58)
+  fillPolygon(nonLavaStone, [
+    { x: 612, y: 0 },
+    { x: 790, y: 0 },
+    { x: 790, y: 166 },
+    { x: 612, y: 166 },
+  ])
+  for (let i = 0; i < lava.data.length; i++) {
+    if (walkable.data[i] || nonLavaStone.data[i]) lava.data[i] = 0
+  }
+  return lava
+}
 
-const RAW_LAVA_RECTS: readonly Rect[] = [
-  { x: 0, y: 0, width: 360, height: 120 },
-  { x: 1038, y: 0, width: 364, height: 120 },
-  { x: 302, y: 24, width: 304, height: 210 },
-  { x: 798, y: 24, width: 304, height: 210 },
-  { x: 0, y: 225, width: 392, height: 288 },
-  { x: 1012, y: 225, width: 390, height: 288 },
-  { x: 0, y: 612, width: 372, height: 190 },
-  { x: 1030, y: 612, width: 372, height: 190 },
-  { x: 0, y: 925, width: 82, height: 33 },
-  { x: 260, y: 925, width: 34, height: 33 },
-  { x: 420, y: 925, width: 245, height: 33 },
-  { x: 743, y: 925, width: 240, height: 33 },
-  { x: 1109, y: 925, width: 35, height: 33 },
-  { x: 1322, y: 925, width: 80, height: 33 },
-  { x: 0, y: 958, width: 665, height: 62 },
-  { x: 743, y: 958, width: 659, height: 62 },
-  { x: 0, y: 1020, width: 635, height: 78 },
-  { x: 772, y: 1020, width: 630, height: 78 },
-  { x: 475, y: 848, width: 190, height: 110 },
-  { x: 742, y: 848, width: 190, height: 110 },
-]
+function buildCliffMask(walkable: Mask, lava: Mask): Mask {
+  const cliff = createMask()
+  for (let i = 0; i < cliff.data.length; i++) {
+    cliff.data[i] = !walkable.data[i] && !lava.data[i] ? 1 : 0
+  }
+  return cliff
+}
 
-const RAW_CLIFF_RECTS: readonly Rect[] = [
-  { x: 0, y: 0, width: 1402, height: 24 },
-  { x: 0, y: 1098, width: 1402, height: 24 },
-  { x: 0, y: 0, width: 24, height: 1122 },
-  { x: 1378, y: 0, width: 24, height: 1122 },
-  { x: 432, y: 220, width: 536, height: 32 },
-  { x: 370, y: 288, width: 62, height: 247 },
-  { x: 970, y: 288, width: 62, height: 247 },
-  { x: 370, y: 601, width: 62, height: 231 },
-  { x: 970, y: 601, width: 62, height: 231 },
-  { x: 238, y: 513, width: 230, height: 22 },
-  { x: 238, y: 601, width: 230, height: 22 },
-  { x: 936, y: 513, width: 230, height: 22 },
-  { x: 936, y: 601, width: 230, height: 22 },
-  { x: 643, y: 790, width: 22, height: 230 },
-  { x: 743, y: 790, width: 22, height: 230 },
-  { x: 360, y: 196, width: 120, height: 92 },
-  { x: 922, y: 196, width: 120, height: 92 },
-  { x: 64, y: 88, width: 224, height: 30 },
-  { x: 64, y: 288, width: 224, height: 30 },
-  { x: 34, y: 88, width: 30, height: 230 },
-  { x: 288, y: 88, width: 30, height: 230 },
-  { x: 1115, y: 88, width: 224, height: 30 },
-  { x: 1115, y: 288, width: 224, height: 30 },
-  { x: 1085, y: 88, width: 30, height: 230 },
-  { x: 1339, y: 88, width: 30, height: 230 },
-  { x: 55, y: 286, width: 154, height: 30 },
-  { x: 55, y: 470, width: 154, height: 30 },
-  { x: 25, y: 286, width: 30, height: 214 },
-  { x: 209, y: 286, width: 30, height: 214 },
-  { x: 1194, y: 286, width: 154, height: 30 },
-  { x: 1194, y: 470, width: 154, height: 30 },
-  { x: 1164, y: 286, width: 30, height: 214 },
-  { x: 1348, y: 286, width: 30, height: 214 },
-  { x: 82, y: 745, width: 178, height: 30 },
-  { x: 82, y: 953, width: 178, height: 30 },
-  { x: 52, y: 745, width: 30, height: 238 },
-  { x: 260, y: 745, width: 30, height: 238 },
-  { x: 1144, y: 745, width: 178, height: 30 },
-  { x: 1144, y: 953, width: 178, height: 30 },
-  { x: 1114, y: 745, width: 30, height: 238 },
-  { x: 1322, y: 745, width: 30, height: 238 },
-  { x: 358, y: 832, width: 288, height: 58 },
-  { x: 756, y: 832, width: 288, height: 58 },
-  { x: 604, y: 836, width: 60, height: 124 },
-  { x: 742, y: 836, width: 60, height: 124 },
-]
+async function loadMaskImage(fileName: string): Promise<Mask> {
+  const path = resolve(MASK_DIR, fileName)
+  const image = sharp(path).ensureAlpha()
+  const meta = await image.metadata()
+  const width = meta.width ?? 0
+  const height = meta.height ?? 0
+  if (width !== ARENA_WIDTH || height !== ARENA_HEIGHT) {
+    throw new Error(`${path} must be ${ARENA_WIDTH}x${ARENA_HEIGHT}, got ${width}x${height}.`)
+  }
+  const raw = await image.raw().toBuffer()
+  const mask = createMask()
+  for (let i = 0, p = 0; i < mask.data.length; i++, p += 4) {
+    const r = raw[p]!
+    const g = raw[p + 1]!
+    const b = raw[p + 2]!
+    const a = raw[p + 3]!
+    mask.data[i] = a > 0 && (r + g + b) / 3 >= 128 ? 1 : 0
+  }
+  return mask
+}
 
-const CLIFF_RECTS: readonly Rect[] = subtractMany(RAW_CLIFF_RECTS, WALKABLE_RECTS)
-const LAVA_RECTS: readonly Rect[] = subtractMany(RAW_LAVA_RECTS, [...WALKABLE_RECTS, ...CLIFF_RECTS])
+function assertExclusiveMasks(masks: {
+  readonly walkable: Mask
+  readonly lava: Mask
+  readonly cliff: Mask
+}): void {
+  let overlap = 0
+  let empty = 0
+  for (let i = 0; i < ARENA_WIDTH * ARENA_HEIGHT; i++) {
+    const count = (masks.walkable.data[i] ?? 0) + (masks.lava.data[i] ?? 0) + (masks.cliff.data[i] ?? 0)
+    if (count > 1) overlap++
+    if (count === 0) empty++
+  }
+  if (overlap > 0) {
+    throw new Error(`Arena source masks must be mutually exclusive; found ${overlap} overlapping pixels.`)
+  }
+  if (empty > 0) {
+    throw new Error(`Arena source masks must classify every pixel; found ${empty} unclassified pixels.`)
+  }
+}
+
+function classifiedGridFromMasks(
+  masks: {
+    readonly walkable: Mask
+    readonly lava: Mask
+    readonly cliff: Mask
+  },
+  cellSize: number,
+): ClassifiedGrid {
+  const cols = Math.ceil(ARENA_WIDTH / cellSize)
+  const rows = Math.ceil(ARENA_HEIGHT / cellSize)
+  const cells = new Uint8Array(cols * rows)
+
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const x0 = col * cellSize
+      const y0 = row * cellSize
+      const x1 = Math.min(ARENA_WIDTH, x0 + cellSize)
+      const y1 = Math.min(ARENA_HEIGHT, y0 + cellSize)
+      let walkable = 0
+      let lava = 0
+      let cliff = 0
+      for (let y = y0; y < y1; y++) {
+        for (let x = x0; x < x1; x++) {
+          const i = maskIndex(x, y)
+          walkable += masks.walkable.data[i] ?? 0
+          lava += masks.lava.data[i] ?? 0
+          cliff += masks.cliff.data[i] ?? 0
+        }
+      }
+      let klass = REGION_WALKABLE
+      let count = walkable
+      if (lava > count) {
+        klass = REGION_LAVA
+        count = lava
+      }
+      if (cliff > count) {
+        klass = REGION_CLIFF
+        count = cliff
+      }
+      cells[row * cols + col] = count > 0 ? klass : REGION_NONE
+    }
+  }
+  return { cells, cols, rows, cellSize }
+}
+
+function rectsFromClassifiedGrid(grid: ClassifiedGrid, klass: RegionClass): Rect[] {
+  const horizontal: Rect[] = []
+  for (let row = 0; row < grid.rows; row++) {
+    let col = 0
+    while (col < grid.cols) {
+      if (grid.cells[row * grid.cols + col] !== klass) {
+        col++
+        continue
+      }
+      const start = col
+      while (col < grid.cols && grid.cells[row * grid.cols + col] === klass) col++
+      horizontal.push({
+        x: start * grid.cellSize,
+        y: row * grid.cellSize,
+        width: Math.min(ARENA_WIDTH, col * grid.cellSize) - start * grid.cellSize,
+        height: Math.min(grid.cellSize, ARENA_HEIGHT - row * grid.cellSize),
+      })
+    }
+  }
+
+  horizontal.sort((a, b) => a.x - b.x || a.width - b.width || a.y - b.y)
+  const merged: Rect[] = []
+  for (const rect of horizontal) {
+    const last = merged[merged.length - 1]
+    if (
+      last &&
+      last.x === rect.x &&
+      last.width === rect.width &&
+      last.y + last.height === rect.y
+    ) {
+      last.height += rect.height
+    } else {
+      merged.push({ ...rect })
+    }
+  }
+
+  return merged.sort((a, b) => a.y - b.y || a.x - b.x || a.width - b.width || a.height - b.height)
+}
+
+async function buildArenaGeometry(): Promise<void> {
+  const walkable = await loadMaskImage("walkable-mask.png")
+  const lava = await loadMaskImage("lava-mask.png")
+  const cliff = await loadMaskImage("cliff-mask.png")
+  assertExclusiveMasks({ walkable, lava, cliff })
+  const classified = classifiedGridFromMasks({ walkable, lava, cliff }, REGION_CELL_PX)
+  WALKABLE_MASK = walkable
+  LAVA_MASK = lava
+  CLIFF_MASK = cliff
+  WALKABLE_RECTS = rectsFromClassifiedGrid(classified, REGION_WALKABLE)
+  LAVA_RECTS = rectsFromClassifiedGrid(classified, REGION_LAVA)
+  CLIFF_RECTS = rectsFromClassifiedGrid(classified, REGION_CLIFF)
+}
 
 const SPAWNS = [
   { x: 710, y: 562 },
@@ -543,13 +885,52 @@ function colorRectLayer(
   return data
 }
 
+function maskRegionLayer(
+  mask: Mask,
+  color: { r: number; g: number; b: number },
+  fillAlpha: number,
+  lineAlpha: number,
+): Buffer {
+  const data = Buffer.alloc(ARENA_WIDTH * ARENA_HEIGHT * 4)
+  for (let y = 0; y < ARENA_HEIGHT; y++) {
+    for (let x = 0; x < ARENA_WIDTH; x++) {
+      const i = maskIndex(x, y)
+      if (!mask.data[i]) continue
+      const edge =
+        x === 0 ||
+        y === 0 ||
+        x === ARENA_WIDTH - 1 ||
+        y === ARENA_HEIGHT - 1 ||
+        !mask.data[i - 1] ||
+        !mask.data[i + 1] ||
+        !mask.data[i - ARENA_WIDTH] ||
+        !mask.data[i + ARENA_WIDTH]
+      const p = i * 4
+      data[p] = color.r
+      data[p + 1] = color.g
+      data[p + 2] = color.b
+      data[p + 3] = edge ? lineAlpha : fillAlpha
+    }
+  }
+  return data
+}
+
+async function maskLayerPng(
+  mask: Mask,
+  color: { r: number; g: number; b: number },
+  fillAlpha: number,
+  lineAlpha: number,
+): Promise<Buffer> {
+  return sharp(maskRegionLayer(mask, color, fillAlpha, lineAlpha), {
+    raw: { width: ARENA_WIDTH, height: ARENA_HEIGHT, channels: 4 },
+  }).png().toBuffer()
+}
+
 async function writeOverlayImages(props: readonly PropDef[]): Promise<void> {
   const propColliders = PLACEMENTS.map((p, i) => scaledColliderForPlacement(props, p, i))
+
   const overlays = [
     ["object-collision-yellow-highlight.png", propColliders, { r: 255, g: 230, b: 0, a: 115 }],
-    ["walkable-lines.png", WALKABLE_RECTS, { r: 80, g: 255, b: 120, a: 40 }],
-    ["cliff-lines.png", CLIFF_RECTS, { r: 255, g: 255, b: 255, a: 70 }],
-    ["lava-lines.png", LAVA_RECTS, { r: 255, g: 60, b: 0, a: 75 }],
   ] as const
 
   for (const [name, rects, color] of overlays) {
@@ -562,22 +943,28 @@ async function writeOverlayImages(props: readonly PropDef[]): Promise<void> {
       .toFile(resolve(REVIEW_DIR, name))
   }
 
+  const maskOverlays = [
+    ["walkable-lines.png", WALKABLE_MASK, { r: 80, g: 255, b: 120 }, 22, 255],
+    ["lava-lines.png", LAVA_MASK, { r: 255, g: 60, b: 0 }, 36, 255],
+    ["cliff-lines.png", CLIFF_MASK, { r: 255, g: 255, b: 255 }, 24, 255],
+  ] as const
+  for (const [name, mask, color, fillAlpha, lineAlpha] of maskOverlays) {
+    await sharp(BASE_OUT)
+      .composite([{ input: await maskLayerPng(mask, color, fillAlpha, lineAlpha), left: 0, top: 0 }])
+      .png()
+      .toFile(resolve(REVIEW_DIR, name))
+  }
+
   const combined = await sharp(BASE_OUT)
     .composite([
       {
-        input: await sharp(colorRectLayer(props, WALKABLE_RECTS, { r: 80, g: 255, b: 120, a: 36 }), {
-          raw: { width: ARENA_WIDTH, height: ARENA_HEIGHT, channels: 4 },
-        }).png().toBuffer(),
+        input: await maskLayerPng(WALKABLE_MASK, { r: 80, g: 255, b: 120 }, 18, 235),
       },
       {
-        input: await sharp(colorRectLayer(props, LAVA_RECTS, { r: 255, g: 60, b: 0, a: 70 }), {
-          raw: { width: ARENA_WIDTH, height: ARENA_HEIGHT, channels: 4 },
-        }).png().toBuffer(),
+        input: await maskLayerPng(LAVA_MASK, { r: 255, g: 60, b: 0 }, 34, 235),
       },
       {
-        input: await sharp(colorRectLayer(props, CLIFF_RECTS, { r: 255, g: 255, b: 255, a: 70 }), {
-          raw: { width: ARENA_WIDTH, height: ARENA_HEIGHT, channels: 4 },
-        }).png().toBuffer(),
+        input: await maskLayerPng(CLIFF_MASK, { r: 255, g: 255, b: 255 }, 18, 235),
       },
       {
         input: await sharp(colorRectLayer(props, propColliders, { r: 255, g: 230, b: 0, a: 105 }), {
@@ -588,6 +975,27 @@ async function writeOverlayImages(props: readonly PropDef[]): Promise<void> {
     .png()
     .toFile(resolve(REVIEW_DIR, "all-overlays-combined.png"))
   void combined
+
+  await sharp(BASE_OUT)
+    .composite([
+      {
+        input: await sharp(colorRectLayer(props, WALKABLE_RECTS, { r: 80, g: 255, b: 120, a: 12 }), {
+          raw: { width: ARENA_WIDTH, height: ARENA_HEIGHT, channels: 4 },
+        }).png().toBuffer(),
+      },
+      {
+        input: await sharp(colorRectLayer(props, LAVA_RECTS, { r: 255, g: 60, b: 0, a: 18 }), {
+          raw: { width: ARENA_WIDTH, height: ARENA_HEIGHT, channels: 4 },
+        }).png().toBuffer(),
+      },
+      {
+        input: await sharp(colorRectLayer(props, CLIFF_RECTS, { r: 255, g: 255, b: 255, a: 12 }), {
+          raw: { width: ARENA_WIDTH, height: ARENA_HEIGHT, channels: 4 },
+        }).png().toBuffer(),
+      },
+    ])
+    .png()
+    .toFile(resolve(REVIEW_DIR, "runtime-rectangles-overlay.png"))
 
   await sharp(resolve(REVIEW_DIR, "reconstructed-map.png"))
     .composite([{ input: numberedPlacementSvg(), left: 0, top: 0 }])
@@ -619,7 +1027,12 @@ function rectangleSceneObject(
     strokeWidth: 2,
     isStroked: true,
     visible: true,
+    codexRuntimeExcluded: true,
   }
+}
+
+function repoPath(path: string): string {
+  return relative(ROOT, path).replace(/\\/g, "/")
 }
 
 function writeSceneAndRuntimeSources(props: readonly PropDef[]): void {
@@ -684,7 +1097,7 @@ function writeSceneAndRuntimeSources(props: readonly PropDef[]): void {
         id: "arena-scene",
         sceneType: "SCENE",
         settings: {
-          exportClass: true,
+          exportClass: false,
           autoImport: true,
           preloadPackFiles: [],
           createMethodName: "editorCreate",
@@ -717,7 +1130,7 @@ function writeSceneAndRuntimeSources(props: readonly PropDef[]): void {
 
   writeFileSync(
     resolve(ROOT, "src/game/scenes/Arena.ts"),
-    `// You can write more code here\n\n/* START OF COMPILED CODE */\n\n/* START-USER-IMPORTS */\nimport Phaser from "phaser"\n\nimport { ARENA_HEIGHT, ARENA_WIDTH } from "@/shared/balance-config/arena"\nimport { TILEMAP_DEPTH } from "@/shared/balance-config/rendering"\nimport type { MinimapCorner } from "@/shared/settings-config"\nimport { WW_LOCAL_PLAYER_ID_REGISTRY_KEY } from "../constants"\nimport { GameConnection } from "../network/GameConnection"\nimport { PlayerRenderSystem } from "../ecs/systems/PlayerRenderSystem"\nimport {\n  publishLoaderComplete,\n  wireSceneLoaderProgress,\n} from "../loaderStatus"\nimport { ArenaRuntime } from "./ArenaRuntime"\n/* END-USER-IMPORTS */\n\nexport default class Arena extends Phaser.Scene {\n\n\tconstructor() {\n\t\tsuper("Arena");\n\n\t\t/* START-USER-CTR-CODE */\n\t\t/* END-USER-CTR-CODE */\n\t}\n\n\teditorCreate(): void {\n\n\t\t// arena_base\n\t\tconst arenaBase = this.add.image(0, 0, "arena-base");\n\t\tarenaBase.setOrigin(0, 0);\n\t\tarenaBase.setDepth(TILEMAP_DEPTH);\n${propCreateLines}\n\n\t\tthis.arenaWidthPx = ARENA_WIDTH;\n\t\tthis.arenaHeightPx = ARENA_HEIGHT;\n\n\t\tthis.events.emit("scene-awake");\n\t}\n\n\tprivate arenaWidthPx = ARENA_WIDTH;\n\tprivate arenaHeightPx = ARENA_HEIGHT;\n\tprivate arenaProps: Phaser.GameObjects.Image[] = [];\n\n\t/* START-USER-CODE */\n\n\tprivate runtime?: ArenaRuntime\n\n\tpreload(): void {\n\t\tthis.load.pack("arena-assets", "/assets/arena-asset-pack.json")\n\t\twireSceneLoaderProgress(this, {\n\t\t\tscene: "Arena",\n\t\t\tdescription: "Arena assets",\n\t\t})\n\t}\n\n\tcreate(): void {\n\t\tthis.editorCreate()\n\t\tthis.runtime = new ArenaRuntime(this, {\n\t\t\tarenaWidthPx: this.arenaWidthPx,\n\t\t\tarenaHeightPx: this.arenaHeightPx,\n\t\t})\n\t\tthis.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {\n\t\t\tthis.runtime?.destroy()\n\t\t\tthis.runtime = undefined\n\t\t})\n\t\tthis.runtime.start()\n\t\tpublishLoaderComplete(this.game as unknown as Parameters<typeof publishLoaderComplete>[0])\n\t}\n\n\tupdate(time: number, delta: number): void {\n\t\tthis.runtime?.update(time, delta)\n\t}\n\n\t/** Phaser group used to collect all player sprites for iteration. */\n\tget playerGroup(): Phaser.GameObjects.Group {\n\t\treturn this.runtime?.playerGroup as Phaser.GameObjects.Group\n\t}\n\n\t/** Exposed for existing e2e diagnostics. */\n\tget playerRenderSystem(): PlayerRenderSystem | undefined {\n\t\treturn this.runtime?.playerRenderSystem\n\t}\n\n\tgetConnection(): GameConnection {\n\t\treturn this.runtime?.getConnection() as GameConnection\n\t}\n\n\tgetLocalPlayerId(): string | null {\n\t\treturn (\n\t\t\tthis.runtime?.getLocalPlayerId() ??\n\t\t\t((this.game.registry.get(WW_LOCAL_PLAYER_ID_REGISTRY_KEY) as string | undefined) ?? null)\n\t\t)\n\t}\n\n\t/** Applies user-facing audio volume settings to the active runtime. */\n\tsetAudioVolumes(settings: {\n\t\treadonly bgmVolume?: number\n\t\treadonly sfxVolume?: number\n\t}): void {\n\t\tthis.runtime?.setAudioVolumes(settings)\n\t}\n\n\t/** Applies local-only debug overlay mode to the active runtime. */\n\tsetDebugModeEnabled(enabled: boolean): void {\n\t\tthis.runtime?.setDebugModeEnabled(enabled)\n\t}\n\n\t/** Applies persisted minimap placement to the active runtime. */\n\tsetMinimapCorner(corner: MinimapCorner): void {\n\t\tthis.runtime?.setMinimapCorner(corner)\n\t}\n\n\t/* END-USER-CODE */\n}\n\n/* END OF COMPILED CODE */\n\n// You can write more code here\n`,
+    `// You can write more code here\n\n/* START OF COMPILED CODE */\n\n/* START-USER-IMPORTS */\nimport Phaser from "phaser"\n\nimport { ARENA_HEIGHT, ARENA_WIDTH } from "@/shared/balance-config/arena"\nimport { TILEMAP_DEPTH } from "@/shared/balance-config/rendering"\nimport type { MinimapCorner } from "@/shared/settings-config"\nimport { WW_LOCAL_PLAYER_ID_REGISTRY_KEY } from "../constants"\nimport { GameConnection } from "../network/GameConnection"\nimport { PlayerRenderSystem } from "../ecs/systems/PlayerRenderSystem"\nimport {\n  publishLoaderComplete,\n  wireSceneLoaderProgress,\n} from "../loaderStatus"\nimport { ArenaRuntime } from "./ArenaRuntime"\n/* END-USER-IMPORTS */\n\nexport default class Arena extends Phaser.Scene {\n\n\tconstructor() {\n\t\tsuper("Arena");\n\n\t\t/* START-USER-CTR-CODE */\n\t\t/* END-USER-CTR-CODE */\n\t}\n\n\teditorCreate(): void {\n\t\t// Arena.scene is a Phaser Editor data scene: it keeps editor-visible\n\t\t// rectangles for regions/colliders, but this runtime output only creates\n\t\t// the visual image layer and props. Region data is exported via arena.json.\n\n\t\t// arena_base\n\t\tconst arenaBase = this.add.image(0, 0, "arena-base");\n\t\tarenaBase.setOrigin(0, 0);\n\t\tarenaBase.setDepth(TILEMAP_DEPTH);\n${propCreateLines}\n\n\t\tthis.arenaWidthPx = ARENA_WIDTH;\n\t\tthis.arenaHeightPx = ARENA_HEIGHT;\n\n\t\tthis.events.emit("scene-awake");\n\t}\n\n\tprivate arenaWidthPx = ARENA_WIDTH;\n\tprivate arenaHeightPx = ARENA_HEIGHT;\n\tprivate arenaProps: Phaser.GameObjects.Image[] = [];\n\n\t/* START-USER-CODE */\n\n\tprivate runtime?: ArenaRuntime\n\n\tpreload(): void {\n\t\tthis.load.pack("arena-assets", "/assets/arena-asset-pack.json")\n\t\twireSceneLoaderProgress(this, {\n\t\t\tscene: "Arena",\n\t\t\tdescription: "Arena assets",\n\t\t})\n\t}\n\n\tcreate(): void {\n\t\tthis.editorCreate()\n\t\tthis.runtime = new ArenaRuntime(this, {\n\t\t\tarenaWidthPx: this.arenaWidthPx,\n\t\t\tarenaHeightPx: this.arenaHeightPx,\n\t\t})\n\t\tthis.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {\n\t\t\tthis.runtime?.destroy()\n\t\t\tthis.runtime = undefined\n\t\t})\n\t\tthis.runtime.start()\n\t\tpublishLoaderComplete(this.game as unknown as Parameters<typeof publishLoaderComplete>[0])\n\t}\n\n\tupdate(time: number, delta: number): void {\n\t\tthis.runtime?.update(time, delta)\n\t}\n\n\t/** Phaser group used to collect all player sprites for iteration. */\n\tget playerGroup(): Phaser.GameObjects.Group {\n\t\treturn this.runtime?.playerGroup as Phaser.GameObjects.Group\n\t}\n\n\t/** Exposed for existing e2e diagnostics. */\n\tget playerRenderSystem(): PlayerRenderSystem | undefined {\n\t\treturn this.runtime?.playerRenderSystem\n\t}\n\n\tgetConnection(): GameConnection {\n\t\treturn this.runtime?.getConnection() as GameConnection\n\t}\n\n\tgetLocalPlayerId(): string | null {\n\t\treturn (\n\t\t\tthis.runtime?.getLocalPlayerId() ??\n\t\t\t((this.game.registry.get(WW_LOCAL_PLAYER_ID_REGISTRY_KEY) as string | undefined) ?? null)\n\t\t)\n\t}\n\n\t/** Applies user-facing audio volume settings to the active runtime. */\n\tsetAudioVolumes(settings: {\n\t\treadonly bgmVolume?: number\n\t\treadonly sfxVolume?: number\n\t}): void {\n\t\tthis.runtime?.setAudioVolumes(settings)\n\t}\n\n\t/** Applies local-only debug overlay mode to the active runtime. */\n\tsetDebugModeEnabled(enabled: boolean): void {\n\t\tthis.runtime?.setDebugModeEnabled(enabled)\n\t}\n\n\t/** Applies persisted minimap placement to the active runtime. */\n\tsetMinimapCorner(corner: MinimapCorner): void {\n\t\tthis.runtime?.setMinimapCorner(corner)\n\t}\n\n\t/* END-USER-CODE */\n}\n\n/* END OF COMPILED CODE */\n\n// You can write more code here\n`,
     "utf8",
   )
 }
@@ -766,9 +1179,9 @@ function writeMetadata(props: readonly PropDef[]): void {
   const propColliders = PLACEMENTS.map((p, i) => scaledColliderForPlacement(props, p, i))
   const metadata = {
     generatedFrom: {
-      base: SOURCE_BASE,
-      objects: SOURCE_OBJECTS,
-      target: SOURCE_TARGET,
+      base: repoPath(SOURCE_BASE),
+      objects: repoPath(SOURCE_OBJECTS),
+      target: repoPath(SOURCE_TARGET),
     },
     arena: { width: ARENA_WIDTH, height: ARENA_HEIGHT },
     props,
@@ -792,7 +1205,10 @@ function writeArenaLayout(): void {
 }
 
 async function main(): Promise<void> {
-  for (const dir of [PROP_DIR, MAP_DIR, REVIEW_DIR]) mkdirSync(dir, { recursive: true })
+  for (const dir of [PROP_DIR, MAP_DIR, REVIEW_DIR, SOURCE_IMAGE_DIR, MASK_DIR]) {
+    mkdirSync(dir, { recursive: true })
+  }
+  await buildArenaGeometry()
   copyFileSync(SOURCE_BASE, BASE_OUT)
   const props = await extractProps()
   writeMetadata(props)

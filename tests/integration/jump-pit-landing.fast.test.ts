@@ -16,7 +16,6 @@ import { createGameSimulation } from "@/server/game/simulation"
 import {
   ARENA_CLIFF_COLLIDERS,
   ARENA_HEIGHT,
-  ARENA_LAVA_COLLIDERS,
   ARENA_WIDTH,
   ARENA_WORLD_COLLIDERS,
 } from "@/shared/balance-config/arena"
@@ -77,27 +76,34 @@ function findIllegalGroundPoint(): { x: number; y: number } {
   throw new Error("expected non-walkable interior sample")
 }
 
-function sampleNativeLavaEdgeJump(): { startX: number; y: number; minLandingX: number } {
-  const sample = { startX: 581, y: 129, minLandingX: 606 }
-  if (terrainStateAtPosition(sample.startX, sample.y) !== "lava") {
+function sampleNativeLavaEdgeJump(): {
+  startX: number
+  startY: number
+  minLandingY: number
+  input: Partial<PlayerInputPayload>
+} {
+  const sample = { startX: 100, startY: 40, minLandingY: 88, input: { down: true } }
+  if (terrainStateAtPosition(sample.startX, sample.startY) !== "lava") {
     throw new Error("expected native lava-edge jump start to be lava")
   }
-  if (terrainStateAtPosition(sample.minLandingX + 1, sample.y) !== "land") {
+  if (terrainStateAtPosition(sample.startX, sample.minLandingY + 1) !== "land") {
     throw new Error("expected native lava-edge jump landing threshold to be land")
   }
   return sample
 }
 
-function sampleWideLavaRect(): { x: number; y: number; width: number; height: number } {
-  const lava = ARENA_LAVA_COLLIDERS.find((rect) =>
-    rect.x > 24 &&
-    rect.y > 0 &&
-    rect.width >= 250 &&
-    rect.height >= 100 &&
-    terrainStateAtPosition(rect.x + rect.width / 2, rect.y + rect.height / 2) === "lava",
-  )
-  if (!lava) throw new Error("expected a wide native lava area")
-  return lava
+function sampleLavaEdge(): { x: number; y: number; exitInput: Partial<PlayerInputPayload> } {
+  for (let y = 0; y < ARENA_HEIGHT - 4; y++) {
+    for (let x = 0; x < ARENA_WIDTH; x++) {
+      if (
+        terrainStateAtPosition(x, y) === "lava" &&
+        terrainStateAtPosition(x, y + 4) === "land"
+      ) {
+        return { x, y, exitInput: { down: true } }
+      }
+    }
+  }
+  throw new Error("expected native lava edge to border land")
 }
 
 function sampleCliffOnlyRect(): { x: number; y: number; width: number; height: number } {
@@ -144,11 +150,11 @@ describe("jump pit landing (integration)", () => {
 
     AbilitySlots.slot1[eid] = ABILITY_INDEX.jump
     Position.x[eid] = jump.startX
-    Position.y[eid] = jump.y
+    Position.y[eid] = jump.startY
 
     for (let tick = 0; tick < 80; tick++) {
       sim.tick(
-        queue(input({ right: true, abilitySlot: tick === 0 ? 1 : null, seq: tick })),
+        queue(input({ ...jump.input, abilitySlot: tick === 0 ? 1 : null, seq: tick })),
         Date.now() + tick * 16.667,
       )
       if (!hasComponent(sim.world, eid, JumpArc) && tick > 0) break
@@ -156,7 +162,7 @@ describe("jump pit landing (integration)", () => {
 
     expect(Health.current[eid]).toBeGreaterThan(0)
     expect(hasComponent(sim.world, eid, JumpArc)).toBe(false)
-    expect(Position.x[eid]).toBeGreaterThanOrEqual(jump.minLandingX)
+    expect(Position.y[eid]).toBeGreaterThanOrEqual(jump.minLandingY)
     expect(terrainStateAtPosition(Position.x[eid], Position.y[eid])).toBe("land")
     expect(
       canOccupyWorldPosition(
@@ -172,18 +178,18 @@ describe("jump pit landing (integration)", () => {
   it("blocks grounded lava players from walking onto land", () => {
     const sim = createGameSimulation(Date.now())
     const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
-    const lava = sampleWideLavaRect()
+    const lava = sampleLavaEdge()
 
-    Position.x[eid] = lava.x + lava.width / 2
-    Position.y[eid] = lava.y + lava.height / 2
+    Position.x[eid] = lava.x
+    Position.y[eid] = lava.y
     TerrainState.kind[eid] = TERRAIN_KIND.lava
 
     for (let tick = 0; tick < 40; tick++) {
-      sim.tick(queue(input({ right: true, seq: tick })), Date.now() + tick * 16.667)
+      sim.tick(queue(input({ ...lava.exitInput, seq: tick })), Date.now() + tick * 16.667)
     }
 
     expect(terrainStateAtPosition(Position.x[eid], Position.y[eid])).toBe("lava")
-    expect(Position.x[eid]).toBeLessThan(lava.x + lava.width)
+    expect(Position.y[eid]).toBeLessThan(lava.y + 4)
     expect(TerrainState.kind[eid]).toBe(TERRAIN_KIND.lava)
   })
 
@@ -194,12 +200,12 @@ describe("jump pit landing (integration)", () => {
 
     AbilitySlots.slot1[eid] = ABILITY_INDEX.jump
     Position.x[eid] = jump.startX
-    Position.y[eid] = jump.y
+    Position.y[eid] = jump.startY
     TerrainState.kind[eid] = TERRAIN_KIND.lava
 
     for (let tick = 0; tick < 90; tick++) {
       sim.tick(
-        queue(input({ right: true, abilitySlot: tick === 0 ? 1 : null, seq: tick })),
+        queue(input({ ...jump.input, abilitySlot: tick === 0 ? 1 : null, seq: tick })),
         Date.now() + tick * 16.667,
       )
       if (!hasComponent(sim.world, eid, JumpArc) && tick > 2) break
@@ -213,10 +219,10 @@ describe("jump pit landing (integration)", () => {
   it("keeps a jump landing in lava from walking out afterward", () => {
     const sim = createGameSimulation(Date.now())
     const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
-    const lava = sampleWideLavaRect()
+    const lava = { x: 100, y: 40, exitInput: { down: true } satisfies Partial<PlayerInputPayload> }
 
-    Position.x[eid] = lava.x + lava.width / 2
-    Position.y[eid] = lava.y + lava.height / 2
+    Position.x[eid] = lava.x
+    Position.y[eid] = lava.y
     addComponent(sim.world, eid, JumpArc)
     JumpArc.z[eid] = 1
     JumpArc.vz[eid] = -1000
@@ -225,11 +231,11 @@ describe("jump pit landing (integration)", () => {
     expect(TerrainState.kind[eid]).toBe(TERRAIN_KIND.lava)
 
     for (let tick = 1; tick < 41; tick++) {
-      sim.tick(queue(input({ right: true, seq: tick })), Date.now() + tick * 16.667)
+      sim.tick(queue(input({ ...lava.exitInput, seq: tick })), Date.now() + tick * 16.667)
     }
 
     expect(terrainStateAtPosition(Position.x[eid], Position.y[eid])).toBe("lava")
-    expect(Position.x[eid]).toBeLessThan(lava.x + lava.width)
+    expect(Position.y[eid]).toBeLessThanOrEqual(lava.y + 8)
     expect(TerrainState.kind[eid]).toBe(TERRAIN_KIND.lava)
   })
 

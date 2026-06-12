@@ -23,17 +23,14 @@ import { canOccupyWorldPosition, type ArenaPropColliderRect } from "./worldColli
 
 const rect: ArenaPropColliderRect = { x: 10, y: 20, width: 30, height: 40 }
 const OPEN_LAND_POINT = { x: 710, y: 562 }
+const OPEN_LAVA_POINT = { x: 132, y: 50 }
+const OPEN_CLIFF_POINT = { x: 452, y: 989 }
 
-function sampleWideLavaRect(): ArenaPropColliderRect {
+function sampleLavaRect(): ArenaPropColliderRect {
   const lava = ARENA_LAVA_COLLIDERS.find((candidate) =>
-    candidate.width >= 250 &&
-    candidate.height >= 100 &&
-    terrainStateAtPosition(
-      candidate.x + candidate.width / 2,
-      candidate.y + candidate.height / 2,
-    ) === "lava",
+    pointInRects(OPEN_LAVA_POINT.x, OPEN_LAVA_POINT.y, [candidate]),
   )
-  if (!lava) throw new Error("Expected a wide native lava rectangle")
+  if (!lava) throw new Error("Expected native lava at the upper-left platform edge")
   return lava
 }
 
@@ -58,15 +55,16 @@ describe("terrain geometry helpers", () => {
   })
 
   it("samples points and terrain states from hazard colliders", () => {
-    const lava = sampleWideLavaRect()
+    sampleLavaRect()
     const cliff = sampleCliffOnlyRect()
 
-    expect(pointInRects(lava.x, lava.y, ARENA_LAVA_COLLIDERS)).toBe(true)
+    expect(pointInRects(OPEN_LAVA_POINT.x, OPEN_LAVA_POINT.y, ARENA_LAVA_COLLIDERS)).toBe(true)
     expect(pointInRects(-1, -1, ARENA_LAVA_COLLIDERS)).toBe(false)
-    expect(terrainStateAtPosition(lava.x + 1, lava.y + 1)).toBe("lava")
+    expect(terrainStateAtPosition(OPEN_LAVA_POINT.x, OPEN_LAVA_POINT.y)).toBe("lava")
     expect(terrainStateAtPosition(cliff.x + cliff.width / 2, cliff.y + cliff.height / 2)).toBe(
       "cliff",
     )
+    expect(terrainStateAtPosition(OPEN_CLIFF_POINT.x, OPEN_CLIFF_POINT.y)).toBe("cliff")
     expect(terrainStateAtPosition(OPEN_LAND_POINT.x, OPEN_LAND_POINT.y)).toBe("land")
   })
 
@@ -94,22 +92,18 @@ describe("worldCollidersForPlayerState", () => {
       expect(lavaColliders).not.toContain(ARENA_LAVA_TRANSITION_COLLIDERS[0])
     }
 
-    const lava = sampleWideLavaRect()
-    const lavaCenter = {
-      x: lava.x + lava.width / 2,
-      y: lava.y + lava.height / 2,
-    }
+    sampleLavaRect()
     const bounds = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
     expect(
       canOccupyWorldPosition(
-        lavaCenter.x,
-        lavaCenter.y,
+        OPEN_LAVA_POINT.x,
+        OPEN_LAVA_POINT.y,
         PLAYER_WORLD_COLLISION_FOOTPRINT,
         bounds,
         lavaColliders,
       ),
     ).toBe(true)
-    expect(groundedLavaCandidateCanOccupy(lavaCenter.x, lavaCenter.y)).toBe(true)
+    expect(groundedLavaCandidateCanOccupy(OPEN_LAVA_POINT.x, OPEN_LAVA_POINT.y)).toBe(true)
     expect(groundedLavaCandidateCanOccupy(OPEN_LAND_POINT.x, OPEN_LAND_POINT.y)).toBe(false)
   })
 

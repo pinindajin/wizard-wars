@@ -40,13 +40,16 @@ function input(over: Partial<PlayerInputPayload> & { seq: number }): PlayerInput
   }
 }
 
-function sampleWideLavaRect() {
+const OPEN_LAVA_EDGE_POINT = { x: 145, y: 57 }
+
+function sampleLavaRect() {
   const lava = ARENA_LAVA_COLLIDERS.find((rect) =>
-    rect.width >= 250 &&
-    rect.height >= 100 &&
-    terrainStateAtPosition(rect.x + rect.width / 2, rect.y + rect.height / 2) === "lava",
+    rect.x <= OPEN_LAVA_EDGE_POINT.x &&
+    rect.x + rect.width >= OPEN_LAVA_EDGE_POINT.x &&
+    rect.y <= OPEN_LAVA_EDGE_POINT.y &&
+    rect.y + rect.height >= OPEN_LAVA_EDGE_POINT.y,
   )
-  if (!lava) throw new Error("Expected a wide native lava rectangle")
+  if (!lava) throw new Error("Expected native lava at the upper-left platform edge")
   return lava
 }
 
@@ -216,10 +219,10 @@ describe("reconcileLocal", () => {
   })
 
   it("replays lava movement without walking onto land", () => {
-    const lava = sampleWideLavaRect()
+    sampleLavaRect()
     const start = {
-      x: lava.x + lava.width / 2,
-      y: lava.y + lava.height / 2,
+      x: OPEN_LAVA_EDGE_POINT.x,
+      y: OPEN_LAVA_EDGE_POINT.y,
     }
     const history = new LocalInputHistory()
     for (let seq = 20; seq < 60; seq++) {
@@ -234,6 +237,6 @@ describe("reconcileLocal", () => {
     )
 
     expect(terrainStateAtPosition(r.targetX, r.targetY)).toBe("lava")
-    expect(r.targetX).toBeLessThan(lava.x + lava.width)
+    expect(r.targetX).toBeLessThanOrEqual(OPEN_LAVA_EDGE_POINT.x)
   })
 })

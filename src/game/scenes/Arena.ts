@@ -28,6 +28,9 @@ export default class Arena extends Phaser.Scene {
 	}
 
 	editorCreate(): void {
+		// Arena.scene is a Phaser Editor data scene: it keeps editor-visible
+		// rectangles for regions/colliders, but this runtime output only creates
+		// the visual image layer and props. Region data is exported via arena.json.
 
 		// arena_base
 		const arenaBase = this.add.image(0, 0, "arena-base");

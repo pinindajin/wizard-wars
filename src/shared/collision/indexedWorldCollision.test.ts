@@ -9,6 +9,7 @@ import { ARENA_WORLD_COLLIDERS } from "@/shared/balance-config/arena"
 import {
   canOccupyWorldPosition,
   moveWithinWorld,
+  resolveAgainstWorld,
   resolveJumpLandingWithGrace,
   type ArenaPropColliderRect,
 } from "./worldCollision"
@@ -17,6 +18,7 @@ import type { IndexedColliderSet } from "./arenaSpatialIndexes"
 import {
   canOccupyWorldPositionIndexed,
   moveWithinWorldIndexed,
+  resolveAgainstWorldIndexed,
   resolveJumpLandingWithGraceIndexed,
   terrainStateAtPositionIndexed,
 } from "./indexedWorldCollision"
@@ -105,6 +107,35 @@ describe("indexedWorldCollision", () => {
     }
   })
 
+  it("falls back to full resolution when local indexed passes cannot clear a deep overlap", () => {
+    const start = { x: 26.7907, y: 601.9871 }
+    const indexed = resolveAgainstWorldIndexed(
+      start.x,
+      start.y,
+      PLAYER_WORLD_COLLISION_FOOTPRINT,
+      ARENA_BOUNDS,
+    )
+
+    expect(
+      canOccupyWorldPosition(
+        indexed.x,
+        indexed.y,
+        PLAYER_WORLD_COLLISION_FOOTPRINT,
+        ARENA_BOUNDS,
+        ARENA_WORLD_COLLIDERS,
+      ),
+    ).toBe(true)
+    expect(indexed).toEqual(
+      resolveAgainstWorld(
+        start.x,
+        start.y,
+        PLAYER_WORLD_COLLISION_FOOTPRINT,
+        ARENA_BOUNDS,
+        ARENA_WORLD_COLLIDERS,
+      ),
+    )
+  })
+
   it("matches brute-force jump landing checks", () => {
     const context = { movementX: 120, movementY: 0, gracePx: 6 }
     const cases = [
@@ -135,12 +166,13 @@ describe("indexedWorldCollision", () => {
     }
   })
 
-  it("matches brute-force terrain sampling and inclusive point boundaries", () => {
+  it("matches brute-force terrain sampling and half-open point boundaries", () => {
     const points = [
       { x: 256, y: 64 },
       { x: 1110, y: 128 },
       { x: 0, y: 128 },
       { x: 710, y: 562 },
+      { x: 160, y: 18 },
     ]
 
     for (const point of points) {
@@ -148,6 +180,7 @@ describe("indexedWorldCollision", () => {
         terrainStateAtPosition(point.x, point.y),
       )
     }
+    expect(terrainStateAtPositionIndexed(160, 18)).toBe("cliff")
   })
 })
 

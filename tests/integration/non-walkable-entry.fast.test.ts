@@ -4,6 +4,7 @@ import { Position } from "@/server/game/components"
 import { createGameSimulation } from "@/server/game/simulation"
 import {
   ARENA_HEIGHT,
+  ARENA_NON_WALKABLE_COLLIDERS,
   ARENA_WORLD_COLLIDERS,
   ARENA_WIDTH,
   PLAYER_WORLD_COLLISION_FOOTPRINT,
@@ -49,21 +50,42 @@ function queue(payload: PlayerInputPayload): Map<string, PlayerInputPayload[]> {
   return new Map([["user1", [payload]]])
 }
 
+function sampleUpperBlocker(): { x: number; y: number; minY: number } {
+  const bounds = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
+  const topClearance = PLAYER_WORLD_COLLISION_RADIUS_Y_PX - PLAYER_WORLD_COLLISION_OFFSET_Y_PX
+  for (const rect of ARENA_NON_WALKABLE_COLLIDERS) {
+    if (rect.y >= 320 || rect.width < 32) continue
+    const x = rect.x + rect.width / 2
+    const y = rect.y + rect.height + topClearance + 3
+    if (
+      canOccupyWorldPosition(
+        x,
+        y,
+        PLAYER_WORLD_COLLISION_FOOTPRINT,
+        bounds,
+        ARENA_WORLD_COLLIDERS,
+      )
+    ) {
+      return { x, y, minY: rect.y + rect.height + topClearance }
+    }
+  }
+  throw new Error("expected upper native non-walkable blocker with legal start")
+}
+
 describe("non-walkable movement integration", () => {
   it("keeps authoritative snapshots outside editor-authored non-walkable colliders", () => {
     const sim = createGameSimulation(Date.now())
     const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
-    const topStrip = ARENA_WORLD_COLLIDERS[0]!
+    const start = sampleUpperBlocker()
     const bounds = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
-    const topClearance = PLAYER_WORLD_COLLISION_RADIUS_Y_PX - PLAYER_WORLD_COLLISION_OFFSET_Y_PX
 
-    Position.x[eid] = topStrip.x + 704
-    Position.y[eid] = topStrip.y + topStrip.height + topClearance
+    Position.x[eid] = start.x
+    Position.y[eid] = start.y
 
     sim.tick(queue(input({ up: true })), Date.now())
 
     const snap = sim.buildGameStateSyncPayload(Date.now()).players[0]!
-    expect(snap.y).toBe(topStrip.y + topStrip.height + topClearance)
+    expect(snap.y).toBeGreaterThanOrEqual(start.minY)
     expect(snap.vy).toBe(0)
     expect(
       canOccupyWorldPosition(

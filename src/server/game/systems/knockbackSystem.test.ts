@@ -68,23 +68,33 @@ function sampleUpperKnockbackCase(): {
   readonly startY: number
 } {
   const blocker = ARENA_NON_WALKABLE_COLLIDERS.find((rect) =>
-    rect.x === 487 && rect.y === 180 && rect.width === 119 && rect.height === 40,
+    rect.y < 320 &&
+    rect.width >= 32 &&
+    canPlayerOccupy(
+      rect.x + rect.width / 2,
+      rect.y + rect.height + PLAYER_WORLD_COLLISION_FOOTPRINT.radiusY -
+        PLAYER_WORLD_COLLISION_FOOTPRINT.offsetY + 3,
+      ARENA_WORLD_COLLIDERS,
+    ),
   )
-  if (!blocker) throw new Error("Expected native upper lava blocker")
+  if (!blocker) throw new Error("Expected native upper non-walkable blocker")
   return {
     blocker,
-    startX: blocker.x + blocker.width + 21,
-    startY: blocker.y + blocker.height + 37,
+    startX: blocker.x + blocker.width / 2,
+    startY:
+      blocker.y + blocker.height + PLAYER_WORLD_COLLISION_FOOTPRINT.radiusY -
+      PLAYER_WORLD_COLLISION_FOOTPRINT.offsetY + 3,
   }
 }
 
-function sampleWideLavaRect(): ArenaPropColliderRect {
+function sampleLavaRect(): ArenaPropColliderRect {
   const lava = ARENA_LAVA_COLLIDERS.find((rect) =>
-    rect.width >= 250 &&
-    rect.height >= 100 &&
-    terrainStateAtPosition(rect.x + rect.width / 2, rect.y + rect.height / 2) === "lava",
+    rect.x <= 132 &&
+    rect.x + rect.width >= 132 &&
+    rect.y <= 54 &&
+    rect.y + rect.height >= 54,
   )
-  if (!lava) throw new Error("Expected a wide native lava rectangle")
+  if (!lava) throw new Error("Expected native lava at the upper-left platform edge")
   return lava
 }
 
@@ -111,8 +121,8 @@ describe("knockbackSystem", () => {
   })
 
   it("keeps grounded land players out of existing non-walkable colliders during knockback", () => {
-    const blocker = ARENA_WORLD_COLLIDERS.find((rect) => {
-      if (rect.x <= 0 || rect.y <= 0 || rect.width < 64 || rect.height < 64) return false
+    const blocker = ARENA_NON_WALKABLE_COLLIDERS.find((rect) => {
+      if (rect.x <= 0 || rect.y <= 0 || rect.width < 8 || rect.height < 8) return false
       const startX = rect.x - PLAYER_WORLD_COLLISION_FOOTPRINT.radiusX - 2
       const startY = rect.y + rect.height / 2 - PLAYER_WORLD_COLLISION_FOOTPRINT.offsetY
       return canPlayerOccupy(startX, startY, ARENA_WORLD_COLLIDERS)
@@ -141,12 +151,12 @@ describe("knockbackSystem", () => {
     addComponent(world, eid, TerrainState)
     addComponent(world, eid, Knockback)
 
-    const lava = sampleWideLavaRect()
-    Position.x[eid] = lava.x + lava.width / 2
-    Position.y[eid] = lava.y + lava.height / 2
+    sampleLavaRect()
+    Position.x[eid] = 132
+    Position.y[eid] = 54
     TerrainState.kind[eid] = TERRAIN_KIND.lava
-    Knockback.impulseX[eid] = 1
-    Knockback.impulseY[eid] = 0
+    Knockback.impulseX[eid] = 0
+    Knockback.impulseY[eid] = 1
     Knockback.remainingPx[eid] = 80
 
     for (let tick = 0; tick < 8; tick++) {

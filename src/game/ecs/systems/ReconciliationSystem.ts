@@ -17,10 +17,10 @@ import {
   normalizedMoveFromWASD,
   worldStepFromIntent,
 } from "@/shared/movementIntent"
-import { moveWithinWorld } from "@/shared/collision/worldCollision"
+import { moveWithinWorldIndexed } from "@/shared/collision/indexedWorldCollision"
+import { terrainColliderSetForPlayerState } from "@/shared/collision/arenaSpatialIndexes"
 import {
   worldCandidateGateForPlayerState,
-  worldCollidersForPlayerState,
 } from "@/shared/collision/worldCollidersForPlayer"
 import type { PlayerInputPayload, PlayerMoveState, PlayerTerrainState } from "@/shared/types"
 
@@ -122,18 +122,18 @@ function stepReplay(
     TICK_DT_SEC,
     mult,
   )
-  const colliders = worldCollidersForPlayerState(ctx.jumpZ, ctx.terrainState, {
+  const colliderSet = terrainColliderSetForPlayerState(ctx.jumpZ, ctx.terrainState, {
     jumpStartedInLava: ctx.jumpStartedInLava,
   })
   const candidateGate = worldCandidateGateForPlayerState(ctx.jumpZ, ctx.terrainState)
-  const moved = moveWithinWorld(
+  const moved = moveWithinWorldIndexed(
     x,
     y,
     step.x,
     step.y,
     PLAYER_WORLD_COLLISION_FOOTPRINT,
     ARENA_BOUNDS,
-    colliders,
+    colliderSet,
     candidateGate,
   )
   return { x: moved.x, y: moved.y }

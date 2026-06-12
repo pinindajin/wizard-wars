@@ -104,6 +104,38 @@ export function resolveJumpLandingWithGraceIndexed(
   return null
 }
 
+export function resolveAgainstWorldIndexed(
+  x: number,
+  y: number,
+  footprint: WorldCollisionFootprint,
+  bounds: ArenaBounds,
+  colliderSet: IndexedColliderSet = ARENA_WORLD_COLLIDER_SET,
+): { x: number; y: number } {
+  let cx = x
+  let cy = y
+  for (let pass = 0; pass < 8; pass++) {
+    const queryAabb = expandAabb(
+      footprintAabb(cx, cy, footprint),
+      Math.max(footprint.radiusX, footprint.radiusY, colliderSet.index.cellSizePx),
+    )
+    const colliders = collidersForAabb(queryAabb, colliderSet)
+    const resolved = resolveAgainstWorld(cx, cy, footprint, bounds, colliders)
+    if (Math.abs(resolved.x - cx) < 0.001 && Math.abs(resolved.y - cy) < 0.001) {
+      return canOccupyWorldPositionIndexed(resolved.x, resolved.y, footprint, bounds, colliderSet)
+        ? resolved
+        : resolveAgainstWorld(x, y, footprint, bounds, colliderSet.rects)
+    }
+    cx = resolved.x
+    cy = resolved.y
+    if (canOccupyWorldPositionIndexed(cx, cy, footprint, bounds, colliderSet)) {
+      return { x: cx, y: cy }
+    }
+  }
+  return canOccupyWorldPositionIndexed(cx, cy, footprint, bounds, colliderSet)
+    ? { x: cx, y: cy }
+    : resolveAgainstWorld(x, y, footprint, bounds, colliderSet.rects)
+}
+
 export function terrainStateAtPositionIndexed(x: number, y: number): PlayerTerrainState {
   if (queryPointIds(ARENA_LAVA_COLLIDER_SET.index, x, y, ARENA_LAVA_COLLIDER_SET.scratch).length > 0) {
     return "lava"
@@ -155,5 +187,14 @@ function unionAabb(a: Aabb, b: Aabb): Aabb {
     y: minY,
     width: maxX - minX,
     height: maxY - minY,
+  }
+}
+
+function expandAabb(aabb: Aabb, amount: number): Aabb {
+  return {
+    x: aabb.x - amount,
+    y: aabb.y - amount,
+    width: aabb.width + amount * 2,
+    height: aabb.height + amount * 2,
   }
 }

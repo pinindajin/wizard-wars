@@ -14,6 +14,36 @@ function readJson<T>(path: string): T {
   return JSON.parse(readFileSync(resolve(ROOT, path), "utf8")) as T
 }
 
+type TiledObject = {
+  readonly id: number
+  readonly name: string
+  readonly x: number
+  readonly y: number
+  readonly width: number
+  readonly height: number
+}
+
+type TiledLayer = {
+  readonly name: string
+  readonly type: string
+  readonly objects?: readonly TiledObject[]
+}
+
+function objectLayer(map: { readonly layers: readonly TiledLayer[] }, name: string): readonly TiledObject[] {
+  const layer = map.layers.find((item) => item.type === "objectgroup" && item.name === name)
+  if (!layer?.objects) throw new Error(`Expected object layer ${name}`)
+  return layer.objects
+}
+
+function rectsOverlap(a: TiledObject, b: TiledObject): boolean {
+  return (
+    a.x < b.x + b.width &&
+    a.x + a.width > b.x &&
+    a.y < b.y + b.height &&
+    a.y + a.height > b.y
+  )
+}
+
 describe("Arena Phaser Editor scene", () => {
   it("exports to the committed arena tilemap without semantic drift", () => {
     const exported = buildArenaTilemapFromScene()
@@ -71,10 +101,38 @@ describe("Arena Phaser Editor scene", () => {
     }
   })
 
+  it("exports unique object ids and mutually exclusive semantic region rectangles", () => {
+    const tilemap = readJson<{ readonly layers: readonly TiledLayer[] }>("public/assets/tilemaps/arena.json")
+    const ids = new Set<number>()
+    for (const layer of tilemap.layers) {
+      for (const object of layer.objects ?? []) {
+        expect(ids.has(object.id), `${object.name} reuses object id ${object.id}`).toBe(false)
+        ids.add(object.id)
+      }
+    }
+
+    const pairs = [
+      ["WalkableAreas", "LavaAreas"],
+      ["WalkableAreas", "CliffAreas"],
+      ["LavaAreas", "CliffAreas"],
+    ] as const
+    for (const [aName, bName] of pairs) {
+      for (const a of objectLayer(tilemap, aName)) {
+        for (const b of objectLayer(tilemap, bName)) {
+          expect(rectsOverlap(a, b), `${a.name} overlaps ${b.name}`).toBe(false)
+        }
+      }
+    }
+  })
+
   it("uses Phaser Editor v5 native image data for Arena visuals and regions", () => {
     const scene = readJson<{
       readonly meta: { readonly version: number }
-      readonly settings: { readonly borderWidth: number; readonly borderHeight: number }
+      readonly settings: {
+        readonly exportClass: boolean
+        readonly borderWidth: number
+        readonly borderHeight: number
+      }
       readonly displayList: readonly {
         readonly type: string
         readonly label: string
@@ -85,12 +143,18 @@ describe("Arena Phaser Editor scene", () => {
         readonly x?: number
         readonly y?: number
         readonly visible?: boolean
+        readonly codexRuntimeExcluded?: boolean
         readonly texture?: { readonly key?: string }
       }[]
     }>("src/game/scenes/Arena.scene")
+    const generatedSource = readFileSync(resolve(ROOT, "src/game/scenes/Arena.ts"), "utf8")
 
     expect(scene.meta.version).toBe(5)
-    expect(scene.settings).toMatchObject({ borderWidth: ARENA_WIDTH, borderHeight: ARENA_HEIGHT })
+    expect(scene.settings).toMatchObject({
+      exportClass: false,
+      borderWidth: ARENA_WIDTH,
+      borderHeight: ARENA_HEIGHT,
+    })
     expect(scene.displayList).toContainEqual(
       expect.objectContaining({
         type: "Image",
@@ -108,6 +172,16 @@ describe("Arena Phaser Editor scene", () => {
         .filter((item) => item.type === "Rectangle")
         .every((item) => item.visible === true),
     ).toBe(true)
+    expect(
+      scene.displayList
+        .filter((item) => item.type === "Rectangle")
+        .every((item) => item.codexRuntimeExcluded === true),
+    ).toBe(true)
+    expect(generatedSource).not.toContain("this.add.rectangle")
+    expect(generatedSource).not.toContain("propCollider_")
+    expect(generatedSource).not.toContain("lavaArea_")
+    expect(generatedSource).not.toContain("cliffArea_")
+    expect(generatedSource).not.toContain("walkableArea_")
   })
 
   it("anchors prop sprites at their ground contact point for y-sort occlusion", () => {

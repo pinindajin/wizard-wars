@@ -62,54 +62,86 @@ import type { PlayerSnapshot, PrimaryMeleeAttackPayload } from "@/shared/types"
 import { getAnimKey, getDirectionFromAngle } from "../../animation/LadyWizardAnimDefs"
 import { HERO_CONFIGS } from "@/shared/balance-config/heroes"
 import {
+  ARENA_HEIGHT,
   ARENA_LAVA_COLLIDERS,
   ARENA_NON_WALKABLE_COLLIDERS,
+  ARENA_PROP_COLLIDERS,
   ARENA_SPAWN_POINTS,
+  ARENA_WIDTH,
+  ARENA_WORLD_COLLIDERS,
+  PLAYER_WORLD_COLLISION_FOOTPRINT,
 } from "@/shared/balance-config"
 import { terrainStateAtPosition } from "@/shared/collision/terrainHazards"
+import { canOccupyWorldPosition } from "@/shared/collision/worldCollision"
 import { REPLAY_SMOOTHING_MS } from "@/shared/balance-config/rendering"
 
 const OPEN_TEST_POINT = ARENA_SPAWN_POINTS[0]!
+const ARENA_BOUNDS = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
+const OPEN_LAVA_EDGE_POINT = { x: 145, y: 57 }
+
+function canPlayerOccupy(x: number, y: number): boolean {
+  return canOccupyWorldPosition(
+    x,
+    y,
+    PLAYER_WORLD_COLLISION_FOOTPRINT,
+    ARENA_BOUNDS,
+    ARENA_WORLD_COLLIDERS,
+  )
+}
 
 function sampleDiagonalSlideCase() {
   const blocker = ARENA_NON_WALKABLE_COLLIDERS.find((rect) =>
-    rect.x === 318 && rect.y === 88 && rect.width === 42 && rect.height === 30,
+    rect.y < 320 &&
+    rect.width >= 32 &&
+    canPlayerOccupy(
+      rect.x + rect.width / 2,
+      rect.y + rect.height + PLAYER_WORLD_COLLISION_FOOTPRINT.radiusY -
+        PLAYER_WORLD_COLLISION_FOOTPRINT.offsetY + 3,
+    ),
   )
   if (!blocker) throw new Error("Expected native upper edge blocker")
   return {
     blocker,
     start: {
-      x: blocker.x - 58,
-      y: blocker.y + blocker.height + 4,
+      x: blocker.x + blocker.width / 2,
+      y:
+        blocker.y + blocker.height + PLAYER_WORLD_COLLISION_FOOTPRINT.radiusY -
+        PLAYER_WORLD_COLLISION_FOOTPRINT.offsetY + 3,
     },
   }
 }
 
 function sampleBlockedSmoothingCase() {
-  const blocker = ARENA_NON_WALKABLE_COLLIDERS.find((rect) =>
-    rect.x === 487 && rect.y === 180 && rect.width === 119 && rect.height === 40,
-  )
-  if (!blocker) throw new Error("Expected native upper lava blocker")
+  const blocker = ARENA_PROP_COLLIDERS.find((rect) => {
+    const y = rect.y + rect.height / 2 - PLAYER_WORLD_COLLISION_FOOTPRINT.offsetY
+    return (
+      canPlayerOccupy(rect.x - PLAYER_WORLD_COLLISION_FOOTPRINT.radiusX - 4, y) &&
+      canPlayerOccupy(rect.x + rect.width + PLAYER_WORLD_COLLISION_FOOTPRINT.radiusX + 4, y)
+    )
+  })
+  if (!blocker) throw new Error("Expected native prop blocker with legal smoothing endpoints")
+  const y = blocker.y + blocker.height / 2 - PLAYER_WORLD_COLLISION_FOOTPRINT.offsetY
   return {
     blocker,
     start: {
-      x: blocker.x + blocker.width + 21,
-      y: blocker.y + blocker.height + 37,
+      x: blocker.x - PLAYER_WORLD_COLLISION_FOOTPRINT.radiusX - 4,
+      y,
     },
     target: {
-      x: blocker.x + blocker.width + 21,
-      y: blocker.y - 25,
+      x: blocker.x + blocker.width + PLAYER_WORLD_COLLISION_FOOTPRINT.radiusX + 4,
+      y,
     },
   }
 }
 
-function sampleWideLavaRect() {
+function sampleLavaRect() {
   const lava = ARENA_LAVA_COLLIDERS.find((rect) =>
-    rect.width >= 250 &&
-    rect.height >= 100 &&
-    terrainStateAtPosition(rect.x + rect.width / 2, rect.y + rect.height / 2) === "lava",
+    rect.x <= OPEN_LAVA_EDGE_POINT.x &&
+    rect.x + rect.width >= OPEN_LAVA_EDGE_POINT.x &&
+    rect.y <= OPEN_LAVA_EDGE_POINT.y &&
+    rect.y + rect.height >= OPEN_LAVA_EDGE_POINT.y,
   )
-  if (!lava) throw new Error("Expected a wide native lava rectangle")
+  if (!lava) throw new Error("Expected native lava at the upper-left platform edge")
   return lava
 }
 
@@ -509,10 +541,10 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     const { scene, group } = mockSceneAndGroup()
     const sys = new PlayerRenderSystem(scene as never, group as never)
     sys.localPlayerId = "p1"
-    const lava = sampleWideLavaRect()
+    sampleLavaRect()
     const start = {
-      x: lava.x + lava.width / 2,
-      y: lava.y + lava.height / 2,
+      x: OPEN_LAVA_EDGE_POINT.x,
+      y: OPEN_LAVA_EDGE_POINT.y,
     }
     sys.applyFullSync(sync([snap({
       id: 1,
@@ -527,7 +559,7 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     const after = sys._getLocalSimForTest(1)
     expect(after).not.toBeNull()
     expect(terrainStateAtPosition(after!.simCurrX, after!.simCurrY)).toBe("lava")
-    expect(after!.simCurrX).toBeLessThan(lava.x + lava.width)
+    expect(after!.simCurrX).toBeLessThanOrEqual(OPEN_LAVA_EDGE_POINT.x)
   })
 
   it("snaps to a legal smooth target when blocker-gated smoothing cannot reach it", () => {

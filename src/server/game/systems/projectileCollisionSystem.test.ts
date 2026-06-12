@@ -21,6 +21,7 @@ import { projectileCollisionSystem } from "./projectileCollisionSystem"
 const FIREBALL_OWNER_SELF_DAMAGE_GRACE_TICKS = Math.ceil(
   FIREBALL_OWNER_SELF_DAMAGE_GRACE_MS / TICK_MS,
 )
+const FIREBALL_TEST_RADIUS_PX = 8
 
 function emptyCtx(overrides: Partial<SimCtx> = {}): SimCtx {
   return {
@@ -208,6 +209,26 @@ describe("projectileCollisionSystem", () => {
     expect(ctx.fireballImpacts).toEqual([{ id: fireball, x, y }])
     expect(ctx.fireballRemovedIds).toEqual([fireball])
     expect(ctx.fireballOwnerMap.has(fireball)).toBe(false)
+  })
+
+  it("despawns fireballs when only the fireball radius touches a prop edge", () => {
+    const prop = ARENA_PROP_COLLIDERS[0]
+    if (!prop) throw new Error("Expected generated arena prop collider")
+
+    const world = createWorld()
+    const x = prop.x - FIREBALL_TEST_RADIUS_PX
+    const y = prop.y + prop.height / 2
+    const fireball = addFireball(world, x, y)
+    const ctx = emptyCtx({
+      world,
+      fireballOwnerMap: new Map([[fireball, "caster"]]),
+    })
+
+    projectileCollisionSystem(ctx)
+
+    expect(ctx.damageRequests).toHaveLength(0)
+    expect(ctx.fireballImpacts).toEqual([{ id: fireball, x, y }])
+    expect(ctx.fireballRemovedIds).toEqual([fireball])
   })
 
   it("misses when the fireball is outside the character hitbox", () => {

@@ -32,11 +32,12 @@ describe("spatialIndex", () => {
     expect(ids).toEqual([1, 2])
   })
 
-  it("treats exact point touches as candidates", () => {
+  it("uses half-open point containment", () => {
     const items: Aabb[] = [{ x: 10, y: 10, width: 54, height: 54 }]
     const index = createStaticAabbIndex(items, { cellSizePx: 64 })
 
-    expect(queryPointIds(index, 64, 64)).toEqual([0])
+    expect(queryPointIds(index, 63, 63)).toEqual([0])
+    expect(queryPointIds(index, 64, 64)).toEqual([])
   })
 
   it("indexes negative and out-of-arena coordinates safely", () => {
