@@ -25,7 +25,7 @@ export type LoaderStatus = {
   readonly total: number
   /**
    * `"loading"` while any pack is still in-flight; `"complete"` is emitted
-   * exactly once by Arena after `editorCreate()` finishes (tilemap + anims
+   * exactly once by Arena after `editorCreate()` finishes (map visuals + anims
    * ready). React uses `complete` to unmount the loading overlay.
    */
   readonly phase: "loading" | "complete"

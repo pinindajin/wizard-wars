@@ -12,6 +12,8 @@ import {
   ARENA_PROP_COLLIDERS,
   ARENA_NON_WALKABLE_COLLIDERS,
   ARENA_WORLD_COLLIDERS,
+  ARENA_LAVA_COLLIDERS,
+  ARENA_CLIFF_COLLIDERS,
 } from "@/shared/balance-config/arena"
 import {
   PLAYER_WORLD_COLLISION_OFFSET_Y_PX,
@@ -44,11 +46,16 @@ function spawnOverlapsCollider(
 }
 
 describe("arena constants", () => {
-  it("exposes prop colliders from generated Tiled export (may be empty)", () => {
+  it("exposes native prop colliders from generated editor export", () => {
     expect(Array.isArray(ARENA_PROP_COLLIDERS)).toBe(true)
+    expect(ARENA_PROP_COLLIDERS.length).toBeGreaterThan(0)
     for (const r of ARENA_PROP_COLLIDERS) {
       expect(r.width).toBeGreaterThan(0)
       expect(r.height).toBeGreaterThan(0)
+      expect(r.x).toBeGreaterThanOrEqual(0)
+      expect(r.y).toBeGreaterThanOrEqual(0)
+      expect(r.x + r.width).toBeLessThanOrEqual(ARENA_WIDTH)
+      expect(r.y + r.height).toBeLessThanOrEqual(ARENA_HEIGHT)
     }
   })
 
@@ -57,28 +64,35 @@ describe("arena constants", () => {
     expect(ARENA_WORLD_COLLIDERS.length).toBe(
       ARENA_PROP_COLLIDERS.length + ARENA_NON_WALKABLE_COLLIDERS.length,
     )
-    expect(
-      ARENA_NON_WALKABLE_COLLIDERS.some(
-        (rect) => rect.width >= TILE_SIZE_PX && rect.height >= TILE_SIZE_PX,
-      ),
-    ).toBe(true)
-    expect(
-      ARENA_NON_WALKABLE_COLLIDERS.some(
-        (rect) =>
-          rect.x % TILE_SIZE_PX === 0 &&
-          rect.y % TILE_SIZE_PX === 0 &&
-          rect.width % TILE_SIZE_PX === 0 &&
-          rect.height % TILE_SIZE_PX === 0,
-      ),
-    ).toBe(true)
+    for (const rect of ARENA_NON_WALKABLE_COLLIDERS) {
+      expect(rect.width).toBeGreaterThan(0)
+      expect(rect.height).toBeGreaterThan(0)
+      expect(rect.x).toBeGreaterThanOrEqual(0)
+      expect(rect.y).toBeGreaterThanOrEqual(0)
+      expect(rect.x + rect.width).toBeLessThanOrEqual(ARENA_WIDTH)
+      expect(rect.y + rect.height).toBeLessThanOrEqual(ARENA_HEIGHT)
+    }
   })
 
-  it("has generated dimensions at 64px per tile", () => {
+  it("exposes explicit native lava and cliff regions", () => {
+    expect(ARENA_LAVA_COLLIDERS.length).toBeGreaterThan(0)
+    expect(ARENA_CLIFF_COLLIDERS.length).toBeGreaterThan(0)
+    for (const rect of [...ARENA_LAVA_COLLIDERS, ...ARENA_CLIFF_COLLIDERS]) {
+      expect(rect.width).toBeGreaterThan(0)
+      expect(rect.height).toBeGreaterThan(0)
+      expect(rect.x).toBeGreaterThanOrEqual(0)
+      expect(rect.y).toBeGreaterThanOrEqual(0)
+      expect(rect.x + rect.width).toBeLessThanOrEqual(ARENA_WIDTH)
+      expect(rect.y + rect.height).toBeLessThanOrEqual(ARENA_HEIGHT)
+    }
+  })
+
+  it("has native image dimensions while retaining 64px broadphase cells", () => {
     expect(TILE_SIZE_PX).toBe(64)
+    expect(ARENA_WIDTH).toBe(1402)
+    expect(ARENA_HEIGHT).toBe(1122)
     expect(ARENA_COLS).toBeGreaterThan(0)
     expect(ARENA_ROWS).toBeGreaterThan(0)
-    expect(ARENA_COLS * TILE_SIZE_PX).toBe(ARENA_WIDTH)
-    expect(ARENA_ROWS * TILE_SIZE_PX).toBe(ARENA_HEIGHT)
   })
 
   it("has correct center coordinates", () => {
@@ -115,9 +129,9 @@ describe("spawn points", () => {
     }
   })
 
-  it("no spawn point overlaps editor-authored non-walkable colliders", () => {
+  it("no spawn point overlaps editor-authored blocking colliders", () => {
     for (const sp of ARENA_SPAWN_POINTS) {
-      for (const rect of ARENA_NON_WALKABLE_COLLIDERS) {
+      for (const rect of ARENA_WORLD_COLLIDERS) {
         expect(spawnOverlapsCollider(sp.x, sp.y, rect)).toBe(false)
       }
     }

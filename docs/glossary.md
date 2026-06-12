@@ -4,7 +4,7 @@ Cross-context vocabulary for active engineering work.
 
 | Term | Definition |
 | --- | --- |
-| Arena | Playfield for a match. Current arena is 66x53 tiles at 64 px each, 4224x3392 px total. |
+| Arena | Playfield for a match. Current arena is a native image-backed 1402x1122 px map with editor-authored prop, cliff, lava, and walkable regions. |
 | Hero | Player avatar. Current MVP heroes share the lady-wizard sprite and differ through identity/config rather than separate art. |
 | Lives | Respawn tickets. A player who reaches zero lives becomes a spectator and can end the match. |
 | Kill | Lethal damage event. The killer receives kill credit and session gold. |

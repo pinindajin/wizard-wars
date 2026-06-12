@@ -5,10 +5,9 @@ import { fileURLToPath, pathToFileURL } from "node:url"
 import { lavaTransitionRectsFromNonWalkableAndLava } from "./lava-transition-rects"
 
 import {
-  ARENA_COLS,
-  ARENA_ROWS,
+  ARENA_HEIGHT,
   ARENA_SPAWN_POINTS,
-  TILE_SIZE_PX,
+  ARENA_WIDTH,
 } from "../src/shared/balance-config/arena"
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
@@ -35,39 +34,8 @@ const GENERATED_LAVA_TRANSITION_COLLIDERS = resolve(
   ROOT,
   "src/shared/balance-config/generated/arena-lava-transition-colliders.ts",
 )
-const ARENA_TILESET = resolve(ROOT, "public/assets/tilesets/arena-terrain.png")
 
-type EditableTileset = {
-  readonly name: string
-  readonly imageKey: string
-  readonly tileWidth: number
-  readonly tileHeight: number
-  readonly tileMargin?: number
-  readonly tileSpacing?: number
-}
-
-type EditableLayer = {
-  readonly name: string
-  readonly data: string
-  readonly width: number
-  readonly height: number
-  readonly tileWidth: number
-  readonly tileHeight: number
-}
-
-type EditableTilemap = {
-  readonly type: "EditableTilemap"
-  readonly id: string
-  readonly label: string
-  readonly width: number
-  readonly height: number
-  readonly tileWidth: number
-  readonly tileHeight: number
-  readonly tilesets: readonly EditableTileset[]
-  readonly layers: readonly EditableLayer[]
-}
-
-type SceneRectangle = {
+type SceneObject = {
   readonly type?: string
   readonly id?: string
   readonly label?: string
@@ -78,11 +46,18 @@ type SceneRectangle = {
   readonly originX?: number
   readonly originY?: number
   readonly visible?: boolean
+  readonly texture?: { readonly key?: string }
 }
 
 type ArenaScene = {
-  readonly displayList?: readonly SceneRectangle[]
-  readonly plainObjects?: readonly unknown[]
+  readonly displayList?: readonly SceneObject[]
+  readonly settings?: {
+    readonly borderWidth?: number
+    readonly borderHeight?: number
+  }
+  readonly meta?: {
+    readonly version?: number
+  }
 }
 
 type TiledObject = {
@@ -101,32 +76,6 @@ type TiledObject = {
   }[]
 }
 
-type Rect = { x: number; y: number; width: number; height: number }
-
-const LAVA_TILE_IDS = new Set([
-  21, 22, 23, 24, 25, 26, 27, 28, 30, 32, 33, 36, 40, 41, 43, 44, 48, 49,
-  51, 52, 54, 55, 59, 60, 64, 65, 68, 69, 76, 77, 79, 80, 82, 84, 85, 87,
-  88, 93, 94, 95, 97, 98, 100, 101, 102, 104, 105, 106, 107, 112, 113, 118,
-  119, 122, 123, 125, 127, 128, 129, 130, 132, 135, 136, 137, 139, 140, 141,
-  142, 145, 146, 148, 149, 150, 151, 152, 153, 155, 157, 158, 159, 160, 167,
-  168, 173, 174, 177, 178, 180, 182, 183, 185, 186, 189, 190, 191, 193, 194,
-  199, 202, 205, 207, 209, 210, 211, 213, 214, 215, 218, 219, 220, 221, 222,
-  223, 224, 225, 226, 227, 228,
-])
-
-type TiledTileLayer = {
-  readonly id: number
-  readonly name: string
-  readonly type: "tilelayer"
-  readonly visible: boolean
-  readonly opacity: 1
-  readonly x: 0
-  readonly y: 0
-  readonly width: number
-  readonly height: number
-  readonly data: readonly number[]
-}
-
 type TiledObjectLayer = {
   readonly id: number
   readonly name: string
@@ -137,6 +86,26 @@ type TiledObjectLayer = {
   readonly y: 0
   readonly draworder: "topdown"
   readonly objects: readonly TiledObject[]
+}
+
+type TiledImageLayer = {
+  readonly id: number
+  readonly name: string
+  readonly type: "imagelayer"
+  readonly visible: boolean
+  readonly opacity: 1
+  readonly x: 0
+  readonly y: 0
+  readonly image: string
+}
+
+type TiledTileLayer = {
+  readonly id: number
+  readonly name: string
+  readonly type: "tilelayer"
+  readonly width: number
+  readonly height: number
+  readonly data: readonly number[]
 }
 
 type TiledMap = {
@@ -151,28 +120,11 @@ type TiledMap = {
   readonly infinite: false
   readonly nextlayerid: number
   readonly nextobjectid: number
-  readonly tilesets: readonly {
-    readonly firstgid: 1
-    readonly name: string
-    readonly tilewidth: number
-    readonly tileheight: number
-    readonly spacing: number
-    readonly margin: number
-    readonly columns: number
-    readonly tilecount: number
-    readonly image: string
-    readonly imagewidth: number
-    readonly imageheight: number
-  }[]
-  readonly layers: readonly [
-    TiledTileLayer,
-    TiledObjectLayer,
-    TiledObjectLayer,
-    TiledObjectLayer,
-    TiledObjectLayer,
-    TiledObjectLayer,
-  ]
+  readonly tilesets: readonly []
+  readonly layers: readonly (TiledImageLayer | TiledObjectLayer | TiledTileLayer)[]
 }
+
+type Rect = { x: number; y: number; width: number; height: number }
 
 function readJson<T>(path: string): T {
   return JSON.parse(readFileSync(path, "utf8")) as T
@@ -180,42 +132,6 @@ function readJson<T>(path: string): T {
 
 function readArenaScene(): ArenaScene {
   return readJson<ArenaScene>(ARENA_SCENE)
-}
-
-function findArenaMap(scene: ArenaScene): EditableTilemap {
-  const match = (scene.plainObjects ?? []).find((obj): obj is EditableTilemap => {
-    return Boolean(
-      obj &&
-        typeof obj === "object" &&
-        (obj as EditableTilemap).type === "EditableTilemap" &&
-        (obj as EditableTilemap).label === "arenaMap",
-    )
-  })
-
-  if (!match) {
-    throw new Error("Arena.scene must contain an EditableTilemap plain object labelled `arenaMap`.")
-  }
-
-  return match
-}
-
-function readGroundData(tilemap: EditableTilemap): readonly number[] {
-  const ground = tilemap.layers.find((layer) => layer.name === "Ground")
-  if (!ground) {
-    throw new Error("Arena.scene editable tilemap must contain a `Ground` layer.")
-  }
-
-  const data = JSON.parse(ground.data) as unknown
-  if (!Array.isArray(data) || !data.every((value) => Number.isInteger(value))) {
-    throw new Error("Arena.scene Ground layer data must be a flat integer array.")
-  }
-  if (data.length !== tilemap.width * tilemap.height) {
-    throw new Error(
-      `Arena.scene Ground layer has ${data.length} tiles; expected ${tilemap.width * tilemap.height}.`,
-    )
-  }
-
-  return data as number[]
 }
 
 function generateSpawnPointObjects(): TiledObject[] {
@@ -232,24 +148,6 @@ function generateSpawnPointObjects(): TiledObject[] {
       properties: [{ name: "spawnIndex", type: "int", value: i }],
     }
   })
-}
-
-/**
- * Reads width/height from a PNG header without pulling in async image APIs.
- *
- * @param path - PNG file path.
- * @returns Image dimensions in pixels.
- */
-function readPngDimensions(path: string): { width: number; height: number } {
-  const bytes = readFileSync(path)
-  const pngSignature = "89504e470d0a1a0a"
-  if (bytes.subarray(0, 8).toString("hex") !== pngSignature) {
-    throw new Error(`Expected PNG tileset at ${path}`)
-  }
-  return {
-    width: bytes.readUInt32BE(16),
-    height: bytes.readUInt32BE(20),
-  }
 }
 
 function readSceneRectangleObjects(
@@ -273,26 +171,108 @@ function readSceneRectangleObjects(
         y: (obj.y ?? 0) - height * originY,
         width,
         height,
-        visible: obj.visible ?? false,
+        visible: obj.visible ?? true,
       }
     })
     .filter((obj) => obj.width > 0 && obj.height > 0)
 }
 
-function readPropColliderObjects(scene: ArenaScene): TiledObject[] {
-  return readSceneRectangleObjects(scene, "propCollider_", "prop-collider", 100)
+function objectLayer(
+  id: number,
+  name: string,
+  objects: readonly TiledObject[],
+): TiledObjectLayer {
+  return {
+    id,
+    name,
+    type: "objectgroup",
+    visible: true,
+    opacity: 1,
+    x: 0,
+    y: 0,
+    draworder: "topdown",
+    objects,
+  }
 }
 
-function readNonWalkableObjects(scene: ArenaScene): TiledObject[] {
-  return readSceneRectangleObjects(scene, "nonWalkableArea_", "non-walkable-area", 1000)
+function imageLayer(): TiledImageLayer {
+  return {
+    id: 1,
+    name: "ArenaBase",
+    type: "imagelayer",
+    visible: true,
+    opacity: 1,
+    x: 0,
+    y: 0,
+    image: "../maps/arena-base.png",
+  }
 }
 
-function readLavaObjects(scene: ArenaScene): TiledObject[] {
-  return readSceneRectangleObjects(scene, "lavaArea_", "lava-area", 2000)
+function assertNativeScene(scene: ArenaScene): void {
+  if (scene.meta?.version !== 5) {
+    throw new Error("Arena.scene must remain Phaser Editor version 5.")
+  }
+  if (scene.settings?.borderWidth !== ARENA_WIDTH || scene.settings?.borderHeight !== ARENA_HEIGHT) {
+    throw new Error(`Arena.scene bounds must remain ${ARENA_WIDTH}x${ARENA_HEIGHT}.`)
+  }
+  const base = (scene.displayList ?? []).find(
+    (obj) => obj.type === "Image" && obj.texture?.key === "arena-base",
+  )
+  if (!base) {
+    throw new Error("Arena.scene must contain an Image using texture key `arena-base`.")
+  }
 }
 
-function readCliffObjects(scene: ArenaScene): TiledObject[] {
-  return readSceneRectangleObjects(scene, "cliffArea_", "cliff-area", 3000)
+export function buildArenaTilemapFromScene(scene = readArenaScene()): TiledMap {
+  assertNativeScene(scene)
+
+  const spawnObjects = generateSpawnPointObjects()
+  const propObjects = readSceneRectangleObjects(scene, "propCollider_", "prop-collider", 100)
+  const nonWalkableObjects = readSceneRectangleObjects(scene, "nonWalkableArea_", "non-walkable-area", 1000)
+  const lavaObjects = readSceneRectangleObjects(scene, "lavaArea_", "lava-area", 2000)
+  const cliffObjects = readSceneRectangleObjects(scene, "cliffArea_", "cliff-area", 3000)
+  const walkableObjects = readSceneRectangleObjects(scene, "walkableArea_", "walkable-area", 4000)
+
+  const highestObjectId = Math.max(
+    0,
+    ...spawnObjects.map((obj) => obj.id),
+    ...propObjects.map((obj) => obj.id),
+    ...nonWalkableObjects.map((obj) => obj.id),
+    ...lavaObjects.map((obj) => obj.id),
+    ...cliffObjects.map((obj) => obj.id),
+    ...walkableObjects.map((obj) => obj.id),
+  )
+
+  return {
+    width: ARENA_WIDTH,
+    height: ARENA_HEIGHT,
+    tilewidth: 1,
+    tileheight: 1,
+    orientation: "orthogonal",
+    renderorder: "right-down",
+    version: "1.10",
+    tiledversion: "1.10.2",
+    infinite: false,
+    nextlayerid: 8,
+    nextobjectid: highestObjectId + 1,
+    tilesets: [],
+    layers: [
+      imageLayer(),
+      objectLayer(2, "SpawnPoints", spawnObjects),
+      objectLayer(3, "PropColliders", propObjects),
+      objectLayer(4, "NonWalkableAreas", nonWalkableObjects),
+      objectLayer(5, "LavaAreas", lavaObjects),
+      objectLayer(6, "CliffAreas", cliffObjects),
+      objectLayer(7, "WalkableAreas", walkableObjects),
+    ],
+  }
+}
+
+function layerRects(tilemap: TiledMap, layerName: string): Rect[] {
+  const layer = tilemap.layers.find(
+    (item): item is TiledObjectLayer => item.type === "objectgroup" && item.name === layerName,
+  )
+  return layer?.objects.map(({ x, y, width, height }) => ({ x, y, width, height })) ?? []
 }
 
 function rectsOverlap(a: Rect, b: Rect): boolean {
@@ -304,213 +284,16 @@ function rectsOverlap(a: Rect, b: Rect): boolean {
   )
 }
 
-function mergeTileRects(rects: readonly Rect[]): Rect[] {
-  const rows = new Map<number, Rect[]>()
-  for (const rect of rects) {
-    const row = rows.get(rect.y) ?? []
-    row.push(rect)
-    rows.set(rect.y, row)
-  }
-
-  const horizontal: Rect[] = []
-  for (const row of [...rows.values()]) {
-    row.sort((a, b) => a.x - b.x)
-    for (const rect of row) {
-      const last = horizontal[horizontal.length - 1]
-      if (last && last.y === rect.y && last.height === rect.height && last.x + last.width === rect.x) {
-        last.width += rect.width
-      } else {
-        horizontal.push({ ...rect })
-      }
-    }
-  }
-
-  horizontal.sort((a, b) => a.x - b.x || a.width - b.width || a.y - b.y)
-  const merged: Rect[] = []
-  for (const rect of horizontal) {
-    const last = merged[merged.length - 1]
-    if (last && last.x === rect.x && last.width === rect.width && last.y + last.height === rect.y) {
-      last.height += rect.height
-    } else {
-      merged.push({ ...rect })
-    }
-  }
-  return merged.sort((a, b) => a.y - b.y || a.x - b.x)
-}
-
-function lavaRectsFromGround(tilemap: TiledMap): Rect[] {
-  const ground = tilemap.layers[0]
-  const rects: Rect[] = []
-  for (let i = 0; i < ground.data.length; i++) {
-    if (!LAVA_TILE_IDS.has(ground.data[i] ?? 0)) continue
-    const col = i % ground.width
-    const row = Math.floor(i / ground.width)
-    rects.push({
-      x: col * TILE_SIZE_PX,
-      y: row * TILE_SIZE_PX,
-      width: TILE_SIZE_PX,
-      height: TILE_SIZE_PX,
-    })
-  }
-  return mergeTileRects(rects)
-}
-
-export function buildArenaTilemapFromScene(scene = readArenaScene()): TiledMap {
-  const tilemap = findArenaMap(scene)
-  const tileset = tilemap.tilesets.find((item) => item.name === "arena-terrain")
-  if (!tileset) {
-    throw new Error("Arena.scene editable tilemap must use the `arena-terrain` tileset.")
-  }
-  if (
-    tilemap.width !== ARENA_COLS ||
-    tilemap.height !== ARENA_ROWS ||
-    tilemap.tileWidth !== TILE_SIZE_PX ||
-    tilemap.tileHeight !== TILE_SIZE_PX
-  ) {
-    throw new Error(
-      `Arena.scene dimensions must remain ${ARENA_COLS}x${ARENA_ROWS} tiles at ${TILE_SIZE_PX}x${TILE_SIZE_PX} px.`,
-    )
-  }
-
-  const groundData = readGroundData(tilemap)
-  const propObjects = readPropColliderObjects(scene)
-  const nonWalkableObjects = readNonWalkableObjects(scene)
-  const lavaObjects = readLavaObjects(scene)
-  const cliffObjects = readCliffObjects(scene)
-  const tilesetImage = readPngDimensions(ARENA_TILESET)
-  const tilesetColumns = tilesetImage.width / TILE_SIZE_PX
-  const tilesetRows = tilesetImage.height / TILE_SIZE_PX
-  const highestObjectId = Math.max(
-    0,
-    ...generateSpawnPointObjects().map((obj) => obj.id),
-    ...propObjects.map((obj) => obj.id),
-    ...nonWalkableObjects.map((obj) => obj.id),
-    ...lavaObjects.map((obj) => obj.id),
-    ...cliffObjects.map((obj) => obj.id),
-  )
-
-  if (!Number.isInteger(tilesetColumns) || !Number.isInteger(tilesetRows)) {
-    throw new Error(
-      `arena-terrain.png dimensions must be divisible by ${TILE_SIZE_PX}; got ${tilesetImage.width}x${tilesetImage.height}.`,
-    )
-  }
-
-  return {
-    width: ARENA_COLS,
-    height: ARENA_ROWS,
-    tilewidth: TILE_SIZE_PX,
-    tileheight: TILE_SIZE_PX,
-    orientation: "orthogonal",
-    renderorder: "right-down",
-    version: "1.10",
-    tiledversion: "1.10.2",
-    infinite: false,
-    nextlayerid: 7,
-    nextobjectid: highestObjectId + 1,
-    tilesets: [
-      {
-        firstgid: 1,
-        name: tileset.name,
-        tilewidth: tileset.tileWidth,
-        tileheight: tileset.tileHeight,
-        spacing: tileset.tileSpacing ?? 0,
-        margin: tileset.tileMargin ?? 0,
-        columns: tilesetColumns,
-        tilecount: tilesetColumns * tilesetRows,
-        image: "../tilesets/arena-terrain.png",
-        imagewidth: tilesetImage.width,
-        imageheight: tilesetImage.height,
-      },
-    ],
-    layers: [
-      {
-        id: 1,
-        name: "Ground",
-        type: "tilelayer",
-        visible: true,
-        opacity: 1,
-        x: 0,
-        y: 0,
-        width: ARENA_COLS,
-        height: ARENA_ROWS,
-        data: groundData,
-      },
-      {
-        id: 2,
-        name: "SpawnPoints",
-        type: "objectgroup",
-        visible: true,
-        opacity: 1,
-        x: 0,
-        y: 0,
-        draworder: "topdown",
-        objects: generateSpawnPointObjects(),
-      },
-      {
-        id: 3,
-        name: "PropColliders",
-        type: "objectgroup",
-        visible: true,
-        opacity: 1,
-        x: 0,
-        y: 0,
-        draworder: "topdown",
-        objects: propObjects,
-      },
-      {
-        id: 4,
-        name: "NonWalkableAreas",
-        type: "objectgroup",
-        visible: true,
-        opacity: 1,
-        x: 0,
-        y: 0,
-        draworder: "topdown",
-        objects: nonWalkableObjects,
-      },
-      {
-        id: 5,
-        name: "LavaAreas",
-        type: "objectgroup",
-        visible: true,
-        opacity: 1,
-        x: 0,
-        y: 0,
-        draworder: "topdown",
-        objects: lavaObjects,
-      },
-      {
-        id: 6,
-        name: "CliffAreas",
-        type: "objectgroup",
-        visible: true,
-        opacity: 1,
-        x: 0,
-        y: 0,
-        draworder: "topdown",
-        objects: cliffObjects,
-      },
-    ],
-  }
-}
-
 function buildGeneratedCollidersSource(
   tilemap: TiledMap,
   layerName: string,
   exportName: string,
 ): string {
-  const objectLayer = tilemap.layers.find(
-    (layer): layer is TiledObjectLayer =>
-      layer.type === "objectgroup" && layer.name === layerName,
-  )
-  const rects =
-    objectLayer?.objects.map(({ x, y, width, height }) => ({ x, y, width, height })) ?? []
-
   return `/**
  * AUTO-GENERATED by \`bun run build:arena-colliders\`. Do not edit by hand.
  * Source: public/assets/tilemaps/arena.json (object layer ${layerName}).
  */
-export const ${exportName} = ${JSON.stringify(rects, null, 2)} as const
+export const ${exportName} = ${JSON.stringify(layerRects(tilemap, layerName), null, 2)} as const
 `
 }
 
@@ -519,21 +302,18 @@ function buildGeneratedHazardSource(
   kind: "lava" | "cliff",
   exportName: string,
 ): string {
-  const objectRects = (layerName: string): Rect[] => {
-    const layer = tilemap.layers.find(
-      (item): item is TiledObjectLayer => item.type === "objectgroup" && item.name === layerName,
-    )
-    return layer?.objects.map(({ x, y, width, height }) => ({ x, y, width, height })) ?? []
-  }
-  const lava = [...lavaRectsFromGround(tilemap), ...objectRects("LavaAreas")]
+  const lava = layerRects(tilemap, "LavaAreas")
+  const cliff = layerRects(tilemap, "CliffAreas")
   const rects =
     kind === "lava"
       ? lava
+      : !hasGroundLayer(tilemap)
+        ? cliff
       : [
-          ...objectRects("NonWalkableAreas").filter(
+          ...layerRects(tilemap, "NonWalkableAreas").filter(
             (rect) => !lava.some((lavaRect) => rectsOverlap(rect, lavaRect)),
           ),
-          ...objectRects("CliffAreas"),
+          ...cliff,
         ]
 
   return `/**
@@ -544,16 +324,15 @@ export const ${exportName} = ${JSON.stringify(rects, null, 2)} as const
 `
 }
 
+function hasGroundLayer(tilemap: TiledMap): boolean {
+  return tilemap.layers.some((layer) => layer.type === "tilelayer" && layer.name === "Ground")
+}
+
 function buildGeneratedLavaTransitionSource(tilemap: TiledMap): string {
-  const objectRects = (layerName: string): Rect[] => {
-    const layer = tilemap.layers.find(
-      (item): item is TiledObjectLayer => item.type === "objectgroup" && item.name === layerName,
-    )
-    return layer?.objects.map(({ x, y, width, height }) => ({ x, y, width, height })) ?? []
-  }
-  const lava = [...lavaRectsFromGround(tilemap), ...objectRects("LavaAreas")]
-  const nonWalkable = objectRects("NonWalkableAreas")
-  const transition = lavaTransitionRectsFromNonWalkableAndLava(nonWalkable, lava)
+  const transition = lavaTransitionRectsFromNonWalkableAndLava(
+    layerRects(tilemap, "NonWalkableAreas"),
+    layerRects(tilemap, "LavaAreas"),
+  )
   return `/**
  * AUTO-GENERATED by \`bun run build:arena-colliders\`. Do not edit by hand.
  * Source: public/assets/tilemaps/arena.json (NonWalkableAreas overlapping hybrid lava, boundary subset).

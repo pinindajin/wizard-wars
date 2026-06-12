@@ -24,8 +24,9 @@ type PlayerInputOverrides = Partial<{
   readonly abilitySlot: number | null
 }>
 
-const SMALL_LAVA_CENTER = { x: 352, y: 160 } as const
-const SMALL_LAVA_RIGHT_EDGE_X = 384
+const SMALL_LAVA_CENTER = { x: 454, y: 129 } as const
+const SMALL_LAVA_JUMP_START = { x: 581, y: 129 } as const
+const SMALL_LAVA_RIGHT_EDGE_X = 606
 
 /**
  * Installs a browser-side recorder for authoritative player snapshots/deltas.
@@ -296,11 +297,11 @@ test("lava edge blocks WASD exit and Jump escapes to land", async ({ page }) => 
   const afterWalk = await waitForTerrain(page, "lava")
   expect(afterWalk.x).toBeLessThan(SMALL_LAVA_RIGHT_EDGE_X)
 
-  await setE2ePlayerPosition(page, SMALL_LAVA_CENTER.x, SMALL_LAVA_CENTER.y)
-  await waitForAuthoritativePosition(page, SMALL_LAVA_CENTER.x, SMALL_LAVA_CENTER.y)
+  await setE2ePlayerPosition(page, SMALL_LAVA_JUMP_START.x, SMALL_LAVA_JUMP_START.y)
+  await waitForAuthoritativePosition(page, SMALL_LAVA_JUMP_START.x, SMALL_LAVA_JUMP_START.y)
   await waitForTerrain(page, "lava")
 
-  const jumpSeq = await sendPlayerInput(page, { up: true, abilitySlot: 1 })
+  const jumpSeq = await sendPlayerInput(page, { right: true, abilitySlot: 1 })
   await waitForProcessedInput(page, jumpSeq)
   await expect
     .poll(async () => (await readAuthoritativeState(page))?.jumpZ ?? 0, {
@@ -318,7 +319,7 @@ test("lava edge blocks WASD exit and Jump escapes to land", async ({ page }) => 
     )
     .toBe(true)
 
-  await sendPlayerInput(page, { up: false })
+  await sendPlayerInput(page, { right: false })
   const afterJump = await waitForTerrain(page, "land")
-  expect(afterJump.y).toBeLessThan(SMALL_LAVA_CENTER.y)
+  expect(afterJump.x).toBeGreaterThan(SMALL_LAVA_RIGHT_EDGE_X)
 })

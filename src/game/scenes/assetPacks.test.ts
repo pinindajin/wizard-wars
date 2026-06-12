@@ -61,11 +61,11 @@ describe("asset pack URLs are absolute", () => {
     }
   })
 
-  it("arena pack declares the core gameplay files (tilemap + tileset + hero sheet + fireball assets)", () => {
+  it("arena pack declares the core gameplay files (native map + colliders + hero sheet + fireball assets)", () => {
     const files = (arenaPack as { arena: { files: PackFile[] } }).arena.files
     const urls = collectUrls(files)
+    expect(urls).toContain("/assets/maps/arena-base.png")
     expect(urls).toContain("/assets/tilemaps/arena.json")
-    expect(urls).toContain("/assets/tilesets/arena-terrain.png")
     expect(urls).toContain(
       "/assets/sprites/heroes/lady-wizard/sheets/lady-wizard-megasheet.png",
     )
@@ -100,9 +100,9 @@ describe("asset pack URLs are absolute", () => {
   it("arena pack exposes prop sprites for Phaser Editor visual placement", () => {
     const files = (arenaPack as { arena: { files: PackFile[] } }).arena.files
     const urls = collectUrls(files)
-    expect(urls).toContain("/assets/sprites/props/barrel.png")
-    expect(urls).toContain("/assets/sprites/props/oak-tree.png")
-    expect(urls).toContain("/assets/sprites/props/treasure-chest.png")
+    expect(urls).toContain("/assets/sprites/arena-props/brazier-tower.png")
+    expect(urls).toContain("/assets/sprites/arena-props/medium-obelisk.png")
+    expect(urls).toContain("/assets/sprites/arena-props/straight-wall.png")
   })
 })
 
@@ -118,11 +118,11 @@ describe("Phaser Editor asset pack exposes arena visual assets", () => {
 
     expect(meta.contentType).toBe("phasereditor2d.pack.core.AssetContentType")
     expect(meta.version).toBe(2)
+    expect(urls).toContain("assets/maps/arena-base.png")
     expect(urls).toContain("assets/tilemaps/arena.json")
-    expect(urls).toContain("assets/tilesets/arena-terrain.png")
-    expect(urls).toContain("assets/sprites/props/barrel.png")
-    expect(urls).toContain("assets/sprites/props/oak-tree.png")
-    expect(urls).toContain("assets/sprites/props/treasure-chest.png")
+    expect(urls).toContain("assets/sprites/arena-props/brazier-tower.png")
+    expect(urls).toContain("assets/sprites/arena-props/medium-obelisk.png")
+    expect(urls).toContain("assets/sprites/arena-props/straight-wall.png")
     for (const u of urls) {
       expect(u.startsWith("/"), `editor asset url should be project-relative: ${u}`).toBe(false)
     }

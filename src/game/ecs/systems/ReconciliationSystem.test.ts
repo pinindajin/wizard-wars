@@ -40,6 +40,16 @@ function input(over: Partial<PlayerInputPayload> & { seq: number }): PlayerInput
   }
 }
 
+function sampleWideLavaRect() {
+  const lava = ARENA_LAVA_COLLIDERS.find((rect) =>
+    rect.width >= 250 &&
+    rect.height >= 100 &&
+    terrainStateAtPosition(rect.x + rect.width / 2, rect.y + rect.height / 2) === "lava",
+  )
+  if (!lava) throw new Error("Expected a wide native lava rectangle")
+  return lava
+}
+
 const noopCtx = {
   isSwinging: false,
   hasSwiftBoots: false,
@@ -206,7 +216,7 @@ describe("reconcileLocal", () => {
   })
 
   it("replays lava movement without walking onto land", () => {
-    const lava = ARENA_LAVA_COLLIDERS.find((rect) => rect.x === 320 && rect.y === 128)!
+    const lava = sampleWideLavaRect()
     const start = {
       x: lava.x + lava.width / 2,
       y: lava.y + lava.height / 2,

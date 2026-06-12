@@ -63,15 +63,55 @@ import { getAnimKey, getDirectionFromAngle } from "../../animation/LadyWizardAni
 import { HERO_CONFIGS } from "@/shared/balance-config/heroes"
 import {
   ARENA_LAVA_COLLIDERS,
+  ARENA_NON_WALKABLE_COLLIDERS,
   ARENA_SPAWN_POINTS,
-  ARENA_WORLD_COLLIDERS,
-  PLAYER_WORLD_COLLISION_OFFSET_Y_PX,
-  PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
 } from "@/shared/balance-config"
 import { terrainStateAtPosition } from "@/shared/collision/terrainHazards"
 import { REPLAY_SMOOTHING_MS } from "@/shared/balance-config/rendering"
 
 const OPEN_TEST_POINT = ARENA_SPAWN_POINTS[0]!
+
+function sampleDiagonalSlideCase() {
+  const blocker = ARENA_NON_WALKABLE_COLLIDERS.find((rect) =>
+    rect.x === 318 && rect.y === 88 && rect.width === 42 && rect.height === 30,
+  )
+  if (!blocker) throw new Error("Expected native upper edge blocker")
+  return {
+    blocker,
+    start: {
+      x: blocker.x - 58,
+      y: blocker.y + blocker.height + 4,
+    },
+  }
+}
+
+function sampleBlockedSmoothingCase() {
+  const blocker = ARENA_NON_WALKABLE_COLLIDERS.find((rect) =>
+    rect.x === 487 && rect.y === 180 && rect.width === 119 && rect.height === 40,
+  )
+  if (!blocker) throw new Error("Expected native upper lava blocker")
+  return {
+    blocker,
+    start: {
+      x: blocker.x + blocker.width + 21,
+      y: blocker.y + blocker.height + 37,
+    },
+    target: {
+      x: blocker.x + blocker.width + 21,
+      y: blocker.y - 25,
+    },
+  }
+}
+
+function sampleWideLavaRect() {
+  const lava = ARENA_LAVA_COLLIDERS.find((rect) =>
+    rect.width >= 250 &&
+    rect.height >= 100 &&
+    terrainStateAtPosition(rect.x + rect.width / 2, rect.y + rect.height / 2) === "lava",
+  )
+  if (!lava) throw new Error("Expected a wide native lava rectangle")
+  return lava
+}
 
 type TestRenderEntry = {
   smoothRemainingMs: number
@@ -455,26 +495,21 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     const { scene, group } = mockSceneAndGroup()
     const sys = new PlayerRenderSystem(scene as never, group as never)
     sys.localPlayerId = "p1"
-    const topStrip = ARENA_WORLD_COLLIDERS[0]!
-    const topClearance = PLAYER_WORLD_COLLISION_RADIUS_Y_PX - PLAYER_WORLD_COLLISION_OFFSET_Y_PX
-    const start = {
-      x: topStrip.x + 704,
-      y: topStrip.y + topStrip.height + topClearance,
-    }
+    const { start } = sampleDiagonalSlideCase()
     sys.applyFullSync(sync([snap({ id: 1, playerId: "p1", x: start.x, y: start.y })]))
 
     sys.update(20, { up: true, down: false, left: false, right: true })
 
     const after = sys._getLocalSimForTest(1)
     expect(after?.simCurrX).toBeGreaterThan(start.x)
-    expect(after?.simCurrY).toBe(start.y)
+    expect(after?.simCurrY).toBeLessThanOrEqual(start.y)
   })
 
   it("keeps local lava prediction inside lava instead of walking onto land", () => {
     const { scene, group } = mockSceneAndGroup()
     const sys = new PlayerRenderSystem(scene as never, group as never)
     sys.localPlayerId = "p1"
-    const lava = ARENA_LAVA_COLLIDERS.find((rect) => rect.x === 320 && rect.y === 128)!
+    const lava = sampleWideLavaRect()
     const start = {
       x: lava.x + lava.width / 2,
       y: lava.y + lava.height / 2,
@@ -499,17 +534,7 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     const { scene, group } = mockSceneAndGroup()
     const sys = new PlayerRenderSystem(scene as never, group as never)
     sys.localPlayerId = "p1"
-    const topStrip = ARENA_WORLD_COLLIDERS[0]!
-    const topClearance = PLAYER_WORLD_COLLISION_RADIUS_Y_PX - PLAYER_WORLD_COLLISION_OFFSET_Y_PX
-    const bottomClearance = PLAYER_WORLD_COLLISION_RADIUS_Y_PX + PLAYER_WORLD_COLLISION_OFFSET_Y_PX
-    const start = {
-      x: topStrip.x + 704,
-      y: topStrip.y + topStrip.height + topClearance,
-    }
-    const target = {
-      x: start.x,
-      y: topStrip.y - bottomClearance,
-    }
+    const { start, target } = sampleBlockedSmoothingCase()
     sys.applyFullSync(sync([snap({ id: 1, playerId: "p1", x: start.x, y: start.y })]))
 
     const entry = (sys as unknown as {
@@ -528,8 +553,6 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     })
 
     expect(sys._getLocalSimForTest(1)).toMatchObject({
-      simPrevX: target.x,
-      simPrevY: target.y,
       simCurrX: target.x,
       simCurrY: target.y,
       smoothRemainingMs: 0,

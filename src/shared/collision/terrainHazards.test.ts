@@ -22,6 +22,31 @@ import {
 import { canOccupyWorldPosition, type ArenaPropColliderRect } from "./worldCollision"
 
 const rect: ArenaPropColliderRect = { x: 10, y: 20, width: 30, height: 40 }
+const OPEN_LAND_POINT = { x: 710, y: 562 }
+
+function sampleWideLavaRect(): ArenaPropColliderRect {
+  const lava = ARENA_LAVA_COLLIDERS.find((candidate) =>
+    candidate.width >= 250 &&
+    candidate.height >= 100 &&
+    terrainStateAtPosition(
+      candidate.x + candidate.width / 2,
+      candidate.y + candidate.height / 2,
+    ) === "lava",
+  )
+  if (!lava) throw new Error("Expected a wide native lava rectangle")
+  return lava
+}
+
+function sampleCliffOnlyRect(): ArenaPropColliderRect {
+  const cliff = ARENA_CLIFF_COLLIDERS.find((candidate) =>
+    terrainStateAtPosition(
+      candidate.x + candidate.width / 2,
+      candidate.y + candidate.height / 2,
+    ) === "cliff",
+  )
+  if (!cliff) throw new Error("Expected a native cliff rectangle outside lava")
+  return cliff
+}
 
 describe("terrain geometry helpers", () => {
   it("detects rectangle overlap and separation on each axis", () => {
@@ -33,14 +58,16 @@ describe("terrain geometry helpers", () => {
   })
 
   it("samples points and terrain states from hazard colliders", () => {
-    const lava = ARENA_LAVA_COLLIDERS[0]
-    const cliff = ARENA_CLIFF_COLLIDERS[0]
+    const lava = sampleWideLavaRect()
+    const cliff = sampleCliffOnlyRect()
 
     expect(pointInRects(lava.x, lava.y, ARENA_LAVA_COLLIDERS)).toBe(true)
     expect(pointInRects(-1, -1, ARENA_LAVA_COLLIDERS)).toBe(false)
     expect(terrainStateAtPosition(lava.x + 1, lava.y + 1)).toBe("lava")
-    expect(terrainStateAtPosition(cliff.x + 1, cliff.y + 1)).toBe("cliff")
-    expect(terrainStateAtPosition(0, 0)).toBe("land")
+    expect(terrainStateAtPosition(cliff.x + cliff.width / 2, cliff.y + cliff.height / 2)).toBe(
+      "cliff",
+    )
+    expect(terrainStateAtPosition(OPEN_LAND_POINT.x, OPEN_LAND_POINT.y)).toBe("land")
   })
 
   it("returns the nearest lava center", () => {
@@ -67,18 +94,23 @@ describe("worldCollidersForPlayerState", () => {
       expect(lavaColliders).not.toContain(ARENA_LAVA_TRANSITION_COLLIDERS[0])
     }
 
+    const lava = sampleWideLavaRect()
+    const lavaCenter = {
+      x: lava.x + lava.width / 2,
+      y: lava.y + lava.height / 2,
+    }
     const bounds = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
     expect(
       canOccupyWorldPosition(
-        2208,
-        96,
+        lavaCenter.x,
+        lavaCenter.y,
         PLAYER_WORLD_COLLISION_FOOTPRINT,
         bounds,
         lavaColliders,
       ),
     ).toBe(true)
-    expect(groundedLavaCandidateCanOccupy(2208, 96)).toBe(true)
-    expect(groundedLavaCandidateCanOccupy(425, 160)).toBe(false)
+    expect(groundedLavaCandidateCanOccupy(lavaCenter.x, lavaCenter.y)).toBe(true)
+    expect(groundedLavaCandidateCanOccupy(OPEN_LAND_POINT.x, OPEN_LAND_POINT.y)).toBe(false)
   })
 
   it("uses props only in the last ticks of an arc (low jumpZ) from land", () => {

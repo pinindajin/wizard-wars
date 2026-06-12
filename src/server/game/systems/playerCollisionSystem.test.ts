@@ -27,16 +27,20 @@ describe("playerCollisionSystem", () => {
       Radius.r[eid] = PLAYER_RADIUS_PX
     }
 
-    Position.x[pusher] = 360
+    Position.x[pusher] = 586
     Position.y[pusher] = 160
-    TerrainState.kind[pusher] = TERRAIN_KIND.land
+    TerrainState.kind[pusher] = TERRAIN_KIND.lava
 
-    Position.x[lavaPlayer] = 378
+    Position.x[lavaPlayer] = 604
     Position.y[lavaPlayer] = 160
     TerrainState.kind[lavaPlayer] = TERRAIN_KIND.lava
 
+    expect(terrainStateAtPosition(Position.x[lavaPlayer], Position.y[lavaPlayer])).toBe("lava")
+    expect(terrainStateAtPosition(615, Position.y[lavaPlayer])).toBe("land")
+
     playerCollisionSystem({ world } as SimCtx)
 
+    expect(Position.x[lavaPlayer]).toBe(604)
     expect(terrainStateAtPosition(Position.x[lavaPlayer], Position.y[lavaPlayer])).toBe("lava")
     expect(TerrainState.kind[lavaPlayer]).toBe(TERRAIN_KIND.lava)
   })

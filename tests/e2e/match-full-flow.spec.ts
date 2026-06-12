@@ -109,7 +109,7 @@ test("full match flow: assets, overlay, canvas, movement, shop, abilities", asyn
           if (!g) return null
           const ready =
             g.textures.exists("lady-wizard") &&
-            g.textures.exists("arena-terrain") &&
+            g.textures.exists("arena-base") &&
             g.anims.exists("lady-wizard-walk-south") &&
             g.anims.exists("lady-wizard-death-south") &&
             g.anims.exists("lady-wizard-light_spell_cast-south") &&

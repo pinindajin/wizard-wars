@@ -1,61 +1,62 @@
 /**
- * Project-owned Arena layout data.
+ * Project-owned native Arena layout data.
  *
- * The current map was seeded from a one-time external import, but runtime
- * gameplay now reads this committed project data rather than any external map
- * editor export. Keep this file in sync with `Arena.scene` and
- * `public/assets/tilemaps/arena.json` when the arena changes.
+ * The arena visual is image-backed at native map resolution. Keep this file in
+ * sync with `Arena.scene`, `public/assets/tilemaps/arena.json`, and the
+ * generated collider files when the arena changes.
  */
-export const ARENA_LAYOUT_COLS = 66
-export const ARENA_LAYOUT_ROWS = 53
+export const ARENA_LAYOUT_WIDTH = 1402
+export const ARENA_LAYOUT_HEIGHT = 1122
+export const ARENA_LAYOUT_COLS = 22
+export const ARENA_LAYOUT_ROWS = 18
 export const ARENA_LAYOUT_IMPORTED_TILE_FIRST_GID = 17
 export const ARENA_LAYOUT_SPAWN_POINTS = [
   {
-    "x": 3168,
-    "y": 1696
+    "x": 710,
+    "y": 562
   },
   {
-    "x": 3040,
-    "y": 2272
+    "x": 585,
+    "y": 560
   },
   {
-    "x": 2656,
-    "y": 2656
+    "x": 835,
+    "y": 560
   },
   {
-    "x": 2080,
-    "y": 2784
+    "x": 710,
+    "y": 410
   },
   {
-    "x": 1504,
-    "y": 2656
+    "x": 710,
+    "y": 710
   },
   {
-    "x": 1184,
-    "y": 2208
+    "x": 510,
+    "y": 505
   },
   {
-    "x": 1056,
-    "y": 1888
+    "x": 910,
+    "y": 505
   },
   {
-    "x": 1184,
-    "y": 1184
+    "x": 512,
+    "y": 625
   },
   {
-    "x": 1568,
-    "y": 736
+    "x": 908,
+    "y": 625
   },
   {
-    "x": 2080,
-    "y": 608
+    "x": 186,
+    "y": 856
   },
   {
-    "x": 2656,
-    "y": 736
+    "x": 1216,
+    "y": 856
   },
   {
-    "x": 3104,
-    "y": 1056
+    "x": 710,
+    "y": 930
   }
 ] as const

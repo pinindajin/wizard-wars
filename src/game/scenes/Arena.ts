@@ -5,6 +5,8 @@
 /* START-USER-IMPORTS */
 import Phaser from "phaser"
 
+import { ARENA_HEIGHT, ARENA_WIDTH } from "@/shared/balance-config/arena"
+import { TILEMAP_DEPTH } from "@/shared/balance-config/rendering"
 import type { MinimapCorner } from "@/shared/settings-config"
 import { WW_LOCAL_PLAYER_ID_REGISTRY_KEY } from "../constants"
 import { GameConnection } from "../network/GameConnection"
@@ -27,66 +29,300 @@ export default class Arena extends Phaser.Scene {
 
 	editorCreate(): void {
 
-		// arenaMap
-		this.cache.tilemap.add("arenaMap_arenaMap", {
-			format: 1,
-			data: {
-				width: 66,
-				height: 53,
-				orientation: "orthogonal",
-				tilewidth: 64,
-				tileheight: 64,
-				tilesets: [
-					{
-						columns: 228,
-						margin: 0,
-						spacing: 0,
-						tilewidth: 64,
-						tileheight: 64,
-						tilecount: 228,
-						firstgid: 1,
-						image: "arena-terrain",
-						name: "arena-terrain",
-						imagewidth: 14592,
-						imageheight: 64,
-					},
-				],
-				layers: [
-					{
-						type: "tilelayer",
-						name: "Ground",
-						width: 66,
-						height: 53,
-						opacity: 1,
-						data: [17, 17, 17, 17, 18, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 20, 17, 17, 17, 17, 17, 21, 22, 23, 24, 25, 22, 26, 23, 24, 27, 27, 27, 27, 27, 27, 27, 27, 25, 22, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 23, 24, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 28, 17, 17, 17, 17, 17, 29, 30, 31, 32, 33, 30, 34, 35, 36, 26, 26, 23, 24, 27, 27, 27, 27, 33, 37, 38, 34, 39, 39, 39, 39, 39, 39, 39, 39, 39, 39, 39, 39, 39, 39, 39, 39, 39, 39, 39, 35, 36, 26, 26, 26, 26, 26, 26, 26, 26, 26, 23, 24, 27, 27, 27, 27, 27, 27, 27, 28, 17, 17, 17, 17, 17, 40, 41, 42, 43, 44, 41, 45, 46, 47, 39, 39, 35, 36, 26, 26, 23, 24, 44, 48, 49, 45, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 46, 47, 39, 39, 39, 39, 39, 39, 39, 39, 39, 35, 36, 26, 26, 26, 26, 26, 23, 24, 28, 17, 17, 17, 17, 17, 51, 52, 53, 43, 54, 55, 56, 57, 50, 50, 50, 46, 47, 39, 39, 58, 32, 54, 59, 60, 61, 62, 63, 57, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 46, 47, 39, 39, 39, 39, 39, 58, 32, 28, 17, 17, 17, 17, 17, 64, 65, 66, 43, 27, 44, 41, 45, 50, 50, 50, 50, 50, 50, 50, 67, 68, 24, 27, 44, 48, 69, 49, 45, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 70, 71, 62, 63, 57, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 28, 17, 17, 17, 17, 17, 64, 65, 66, 43, 27, 54, 52, 73, 50, 50, 50, 50, 50, 50, 50, 74, 75, 76, 27, 54, 59, 77, 60, 56, 57, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 78, 79, 69, 49, 45, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 28, 17, 17, 17, 17, 17, 21, 80, 81, 68, 24, 27, 82, 83, 57, 50, 50, 50, 50, 50, 50, 78, 84, 85, 27, 27, 27, 27, 44, 41, 45, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 86, 87, 77, 60, 61, 63, 57, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 28, 17, 17, 17, 17, 17, 88, 89, 90, 91, 32, 27, 44, 41, 45, 50, 50, 50, 50, 50, 50, 92, 93, 94, 26, 26, 26, 23, 95, 52, 73, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 27, 44, 48, 49, 45, 70, 71, 62, 62, 62, 62, 62, 62, 63, 57, 70, 96, 97, 28, 17, 17, 17, 17, 17, 98, 99, 50, 72, 43, 27, 54, 52, 73, 50, 50, 50, 50, 50, 50, 46, 47, 39, 39, 39, 39, 58, 32, 65, 99, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 27, 54, 59, 100, 73, 78, 79, 69, 69, 69, 69, 69, 69, 49, 45, 78, 84, 85, 28, 17, 17, 17, 17, 17, 98, 99, 50, 67, 101, 26, 26, 102, 103, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 65, 99, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 25, 22, 26, 102, 103, 92, 104, 105, 77, 77, 77, 77, 77, 100, 73, 86, 106, 107, 28, 17, 17, 17, 17, 17, 98, 99, 50, 74, 108, 109, 109, 110, 111, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 67, 68, 112, 99, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 113, 114, 39, 115, 116, 46, 91, 32, 27, 27, 25, 22, 26, 102, 103, 72, 43, 27, 28, 17, 17, 17, 17, 17, 98, 99, 50, 78, 79, 69, 69, 49, 45, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 46, 117, 118, 103, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 65, 99, 50, 50, 50, 50, 67, 101, 26, 26, 119, 120, 39, 115, 116, 72, 43, 27, 28, 17, 17, 17, 17, 17, 98, 99, 50, 92, 104, 105, 77, 100, 73, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 46, 121, 116, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 65, 99, 50, 50, 50, 50, 46, 47, 39, 39, 115, 116, 50, 50, 50, 72, 43, 27, 28, 17, 17, 17, 17, 17, 122, 83, 57, 46, 91, 32, 27, 65, 99, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 65, 99, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 27, 28, 17, 17, 17, 17, 17, 40, 41, 45, 50, 72, 123, 22, 102, 103, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 65, 99, 50, 50, 50, 50, 70, 71, 63, 57, 50, 70, 124, 57, 50, 72, 43, 27, 28, 17, 17, 17, 17, 17, 51, 52, 73, 70, 96, 125, 37, 110, 111, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 82, 126, 62, 63, 57, 50, 78, 79, 49, 45, 50, 78, 127, 45, 50, 67, 68, 24, 28, 17, 17, 17, 17, 17, 64, 65, 99, 78, 84, 128, 48, 49, 45, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 44, 48, 69, 49, 45, 50, 92, 129, 130, 131, 50, 86, 132, 61, 62, 133, 134, 76, 28, 17, 17, 17, 17, 17, 64, 65, 99, 86, 106, 135, 59, 60, 61, 63, 57, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 54, 59, 77, 100, 73, 50, 46, 47, 115, 116, 50, 72, 136, 48, 69, 69, 137, 85, 28, 17, 17, 17, 17, 17, 64, 82, 83, 138, 43, 25, 139, 140, 48, 49, 45, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 27, 27, 27, 82, 126, 62, 62, 62, 62, 63, 57, 72, 141, 59, 77, 77, 142, 107, 28, 17, 17, 17, 17, 17, 64, 44, 41, 143, 101, 119, 144, 145, 146, 130, 131, 70, 71, 63, 57, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 67, 101, 26, 26, 23, 140, 48, 69, 69, 69, 69, 49, 45, 72, 43, 27, 27, 27, 27, 27, 28, 17, 17, 17, 17, 17, 64, 54, 52, 147, 47, 115, 90, 47, 39, 115, 116, 78, 79, 49, 45, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 70, 71, 63, 57, 50, 46, 47, 39, 39, 58, 148, 149, 150, 151, 151, 152, 153, 73, 67, 101, 23, 24, 27, 27, 27, 28, 17, 17, 17, 17, 17, 64, 27, 82, 126, 62, 62, 62, 62, 62, 62, 62, 154, 155, 100, 73, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 78, 79, 49, 45, 50, 50, 70, 71, 62, 156, 97, 113, 114, 39, 39, 58, 157, 99, 46, 47, 58, 32, 27, 27, 27, 28, 17, 17, 17, 17, 17, 64, 27, 44, 48, 69, 69, 69, 69, 69, 69, 69, 137, 85, 65, 99, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 86, 87, 60, 61, 63, 57, 78, 79, 69, 137, 85, 65, 99, 50, 50, 72, 158, 99, 50, 50, 72, 43, 27, 27, 27, 28, 17, 17, 17, 17, 17, 64, 27, 54, 59, 77, 77, 77, 77, 77, 77, 77, 142, 107, 65, 99, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 44, 48, 49, 45, 92, 129, 151, 159, 94, 102, 103, 50, 50, 67, 160, 103, 50, 50, 67, 101, 23, 24, 27, 28, 17, 17, 17, 17, 17, 64, 27, 27, 25, 22, 26, 26, 26, 23, 24, 27, 27, 27, 65, 99, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 54, 59, 100, 73, 46, 47, 39, 39, 39, 115, 116, 50, 50, 46, 161, 162, 62, 62, 163, 164, 58, 32, 27, 28, 17, 17, 17, 17, 17, 64, 27, 27, 113, 114, 39, 39, 39, 58, 32, 27, 27, 25, 80, 103, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 27, 27, 65, 99, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 78, 79, 69, 69, 49, 45, 72, 43, 27, 28, 17, 17, 17, 17, 17, 64, 27, 27, 65, 99, 50, 50, 50, 67, 101, 26, 26, 119, 165, 116, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 27, 27, 82, 126, 62, 63, 57, 50, 50, 50, 50, 50, 50, 50, 86, 87, 77, 77, 100, 73, 72, 43, 27, 28, 17, 17, 17, 17, 17, 64, 27, 27, 65, 99, 50, 50, 50, 46, 47, 39, 39, 115, 116, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 27, 27, 44, 48, 69, 49, 45, 50, 50, 50, 50, 50, 50, 50, 67, 101, 26, 26, 102, 103, 72, 43, 27, 28, 17, 17, 17, 17, 17, 64, 27, 27, 82, 126, 63, 57, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 67, 68, 24, 27, 54, 59, 77, 100, 73, 50, 70, 71, 62, 62, 62, 63, 166, 47, 39, 39, 115, 116, 72, 43, 27, 28, 17, 17, 17, 17, 17, 64, 27, 27, 44, 48, 49, 45, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 46, 117, 36, 26, 23, 24, 27, 65, 99, 50, 78, 79, 69, 69, 69, 49, 45, 50, 50, 50, 50, 50, 72, 43, 27, 28, 17, 17, 17, 17, 17, 64, 27, 27, 54, 59, 100, 73, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 70, 71, 62, 63, 57, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 46, 47, 39, 58, 32, 27, 65, 99, 50, 86, 87, 77, 77, 77, 60, 56, 57, 70, 71, 62, 62, 156, 97, 27, 28, 17, 17, 17, 17, 17, 64, 27, 27, 27, 27, 65, 99, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 78, 79, 69, 49, 45, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 27, 65, 99, 50, 72, 43, 27, 27, 27, 44, 41, 45, 78, 79, 69, 69, 137, 85, 27, 28, 17, 17, 17, 17, 17, 64, 27, 25, 22, 26, 102, 103, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 86, 87, 77, 100, 73, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 67, 101, 26, 102, 103, 50, 67, 101, 26, 23, 24, 54, 52, 73, 86, 87, 77, 77, 167, 168, 24, 28, 17, 17, 17, 17, 17, 64, 27, 113, 114, 169, 170, 171, 62, 63, 57, 50, 50, 50, 50, 50, 50, 50, 70, 71, 156, 97, 27, 82, 126, 62, 63, 57, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 46, 47, 39, 115, 116, 50, 46, 47, 39, 58, 32, 27, 65, 99, 72, 43, 27, 27, 113, 172, 32, 28, 17, 17, 17, 17, 17, 64, 27, 65, 99, 78, 79, 69, 69, 49, 45, 50, 50, 50, 50, 50, 50, 50, 78, 79, 137, 85, 27, 44, 48, 69, 49, 45, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 67, 101, 26, 102, 103, 67, 101, 23, 24, 65, 66, 43, 28, 17, 17, 17, 17, 17, 64, 25, 80, 103, 92, 129, 151, 152, 153, 73, 50, 50, 50, 50, 50, 50, 50, 86, 87, 142, 107, 27, 173, 174, 151, 130, 131, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 74, 108, 109, 175, 176, 166, 47, 58, 32, 65, 66, 43, 28, 17, 17, 17, 17, 17, 64, 113, 89, 116, 46, 47, 39, 58, 157, 99, 50, 50, 50, 50, 50, 50, 50, 67, 101, 26, 26, 23, 177, 37, 109, 110, 111, 70, 124, 57, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 78, 79, 69, 69, 49, 45, 50, 67, 101, 102, 81, 68, 178, 17, 17, 17, 17, 17, 64, 82, 126, 62, 62, 63, 179, 96, 180, 99, 50, 50, 50, 50, 50, 50, 50, 46, 47, 39, 169, 181, 182, 48, 69, 49, 45, 78, 127, 45, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 86, 87, 77, 77, 100, 73, 50, 46, 47, 115, 90, 91, 183, 17, 17, 17, 17, 17, 64, 44, 48, 69, 69, 49, 184, 84, 185, 99, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 78, 84, 186, 59, 77, 100, 187, 188, 189, 73, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 70, 96, 97, 27, 27, 65, 99, 50, 50, 50, 50, 50, 72, 190, 17, 17, 17, 17, 17, 64, 54, 59, 191, 150, 130, 192, 93, 193, 103, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 86, 194, 168, 24, 27, 65, 195, 84, 185, 99, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 78, 84, 85, 27, 27, 65, 99, 50, 50, 50, 50, 50, 72, 190, 17, 17, 17, 17, 17, 64, 27, 27, 113, 196, 170, 197, 198, 110, 111, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 199, 200, 36, 26, 102, 201, 93, 193, 103, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 86, 106, 107, 27, 27, 82, 83, 57, 50, 70, 71, 62, 156, 202, 17, 17, 17, 17, 17, 64, 27, 25, 80, 203, 79, 69, 69, 49, 45, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 158, 204, 47, 39, 115, 90, 47, 115, 116, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 27, 27, 27, 44, 41, 45, 50, 78, 79, 69, 137, 205, 17, 17, 17, 17, 17, 64, 27, 113, 89, 206, 87, 77, 77, 100, 73, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 67, 160, 103, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72, 43, 27, 27, 27, 54, 52, 73, 50, 86, 87, 77, 142, 207, 17, 17, 17, 17, 17, 64, 27, 65, 99, 72, 43, 27, 25, 80, 103, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 74, 208, 171, 63, 57, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 67, 68, 24, 27, 27, 27, 65, 99, 70, 96, 97, 27, 27, 28, 17, 17, 17, 17, 17, 64, 27, 65, 99, 72, 43, 27, 113, 89, 116, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 78, 79, 69, 49, 45, 50, 70, 71, 63, 57, 50, 70, 71, 62, 63, 57, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 46, 91, 32, 27, 27, 27, 65, 99, 78, 84, 85, 27, 27, 28, 17, 17, 17, 17, 17, 64, 27, 65, 99, 72, 43, 27, 65, 99, 50, 70, 71, 62, 62, 62, 62, 62, 62, 62, 62, 154, 155, 77, 100, 73, 50, 78, 79, 49, 45, 50, 78, 79, 69, 49, 45, 50, 50, 70, 71, 62, 62, 62, 62, 62, 62, 63, 179, 96, 97, 27, 27, 27, 65, 99, 86, 106, 107, 27, 27, 28, 17, 17, 17, 17, 17, 64, 27, 65, 99, 72, 43, 27, 65, 99, 50, 78, 79, 69, 69, 69, 69, 69, 69, 69, 69, 137, 85, 25, 80, 103, 50, 86, 87, 100, 73, 50, 86, 87, 77, 100, 73, 50, 50, 78, 79, 69, 69, 69, 69, 69, 69, 49, 184, 84, 85, 27, 27, 27, 65, 99, 72, 43, 27, 27, 27, 28, 17, 17, 17, 17, 17, 64, 27, 82, 126, 156, 97, 27, 65, 99, 50, 86, 209, 150, 151, 151, 151, 151, 151, 152, 105, 142, 210, 211, 165, 116, 50, 72, 43, 82, 126, 62, 156, 97, 27, 82, 126, 62, 62, 154, 155, 77, 77, 77, 77, 77, 77, 60, 212, 213, 107, 25, 22, 26, 102, 103, 67, 101, 26, 23, 24, 28, 17, 17, 17, 17, 17, 64, 27, 44, 48, 137, 85, 25, 80, 103, 50, 72, 199, 114, 39, 39, 39, 39, 39, 35, 214, 24, 113, 89, 116, 50, 50, 72, 43, 44, 48, 69, 137, 85, 27, 44, 48, 69, 69, 137, 85, 27, 27, 27, 27, 27, 27, 44, 215, 85, 27, 33, 37, 109, 175, 171, 133, 198, 109, 216, 76, 28, 17, 17, 17, 17, 17, 64, 27, 54, 59, 142, 107, 33, 217, 171, 62, 156, 218, 126, 62, 62, 62, 62, 62, 133, 134, 76, 82, 126, 62, 62, 62, 156, 97, 54, 59, 77, 142, 107, 27, 54, 59, 77, 77, 142, 107, 27, 27, 27, 27, 27, 27, 54, 219, 107, 27, 44, 48, 69, 69, 69, 69, 69, 69, 137, 85, 28, 17, 17, 17, 17, 17, 64, 27, 27, 27, 27, 27, 44, 48, 69, 69, 137, 128, 48, 69, 69, 69, 69, 69, 69, 137, 85, 44, 48, 69, 69, 69, 137, 85, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 54, 59, 77, 77, 77, 77, 77, 77, 142, 107, 28, 17, 17, 17, 17, 17, 220, 221, 221, 221, 221, 221, 222, 223, 224, 224, 225, 226, 223, 224, 224, 224, 224, 224, 224, 225, 227, 222, 223, 224, 224, 224, 225, 227, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 228, 17],
-					},
-				],
-			},
-		});
-		const arenaMap = this.add.tilemap("arenaMap_arenaMap");
-		arenaMap.addTilesetImage("arena-terrain");
+		// arena_base
+		const arenaBase = this.add.image(0, 0, "arena-base");
+		arenaBase.setOrigin(0, 0);
+		arenaBase.setDepth(TILEMAP_DEPTH);
 
-		// Ground
-		arenaMap.createLayer("Ground", ["arena-terrain"], 0, 0);
+		// arenaProp0
+		const arenaProp0 = this.add.image(132, 146, "arena-prop-brazier-tower");
+		arenaProp0.setOrigin(0.5, 1);
+		arenaProp0.setScale(0.24, 0.24);
+		arenaProp0.setDepth(146);
+		this.arenaProps.push(arenaProp0); // Brazier Tower
 
-		// prop_mushroom_cluster
-		this.add.image(1120, 224, "prop-mushroom-cluster");
+		// arenaProp1
+		const arenaProp1 = this.add.image(225, 149, "arena-prop-brazier-tower");
+		arenaProp1.setOrigin(0.5, 1);
+		arenaProp1.setScale(0.24, 0.24);
+		arenaProp1.setDepth(149);
+		this.arenaProps.push(arenaProp1); // Brazier Tower
 
-		// prop_cracked_shield
-		this.add.image(222, 288, "prop-cracked-shield");
+		// arenaProp2
+		const arenaProp2 = this.add.image(72, 121, "arena-prop-brazier-tower");
+		arenaProp2.setOrigin(0.5, 1);
+		arenaProp2.setScale(0.23, 0.23);
+		arenaProp2.setDepth(121);
+		this.arenaProps.push(arenaProp2); // Brazier Tower
 
-		// prop_boulder_rock
-		this.add.image(1229, 528, "prop-boulder-rock");
+		// arenaProp3
+		const arenaProp3 = this.add.image(1064, 146, "arena-prop-brazier-tower");
+		arenaProp3.setOrigin(0.5, 1);
+		arenaProp3.setScale(0.24, 0.24);
+		arenaProp3.setDepth(146);
+		this.arenaProps.push(arenaProp3); // Brazier Tower
 
-		// prop_mushroom_cluster_1
-		this.add.image(221, 545, "prop-mushroom-cluster");
+		// arenaProp4
+		const arenaProp4 = this.add.image(1195, 149, "arena-prop-brazier-tower");
+		arenaProp4.setOrigin(0.5, 1);
+		arenaProp4.setScale(0.24, 0.24);
+		arenaProp4.setDepth(149);
+		this.arenaProps.push(arenaProp4); // Brazier Tower
 
-		this.arenaMap = arenaMap;
+		// arenaProp5
+		const arenaProp5 = this.add.image(1327, 121, "arena-prop-brazier-tower");
+		arenaProp5.setOrigin(0.5, 1);
+		arenaProp5.setScale(0.23, 0.23);
+		arenaProp5.setDepth(121);
+		this.arenaProps.push(arenaProp5); // Brazier Tower
+
+		// arenaProp6
+		const arenaProp6 = this.add.image(1326, 246, "arena-prop-tall-rune-pillar");
+		arenaProp6.setOrigin(0.5, 1);
+		arenaProp6.setScale(0.33, 0.33);
+		arenaProp6.setDepth(246);
+		this.arenaProps.push(arenaProp6); // Tall Rune Pillar
+
+		// arenaProp7
+		const arenaProp7 = this.add.image(1306, 427, "arena-prop-brazier-tower");
+		arenaProp7.setOrigin(0.5, 1);
+		arenaProp7.setScale(0.24, 0.24);
+		arenaProp7.setDepth(427);
+		this.arenaProps.push(arenaProp7); // Brazier Tower
+
+		// arenaProp8
+		const arenaProp8 = this.add.image(37, 427, "arena-prop-brazier-tower");
+		arenaProp8.setOrigin(0.5, 1);
+		arenaProp8.setScale(0.24, 0.24);
+		arenaProp8.setDepth(427);
+		this.arenaProps.push(arenaProp8); // Brazier Tower
+
+		// arenaProp9
+		const arenaProp9 = this.add.image(103, 382, "arena-prop-small-rocks");
+		arenaProp9.setOrigin(0.5, 1);
+		arenaProp9.setScale(0.36, 0.36);
+		arenaProp9.setDepth(382);
+		this.arenaProps.push(arenaProp9); // Small Rocks
+
+		// arenaProp10
+		const arenaProp10 = this.add.image(1260, 383, "arena-prop-basalt-cluster");
+		arenaProp10.setOrigin(0.5, 1);
+		arenaProp10.setScale(0.28, 0.28);
+		arenaProp10.setDepth(383);
+		this.arenaProps.push(arenaProp10); // Basalt Cluster
+
+		// arenaProp11
+		const arenaProp11 = this.add.image(459, 477, "arena-prop-medium-obelisk");
+		arenaProp11.setOrigin(0.5, 1);
+		arenaProp11.setScale(0.39, 0.39);
+		arenaProp11.setDepth(477);
+		this.arenaProps.push(arenaProp11); // Medium Obelisk
+
+		// arenaProp12
+		const arenaProp12 = this.add.image(613, 394, "arena-prop-medium-obelisk");
+		arenaProp12.setOrigin(0.5, 1);
+		arenaProp12.setScale(0.36, 0.36);
+		arenaProp12.setDepth(394);
+		this.arenaProps.push(arenaProp12); // Medium Obelisk
+
+		// arenaProp13
+		const arenaProp13 = this.add.image(806, 394, "arena-prop-medium-obelisk");
+		arenaProp13.setOrigin(0.5, 1);
+		arenaProp13.setScale(0.36, 0.36);
+		arenaProp13.setDepth(394);
+		this.arenaProps.push(arenaProp13); // Medium Obelisk
+
+		// arenaProp14
+		const arenaProp14 = this.add.image(1008, 563, "arena-prop-medium-obelisk");
+		arenaProp14.setOrigin(0.5, 1);
+		arenaProp14.setScale(0.39, 0.39);
+		arenaProp14.setDepth(563);
+		this.arenaProps.push(arenaProp14); // Medium Obelisk
+
+		// arenaProp15
+		const arenaProp15 = this.add.image(949, 723, "arena-prop-medium-obelisk");
+		arenaProp15.setOrigin(0.5, 1);
+		arenaProp15.setScale(0.37, 0.37);
+		arenaProp15.setDepth(723);
+		this.arenaProps.push(arenaProp15); // Medium Obelisk
+
+		// arenaProp16
+		const arenaProp16 = this.add.image(779, 781, "arena-prop-medium-obelisk");
+		arenaProp16.setOrigin(0.5, 1);
+		arenaProp16.setScale(0.36, 0.36);
+		arenaProp16.setDepth(781);
+		this.arenaProps.push(arenaProp16); // Medium Obelisk
+
+		// arenaProp17
+		const arenaProp17 = this.add.image(650, 781, "arena-prop-medium-obelisk");
+		arenaProp17.setOrigin(0.5, 1);
+		arenaProp17.setScale(0.36, 0.36);
+		arenaProp17.setDepth(781);
+		this.arenaProps.push(arenaProp17); // Medium Obelisk
+
+		// arenaProp18
+		const arenaProp18 = this.add.image(462, 706, "arena-prop-medium-obelisk");
+		arenaProp18.setOrigin(0.5, 1);
+		arenaProp18.setScale(0.37, 0.37);
+		arenaProp18.setDepth(706);
+		this.arenaProps.push(arenaProp18); // Medium Obelisk
+
+		// arenaProp19
+		const arenaProp19 = this.add.image(404, 588, "arena-prop-medium-obelisk");
+		arenaProp19.setOrigin(0.5, 1);
+		arenaProp19.setScale(0.37, 0.37);
+		arenaProp19.setDepth(588);
+		this.arenaProps.push(arenaProp19); // Medium Obelisk
+
+		// arenaProp20
+		const arenaProp20 = this.add.image(521, 588, "arena-prop-brazier-tower");
+		arenaProp20.setOrigin(0.5, 1);
+		arenaProp20.setScale(0.24, 0.24);
+		arenaProp20.setDepth(588);
+		this.arenaProps.push(arenaProp20); // Brazier Tower
+
+		// arenaProp21
+		const arenaProp21 = this.add.image(904, 588, "arena-prop-brazier-tower");
+		arenaProp21.setOrigin(0.5, 1);
+		arenaProp21.setScale(0.24, 0.24);
+		arenaProp21.setDepth(588);
+		this.arenaProps.push(arenaProp21); // Brazier Tower
+
+		// arenaProp22
+		const arenaProp22 = this.add.image(946, 423, "arena-prop-brazier-tower");
+		arenaProp22.setOrigin(0.5, 1);
+		arenaProp22.setScale(0.24, 0.24);
+		arenaProp22.setDepth(423);
+		this.arenaProps.push(arenaProp22); // Brazier Tower
+
+		// arenaProp23
+		const arenaProp23 = this.add.image(464, 423, "arena-prop-brazier-tower");
+		arenaProp23.setOrigin(0.5, 1);
+		arenaProp23.setScale(0.24, 0.24);
+		arenaProp23.setDepth(423);
+		this.arenaProps.push(arenaProp23); // Brazier Tower
+
+		// arenaProp24
+		const arenaProp24 = this.add.image(650, 209, "arena-prop-brazier-tower");
+		arenaProp24.setOrigin(0.5, 1);
+		arenaProp24.setScale(0.24, 0.24);
+		arenaProp24.setDepth(209);
+		this.arenaProps.push(arenaProp24); // Brazier Tower
+
+		// arenaProp25
+		const arenaProp25 = this.add.image(777, 209, "arena-prop-brazier-tower");
+		arenaProp25.setOrigin(0.5, 1);
+		arenaProp25.setScale(0.24, 0.24);
+		arenaProp25.setDepth(209);
+		this.arenaProps.push(arenaProp25); // Brazier Tower
+
+		// arenaProp26
+		const arenaProp26 = this.add.image(650, 874, "arena-prop-brazier-tower");
+		arenaProp26.setOrigin(0.5, 1);
+		arenaProp26.setScale(0.24, 0.24);
+		arenaProp26.setDepth(874);
+		this.arenaProps.push(arenaProp26); // Brazier Tower
+
+		// arenaProp27
+		const arenaProp27 = this.add.image(785, 874, "arena-prop-brazier-tower");
+		arenaProp27.setOrigin(0.5, 1);
+		arenaProp27.setScale(0.24, 0.24);
+		arenaProp27.setDepth(874);
+		this.arenaProps.push(arenaProp27); // Brazier Tower
+
+		// arenaProp28
+		const arenaProp28 = this.add.image(548, 445, "arena-prop-straight-wall");
+		arenaProp28.setOrigin(0.5, 1);
+		arenaProp28.setScale(0.32, 0.32);
+		arenaProp28.setDepth(445);
+		this.arenaProps.push(arenaProp28); // Straight Wall
+
+		// arenaProp29
+		const arenaProp29 = this.add.image(868, 445, "arena-prop-straight-wall");
+		arenaProp29.setOrigin(0.5, 1);
+		arenaProp29.setScale(0.32, 0.32);
+		arenaProp29.setDepth(445);
+		this.arenaProps.push(arenaProp29); // Straight Wall
+
+		// arenaProp30
+		const arenaProp30 = this.add.image(558, 676, "arena-prop-straight-wall");
+		arenaProp30.setOrigin(0.5, 1);
+		arenaProp30.setScale(0.31, 0.31);
+		arenaProp30.setDepth(676);
+		this.arenaProps.push(arenaProp30); // Straight Wall
+
+		// arenaProp31
+		const arenaProp31 = this.add.image(860, 676, "arena-prop-straight-wall");
+		arenaProp31.setOrigin(0.5, 1);
+		arenaProp31.setScale(0.31, 0.31);
+		arenaProp31.setDepth(676);
+		this.arenaProps.push(arenaProp31); // Straight Wall
+
+		// arenaProp32
+		const arenaProp32 = this.add.image(650, 560, "arena-prop-short-wall-slab");
+		arenaProp32.setOrigin(0.5, 1);
+		arenaProp32.setScale(0.33, 0.33);
+		arenaProp32.setDepth(560);
+		this.arenaProps.push(arenaProp32); // Short Wall Slab
+
+		// arenaProp33
+		const arenaProp33 = this.add.image(775, 560, "arena-prop-short-wall-slab");
+		arenaProp33.setOrigin(0.5, 1);
+		arenaProp33.setScale(-0.33, 0.33);
+		arenaProp33.setDepth(560);
+		this.arenaProps.push(arenaProp33); // Short Wall Slab
+
+		// arenaProp34
+		const arenaProp34 = this.add.image(392, 864, "arena-prop-brazier-tower");
+		arenaProp34.setOrigin(0.5, 1);
+		arenaProp34.setScale(0.24, 0.24);
+		arenaProp34.setDepth(864);
+		this.arenaProps.push(arenaProp34); // Brazier Tower
+
+		// arenaProp35
+		const arenaProp35 = this.add.image(1017, 864, "arena-prop-brazier-tower");
+		arenaProp35.setOrigin(0.5, 1);
+		arenaProp35.setScale(0.24, 0.24);
+		arenaProp35.setDepth(864);
+		this.arenaProps.push(arenaProp35); // Brazier Tower
+
+		// arenaProp36
+		const arenaProp36 = this.add.image(1296, 923, "arena-prop-brazier-tower");
+		arenaProp36.setOrigin(0.5, 1);
+		arenaProp36.setScale(0.24, 0.24);
+		arenaProp36.setDepth(923);
+		this.arenaProps.push(arenaProp36); // Brazier Tower
+
+		// arenaProp37
+		const arenaProp37 = this.add.image(106, 923, "arena-prop-brazier-tower");
+		arenaProp37.setOrigin(0.5, 1);
+		arenaProp37.setScale(0.24, 0.24);
+		arenaProp37.setDepth(923);
+		this.arenaProps.push(arenaProp37); // Brazier Tower
+
+		// arenaProp38
+		const arenaProp38 = this.add.image(164, 1008, "arena-prop-lava-spire-cluster");
+		arenaProp38.setOrigin(0.5, 1);
+		arenaProp38.setScale(0.28, 0.28);
+		arenaProp38.setDepth(1008);
+		this.arenaProps.push(arenaProp38); // Lava Spire Cluster
+
+		// arenaProp39
+		const arenaProp39 = this.add.image(1240, 1008, "arena-prop-lava-spire-cluster");
+		arenaProp39.setOrigin(0.5, 1);
+		arenaProp39.setScale(-0.28, 0.28);
+		arenaProp39.setDepth(1008);
+		this.arenaProps.push(arenaProp39); // Lava Spire Cluster
+
+		this.arenaWidthPx = ARENA_WIDTH;
+		this.arenaHeightPx = ARENA_HEIGHT;
 
 		this.events.emit("scene-awake");
 	}
 
-	private arenaMap!: Phaser.Tilemaps.Tilemap;
+	private arenaWidthPx = ARENA_WIDTH;
+	private arenaHeightPx = ARENA_HEIGHT;
+	private arenaProps: Phaser.GameObjects.Image[] = [];
 
 	/* START-USER-CODE */
 
@@ -103,7 +339,8 @@ export default class Arena extends Phaser.Scene {
 	create(): void {
 		this.editorCreate()
 		this.runtime = new ArenaRuntime(this, {
-			arenaMap: this.arenaMap,
+			arenaWidthPx: this.arenaWidthPx,
+			arenaHeightPx: this.arenaHeightPx,
 		})
 		this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
 			this.runtime?.destroy()

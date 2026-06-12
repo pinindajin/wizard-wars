@@ -283,11 +283,8 @@ function makeScene(connection: ReturnType<typeof makeConnection>) {
 function makeRuntime(connection = makeConnection()) {
   const scene = makeScene(connection)
   const runtime = new ArenaRuntime(scene as never, {
-    arenaMap: {
-      widthInPixels: 100,
-      heightInPixels: 100,
-      layers: [],
-    } as never,
+    arenaWidthPx: 100,
+    arenaHeightPx: 100,
   })
   return { runtime, scene, connection }
 }

@@ -2,7 +2,7 @@ import Phaser from "phaser"
 
 import { clientLogger } from "@/lib/clientLogger"
 import { WsEvent } from "@/shared/events"
-import { ARENA_CAMERA_FOLLOW_ZOOM, TILEMAP_DEPTH } from "@/shared/balance-config/rendering"
+import { ARENA_CAMERA_FOLLOW_ZOOM } from "@/shared/balance-config/rendering"
 import type {
   GameStateSyncPayload,
   PlayerBatchUpdatePayload,
@@ -47,7 +47,8 @@ import { WalkFootstepController } from "../audio/WalkFootstepController"
 import { MinimapController } from "../minimap/MinimapController"
 
 type ArenaRuntimeVisuals = {
-  arenaMap: Phaser.Tilemaps.Tilemap
+  arenaWidthPx: number
+  arenaHeightPx: number
 }
 
 const INACTIVE_MOVE_INTENT = {
@@ -150,7 +151,7 @@ export class ArenaRuntime {
    */
   private lastHazardTakeHitSfxAtMs: number | null = null
 
-  /** Pixel size of the loaded arena tilemap (for camera bounds). */
+  /** Pixel size of the loaded arena visual (for camera/minimap bounds). */
   private arenaWidthPx = 0
   private arenaHeightPx = 0
 
@@ -161,7 +162,7 @@ export class ArenaRuntime {
 
   /**
    * Starts the same systems previously created by Arena.editorCreate(), after
-   * Phaser Editor has created the visual tilemap.
+   * Phaser Editor has created the native arena image and prop visuals.
    */
   start(): void {
     this.destroyed = false
@@ -178,16 +179,11 @@ export class ArenaRuntime {
   }
 
   /**
-   * Applies current runtime tilemap behavior to the editor-created map.
+   * Captures current runtime arena visual bounds from the editor-created map.
    */
   private _configureTilemap(): void {
-    const map = this.visuals.arenaMap
-    this.arenaWidthPx = map.widthInPixels
-    this.arenaHeightPx = map.heightInPixels
-
-    for (const [index, layer] of map.layers.entries()) {
-      layer.tilemapLayer?.setDepth(TILEMAP_DEPTH + index)
-    }
+    this.arenaWidthPx = this.visuals.arenaWidthPx
+    this.arenaHeightPx = this.visuals.arenaHeightPx
   }
 
   /**
@@ -244,7 +240,7 @@ export class ArenaRuntime {
   }
 
   /**
-   * Configures the main camera: world bounds from the arena tilemap, follow zoom
+   * Configures the main camera: world bounds from the arena image, follow zoom
    * ({@link ARENA_CAMERA_FOLLOW_ZOOM}) so `centerOn` can scroll. Each frame,
    * `update` centers on the local player's foot when available.
    */
@@ -256,8 +252,8 @@ export class ArenaRuntime {
       cam.setBounds(0, 0, this.arenaWidthPx, this.arenaHeightPx)
     } else {
       this.log.warn(
-        { event: "arena.tilemap.bounds.skipped", reason: "zero_size_tilemap" },
-        "Tilemap has zero size; camera bounds not set",
+        { event: "arena.visual.bounds.skipped", reason: "zero_size_visual" },
+        "Arena visual has zero size; camera bounds not set",
       )
     }
   }
@@ -266,7 +262,10 @@ export class ArenaRuntime {
    * Creates the minimap camera and DOM frame after world visuals exist.
    */
   private _setupMinimap(): void {
-    this.minimapController = new MinimapController(this.scene, this.visuals.arenaMap)
+    this.minimapController = new MinimapController(this.scene, {
+      arenaWidth: this.arenaWidthPx,
+      arenaHeight: this.arenaHeightPx,
+    })
     this.scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.minimapController?.destroy()
     })
