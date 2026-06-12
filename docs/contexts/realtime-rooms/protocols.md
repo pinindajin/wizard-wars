@@ -53,6 +53,9 @@ When adding a room event, update the shared event constant, payload type, valida
 | `fireball_launch` | Server to clients | Fireball spawn/VFX event. |
 | `fireball_impact` | Server to clients | Fireball impact/VFX event. |
 | `fireball_batch_update` | Server to clients | Fireball deltas/removals. |
+| `homing_orb_launch` | Server to clients | Homing Orb spawn/VFX event with owner, target, velocity, heading, and expiry time. |
+| `homing_orb_impact` | Server to clients | Homing Orb hit or expiry VFX/SFX event. |
+| `homing_orb_batch_update` | Server to clients | Homing Orb position, velocity, heading deltas, and removals. |
 | `lightning_bolt` | Server to clients | Lightning bolt VFX/damage event. |
 | `primary_melee_attack` | Server to clients | Primary melee swing event. |
 | `combat_telegraph_start` | Server to clients | Start a client-rendered telegraph. |
@@ -85,6 +88,7 @@ When adding a room event, update the shared event constant, payload type, valida
 - Clients may render telegraphs and VFX from server-seeded timing/geometry, but they do not decide damage.
 - Input payloads are sequence-numbered, validated by the room, queued per player, capped, and consumed by the simulation at most once per player per tick.
 - Player and fireball movement deltas may be cadence-limited by `WW_NET_SEND_RATE_HZ`, but owner ACKs, full syncs, death/respawn, shop/economy, ability SFX, combat events, and performance status are sent immediately.
+- `game_state_sync` includes active `fireballs` and `homingOrbs` so reconnecting clients can rebuild projectile sprites immediately.
 - `lastProcessedInputSeq` advancement is not allowed to wait for the visual delta cadence; when needed, the owner receives a minimal ACK-only player delta.
 - `server_performance_status` is emitted on degraded-state changes, or at most once per second while degraded. Its `server_cpu` client indicator name is retained for parity with Seas of Aleryn, but the signal means "server loop degraded".
 - Full hydration should include enough lobby/shop/game state for reconnect and resync paths to recover without relying on stale client memory.

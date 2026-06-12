@@ -9,8 +9,56 @@
  */
 import { query } from "bitecs"
 
-import { Position, FireballTag } from "../components"
-import type { SimCtx, FireballPrevState } from "../simulation"
+import { FireballTag, HomingOrb, HomingOrbTag, Position, Velocity } from "../components"
+import type { HomingOrbPrevState, SimCtx } from "../simulation"
+
+/**
+ * Seeds or appends a Homing Orb delta when its movement state changes.
+ *
+ * @param ctx - Simulation context.
+ * @param eid - Homing Orb entity id.
+ * @param prev - Previous state map entry, if any.
+ */
+function collectHomingOrbDelta(
+  ctx: SimCtx,
+  eid: number,
+  prev: HomingOrbPrevState | undefined,
+): void {
+  const x = Position.x[eid]
+  const y = Position.y[eid]
+  const vx = Velocity.vx[eid]
+  const vy = Velocity.vy[eid]
+  const headingRad = HomingOrb.headingRad[eid]
+
+  if (!prev) {
+    ctx.prevHomingOrbStates.set(eid, { x, y, vx, vy, headingRad })
+    return
+  }
+
+  if (
+    x !== prev.x ||
+    y !== prev.y ||
+    vx !== prev.vx ||
+    vy !== prev.vy ||
+    headingRad !== prev.headingRad
+  ) {
+    const targetId = ctx.homingOrbTargetPlayerMap.get(eid)
+    ctx.homingOrbDeltas.push({
+      id: eid,
+      x,
+      y,
+      vx,
+      vy,
+      headingRad,
+      ...(targetId !== undefined ? { targetId } : {}),
+    })
+    prev.x = x
+    prev.y = y
+    prev.vx = vx
+    prev.vy = vy
+    prev.headingRad = headingRad
+  }
+}
 
 /**
  * Runs the projectile delta system for one tick.
@@ -44,6 +92,18 @@ export function projectileDeltaSystem(ctx: SimCtx): void {
   for (const eid of prevFireballStates.keys()) {
     if (!alive.has(eid)) {
       prevFireballStates.delete(eid)
+    }
+  }
+
+  for (const eid of query(world, [HomingOrbTag])) {
+    collectHomingOrbDelta(ctx, eid, ctx.prevHomingOrbStates.get(eid))
+  }
+
+  const aliveHomingOrbs = new Set<number>()
+  for (const eid of query(world, [HomingOrbTag])) aliveHomingOrbs.add(eid)
+  for (const eid of ctx.prevHomingOrbStates.keys()) {
+    if (!aliveHomingOrbs.has(eid)) {
+      ctx.prevHomingOrbStates.delete(eid)
     }
   }
 }

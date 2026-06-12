@@ -3,6 +3,9 @@ import {
   signupUsernameSchema,
   chatMessagePayloadSchema,
   playerInputPayloadSchema,
+  homingOrbBatchUpdatePayloadSchema,
+  homingOrbImpactPayloadSchema,
+  homingOrbLaunchPayloadSchema,
   parseGameStateSyncPayload,
   parsePlayerDeathPayload,
   parseServerPerformanceStatusPayload,
@@ -26,6 +29,14 @@ function validAbilityStates() {
       rechargeDurationMs: null,
     },
     jump: {
+      cooldownEndsAtServerTimeMs: null,
+      cooldownDurationMs: null,
+      charges: 4,
+      maxCharges: 4,
+      rechargeEndsAtServerTimeMs: null,
+      rechargeDurationMs: null,
+    },
+    homing_orb: {
       cooldownEndsAtServerTimeMs: null,
       cooldownDurationMs: null,
       charges: 4,
@@ -174,6 +185,18 @@ describe("ServerPerformanceStatus protocol", () => {
       } as never),
     ).toThrow()
   })
+
+  it("bridges Homing Orb room events to websocket events", () => {
+    expect(RoomEvent.HomingOrbLaunch).toBe("homing_orb_launch")
+    expect(RoomEvent.HomingOrbBatchUpdate).toBe("homing_orb_batch_update")
+    expect(RoomEvent.HomingOrbImpact).toBe("homing_orb_impact")
+    expect(WsEvent.HomingOrbLaunch).toBe("HOMING_ORB_LAUNCH")
+    expect(roomToWsEvent[RoomEvent.HomingOrbLaunch]).toBe(WsEvent.HomingOrbLaunch)
+    expect(roomToWsEvent[RoomEvent.HomingOrbBatchUpdate]).toBe(
+      WsEvent.HomingOrbBatchUpdate,
+    )
+    expect(roomToWsEvent[RoomEvent.HomingOrbImpact]).toBe(WsEvent.HomingOrbImpact)
+  })
 })
 
 describe("parseGameStateSyncPayload", () => {
@@ -206,6 +229,7 @@ describe("parseGameStateSyncPayload", () => {
         },
       ],
       fireballs: [],
+      homingOrbs: [],
       seq: 0,
       serverTimeMs: 1700000000000,
     }
@@ -219,8 +243,32 @@ describe("parseGameStateSyncPayload", () => {
       fireballs: [
         { id: 42, ownerId: "u1", x: 1, y: 2, vx: 100, vy: 0 },
       ],
+      homingOrbs: [],
       seq: 0,
       serverTimeMs: 1700000000000,
+    }
+    expect(parseGameStateSyncPayload(raw)).toEqual(raw)
+  })
+
+  it("accepts homing orbs in sync payload", () => {
+    const raw: GameStateSyncPayload = {
+      players: [],
+      fireballs: [],
+      homingOrbs: [
+        {
+          id: 77,
+          ownerId: "caster",
+          targetId: "target",
+          x: 10,
+          y: 20,
+          vx: 120,
+          vy: 0,
+          headingRad: 0,
+          expiresAtServerTimeMs: 15_000,
+        },
+      ],
+      seq: 0,
+      serverTimeMs: 1,
     }
     expect(parseGameStateSyncPayload(raw)).toEqual(raw)
   })
@@ -230,6 +278,30 @@ describe("parseGameStateSyncPayload", () => {
       parseGameStateSyncPayload({
         players: [],
         fireballs: [{ id: 1, ownerId: "", x: 0, y: 0, vx: 1, vy: 0 }],
+        homingOrbs: [],
+        seq: 0,
+        serverTimeMs: 1,
+      } as never),
+    ).toThrow()
+  })
+
+  it("rejects homing orb with non-finite heading", () => {
+    expect(() =>
+      parseGameStateSyncPayload({
+        players: [],
+        fireballs: [],
+        homingOrbs: [
+          {
+            id: 77,
+            ownerId: "caster",
+            x: 10,
+            y: 20,
+            vx: 120,
+            vy: 0,
+            headingRad: Number.NaN,
+            expiresAtServerTimeMs: 15_000,
+          },
+        ],
         seq: 0,
         serverTimeMs: 1,
       } as never),
@@ -266,6 +338,7 @@ describe("parseGameStateSyncPayload", () => {
           },
         ],
         fireballs: [],
+        homingOrbs: [],
         seq: 0,
         serverTimeMs: 1,
       } as never),
@@ -311,9 +384,65 @@ describe("parseGameStateSyncPayload", () => {
           },
         ],
         fireballs: [],
+        homingOrbs: [],
         seq: 0,
         serverTimeMs: 1,
       } as never),
+    ).toThrow()
+  })
+})
+
+describe("Homing Orb protocol schemas", () => {
+  it("accepts launch, batch update, and impact payloads", () => {
+    expect(homingOrbLaunchPayloadSchema.parse({
+      id: 1,
+      ownerId: "caster",
+      targetId: "target",
+      x: 10,
+      y: 20,
+      vx: 120,
+      vy: 0,
+      headingRad: 0,
+      expiresAtServerTimeMs: 15_000,
+    })).toMatchObject({ id: 1, targetId: "target" })
+
+    expect(homingOrbBatchUpdatePayloadSchema.parse({
+      deltas: [{ id: 1, x: 11, y: 20, vx: 130, vy: 0, headingRad: 0.1 }],
+      removedIds: [],
+      seq: 2,
+    })).toMatchObject({ seq: 2 })
+
+    expect(homingOrbImpactPayloadSchema.parse({
+      id: 1,
+      x: 12,
+      y: 20,
+      reason: "expired",
+      hitPlayerIds: ["target"],
+      damage: 4,
+    })).toMatchObject({ reason: "expired", damage: 4 })
+  })
+
+  it("rejects malformed Homing Orb protocol payloads", () => {
+    expect(() =>
+      homingOrbLaunchPayloadSchema.parse({
+        id: 1,
+        ownerId: "caster",
+        x: 10,
+        y: 20,
+        vx: 120,
+        vy: 0,
+        headingRad: Number.NaN,
+        expiresAtServerTimeMs: 15_000,
+      }),
+    ).toThrow()
+
+    expect(() =>
+      homingOrbImpactPayloadSchema.parse({
+        id: 1,
+        x: 12,
+        y: 20,
+        reason: "miss",
+      }),
     ).toThrow()
   })
 })

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
 import { ProjectileRenderSystem } from "./ProjectileRenderSystem"
-import { ClientFireball } from "../components"
+import { ClientFireball, ClientHomingOrb } from "../components"
 
 /**
  * Builds a Phaser-shaped scene mock with both `add.sprite` and
@@ -14,22 +14,26 @@ function mockScene() {
   const emitterStopFns: Array<ReturnType<typeof vi.fn>> = []
   const startFollowFns: Array<ReturnType<typeof vi.fn>> = []
   const spriteRotationFns: Array<ReturnType<typeof vi.fn>> = []
+  const spriteScaleFns: Array<ReturnType<typeof vi.fn>> = []
   return {
     spriteDestroyFns,
     emitterDestroyFns,
     emitterStopFns,
     startFollowFns,
     spriteRotationFns,
+    spriteScaleFns,
     scene: {
       add: {
         sprite: vi.fn(() => {
           const destroy = vi.fn()
           const setRotation = vi.fn()
+          const setScale = vi.fn()
           spriteDestroyFns.push(destroy)
           spriteRotationFns.push(setRotation)
+          spriteScaleFns.push(setScale)
           return {
             destroy,
-            setScale: vi.fn(),
+            setScale,
             setDepth: vi.fn(),
             play: vi.fn(),
             setRotation,
@@ -56,6 +60,9 @@ describe("ProjectileRenderSystem", () => {
   beforeEach(() => {
     for (const k of Object.keys(ClientFireball)) {
       delete ClientFireball[Number(k) as never]
+    }
+    for (const k of Object.keys(ClientHomingOrb)) {
+      delete ClientHomingOrb[Number(k) as never]
     }
   })
 
@@ -221,5 +228,49 @@ describe("ProjectileRenderSystem", () => {
     // After exactly 3 committed sim steps at vx=600, TICK_DT_SEC=1/60,
     // simCurr advances by 600 × (1/60) × 3 = 30 px.
     expect(ClientFireball[42]?.x).toBeCloseTo(30, 5)
+  })
+
+  it("spawns homing orb sprites at 60% fireball scale and rotates from authoritative heading", () => {
+    const { scene, spriteRotationFns, spriteScaleFns } = mockScene()
+    const sys = new ProjectileRenderSystem(scene as never)
+
+    sys.spawnHomingOrb({
+      id: 90,
+      ownerId: "caster",
+      targetId: "target",
+      x: 10,
+      y: 20,
+      vx: 120,
+      vy: 0,
+      headingRad: Math.PI / 4,
+      expiresAtServerTimeMs: 15_000,
+    })
+    sys.applyHomingOrbBatchUpdate({
+      deltas: [
+        {
+          id: 90,
+          x: 30,
+          y: 40,
+          vx: 0,
+          vy: 120,
+          headingRad: Math.PI / 2,
+        },
+      ],
+      removedIds: [],
+      seq: 1,
+    })
+
+    expect(scene.add.sprite).toHaveBeenCalledWith(10, 20, "homing-orb")
+    expect(spriteScaleFns[0]).toHaveBeenCalledWith(0.12)
+    expect(spriteRotationFns[0]).toHaveBeenCalledWith(Math.PI / 4)
+    expect(spriteRotationFns[0]).toHaveBeenLastCalledWith(Math.PI / 2)
+    expect(ClientHomingOrb[90]).toMatchObject({
+      x: 30,
+      y: 40,
+      vx: 0,
+      vy: 120,
+      headingRad: Math.PI / 2,
+      ownerId: "caster",
+    })
   })
 })

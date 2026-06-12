@@ -8,24 +8,20 @@ import path from "node:path"
 import { defineConfig } from "vitest/config"
 
 const PR_CHANGE_COVERAGE_INCLUDE = [
-  "scripts/animation-sync.ts",
-  "scripts/check-animation-config.ts",
-  "src/app/api/dev/animation-tool/save/route.ts",
-  "src/game/animation/LadyWizardAnimDefs.ts",
+  "src/game/animation/FireballAnimDefs.ts",
+  "src/game/ecs/components.ts",
+  "src/server/game/abilityRuntimeState.ts",
+  "src/server/game/components.ts",
+  "src/server/game/networkBatching.ts",
+  "src/server/gameserver/sessionShop.ts",
+  "src/shared/balance-config/abilities.ts",
   "src/shared/balance-config/animationConfig.ts",
-  "src/shared/balance-config/equipment.ts",
-  "src/shared/balance-config/heroes.ts",
+  "src/shared/balance-config/audio.ts",
+  "src/shared/balance-config/combat.ts",
   "src/shared/balance-config/items.ts",
   "src/shared/events.ts",
   "src/shared/roomEvents.ts",
   "src/shared/validators.ts",
-  "src/shared/playerAnimAim.ts",
-  "src/shared/sprites/spriteViewerOverlays.ts",
-  "src/server/gameserver/sessionShop.ts",
-  "src/server/game/components.ts",
-  "src/server/game/systems/primaryMeleeAttackSystem.ts",
-  "src/server/game/systems/swingConeGeometry.ts",
-  "src/lib/kill-feed-format.ts",
 ] as const
 
 export default defineConfig({

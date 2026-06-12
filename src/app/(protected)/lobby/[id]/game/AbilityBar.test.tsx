@@ -34,6 +34,14 @@ function readyState(): AbilityRuntimeStates {
       rechargeEndsAtServerTimeMs: null,
       rechargeDurationMs: null,
     },
+    homing_orb: {
+      cooldownEndsAtServerTimeMs: null,
+      cooldownDurationMs: null,
+      charges: 4,
+      maxCharges: 4,
+      rechargeEndsAtServerTimeMs: null,
+      rechargeDurationMs: null,
+    },
   }
 }
 
@@ -118,5 +126,33 @@ describe("AbilityBar", () => {
         .getByTestId("ability-slot-0-cooldown-overlay")
         .getAttribute("data-cooldown-kind"),
     ).toBe("heavy")
+  })
+
+  it("renders Homing Orb charges and recharge like other charge abilities", () => {
+    render(
+      <AbilityBar
+        slots={["homing_orb", null, null, null, null]}
+        serverNowMs={1_000}
+        abilityStates={{
+          ...readyState(),
+          homing_orb: {
+            cooldownEndsAtServerTimeMs: null,
+            cooldownDurationMs: null,
+            charges: 3,
+            maxCharges: 4,
+            rechargeEndsAtServerTimeMs: 16_000,
+            rechargeDurationMs: 15_000,
+          },
+        }}
+      />,
+    )
+
+    expect(screen.getByTestId("ability-slot-0-charge-count").textContent).toBe("3")
+    expect(screen.getByTestId("ability-slot-0").textContent).toContain("Homi")
+    expect(
+      screen
+        .getByTestId("ability-slot-0-cooldown-overlay")
+        .getAttribute("data-cooldown-kind"),
+    ).toBe("light")
   })
 })

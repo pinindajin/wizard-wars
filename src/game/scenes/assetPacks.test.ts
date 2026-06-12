@@ -61,7 +61,7 @@ describe("asset pack URLs are absolute", () => {
     }
   })
 
-  it("arena pack declares the core gameplay files (tilemap + tileset + hero sheet + fireball assets)", () => {
+  it("arena pack declares the core gameplay files (tilemap + tileset + hero sheet + projectile assets)", () => {
     const files = (arenaPack as { arena: { files: PackFile[] } }).arena.files
     const urls = collectUrls(files)
     expect(urls).toContain("/assets/tilemaps/arena.json")
@@ -70,22 +70,33 @@ describe("asset pack URLs are absolute", () => {
       "/assets/sprites/heroes/lady-wizard/sheets/lady-wizard-megasheet.png",
     )
     expect(urls).toContain("/assets/sprites/abilities/fireball-fly.png")
+    expect(urls).toContain("/assets/sprites/abilities/homing-orb-fly.png")
     expect(urls).toContain("/assets/sprites/abilities/fireball-channel.png")
     expect(urls).toContain("/assets/sprites/abilities/ember.png")
+    expect(urls).toContain("/assets/sounds/sfx-homing-orb-cast.mp3")
+    expect(urls).toContain("/assets/sounds/sfx-homing-orb-impact.mp3")
+    expect(urls).toContain("/assets/sounds/sfx-homing-orb-expire.mp3")
   })
 
-  it("fireball sheet metadata matches Phaser frame configs", async () => {
+  it("projectile sheet metadata matches Phaser frame configs", async () => {
     const files = (arenaPack as { arena: { files: PackFile[] } }).arena.files
     const fly = packFileForKey(files, "fireball")
+    const homing = packFileForKey(files, "homing-orb")
     const channel = packFileForKey(files, "fireball-channel")
 
     expect(fly.frameConfig).toEqual({ frameWidth: 256, frameHeight: 256 })
+    expect(homing.frameConfig).toEqual({ frameWidth: 256, frameHeight: 256 })
     expect(channel.frameConfig).toEqual({ frameWidth: 64, frameHeight: 64 })
 
     const flyMeta = await sharp("public/assets/sprites/abilities/fireball-fly.png").metadata()
+    const homingMeta = await sharp("public/assets/sprites/abilities/homing-orb-fly.png").metadata()
     const channelMeta = await sharp("public/assets/sprites/abilities/fireball-channel.png").metadata()
 
     expect({ width: flyMeta.width, height: flyMeta.height }).toEqual({
+      width: 1280,
+      height: 256,
+    })
+    expect({ width: homingMeta.width, height: homingMeta.height }).toEqual({
       width: 1280,
       height: 256,
     })
@@ -94,6 +105,7 @@ describe("asset pack URLs are absolute", () => {
       height: 64,
     })
     expect(flyMeta.width! / fly.frameConfig!.frameWidth).toBe(5)
+    expect(homingMeta.width! / homing.frameConfig!.frameWidth).toBe(5)
     expect(channelMeta.width! / channel.frameConfig!.frameWidth).toBe(8)
   })
 

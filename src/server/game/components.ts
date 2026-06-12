@@ -90,6 +90,19 @@ export const Casting = {
   capturedFacingAngle: new Float32Array(MAX_ENTITIES),
   capturedTargetX: new Float32Array(MAX_ENTITIES),
   capturedTargetY: new Float32Array(MAX_ENTITIES),
+  capturedTargetEid: new Int32Array(MAX_ENTITIES),
+}
+
+/** Homing Orb projectile steering state. */
+export const HomingOrb = {
+  /** Locked target entity id, or -1 when no target is currently valid. */
+  targetEid: new Int32Array(MAX_ENTITIES),
+  /** Authoritative projectile heading in radians. */
+  headingRad: new Float32Array(MAX_ENTITIES),
+  /** Current projectile speed in px/s. */
+  speedPxPerSec: new Float32Array(MAX_ENTITIES),
+  /** Simulation tick at which the projectile expires in place. */
+  expiresAtTick: new Uint32Array(MAX_ENTITIES),
 }
 
 /** Applied knockback impulse; decremented each tick until exhausted. */
@@ -123,6 +136,7 @@ export const TerrainState = {
  */
 export const Cooldown = {
   fireball: new Uint32Array(MAX_ENTITIES),
+  homingOrb: new Uint32Array(MAX_ENTITIES),
   lightningBolt: new Uint32Array(MAX_ENTITIES),
   /** Primary melee swing end tick (was legacy `axe` cooldown array). */
   primaryMelee: new Uint32Array(MAX_ENTITIES),
@@ -137,6 +151,9 @@ export const Cooldown = {
  */
 export const AbilityRuntime = {
   fireballCooldownEndsAtMs: new Float64Array(MAX_ENTITIES),
+  homingOrbCharges: new Uint8Array(MAX_ENTITIES),
+  homingOrbRechargeReadyTick: new Uint32Array(MAX_ENTITIES),
+  homingOrbRechargeEndsAtMs: new Float64Array(MAX_ENTITIES),
   lightningBoltCooldownEndsAtMs: new Float64Array(MAX_ENTITIES),
   healingPotionCooldownEndsAtMs: new Float64Array(MAX_ENTITIES),
   jumpCharges: new Uint8Array(MAX_ENTITIES),
@@ -246,6 +263,9 @@ export const ProjectileTag = {}
 /** Marks an entity as a fireball projectile. */
 export const FireballTag = {}
 
+/** Marks an entity as a Homing Orb projectile. */
+export const HomingOrbTag = {}
+
 /** Marks an entity as an axe-swing hitbox. */
 export const AxeHitboxTag = {}
 
@@ -284,6 +304,7 @@ export const ABILITY_INDEX = {
   axe: 2,
   healing_potion: 3,
   jump: 4,
+  homing_orb: 5,
 } as const
 
 /** Reverse lookup: abilityIndex → ability ID string. */
@@ -293,6 +314,7 @@ export const ABILITY_INDEX_TO_ID: readonly string[] = [
   "axe",
   "healing_potion",
   "jump",
+  "homing_orb",
 ]
 
 /** Maps hero string IDs to the integer stored in {@link Hero}.typeIndex. */

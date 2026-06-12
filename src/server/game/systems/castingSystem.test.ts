@@ -10,6 +10,8 @@ import {
   DyingTag,
   Facing,
   Hero,
+  HomingOrb,
+  HomingOrbTag,
   PlayerInput,
   PlayerTag,
   Position,
@@ -26,6 +28,8 @@ import {
   type AnimationActionConfig,
 } from "../../../shared/balance-config/animationConfig"
 import {
+  HOMING_ORB_CHARGE_RECHARGE_MS,
+  HOMING_ORB_MAX_CHARGES,
   JUMP_CHARGE_RECHARGE_MS,
   JUMP_MAX_CHARGES,
   TICK_MS,
@@ -47,6 +51,9 @@ function emptyCtx(overrides: Partial<SimCtx> = {}): SimCtx {
     playerHeroIdMap: new Map(),
     fireballOwnerMap: new Map(),
     fireballCreatedAtTickMap: new Map(),
+    homingOrbOwnerMap: new Map(),
+    homingOrbTargetPlayerMap: new Map(),
+    homingOrbCastTargetPlayerMap: new Map(),
     inputMap: new Map(),
     lastProcessedInputSeqByPlayer: new Map(),
     commandBuffer: createCommandBuffer(),
@@ -59,6 +66,9 @@ function emptyCtx(overrides: Partial<SimCtx> = {}): SimCtx {
     fireballLaunches: [],
     fireballImpacts: [],
     fireballRemovedIds: [],
+    homingOrbLaunches: [],
+    homingOrbImpacts: [],
+    homingOrbRemovedIds: [],
     lightningBolts: [],
     primaryMeleeAttacks: [],
     combatTelegraphStarts: [],
@@ -69,12 +79,14 @@ function emptyCtx(overrides: Partial<SimCtx> = {}): SimCtx {
     hostEndSignal: false,
     prevPlayerStates: new Map(),
     prevFireballStates: new Map(),
+    prevHomingOrbStates: new Map(),
     killStats: new Map(),
     activeMeleeAttacks: new Map(),
     activeCombatTelegraphs: new Map(),
     invulnerableExpiresAtTickByEntity: new Map(),
     playerDeltas: [],
     fireballDeltas: [],
+    homingOrbDeltas: [],
     abilitySfxEvents: [],
     ...overrides,
   }
@@ -102,6 +114,9 @@ function addCaster(world: ReturnType<typeof createWorld>, x = 100, y = 100): num
   AbilityRuntime.jumpCharges[eid] = JUMP_MAX_CHARGES
   AbilityRuntime.jumpRechargeReadyTick[eid] = 0
   AbilityRuntime.jumpRechargeEndsAtMs[eid] = 0
+  AbilityRuntime.homingOrbCharges[eid] = HOMING_ORB_MAX_CHARGES
+  AbilityRuntime.homingOrbRechargeReadyTick[eid] = 0
+  AbilityRuntime.homingOrbRechargeEndsAtMs[eid] = 0
   AbilitySlots.slot0[eid] = ABILITY_INDEX.fireball
   AbilitySlots.slot1[eid] = ABILITY_INDEX.lightning_bolt
   AbilitySlots.slot2[eid] = -1
@@ -112,6 +127,83 @@ function addCaster(world: ReturnType<typeof createWorld>, x = 100, y = 100): num
   PlayerInput.abilityTargetY[eid] = y
   return eid
 }
+
+function addPassiveTarget(
+  world: ReturnType<typeof createWorld>,
+  x: number,
+  y: number,
+): number {
+  const target = addCaster(world, x, y)
+  PlayerInput.abilitySlot[target] = -1
+  return target
+}
+
+describe("castingSystem homing orb charges and target lock", () => {
+  const homingRechargeTicks = Math.ceil(HOMING_ORB_CHARGE_RECHARGE_MS / TICK_MS)
+
+  function addHomingCaster(world: ReturnType<typeof createWorld>): number {
+    const caster = addCaster(world)
+    AbilitySlots.slot2[caster] = ABILITY_INDEX.homing_orb
+    PlayerInput.abilitySlot[caster] = 2
+    return caster
+  }
+
+  it("rejects homing orb without spending a charge when no target exists", () => {
+    const world = createWorld()
+    const caster = addHomingCaster(world)
+    const ctx = emptyCtx({
+      world,
+      currentTick: 20,
+      serverTimeMs: 1_000,
+      entityPlayerMap: new Map([[caster, "caster"]]),
+    })
+
+    castingSystem(ctx)
+
+    expect(hasComponent(world, caster, Casting)).toBe(false)
+    expect(AbilityRuntime.homingOrbCharges[caster]).toBe(HOMING_ORB_MAX_CHARGES)
+    expect(AbilityRuntime.homingOrbRechargeReadyTick[caster]).toBe(0)
+  })
+
+  it("spends a charge and launches at the target closest to the captured cursor", () => {
+    const world = createWorld()
+    const caster = addHomingCaster(world)
+    const far = addPassiveTarget(world, 500, 100)
+    const nearCursor = addPassiveTarget(world, 280, 100)
+    PlayerInput.abilityTargetX[caster] = 300
+    PlayerInput.abilityTargetY[caster] = 100
+    const commandBuffer = createCommandBuffer()
+    const ctx = emptyCtx({
+      world,
+      currentTick: 10,
+      serverTimeMs: 1_000,
+      commandBuffer,
+      entityPlayerMap: new Map([
+        [caster, "caster"],
+        [far, "far"],
+        [nearCursor, "near"],
+      ]),
+    })
+
+    castingSystem(ctx)
+
+    expect(hasComponent(world, caster, Casting)).toBe(true)
+    expect(AbilityRuntime.homingOrbCharges[caster]).toBe(HOMING_ORB_MAX_CHARGES - 1)
+    expect(AbilityRuntime.homingOrbRechargeReadyTick[caster]).toBe(10 + homingRechargeTicks)
+
+    PlayerInput.abilitySlot[caster] = -1
+    ctx.currentTick =
+      10 + msToTickOffset(getSpellAnimationConfig("red_wizard", "homing_orb").durationMs)
+    castingSystem(ctx)
+    commandBuffer.execute(world)
+
+    expect(ctx.homingOrbLaunches).toHaveLength(1)
+    expect(ctx.homingOrbLaunches[0]!.ownerId).toBe("caster")
+    expect(ctx.homingOrbLaunches[0]!.targetId).toBe("near")
+    expect(hasComponent(world, ctx.homingOrbLaunches[0]!.id, HomingOrbTag)).toBe(true)
+    expect(HomingOrb.targetEid[ctx.homingOrbLaunches[0]!.id]).toBe(nearCursor)
+  })
+})
 
 describe("castingSystem jump charges", () => {
   const jumpRechargeTicks = Math.ceil(JUMP_CHARGE_RECHARGE_MS / TICK_MS)

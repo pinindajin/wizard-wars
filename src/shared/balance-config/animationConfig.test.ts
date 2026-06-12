@@ -191,6 +191,7 @@ describe("animation config", () => {
     expect(megasheetClipForAnimationActionKey("death")).toBe("death")
     expect(megasheetClipForAnimationActionKey("stumble")).toBe("stumble")
     expect(megasheetClipForAnimationActionKey("spell:fireball")).toBe("light_spell_cast")
+    expect(megasheetClipForAnimationActionKey("spell:homing_orb")).toBe("light_spell_cast")
     expect(megasheetClipForAnimationActionKey("spell:jump")).toBe("jump")
     expect(megasheetClipForAnimationActionKey("spell:lightning_bolt")).toBe("heavy_spell_cast")
     expect(megasheetClipForAnimationActionKey("primary:red_wizard_cleaver")).toBe(
@@ -218,6 +219,10 @@ describe("animation config", () => {
   it("builds one shared action list without direction variants", () => {
     const actions = getAnimationToolActions("red_wizard")
     expect(actions.map((action) => action.id)).toContain("primary:red_wizard_cleaver")
+    expect(actions.find((action) => action.id === "spell:homing_orb")).toMatchObject({
+      atlasClipId: "light-spell-cast",
+      megasheetClip: "light_spell_cast",
+    })
     expect(actions.some((action) => action.id.includes("south"))).toBe(false)
     expect(getAnimationToolActions("unknown_hero")[0]!.id).toBe("idle")
     expect(

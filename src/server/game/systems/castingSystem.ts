@@ -29,9 +29,12 @@ import {
   Ownership,
   ProjectileTag,
   FireballTag,
+  HomingOrb,
+  HomingOrbTag,
   DyingTag,
   DeadTag,
   SpectatorTag,
+  InvulnerableTag,
   ABILITY_INDEX_TO_ID,
   ITEM_INDEX_TO_ID,
   HERO_INDEX_TO_ID,
@@ -45,6 +48,10 @@ import type { SimCtx, PendingLightningBolt } from "../simulation"
 import {
   FIREBALL_SPEED_PX_PER_SEC,
   FIREBALL_COOLDOWN_MS,
+  HOMING_ORB_CHARGE_RECHARGE_MS,
+  HOMING_ORB_INITIAL_SPEED_PX_PER_SEC,
+  HOMING_ORB_LIFETIME_MS,
+  HOMING_ORB_MAX_CHARGES,
   LIGHTNING_COOLDOWN_MS,
   LIGHTNING_BOLT_ARC_PX,
   LIGHTNING_HIT_RADIUS_PX,
@@ -78,12 +85,17 @@ function isAirborneForAirLock(world: World, eid: number): boolean {
 /** Tick duration equivalent for each ability cooldown. */
 const COOLDOWN_TICKS: Record<string, number> = {
   fireball: Math.ceil(FIREBALL_COOLDOWN_MS / TICK_MS),
+  homing_orb: 0,
   lightning_bolt: Math.ceil(LIGHTNING_COOLDOWN_MS / TICK_MS),
   healing_potion: Math.ceil(HEALING_POTION_CAST_MS / TICK_MS),
 }
 
 /** Tick duration for restoring one jump charge. */
 const JUMP_RECHARGE_TICKS = Math.ceil(JUMP_CHARGE_RECHARGE_MS / TICK_MS)
+/** Tick duration for restoring one Homing Orb charge. */
+const HOMING_ORB_RECHARGE_TICKS = Math.ceil(HOMING_ORB_CHARGE_RECHARGE_MS / TICK_MS)
+/** Homing Orb lifetime expressed in authoritative simulation ticks. */
+const HOMING_ORB_LIFETIME_TICKS = Math.ceil(HOMING_ORB_LIFETIME_MS / TICK_MS)
 
 /** Returns the hero id stored on an entity, falling back to the default index. */
 function heroIdForCaster(eid: number): string {
@@ -122,6 +134,7 @@ function slotAbilityIndex(eid: number, slot: number): number {
 function isCooldownReady(eid: number, abilityId: string, currentTick: number): boolean {
   switch (abilityId) {
     case "fireball":       return currentTick >= Cooldown.fireball[eid]
+    case "homing_orb":     return currentTick >= Cooldown.homingOrb[eid]
     case "lightning_bolt": return currentTick >= Cooldown.lightningBolt[eid]
     case "healing_potion": return currentTick >= Cooldown.healingPotion[eid]
     case "jump":           return currentTick >= Cooldown.jump[eid]
@@ -142,6 +155,9 @@ function setCooldown(
     case "fireball":
       Cooldown.fireball[eid] = currentTick + cd
       AbilityRuntime.fireballCooldownEndsAtMs[eid] = endsAtMs
+      break
+    case "homing_orb":
+      Cooldown.homingOrb[eid] = currentTick + cd
       break
     case "lightning_bolt":
       Cooldown.lightningBolt[eid] = currentTick + cd
@@ -202,6 +218,112 @@ function consumeJumpCharge(eid: number, currentTick: number, serverTimeMs: numbe
   AbilityRuntime.jumpCharges[eid]--
   ensureJumpRecharge(eid, currentTick, serverTimeMs)
   return true
+}
+
+/**
+ * Starts Homing Orb recharge when charges are below maximum and no timer is active.
+ *
+ * @param eid - Player entity id.
+ * @param currentTick - Current authoritative simulation tick.
+ * @param serverTimeMs - Current authoritative server wall-clock time.
+ */
+function ensureHomingOrbRecharge(eid: number, currentTick: number, serverTimeMs: number): void {
+  if (AbilityRuntime.homingOrbCharges[eid] >= HOMING_ORB_MAX_CHARGES) return
+  if (AbilityRuntime.homingOrbRechargeReadyTick[eid] > 0) return
+  AbilityRuntime.homingOrbRechargeReadyTick[eid] = currentTick + HOMING_ORB_RECHARGE_TICKS
+  AbilityRuntime.homingOrbRechargeEndsAtMs[eid] =
+    serverTimeMs + HOMING_ORB_RECHARGE_TICKS * TICK_MS
+}
+
+/**
+ * Restores ready Homing Orb charges before new cast validation.
+ *
+ * @param eid - Player entity id.
+ * @param currentTick - Current authoritative simulation tick.
+ * @param serverTimeMs - Current authoritative server wall-clock time.
+ */
+function refreshHomingOrbCharges(eid: number, currentTick: number, serverTimeMs: number): void {
+  const readyTick = AbilityRuntime.homingOrbRechargeReadyTick[eid]
+  if (readyTick <= 0 || currentTick < readyTick) return
+
+  AbilityRuntime.homingOrbCharges[eid] = Math.min(
+    HOMING_ORB_MAX_CHARGES,
+    AbilityRuntime.homingOrbCharges[eid] + 1,
+  )
+
+  AbilityRuntime.homingOrbRechargeReadyTick[eid] = 0
+  AbilityRuntime.homingOrbRechargeEndsAtMs[eid] = 0
+  ensureHomingOrbRecharge(eid, currentTick, serverTimeMs)
+}
+
+/**
+ * Consumes a Homing Orb charge and maintains the active recharge timer.
+ *
+ * @param eid - Player entity id.
+ * @param currentTick - Current authoritative simulation tick.
+ * @param serverTimeMs - Current authoritative server wall-clock time.
+ * @returns True when a charge was consumed.
+ */
+function consumeHomingOrbCharge(eid: number, currentTick: number, serverTimeMs: number): boolean {
+  if (AbilityRuntime.homingOrbCharges[eid] <= 0) return false
+  AbilityRuntime.homingOrbCharges[eid]--
+  ensureHomingOrbRecharge(eid, currentTick, serverTimeMs)
+  return true
+}
+
+/**
+ * Returns true when a player can be locked by Homing Orb.
+ *
+ * @param ctx - Simulation context.
+ * @param ownerEid - Casting player entity id.
+ * @param targetEid - Candidate player entity id.
+ * @param expectedUserId - Optional stored user id for stale entity-id protection.
+ * @returns True when the target entity is a live, vulnerable enemy and still maps to the expected user.
+ */
+function isValidHomingOrbTarget(
+  ctx: SimCtx,
+  ownerEid: number,
+  targetEid: number,
+  expectedUserId?: string,
+): boolean {
+  const { world, entityPlayerMap } = ctx
+  if (targetEid === ownerEid) return false
+  if (!hasComponent(world, targetEid, PlayerTag)) return false
+  if (hasComponent(world, targetEid, DyingTag)) return false
+  if (hasComponent(world, targetEid, DeadTag)) return false
+  if (hasComponent(world, targetEid, SpectatorTag)) return false
+  if (hasComponent(world, targetEid, InvulnerableTag)) return false
+  const userId = entityPlayerMap.get(targetEid)
+  if (userId === undefined) return false
+  return expectedUserId === undefined || userId === expectedUserId
+}
+
+/**
+ * Finds the valid Homing Orb target nearest a world position in one pass.
+ *
+ * @param ctx - Simulation context.
+ * @param ownerEid - Casting or projectile owner entity id.
+ * @param x - Target-selection x coordinate.
+ * @param y - Target-selection y coordinate.
+ * @returns Closest valid target entity/user id pair, or null when none exists.
+ */
+function nearestHomingOrbTarget(
+  ctx: SimCtx,
+  ownerEid: number,
+  x: number,
+  y: number,
+): { readonly eid: number; readonly userId: string } | null {
+  let best: { eid: number; userId: string; distSq: number } | null = null
+  for (const candidate of query(ctx.world, [PlayerTag])) {
+    if (!isValidHomingOrbTarget(ctx, ownerEid, candidate)) continue
+    const dx = Position.x[candidate] - x
+    const dy = Position.y[candidate] - y
+    const distSq = dx * dx + dy * dy
+    if (best === null || distSq < best.distSq) {
+      best = { eid: candidate, userId: ctx.entityPlayerMap.get(candidate)!, distSq }
+    }
+  }
+  return best === null ? null : { eid: best.eid, userId: best.userId }
 }
 
 // ─── Cast completion handlers ────────────────────────────────────────────
@@ -278,6 +400,85 @@ function launchFireball(ctx: SimCtx, casterEid: number, capturedAngle: number): 
         y: spawnY,
         vx,
         vy,
+      })
+    },
+  })
+}
+
+/**
+ * Enqueues creation of a Homing Orb projectile at end-of-tick execute.
+ *
+ * Spawn position follows Fireball's deferred feet position, while aim direction
+ * and target identity come from the cast-start snapshot.
+ *
+ * @param ctx - Simulation context.
+ * @param casterEid - Casting player entity id.
+ * @param capturedAngle - Locked world radians from cast start.
+ * @param targetEid - Accepted target entity id from cast start.
+ * @param targetUserId - Accepted target user id from cast start.
+ */
+function launchHomingOrb(
+  ctx: SimCtx,
+  casterEid: number,
+  capturedAngle: number,
+  targetEid: number,
+  targetUserId: string | undefined,
+): void {
+  const {
+    world,
+    commandBuffer,
+    currentTick,
+    serverTimeMs,
+    entityPlayerMap,
+    homingOrbOwnerMap,
+    homingOrbTargetPlayerMap,
+    homingOrbLaunches,
+  } = ctx
+
+  const casterUserId = entityPlayerMap.get(casterEid) ?? ""
+  const vx = Math.cos(capturedAngle) * HOMING_ORB_INITIAL_SPEED_PX_PER_SEC
+  const vy = Math.sin(capturedAngle) * HOMING_ORB_INITIAL_SPEED_PX_PER_SEC
+
+  commandBuffer.enqueue({
+    type: "addEntity",
+    skipIf: (w) => shouldSkipDeferredFireballSpawn(w, casterEid),
+    setup: (orbEid) => {
+      const spawnX = Position.x[casterEid] + Math.cos(capturedAngle) * 25
+      const spawnY = Position.y[casterEid] + Math.sin(capturedAngle) * 25
+      const target =
+        targetUserId !== undefined &&
+        isValidHomingOrbTarget(ctx, casterEid, targetEid, targetUserId)
+          ? { eid: targetEid, userId: targetUserId }
+          : nearestHomingOrbTarget(ctx, casterEid, spawnX, spawnY)
+
+      addComponent(world, orbEid, HomingOrbTag)
+      addComponent(world, orbEid, ProjectileTag)
+      addComponent(world, orbEid, Position)
+      addComponent(world, orbEid, Velocity)
+      addComponent(world, orbEid, Ownership)
+      addComponent(world, orbEid, HomingOrb)
+      Position.x[orbEid] = spawnX
+      Position.y[orbEid] = spawnY
+      Velocity.vx[orbEid] = vx
+      Velocity.vy[orbEid] = vy
+      Ownership.ownerEid[orbEid] = casterEid
+      HomingOrb.targetEid[orbEid] = target?.eid ?? -1
+      HomingOrb.headingRad[orbEid] = capturedAngle
+      HomingOrb.speedPxPerSec[orbEid] = HOMING_ORB_INITIAL_SPEED_PX_PER_SEC
+      HomingOrb.expiresAtTick[orbEid] = currentTick + HOMING_ORB_LIFETIME_TICKS
+      homingOrbOwnerMap.set(orbEid, casterUserId)
+      if (target) homingOrbTargetPlayerMap.set(orbEid, target.userId)
+
+      homingOrbLaunches.push({
+        id: orbEid,
+        ownerId: casterUserId,
+        ...(target ? { targetId: target.userId } : {}),
+        x: spawnX,
+        y: spawnY,
+        vx,
+        vy,
+        headingRad: capturedAngle,
+        expiresAtServerTimeMs: serverTimeMs + HOMING_ORB_LIFETIME_TICKS * TICK_MS,
       })
     },
   })
@@ -376,6 +577,7 @@ export function castingSystem(ctx: SimCtx): void {
   // ── 0. Recharge charge-based abilities before accepting new inputs ───
   for (const eid of query(world, [PlayerTag])) {
     refreshJumpCharges(eid, currentTick, serverTimeMs)
+    refreshHomingOrbCharges(eid, currentTick, serverTimeMs)
   }
 
   // ── 1. Complete active casts ─────────────────────────────────────────
@@ -393,6 +595,7 @@ export function castingSystem(ctx: SimCtx): void {
           hasComponent(world, eid, SpectatorTag) ? "spectator" : "caster_dead",
         )
       }
+      ctx.homingOrbCastTargetPlayerMap.delete(eid)
       removeComponent(world, eid, Casting)
       continue
     }
@@ -404,6 +607,16 @@ export function castingSystem(ctx: SimCtx): void {
       switch (abilityId) {
         case "fireball":
           launchFireball(ctx, eid, Casting.capturedFacingAngle[eid])
+          break
+        case "homing_orb":
+          launchHomingOrb(
+            ctx,
+            eid,
+            Casting.capturedFacingAngle[eid],
+            Casting.capturedTargetEid[eid],
+            ctx.homingOrbCastTargetPlayerMap.get(eid),
+          )
+          ctx.homingOrbCastTargetPlayerMap.delete(eid)
           break
         case "lightning_bolt":
           queueLightningBolt(
@@ -422,6 +635,7 @@ export function castingSystem(ctx: SimCtx): void {
 
     if (currentTick >= Casting.animationEndsAtTick[eid]) {
       setCooldown(eid, abilityId, currentTick, serverTimeMs)
+      ctx.homingOrbCastTargetPlayerMap.delete(eid)
       removeComponent(world, eid, Casting)
     }
   }
@@ -467,6 +681,18 @@ export function castingSystem(ctx: SimCtx): void {
 
     if (!isCooldownReady(eid, abilityId, currentTick)) continue
 
+    let homingOrbTarget: { readonly eid: number; readonly userId: string } | null = null
+    if (abilityId === "homing_orb") {
+      homingOrbTarget = nearestHomingOrbTarget(
+        ctx,
+        eid,
+        PlayerInput.abilityTargetX[eid],
+        PlayerInput.abilityTargetY[eid],
+      )
+      if (homingOrbTarget === null) continue
+      if (!consumeHomingOrbCharge(eid, currentTick, serverTimeMs)) continue
+    }
+
     const heroId = heroIdForCaster(eid)
     const timing = spellCastTicks(heroId, abilityId)
 
@@ -481,6 +707,10 @@ export function castingSystem(ctx: SimCtx): void {
     Casting.capturedPositionY[eid] = Position.y[eid]
     Casting.capturedTargetX[eid] = PlayerInput.abilityTargetX[eid]
     Casting.capturedTargetY[eid] = PlayerInput.abilityTargetY[eid]
+    Casting.capturedTargetEid[eid] = homingOrbTarget?.eid ?? -1
+    if (homingOrbTarget) {
+      ctx.homingOrbCastTargetPlayerMap.set(eid, homingOrbTarget.userId)
+    }
     const targetDx = Casting.capturedTargetX[eid] - Casting.capturedPositionX[eid]
     const targetDy = Casting.capturedTargetY[eid] - Casting.capturedPositionY[eid]
     Casting.capturedFacingAngle[eid] =

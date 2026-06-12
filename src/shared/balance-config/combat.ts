@@ -92,6 +92,8 @@ export const FIREBALL_DAMAGE_PROPERTIES = combineDamageProperties(
 )
 /** Fireball projectile speed in px/s. */
 export const FIREBALL_SPEED_PX_PER_SEC = 400
+/** Approximate fireball hit radius in pixels. */
+export const FIREBALL_HIT_RADIUS_PX = 8
 /**
  * Default fireball cast animation lock duration.
  * Runtime cast timing is loaded from `src/shared/balance-config/animation-config.json`.
@@ -101,6 +103,39 @@ export const FIREBALL_CAST_MS = 500
 export const FIREBALL_COOLDOWN_MS = 800
 /** Newly launched fireballs ignore their owner for this many ms. */
 export const FIREBALL_OWNER_SELF_DAMAGE_GRACE_MS = 100
+
+// --- Homing Orb ---
+/** Damage dealt by a direct Homing Orb hit. Bitmask: Magic. */
+export const HOMING_ORB_DAMAGE = 8
+export const HOMING_ORB_DAMAGE_PROPERTIES = DamageProperty.Magic
+/** Damage dealt by a Homing Orb expiry explosion. Bitmask: Magic. */
+export const HOMING_ORB_EXPIRY_DAMAGE = 4
+/** Homing Orb uses the same cast lock as Fireball. */
+export const HOMING_ORB_CAST_MS = FIREBALL_CAST_MS
+/** Homing Orb is charge-gated and has no extra cooldown. */
+export const HOMING_ORB_COOLDOWN_MS = 0
+/** Maximum Homing Orb charges available before recharge stops. */
+export const HOMING_ORB_MAX_CHARGES = 4
+/** Time to restore one spent Homing Orb charge. */
+export const HOMING_ORB_CHARGE_RECHARGE_MS = 15_000
+/** Homing Orb lifetime before expiry explosion. */
+export const HOMING_ORB_LIFETIME_MS = 15_000
+/** Homing Orb collision radius, scaled from Fireball's visual size. */
+export const HOMING_ORB_HIT_RADIUS_PX = Math.ceil(FIREBALL_HIT_RADIUS_PX * 0.6)
+/** Initial Homing Orb projectile speed in px/s. */
+export const HOMING_ORB_INITIAL_SPEED_PX_PER_SEC = 120
+/** Minimum Homing Orb projectile speed while turning or untargeted. */
+export const HOMING_ORB_MIN_SPEED_PX_PER_SEC = 80
+/** Maximum Homing Orb projectile speed in px/s. */
+export const HOMING_ORB_MAX_SPEED_PX_PER_SEC = FIREBALL_SPEED_PX_PER_SEC
+/** Homing Orb acceleration while pointed at its target. */
+export const HOMING_ORB_ACCEL_PX_PER_SEC2 = 180
+/** Homing Orb deceleration while steering outside its acceleration cone. */
+export const HOMING_ORB_TURN_DECEL_PX_PER_SEC2 = 220
+/** Homing Orb maximum turn rate. */
+export const HOMING_ORB_TURN_RATE_DEG_PER_SEC = 30
+/** Cone around the projectile heading where Homing Orb accelerates. */
+export const HOMING_ORB_ACCEL_CONE_DEG = 10
 
 // --- Lightning Bolt ---
 /** Damage dealt by lightning bolt. Bitmask: Magic | Electric. */

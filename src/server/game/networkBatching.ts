@@ -1,4 +1,8 @@
-import type { FireballBatchUpdatePayload, PlayerDelta } from "@/shared/types"
+import type {
+  FireballBatchUpdatePayload,
+  HomingOrbBatchUpdatePayload,
+  PlayerDelta,
+} from "@/shared/types"
 
 /**
  * Merges tick-local player delta arrays into one payload-ready delta list.
@@ -33,6 +37,33 @@ export function mergeFireballBatch(
     for (const delta of batch.deltas) {
       removedIds.delete(delta.id)
       deltas.set(delta.id, delta)
+    }
+    for (const id of batch.removedIds) {
+      removedIds.add(id)
+      deltas.delete(id)
+    }
+  }
+  return {
+    deltas: [...deltas.values()],
+    removedIds: [...removedIds.values()],
+  }
+}
+
+/**
+ * Merges tick-local Homing Orb delta batches into one payload-ready batch.
+ *
+ * @param batches - Ordered Homing Orb delta and removal batches.
+ * @returns Merged Homing Orb batch.
+ */
+export function mergeHomingOrbBatch(
+  batches: readonly Pick<HomingOrbBatchUpdatePayload, "deltas" | "removedIds">[],
+): Pick<HomingOrbBatchUpdatePayload, "deltas" | "removedIds"> {
+  const deltas = new Map<number, HomingOrbBatchUpdatePayload["deltas"][number]>()
+  const removedIds = new Set<number>()
+  for (const batch of batches) {
+    for (const delta of batch.deltas) {
+      removedIds.delete(delta.id)
+      deltas.set(delta.id, { ...(deltas.get(delta.id) ?? { id: delta.id }), ...delta })
     }
     for (const id of batch.removedIds) {
       removedIds.add(id)
