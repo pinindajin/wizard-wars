@@ -64,7 +64,6 @@ import { HERO_CONFIGS } from "@/shared/balance-config/heroes"
 import {
   ARENA_HEIGHT,
   ARENA_LAVA_COLLIDERS,
-  ARENA_NON_WALKABLE_COLLIDERS,
   ARENA_PROP_COLLIDERS,
   ARENA_SPAWN_POINTS,
   ARENA_WIDTH,
@@ -78,6 +77,7 @@ import { REPLAY_SMOOTHING_MS } from "@/shared/balance-config/rendering"
 const OPEN_TEST_POINT = ARENA_SPAWN_POINTS[0]!
 const ARENA_BOUNDS = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
 const OPEN_LAVA_EDGE_POINT = { x: 145, y: 57 }
+const REPRESENTATIVE_BLOCKER_MIN_AREA_PX = 1_000
 
 function canPlayerOccupy(x: number, y: number): boolean {
   return canOccupyWorldPosition(
@@ -90,16 +90,18 @@ function canPlayerOccupy(x: number, y: number): boolean {
 }
 
 function sampleDiagonalSlideCase() {
-  const blocker = ARENA_NON_WALKABLE_COLLIDERS.find((rect) =>
-    rect.y < 320 &&
-    rect.width >= 32 &&
-    canPlayerOccupy(
-      rect.x + rect.width / 2,
-      rect.y + rect.height + PLAYER_WORLD_COLLISION_FOOTPRINT.radiusY -
-        PLAYER_WORLD_COLLISION_FOOTPRINT.offsetY + 3,
-    ),
-  )
-  if (!blocker) throw new Error("Expected native upper edge blocker")
+  const blocker = ARENA_WORLD_COLLIDERS
+    .filter((rect) =>
+      rect.y < 420 &&
+      rect.width * rect.height >= REPRESENTATIVE_BLOCKER_MIN_AREA_PX &&
+      canPlayerOccupy(
+        rect.x + rect.width / 2,
+        rect.y + rect.height + PLAYER_WORLD_COLLISION_FOOTPRINT.radiusY -
+          PLAYER_WORLD_COLLISION_FOOTPRINT.offsetY + 3,
+      ),
+    )
+    .sort((a, b) => b.width * b.height - a.width * a.height)[0]
+  if (!blocker) throw new Error("Expected representative native upper blocker")
   return {
     blocker,
     start: {

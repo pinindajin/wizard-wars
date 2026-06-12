@@ -79,29 +79,31 @@ function findIllegalGroundPoint(): { x: number; y: number } {
 function sampleNativeLavaEdgeJump(): {
   startX: number
   startY: number
-  minLandingY: number
+  minLandingX: number
   input: Partial<PlayerInputPayload>
 } {
-  const sample = { startX: 100, startY: 40, minLandingY: 88, input: { down: true } }
+  const sample = { startX: 24, startY: 800, minLandingX: 112, input: { right: true } }
   if (terrainStateAtPosition(sample.startX, sample.startY) !== "lava") {
     throw new Error("expected native lava-edge jump start to be lava")
   }
-  if (terrainStateAtPosition(sample.startX, sample.minLandingY + 1) !== "land") {
+  if (terrainStateAtPosition(sample.minLandingX, sample.startY) !== "land") {
     throw new Error("expected native lava-edge jump landing threshold to be land")
   }
   return sample
 }
 
-function sampleLavaEdge(): { x: number; y: number; exitInput: Partial<PlayerInputPayload> } {
-  for (let y = 0; y < ARENA_HEIGHT - 4; y++) {
-    for (let x = 0; x < ARENA_WIDTH; x++) {
-      if (
-        terrainStateAtPosition(x, y) === "lava" &&
-        terrainStateAtPosition(x, y + 4) === "land"
-      ) {
-        return { x, y, exitInput: { down: true } }
-      }
-    }
+function sampleLavaEdge(): {
+  x: number
+  y: number
+  landThresholdX: number
+  exitInput: Partial<PlayerInputPayload>
+} {
+  const sample = { x: 24, y: 800, landThresholdX: 112, exitInput: { right: true } }
+  if (
+    terrainStateAtPosition(sample.x, sample.y) === "lava" &&
+    terrainStateAtPosition(sample.landThresholdX, sample.y) === "land"
+  ) {
+    return sample
   }
   throw new Error("expected native lava edge to border land")
 }
@@ -162,7 +164,7 @@ describe("jump pit landing (integration)", () => {
 
     expect(Health.current[eid]).toBeGreaterThan(0)
     expect(hasComponent(sim.world, eid, JumpArc)).toBe(false)
-    expect(Position.y[eid]).toBeGreaterThanOrEqual(jump.minLandingY)
+    expect(Position.x[eid]).toBeGreaterThanOrEqual(jump.minLandingX)
     expect(terrainStateAtPosition(Position.x[eid], Position.y[eid])).toBe("land")
     expect(
       canOccupyWorldPosition(
@@ -189,7 +191,7 @@ describe("jump pit landing (integration)", () => {
     }
 
     expect(terrainStateAtPosition(Position.x[eid], Position.y[eid])).toBe("lava")
-    expect(Position.y[eid]).toBeLessThan(lava.y + 4)
+    expect(Position.x[eid]).toBeLessThan(lava.landThresholdX)
     expect(TerrainState.kind[eid]).toBe(TERRAIN_KIND.lava)
   })
 

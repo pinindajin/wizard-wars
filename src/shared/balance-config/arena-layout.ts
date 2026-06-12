@@ -56,7 +56,7 @@ export const ARENA_LAYOUT_SPAWN_POINTS = [
     "y": 856
   },
   {
-    "x": 710,
+    "x": 700,
     "y": 930
   }
 ] as const

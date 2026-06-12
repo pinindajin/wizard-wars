@@ -7,15 +7,18 @@ import {
 import {
   ARENA_CENTER_X,
   ARENA_CENTER_Y,
+  ARENA_HEIGHT,
   ARENA_SPAWN_POINTS,
   ARENA_WIDTH,
   ARENA_WORLD_COLLIDERS,
 } from "@/shared/balance-config/arena"
 import {
+  PLAYER_WORLD_COLLISION_FOOTPRINT,
   PLAYER_WORLD_COLLISION_OFFSET_Y_PX,
   PLAYER_WORLD_COLLISION_RADIUS_X_PX,
   PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
 } from "@/shared/balance-config/combat"
+import { canOccupyWorldPosition } from "@/shared/collision/worldCollision"
 import {
   AbilityRuntime,
   Cooldown,
@@ -42,6 +45,7 @@ import { JUMP_CHARGE_RECHARGE_MS, JUMP_MAX_CHARGES, TICK_MS } from "@/shared/bal
 import type { PlayerInputPayload } from "@/shared/types"
 
 let nextSeq = 1
+const REPRESENTATIVE_BLOCKER_MIN_AREA_PX = 1_000
 const emptyInput = (overrides: Partial<PlayerInputPayload> = {}): PlayerInputPayload => ({
   up: false,
   down: false,
@@ -59,6 +63,25 @@ const emptyInput = (overrides: Partial<PlayerInputPayload> = {}): PlayerInputPay
   clientSendTimeMs: Date.now(),
   ...overrides,
 })
+
+function sampleBlockingColliderFromBelow() {
+  const topClearance = PLAYER_WORLD_COLLISION_RADIUS_Y_PX - PLAYER_WORLD_COLLISION_OFFSET_Y_PX
+  const blocker = ARENA_WORLD_COLLIDERS
+    .filter((rect) =>
+      rect.y < 420 &&
+      rect.width * rect.height >= REPRESENTATIVE_BLOCKER_MIN_AREA_PX &&
+      canOccupyWorldPosition(
+        rect.x + rect.width / 2,
+        rect.y + rect.height + topClearance,
+        PLAYER_WORLD_COLLISION_FOOTPRINT,
+        { width: ARENA_WIDTH, height: ARENA_HEIGHT },
+        ARENA_WORLD_COLLIDERS,
+      ),
+    )
+    .sort((a, b) => b.width * b.height - a.width * a.height)[0]
+  if (!blocker) throw new Error("Expected native world blocker with open land below it")
+  return blocker
+}
 
 /** Convenience: wrap a single input per player into the new queue-style map. */
 function queueMap(
@@ -181,9 +204,9 @@ describe("movement system", () => {
   it("does not enter non-walkable terrain or emit moving velocity when blocked", () => {
     const sim = createGameSimulation(Date.now())
     const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
-    const topStrip = ARENA_WORLD_COLLIDERS[0]!
+    const topStrip = sampleBlockingColliderFromBelow()
     const topClearance = PLAYER_WORLD_COLLISION_RADIUS_Y_PX - PLAYER_WORLD_COLLISION_OFFSET_Y_PX
-    Position.x[eid] = topStrip.x + 704
+    Position.x[eid] = topStrip.x + topStrip.width / 2
     Position.y[eid] = topStrip.y + topStrip.height + topClearance
 
     sim.tick(queueMap([["user1", emptyInput({ up: true })]]), Date.now())

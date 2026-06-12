@@ -27,6 +27,7 @@ import type { SimCtx } from "../simulation"
 import { knockbackSystem } from "./knockbackSystem"
 
 const ARENA_BOUNDS = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
+const REPRESENTATIVE_BLOCKER_MIN_AREA_PX = 1_000
 
 function addGroundedPlayerWithKnockback(
   x: number,
@@ -67,17 +68,19 @@ function sampleUpperKnockbackCase(): {
   readonly startX: number
   readonly startY: number
 } {
-  const blocker = ARENA_NON_WALKABLE_COLLIDERS.find((rect) =>
-    rect.y < 320 &&
-    rect.width >= 32 &&
-    canPlayerOccupy(
-      rect.x + rect.width / 2,
-      rect.y + rect.height + PLAYER_WORLD_COLLISION_FOOTPRINT.radiusY -
-        PLAYER_WORLD_COLLISION_FOOTPRINT.offsetY + 3,
-      ARENA_WORLD_COLLIDERS,
-    ),
-  )
-  if (!blocker) throw new Error("Expected native upper non-walkable blocker")
+  const blocker = ARENA_WORLD_COLLIDERS
+    .filter((rect) =>
+      rect.y < 420 &&
+      rect.width * rect.height >= REPRESENTATIVE_BLOCKER_MIN_AREA_PX &&
+      canPlayerOccupy(
+        rect.x + rect.width / 2,
+        rect.y + rect.height + PLAYER_WORLD_COLLISION_FOOTPRINT.radiusY -
+          PLAYER_WORLD_COLLISION_FOOTPRINT.offsetY + 3,
+        ARENA_WORLD_COLLIDERS,
+      ),
+    )
+    .sort((a, b) => b.width * b.height - a.width * a.height)[0]
+  if (!blocker) throw new Error("Expected representative native upper blocker")
   return {
     blocker,
     startX: blocker.x + blocker.width / 2,
@@ -143,7 +146,7 @@ describe("knockbackSystem", () => {
     )
   })
 
-  it("keeps grounded lava players from being knocked onto land", () => {
+  it("keeps grounded lava players from being knocked off lava", () => {
     const world = createWorld()
     const eid = addEntity(world)
     addComponent(world, eid, PlayerTag)

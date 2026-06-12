@@ -23,14 +23,14 @@ import { canOccupyWorldPosition, type ArenaPropColliderRect } from "./worldColli
 
 const rect: ArenaPropColliderRect = { x: 10, y: 20, width: 30, height: 40 }
 const OPEN_LAND_POINT = { x: 710, y: 562 }
-const OPEN_LAVA_POINT = { x: 132, y: 50 }
+const OPEN_LAVA_POINT = { x: 350, y: 180 }
 const OPEN_CLIFF_POINT = { x: 452, y: 989 }
 
 function sampleLavaRect(): ArenaPropColliderRect {
   const lava = ARENA_LAVA_COLLIDERS.find((candidate) =>
     pointInRects(OPEN_LAVA_POINT.x, OPEN_LAVA_POINT.y, [candidate]),
   )
-  if (!lava) throw new Error("Expected native lava at the upper-left platform edge")
+  if (!lava) throw new Error("Expected native lava in the upper-left lava pool")
   return lava
 }
 

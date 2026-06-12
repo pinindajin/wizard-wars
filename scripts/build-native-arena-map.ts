@@ -55,6 +55,15 @@ const SOURCE_BASE = process.env.WW_ARENA_SOURCE_BASE ?? resolve(SOURCE_IMAGE_DIR
 const SOURCE_OBJECTS = process.env.WW_ARENA_SOURCE_OBJECTS ?? resolve(SOURCE_IMAGE_DIR, "map-objects.png")
 const SOURCE_TARGET = process.env.WW_ARENA_SOURCE_TARGET ?? resolve(SOURCE_IMAGE_DIR, "map-with-objects.png")
 
+const DETAIL_CROPS = [
+  { label: "Top-left diagonal", x: 210, y: 165, width: 260, height: 210 },
+  { label: "Top-right diagonal", x: 932, y: 165, width: 260, height: 210 },
+  { label: "Bottom-left diagonal", x: 230, y: 700, width: 280, height: 220 },
+  { label: "Bottom-right diagonal", x: 892, y: 700, width: 280, height: 220 },
+  { label: "Left side neck", x: 0, y: 330, width: 220, height: 270 },
+  { label: "Right side neck", x: 1182, y: 330, width: 220, height: 270 },
+] as const
+
 const REGION_NONE: RegionClass = 0
 const REGION_WALKABLE: RegionClass = 1
 const REGION_LAVA: RegionClass = 2
@@ -598,7 +607,7 @@ const SPAWNS = [
   { x: 908, y: 625 },
   { x: 186, y: 856 },
   { x: 1216, y: 856 },
-  { x: 710, y: 930 },
+  { x: 700, y: 930 },
 ] as const
 
 async function loadRaw(path: string): Promise<RawImage> {
@@ -926,6 +935,77 @@ async function maskLayerPng(
   }).png().toBuffer()
 }
 
+function textSvg(width: number, height: number, text: string, options: { fontSize?: number; y?: number } = {}): Buffer {
+  const fontSize = options.fontSize ?? 16
+  const y = options.y ?? Math.round(height * 0.66)
+  const escaped = text
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+  return Buffer.from(`
+    <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+      <rect width="100%" height="100%" fill="#171717"/>
+      <text x="${Math.round(width / 2)}" y="${y}" text-anchor="middle"
+        font-family="Arial, sans-serif" font-size="${fontSize}" font-weight="700"
+        fill="#f4f4f5">${escaped}</text>
+    </svg>
+  `)
+}
+
+async function writeGeometryDetailCropSheet(): Promise<void> {
+  const sources = [
+    { label: "Base", path: BASE_OUT },
+    { label: "Walkable", path: resolve(REVIEW_DIR, "walkable-lines.png") },
+    { label: "Combined", path: resolve(REVIEW_DIR, "all-overlays-combined.png") },
+  ] as const
+  const tileWidth = 280
+  const tileHeight = 270
+  const labelHeight = 28
+  const gap = 10
+  const headerHeight = 42
+  const width = sources.length * tileWidth + (sources.length + 1) * gap
+  const height = headerHeight + DETAIL_CROPS.length * (labelHeight + tileHeight + gap) + gap
+  const composites: sharp.OverlayOptions[] = [
+    { input: textSvg(width, headerHeight, "Walkable geometry detail crops", { fontSize: 20, y: 28 }), left: 0, top: 0 },
+  ]
+
+  for (let row = 0; row < DETAIL_CROPS.length; row++) {
+    const crop = DETAIL_CROPS[row]!
+    for (let col = 0; col < sources.length; col++) {
+      const source = sources[col]!
+      const tileLeft = gap + col * (tileWidth + gap)
+      const tileTop = headerHeight + gap + row * (labelHeight + tileHeight + gap)
+      const label = `${crop.label} - ${source.label}`
+      composites.push({
+        input: textSvg(tileWidth, labelHeight, label, { fontSize: 14, y: 20 }),
+        left: tileLeft,
+        top: tileTop,
+      })
+      composites.push({
+        input: await sharp(source.path)
+          .extract({ left: crop.x, top: crop.y, width: crop.width, height: crop.height })
+          .png()
+          .toBuffer(),
+        left: tileLeft + Math.floor((tileWidth - crop.width) / 2),
+        top: tileTop + labelHeight,
+      })
+    }
+  }
+
+  await sharp({
+    create: {
+      width,
+      height,
+      channels: 4,
+      background: { r: 20, g: 20, b: 20, alpha: 1 },
+    },
+  })
+    .composite(composites)
+    .png()
+    .toFile(resolve(REVIEW_DIR, "walkable-detail-crops.png"))
+}
+
 async function writeOverlayImages(props: readonly PropDef[]): Promise<void> {
   const propColliders = PLACEMENTS.map((p, i) => scaledColliderForPlacement(props, p, i))
 
@@ -937,7 +1017,8 @@ async function writeOverlayImages(props: readonly PropDef[]): Promise<void> {
     const overlay = await sharp(colorRectLayer(props, rects, color), {
       raw: { width: ARENA_WIDTH, height: ARENA_HEIGHT, channels: 4 },
     }).png().toBuffer()
-    await sharp(BASE_OUT)
+    const background = name === "object-collision-yellow-highlight.png" ? resolve(REVIEW_DIR, "reconstructed-map.png") : BASE_OUT
+    await sharp(background)
       .composite([{ input: overlay, left: 0, top: 0 }])
       .png()
       .toFile(resolve(REVIEW_DIR, name))
@@ -955,7 +1036,7 @@ async function writeOverlayImages(props: readonly PropDef[]): Promise<void> {
       .toFile(resolve(REVIEW_DIR, name))
   }
 
-  const combined = await sharp(BASE_OUT)
+  const combined = await sharp(resolve(REVIEW_DIR, "reconstructed-map.png"))
     .composite([
       {
         input: await maskLayerPng(WALKABLE_MASK, { r: 80, g: 255, b: 120 }, 18, 235),
@@ -1001,6 +1082,8 @@ async function writeOverlayImages(props: readonly PropDef[]): Promise<void> {
     .composite([{ input: numberedPlacementSvg(), left: 0, top: 0 }])
     .png()
     .toFile(resolve(REVIEW_DIR, "numbered-placement-overlay.png"))
+
+  await writeGeometryDetailCropSheet()
 }
 
 function rectangleSceneObject(

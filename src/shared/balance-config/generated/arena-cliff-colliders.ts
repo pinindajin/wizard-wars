@@ -304,6 +304,18 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 4
   },
   {
+    "x": 128,
+    "y": 60,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 160,
+    "y": 60,
+    "width": 12,
+    "height": 4
+  },
+  {
     "x": 344,
     "y": 60,
     "width": 28,
@@ -328,10 +340,40 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 4
   },
   {
+    "x": 1228,
+    "y": 60,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 1260,
+    "y": 60,
+    "width": 12,
+    "height": 4
+  },
+  {
     "x": 0,
     "y": 64,
     "width": 100,
-    "height": 8
+    "height": 4
+  },
+  {
+    "x": 112,
+    "y": 64,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 128,
+    "y": 64,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 156,
+    "y": 64,
+    "width": 20,
+    "height": 4
   },
   {
     "x": 344,
@@ -346,9 +388,39 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 32
   },
   {
+    "x": 1224,
+    "y": 64,
+    "width": 48,
+    "height": 4
+  },
+  {
+    "x": 1284,
+    "y": 64,
+    "width": 8,
+    "height": 4
+  },
+  {
     "x": 1300,
     "y": 64,
     "width": 102,
+    "height": 4
+  },
+  {
+    "x": 0,
+    "y": 68,
+    "width": 124,
+    "height": 4
+  },
+  {
+    "x": 128,
+    "y": 68,
+    "width": 48,
+    "height": 4
+  },
+  {
+    "x": 212,
+    "y": 68,
+    "width": 16,
     "height": 4
   },
   {
@@ -358,15 +430,33 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 16
   },
   {
-    "x": 1304,
+    "x": 1176,
     "y": 68,
-    "width": 98,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 1224,
+    "y": 68,
+    "width": 52,
+    "height": 4
+  },
+  {
+    "x": 1280,
+    "y": 68,
+    "width": 122,
     "height": 4
   },
   {
     "x": 0,
     "y": 72,
-    "width": 92,
+    "width": 180,
+    "height": 4
+  },
+  {
+    "x": 188,
+    "y": 72,
+    "width": 48,
     "height": 4
   },
   {
@@ -376,15 +466,27 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 20
   },
   {
-    "x": 1312,
+    "x": 1168,
     "y": 72,
-    "width": 90,
+    "width": 44,
+    "height": 4
+  },
+  {
+    "x": 1224,
+    "y": 72,
+    "width": 178,
     "height": 4
   },
   {
     "x": 0,
     "y": 76,
-    "width": 84,
+    "width": 136,
+    "height": 4
+  },
+  {
+    "x": 196,
+    "y": 76,
+    "width": 48,
     "height": 4
   },
   {
@@ -394,15 +496,27 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 1320,
+    "x": 1160,
     "y": 76,
-    "width": 82,
+    "width": 48,
+    "height": 4
+  },
+  {
+    "x": 1268,
+    "y": 76,
+    "width": 134,
     "height": 4
   },
   {
     "x": 0,
     "y": 80,
-    "width": 80,
+    "width": 120,
+    "height": 4
+  },
+  {
+    "x": 208,
+    "y": 80,
+    "width": 44,
     "height": 4
   },
   {
@@ -412,15 +526,27 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 1324,
+    "x": 1152,
     "y": 80,
-    "width": 78,
+    "width": 40,
+    "height": 4
+  },
+  {
+    "x": 1284,
+    "y": 80,
+    "width": 118,
     "height": 4
   },
   {
     "x": 0,
     "y": 84,
-    "width": 72,
+    "width": 108,
+    "height": 4
+  },
+  {
+    "x": 220,
+    "y": 84,
+    "width": 32,
     "height": 4
   },
   {
@@ -436,15 +562,27 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 1332,
+    "x": 1148,
     "y": 84,
-    "width": 70,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 1296,
+    "y": 84,
+    "width": 106,
     "height": 4
   },
   {
     "x": 0,
     "y": 88,
-    "width": 68,
+    "width": 100,
+    "height": 4
+  },
+  {
+    "x": 232,
+    "y": 88,
+    "width": 24,
     "height": 4
   },
   {
@@ -454,15 +592,27 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 1336,
+    "x": 1148,
     "y": 88,
-    "width": 66,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 1304,
+    "y": 88,
+    "width": 98,
     "height": 4
   },
   {
     "x": 0,
     "y": 92,
-    "width": 64,
+    "width": 92,
+    "height": 4
+  },
+  {
+    "x": 240,
+    "y": 92,
+    "width": 16,
     "height": 4
   },
   {
@@ -478,15 +628,27 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 8
   },
   {
-    "x": 1340,
+    "x": 1148,
     "y": 92,
-    "width": 62,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 1312,
+    "y": 92,
+    "width": 90,
     "height": 4
   },
   {
     "x": 0,
     "y": 96,
-    "width": 60,
+    "width": 84,
+    "height": 4
+  },
+  {
+    "x": 244,
+    "y": 96,
+    "width": 24,
     "height": 4
   },
   {
@@ -508,15 +670,33 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 1344,
+    "x": 1132,
     "y": 96,
-    "width": 58,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1144,
+    "y": 96,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 1320,
+    "y": 96,
+    "width": 82,
     "height": 4
   },
   {
     "x": 0,
     "y": 100,
-    "width": 56,
+    "width": 80,
+    "height": 4
+  },
+  {
+    "x": 248,
+    "y": 100,
+    "width": 24,
     "height": 4
   },
   {
@@ -544,15 +724,27 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 1348,
+    "x": 1128,
     "y": 100,
-    "width": 54,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 1324,
+    "y": 100,
+    "width": 78,
     "height": 4
   },
   {
     "x": 0,
     "y": 104,
-    "width": 52,
+    "width": 76,
+    "height": 4
+  },
+  {
+    "x": 256,
+    "y": 104,
+    "width": 20,
     "height": 4
   },
   {
@@ -586,15 +778,27 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 1352,
+    "x": 1128,
     "y": 104,
-    "width": 50,
-    "height": 8
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 1328,
+    "y": 104,
+    "width": 74,
+    "height": 4
   },
   {
     "x": 0,
     "y": 108,
-    "width": 48,
+    "width": 72,
+    "height": 4
+  },
+  {
+    "x": 260,
+    "y": 108,
+    "width": 20,
     "height": 8
   },
   {
@@ -610,6 +814,24 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 4
   },
   {
+    "x": 1124,
+    "y": 108,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 1332,
+    "y": 108,
+    "width": 70,
+    "height": 4
+  },
+  {
+    "x": 0,
+    "y": 112,
+    "width": 68,
+    "height": 4
+  },
+  {
     "x": 412,
     "y": 112,
     "width": 8,
@@ -622,22 +844,52 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 8
   },
   {
-    "x": 1356,
+    "x": 1120,
     "y": 112,
-    "width": 46,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 1336,
+    "y": 112,
+    "width": 66,
     "height": 4
   },
   {
     "x": 0,
     "y": 116,
-    "width": 44,
+    "width": 64,
+    "height": 4
+  },
+  {
+    "x": 264,
+    "y": 116,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 1120,
+    "y": 116,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 1340,
+    "y": 116,
+    "width": 62,
     "height": 8
   },
   {
-    "x": 1360,
-    "y": 116,
-    "width": 42,
-    "height": 12
+    "x": 0,
+    "y": 120,
+    "width": 60,
+    "height": 8
+  },
+  {
+    "x": 268,
+    "y": 120,
+    "width": 16,
+    "height": 4
   },
   {
     "x": 528,
@@ -646,88 +898,196 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 0,
+    "x": 1116,
+    "y": 120,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 272,
     "y": 124,
-    "width": 40,
-    "height": 12
+    "width": 16,
+    "height": 8
   },
   {
     "x": 528,
     "y": 124,
-    "width": 136,
+    "width": 160,
     "height": 4
   },
   {
-    "x": 740,
+    "x": 712,
     "y": 124,
-    "width": 136,
-    "height": 8
+    "width": 164,
+    "height": 4
+  },
+  {
+    "x": 1116,
+    "y": 124,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 1344,
+    "y": 124,
+    "width": 58,
+    "height": 4
+  },
+  {
+    "x": 0,
+    "y": 128,
+    "width": 56,
+    "height": 12
   },
   {
     "x": 524,
     "y": 128,
-    "width": 140,
-    "height": 8
-  },
-  {
-    "x": 1364,
-    "y": 128,
-    "width": 38,
-    "height": 12
-  },
-  {
-    "x": 740,
-    "y": 132,
-    "width": 140,
+    "width": 152,
     "height": 4
   },
   {
-    "x": 0,
+    "x": 728,
+    "y": 128,
+    "width": 148,
+    "height": 4
+  },
+  {
+    "x": 1112,
+    "y": 128,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 1348,
+    "y": 128,
+    "width": 54,
+    "height": 16
+  },
+  {
+    "x": 272,
+    "y": 132,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 524,
+    "y": 132,
+    "width": 148,
+    "height": 4
+  },
+  {
+    "x": 732,
+    "y": 132,
+    "width": 148,
+    "height": 4
+  },
+  {
+    "x": 1112,
+    "y": 132,
+    "width": 16,
+    "height": 24
+  },
+  {
+    "x": 276,
     "y": 136,
-    "width": 36,
-    "height": 32
+    "width": 16,
+    "height": 28
   },
   {
     "x": 520,
     "y": 136,
-    "width": 144,
+    "width": 152,
     "height": 4
   },
   {
-    "x": 740,
+    "x": 732,
     "y": 136,
-    "width": 144,
-    "height": 36
+    "width": 152,
+    "height": 4
+  },
+  {
+    "x": 0,
+    "y": 140,
+    "width": 52,
+    "height": 24
   },
   {
     "x": 516,
     "y": 140,
-    "width": 148,
-    "height": 24
+    "width": 156,
+    "height": 4
   },
   {
-    "x": 1368,
+    "x": 728,
     "y": 140,
-    "width": 34,
-    "height": 20
+    "width": 156,
+    "height": 4
   },
   {
-    "x": 1108,
-    "y": 160,
-    "width": 4,
+    "x": 516,
+    "y": 144,
+    "width": 152,
+    "height": 4
+  },
+  {
+    "x": 732,
+    "y": 144,
+    "width": 152,
     "height": 8
   },
   {
-    "x": 1364,
-    "y": 160,
-    "width": 38,
+    "x": 1352,
+    "y": 144,
+    "width": 50,
     "height": 16
   },
   {
-    "x": 292,
-    "y": 164,
-    "width": 4,
+    "x": 516,
+    "y": 148,
+    "width": 156,
     "height": 8
+  },
+  {
+    "x": 728,
+    "y": 152,
+    "width": 156,
+    "height": 4
+  },
+  {
+    "x": 516,
+    "y": 156,
+    "width": 152,
+    "height": 8
+  },
+  {
+    "x": 732,
+    "y": 156,
+    "width": 152,
+    "height": 8
+  },
+  {
+    "x": 1108,
+    "y": 156,
+    "width": 20,
+    "height": 12
+  },
+  {
+    "x": 1348,
+    "y": 160,
+    "width": 54,
+    "height": 12
+  },
+  {
+    "x": 0,
+    "y": 164,
+    "width": 56,
+    "height": 12
+  },
+  {
+    "x": 276,
+    "y": 164,
+    "width": 20,
+    "height": 4
   },
   {
     "x": 516,
@@ -736,10 +1096,22 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 0,
+    "x": 664,
+    "y": 164,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 728,
+    "y": 164,
+    "width": 156,
+    "height": 8
+  },
+  {
+    "x": 272,
     "y": 168,
-    "width": 40,
-    "height": 12
+    "width": 24,
+    "height": 8
   },
   {
     "x": 520,
@@ -748,16 +1120,16 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 1104,
+    "x": 668,
     "y": 168,
-    "width": 8,
+    "width": 4,
     "height": 4
   },
   {
-    "x": 288,
-    "y": 172,
-    "width": 8,
-    "height": 8
+    "x": 1104,
+    "y": 168,
+    "width": 24,
+    "height": 4
   },
   {
     "x": 520,
@@ -766,70 +1138,94 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 740,
+    "x": 664,
     "y": 172,
-    "width": 140,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 728,
+    "y": 172,
+    "width": 152,
     "height": 8
   },
   {
     "x": 1104,
     "y": 172,
-    "width": 12,
-    "height": 12
+    "width": 28,
+    "height": 8
   },
   {
-    "x": 520,
-    "y": 176,
-    "width": 144,
-    "height": 4
-  },
-  {
-    "x": 1360,
-    "y": 176,
-    "width": 42,
+    "x": 1344,
+    "y": 172,
+    "width": 58,
     "height": 8
   },
   {
     "x": 0,
-    "y": 180,
-    "width": 44,
+    "y": 176,
+    "width": 60,
     "height": 8
   },
   {
-    "x": 284,
-    "y": 180,
-    "width": 12,
+    "x": 268,
+    "y": 176,
+    "width": 28,
     "height": 8
+  },
+  {
+    "x": 520,
+    "y": 176,
+    "width": 152,
+    "height": 4
   },
   {
     "x": 524,
     "y": 180,
-    "width": 140,
+    "width": 148,
     "height": 4
   },
   {
-    "x": 740,
+    "x": 728,
     "y": 180,
-    "width": 136,
+    "width": 148,
     "height": 8
+  },
+  {
+    "x": 1104,
+    "y": 180,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 1340,
+    "y": 180,
+    "width": 62,
+    "height": 8
+  },
+  {
+    "x": 0,
+    "y": 184,
+    "width": 64,
+    "height": 4
+  },
+  {
+    "x": 264,
+    "y": 184,
+    "width": 32,
+    "height": 4
   },
   {
     "x": 528,
     "y": 184,
-    "width": 136,
+    "width": 144,
     "height": 4
   },
   {
     "x": 1104,
     "y": 184,
-    "width": 16,
-    "height": 12
-  },
-  {
-    "x": 1356,
-    "y": 184,
-    "width": 46,
-    "height": 4
+    "width": 36,
+    "height": 8
   },
   {
     "x": 0,
@@ -840,31 +1236,31 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 32,
     "y": 188,
-    "width": 16,
+    "width": 36,
     "height": 4
   },
   {
-    "x": 280,
+    "x": 260,
     "y": 188,
-    "width": 16,
-    "height": 8
+    "width": 36,
+    "height": 4
   },
   {
     "x": 536,
     "y": 188,
-    "width": 128,
+    "width": 136,
     "height": 4
   },
   {
-    "x": 740,
+    "x": 728,
     "y": 188,
-    "width": 128,
+    "width": 140,
     "height": 8
   },
   {
-    "x": 1356,
+    "x": 1336,
     "y": 188,
-    "width": 20,
+    "width": 40,
     "height": 4
   },
   {
@@ -876,19 +1272,31 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 32,
     "y": 192,
-    "width": 20,
-    "height": 8
+    "width": 40,
+    "height": 4
+  },
+  {
+    "x": 256,
+    "y": 192,
+    "width": 40,
+    "height": 4
   },
   {
     "x": 540,
     "y": 192,
-    "width": 124,
+    "width": 132,
     "height": 4
   },
   {
-    "x": 1352,
+    "x": 1104,
     "y": 192,
-    "width": 20,
+    "width": 40,
+    "height": 4
+  },
+  {
+    "x": 1332,
+    "y": 192,
+    "width": 40,
     "height": 4
   },
   {
@@ -898,315 +1306,405 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 76
   },
   {
-    "x": 288,
+    "x": 32,
     "y": 196,
-    "width": 8,
+    "width": 44,
+    "height": 4
+  },
+  {
+    "x": 252,
+    "y": 196,
+    "width": 44,
     "height": 4
   },
   {
     "x": 544,
     "y": 196,
-    "width": 120,
+    "width": 128,
     "height": 8
   },
   {
-    "x": 740,
+    "x": 728,
     "y": 196,
-    "width": 124,
+    "width": 136,
     "height": 4
   },
   {
     "x": 1104,
     "y": 196,
-    "width": 12,
+    "width": 44,
     "height": 4
   },
   {
-    "x": 1348,
+    "x": 1328,
     "y": 196,
-    "width": 24,
+    "width": 44,
     "height": 4
   },
   {
     "x": 32,
     "y": 200,
-    "width": 24,
+    "width": 48,
     "height": 4
   },
   {
-    "x": 292,
+    "x": 248,
     "y": 200,
-    "width": 4,
+    "width": 48,
     "height": 4
   },
   {
-    "x": 740,
+    "x": 728,
     "y": 200,
-    "width": 116,
+    "width": 128,
     "height": 4
   },
   {
     "x": 1104,
     "y": 200,
-    "width": 8,
+    "width": 52,
     "height": 4
   },
   {
-    "x": 1348,
+    "x": 1324,
     "y": 200,
-    "width": 20,
+    "width": 44,
     "height": 4
   },
   {
     "x": 32,
     "y": 204,
-    "width": 28,
+    "width": 56,
+    "height": 4
+  },
+  {
+    "x": 244,
+    "y": 204,
+    "width": 52,
     "height": 4
   },
   {
     "x": 548,
     "y": 204,
-    "width": 116,
+    "width": 124,
     "height": 4
   },
   {
-    "x": 740,
+    "x": 728,
     "y": 204,
-    "width": 108,
+    "width": 120,
     "height": 4
   },
   {
     "x": 1104,
     "y": 204,
-    "width": 4,
+    "width": 56,
     "height": 4
   },
   {
-    "x": 1344,
+    "x": 1316,
     "y": 204,
-    "width": 24,
+    "width": 52,
     "height": 4
   },
   {
     "x": 32,
     "y": 208,
-    "width": 32,
+    "width": 60,
+    "height": 4
+  },
+  {
+    "x": 236,
+    "y": 208,
+    "width": 64,
     "height": 4
   },
   {
     "x": 564,
     "y": 208,
-    "width": 100,
+    "width": 108,
     "height": 4
   },
   {
-    "x": 740,
+    "x": 728,
     "y": 208,
-    "width": 104,
+    "width": 116,
     "height": 4
   },
   {
-    "x": 1340,
+    "x": 1104,
     "y": 208,
-    "width": 28,
+    "width": 64,
+    "height": 4
+  },
+  {
+    "x": 1312,
+    "y": 208,
+    "width": 56,
     "height": 4
   },
   {
     "x": 32,
     "y": 212,
-    "width": 36,
+    "width": 68,
+    "height": 4
+  },
+  {
+    "x": 228,
+    "y": 212,
+    "width": 76,
     "height": 4
   },
   {
     "x": 568,
     "y": 212,
-    "width": 96,
+    "width": 104,
     "height": 8
   },
   {
-    "x": 740,
+    "x": 728,
     "y": 212,
-    "width": 92,
-    "height": 36
+    "width": 104,
+    "height": 40
   },
   {
-    "x": 1336,
+    "x": 1100,
     "y": 212,
-    "width": 32,
+    "width": 76,
+    "height": 4
+  },
+  {
+    "x": 1304,
+    "y": 212,
+    "width": 64,
     "height": 4
   },
   {
     "x": 32,
     "y": 216,
-    "width": 40,
+    "width": 80,
     "height": 4
   },
   {
-    "x": 1328,
+    "x": 220,
     "y": 216,
-    "width": 40,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 240,
+    "y": 216,
+    "width": 68,
+    "height": 4
+  },
+  {
+    "x": 1096,
+    "y": 216,
+    "width": 64,
+    "height": 4
+  },
+  {
+    "x": 1168,
+    "y": 216,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 1292,
+    "y": 216,
+    "width": 76,
     "height": 4
   },
   {
     "x": 32,
     "y": 220,
-    "width": 48,
+    "width": 92,
+    "height": 4
+  },
+  {
+    "x": 208,
+    "y": 220,
+    "width": 100,
     "height": 4
   },
   {
     "x": 572,
     "y": 220,
-    "width": 92,
+    "width": 100,
     "height": 28
   },
   {
-    "x": 1324,
+    "x": 1096,
     "y": 220,
-    "width": 44,
+    "width": 100,
+    "height": 4
+  },
+  {
+    "x": 1280,
+    "y": 220,
+    "width": 88,
     "height": 4
   },
   {
     "x": 36,
     "y": 224,
-    "width": 52,
+    "width": 104,
     "height": 4
   },
   {
-    "x": 1316,
+    "x": 188,
     "y": 224,
-    "width": 52,
+    "width": 80,
+    "height": 4
+  },
+  {
+    "x": 280,
+    "y": 224,
+    "width": 28,
+    "height": 4
+  },
+  {
+    "x": 1096,
+    "y": 224,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 1132,
+    "y": 224,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 1160,
+    "y": 224,
+    "width": 56,
+    "height": 4
+  },
+  {
+    "x": 1264,
+    "y": 224,
+    "width": 104,
     "height": 4
   },
   {
     "x": 44,
     "y": 228,
-    "width": 48,
+    "width": 220,
     "height": 4
   },
   {
-    "x": 236,
+    "x": 284,
+    "y": 228,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 1092,
     "y": 228,
     "width": 4,
     "height": 4
   },
   {
-    "x": 1160,
+    "x": 1100,
     "y": 228,
-    "width": 8,
+    "width": 16,
     "height": 4
   },
   {
-    "x": 1308,
+    "x": 1136,
     "y": 228,
-    "width": 52,
+    "width": 224,
     "height": 4
   },
   {
     "x": 44,
     "y": 232,
-    "width": 60,
+    "width": 216,
     "height": 4
   },
   {
-    "x": 228,
+    "x": 288,
     "y": 232,
-    "width": 16,
+    "width": 12,
     "height": 4
   },
   {
-    "x": 1156,
+    "x": 1100,
     "y": 232,
-    "width": 20,
+    "width": 12,
     "height": 4
   },
   {
-    "x": 1300,
+    "x": 1144,
     "y": 232,
-    "width": 60,
+    "width": 216,
     "height": 4
   },
   {
     "x": 48,
     "y": 236,
-    "width": 68,
+    "width": 212,
     "height": 4
   },
   {
-    "x": 216,
+    "x": 292,
     "y": 236,
-    "width": 32,
+    "width": 8,
     "height": 4
   },
   {
-    "x": 1152,
+    "x": 1104,
     "y": 236,
-    "width": 36,
+    "width": 4,
     "height": 4
   },
   {
-    "x": 1288,
+    "x": 1140,
     "y": 236,
-    "width": 68,
+    "width": 216,
     "height": 4
   },
   {
     "x": 48,
     "y": 240,
-    "width": 80,
+    "width": 216,
     "height": 4
   },
   {
-    "x": 200,
+    "x": 1136,
     "y": 240,
-    "width": 56,
-    "height": 4
-  },
-  {
-    "x": 1148,
-    "y": 240,
-    "width": 56,
-    "height": 4
-  },
-  {
-    "x": 1272,
-    "y": 240,
-    "width": 80,
+    "width": 216,
     "height": 4
   },
   {
     "x": 52,
     "y": 244,
-    "width": 208,
+    "width": 216,
     "height": 4
   },
   {
-    "x": 1144,
+    "x": 1132,
     "y": 244,
-    "width": 208,
+    "width": 220,
     "height": 4
   },
   {
     "x": 52,
     "y": 248,
-    "width": 212,
+    "width": 220,
     "height": 4
   },
   {
     "x": 572,
     "y": 248,
-    "width": 56,
+    "width": 104,
     "height": 4
   },
   {
-    "x": 776,
+    "x": 1128,
     "y": 248,
-    "width": 56,
-    "height": 4
-  },
-  {
-    "x": 1140,
-    "y": 248,
-    "width": 208,
+    "width": 220,
     "height": 4
   },
   {
@@ -1218,25 +1716,25 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 100,
     "y": 252,
-    "width": 168,
+    "width": 176,
     "height": 4
   },
   {
     "x": 568,
     "y": 252,
-    "width": 28,
+    "width": 116,
     "height": 4
   },
   {
-    "x": 804,
+    "x": 716,
     "y": 252,
-    "width": 40,
+    "width": 128,
     "height": 4
   },
   {
-    "x": 1136,
+    "x": 1124,
     "y": 252,
-    "width": 164,
+    "width": 176,
     "height": 4
   },
   {
@@ -1254,97 +1752,133 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 104,
     "y": 256,
-    "width": 168,
+    "width": 176,
     "height": 4
   },
   {
     "x": 548,
     "y": 256,
-    "width": 28,
+    "width": 132,
     "height": 4
   },
   {
-    "x": 828,
+    "x": 708,
     "y": 256,
-    "width": 28,
+    "width": 20,
     "height": 4
   },
   {
-    "x": 1132,
+    "x": 732,
     "y": 256,
-    "width": 168,
+    "width": 124,
+    "height": 4
+  },
+  {
+    "x": 1120,
+    "y": 256,
+    "width": 180,
     "height": 4
   },
   {
     "x": 104,
     "y": 260,
-    "width": 172,
+    "width": 180,
+    "height": 4
+  },
+  {
+    "x": 316,
+    "y": 260,
+    "width": 4,
     "height": 4
   },
   {
     "x": 528,
     "y": 260,
-    "width": 28,
+    "width": 168,
     "height": 4
   },
   {
-    "x": 848,
+    "x": 704,
     "y": 260,
-    "width": 24,
+    "width": 168,
     "height": 4
   },
   {
-    "x": 1128,
+    "x": 1080,
     "y": 260,
-    "width": 172,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1116,
+    "y": 260,
+    "width": 184,
     "height": 4
   },
   {
     "x": 104,
     "y": 264,
-    "width": 176,
+    "width": 184,
     "height": 4
   },
   {
     "x": 524,
     "y": 264,
-    "width": 16,
+    "width": 148,
     "height": 4
   },
   {
-    "x": 864,
+    "x": 676,
     "y": 264,
-    "width": 16,
+    "width": 20,
     "height": 4
   },
   {
-    "x": 1124,
+    "x": 712,
     "y": 264,
-    "width": 172,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 740,
+    "y": 264,
+    "width": 140,
+    "height": 4
+  },
+  {
+    "x": 1112,
+    "y": 264,
+    "width": 184,
     "height": 4
   },
   {
     "x": 104,
     "y": 268,
-    "width": 180,
+    "width": 188,
     "height": 4
   },
   {
-    "x": 520,
+    "x": 516,
     "y": 268,
-    "width": 4,
+    "width": 116,
     "height": 4
   },
   {
-    "x": 880,
+    "x": 772,
     "y": 268,
-    "width": 4,
+    "width": 8,
     "height": 4
   },
   {
-    "x": 1120,
+    "x": 784,
     "y": 268,
-    "width": 176,
+    "width": 100,
+    "height": 4
+  },
+  {
+    "x": 1108,
+    "y": 268,
+    "width": 188,
     "height": 4
   },
   {
@@ -1368,25 +1902,25 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 196,
     "y": 272,
-    "width": 92,
+    "width": 100,
     "height": 4
   },
   {
     "x": 488,
     "y": 272,
-    "width": 20,
+    "width": 112,
     "height": 4
   },
   {
-    "x": 892,
+    "x": 804,
     "y": 272,
-    "width": 24,
+    "width": 112,
     "height": 4
   },
   {
-    "x": 1116,
+    "x": 1104,
     "y": 272,
-    "width": 88,
+    "width": 100,
     "height": 4
   },
   {
@@ -1404,25 +1938,25 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 212,
     "y": 276,
-    "width": 80,
+    "width": 88,
     "height": 4
   },
   {
     "x": 472,
     "y": 276,
-    "width": 24,
+    "width": 108,
     "height": 4
   },
   {
-    "x": 908,
+    "x": 824,
     "y": 276,
-    "width": 20,
+    "width": 104,
     "height": 4
   },
   {
-    "x": 1112,
+    "x": 1100,
     "y": 276,
-    "width": 92,
+    "width": 104,
     "height": 4
   },
   {
@@ -1434,25 +1968,37 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 224,
     "y": 280,
-    "width": 72,
+    "width": 80,
+    "height": 4
+  },
+  {
+    "x": 340,
+    "y": 280,
+    "width": 4,
     "height": 4
   },
   {
     "x": 464,
     "y": 280,
-    "width": 20,
+    "width": 96,
     "height": 4
   },
   {
-    "x": 920,
-    "y": 280,
-    "width": 20,
-    "height": 4
-  },
-  {
-    "x": 1104,
+    "x": 844,
     "y": 280,
     "width": 96,
+    "height": 4
+  },
+  {
+    "x": 1056,
+    "y": 280,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1096,
+    "y": 280,
+    "width": 104,
     "height": 4
   },
   {
@@ -1476,25 +2022,37 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 244,
     "y": 284,
-    "width": 56,
+    "width": 64,
+    "height": 4
+  },
+  {
+    "x": 344,
+    "y": 284,
+    "width": 8,
     "height": 4
   },
   {
     "x": 452,
     "y": 284,
-    "width": 20,
+    "width": 92,
     "height": 4
   },
   {
-    "x": 928,
+    "x": 860,
     "y": 284,
-    "width": 20,
+    "width": 88,
     "height": 4
   },
   {
-    "x": 1100,
+    "x": 1052,
     "y": 284,
-    "width": 44,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 1092,
+    "y": 284,
+    "width": 52,
     "height": 4
   },
   {
@@ -1512,25 +2070,37 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 272,
     "y": 288,
-    "width": 32,
+    "width": 40,
+    "height": 4
+  },
+  {
+    "x": 348,
+    "y": 288,
+    "width": 4,
     "height": 4
   },
   {
     "x": 444,
     "y": 288,
-    "width": 20,
+    "width": 84,
     "height": 4
   },
   {
-    "x": 940,
+    "x": 872,
     "y": 288,
-    "width": 12,
+    "width": 80,
     "height": 4
   },
   {
-    "x": 1096,
+    "x": 1048,
     "y": 288,
-    "width": 32,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 1088,
+    "y": 288,
+    "width": 40,
     "height": 4
   },
   {
@@ -1548,25 +2118,37 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 280,
     "y": 292,
-    "width": 28,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 352,
+    "y": 292,
+    "width": 4,
     "height": 4
   },
   {
     "x": 436,
     "y": 292,
-    "width": 16,
+    "width": 80,
     "height": 4
   },
   {
-    "x": 952,
+    "x": 888,
     "y": 292,
-    "width": 16,
+    "width": 80,
     "height": 4
   },
   {
-    "x": 1092,
+    "x": 1048,
     "y": 292,
-    "width": 32,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1084,
+    "y": 292,
+    "width": 40,
     "height": 4
   },
   {
@@ -1584,25 +2166,37 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 280,
     "y": 296,
-    "width": 36,
+    "width": 40,
+    "height": 4
+  },
+  {
+    "x": 356,
+    "y": 296,
+    "width": 4,
     "height": 4
   },
   {
     "x": 428,
     "y": 296,
-    "width": 16,
+    "width": 76,
     "height": 4
   },
   {
-    "x": 960,
+    "x": 900,
     "y": 296,
-    "width": 16,
+    "width": 76,
     "height": 4
   },
   {
-    "x": 1088,
+    "x": 1044,
     "y": 296,
-    "width": 32,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1080,
+    "y": 296,
+    "width": 40,
     "height": 4
   },
   {
@@ -1620,25 +2214,43 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 280,
     "y": 300,
-    "width": 40,
+    "width": 44,
+    "height": 4
+  },
+  {
+    "x": 388,
+    "y": 300,
+    "width": 8,
     "height": 4
   },
   {
     "x": 420,
     "y": 300,
-    "width": 16,
+    "width": 72,
     "height": 4
   },
   {
-    "x": 968,
+    "x": 912,
     "y": 300,
-    "width": 12,
+    "width": 68,
     "height": 4
   },
   {
-    "x": 1084,
+    "x": 1008,
     "y": 300,
-    "width": 36,
+    "width": 8,
+    "height": 8
+  },
+  {
+    "x": 1036,
+    "y": 300,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 1076,
+    "y": 300,
+    "width": 44,
     "height": 4
   },
   {
@@ -1656,25 +2268,43 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 284,
     "y": 304,
-    "width": 40,
+    "width": 44,
+    "height": 4
+  },
+  {
+    "x": 364,
+    "y": 304,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 384,
+    "y": 304,
+    "width": 8,
     "height": 4
   },
   {
     "x": 412,
     "y": 304,
-    "width": 16,
+    "width": 68,
     "height": 4
   },
   {
-    "x": 976,
+    "x": 920,
+    "y": 304,
+    "width": 68,
+    "height": 4
+  },
+  {
+    "x": 1028,
     "y": 304,
     "width": 12,
     "height": 4
   },
   {
-    "x": 1080,
+    "x": 1072,
     "y": 304,
-    "width": 36,
+    "width": 44,
     "height": 4
   },
   {
@@ -1686,73 +2316,91 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 284,
     "y": 308,
-    "width": 44,
+    "width": 48,
     "height": 4
   },
   {
-    "x": 388,
+    "x": 368,
     "y": 308,
-    "width": 32,
+    "width": 8,
     "height": 4
   },
   {
-    "x": 984,
+    "x": 380,
+    "y": 308,
+    "width": 92,
+    "height": 4
+  },
+  {
+    "x": 932,
+    "y": 308,
+    "width": 64,
+    "height": 4
+  },
+  {
+    "x": 1012,
+    "y": 308,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 1024,
     "y": 308,
     "width": 12,
     "height": 4
   },
   {
-    "x": 1076,
+    "x": 1068,
     "y": 308,
-    "width": 40,
-    "height": 4
-  },
-  {
-    "x": 284,
-    "y": 312,
     "width": 48,
     "height": 4
   },
   {
-    "x": 388,
-    "y": 312,
-    "width": 24,
-    "height": 4
-  },
-  {
-    "x": 992,
-    "y": 312,
-    "width": 24,
-    "height": 4
-  },
-  {
-    "x": 1072,
-    "y": 312,
-    "width": 44,
-    "height": 4
-  },
-  {
     "x": 284,
-    "y": 316,
+    "y": 312,
     "width": 52,
     "height": 4
   },
   {
-    "x": 384,
-    "y": 316,
-    "width": 20,
+    "x": 372,
+    "y": 312,
+    "width": 88,
     "height": 4
   },
   {
-    "x": 1000,
-    "y": 316,
-    "width": 20,
+    "x": 940,
+    "y": 312,
+    "width": 88,
     "height": 4
   },
   {
-    "x": 1068,
+    "x": 1064,
+    "y": 312,
+    "width": 52,
+    "height": 4
+  },
+  {
+    "x": 284,
     "y": 316,
-    "width": 48,
+    "width": 56,
+    "height": 4
+  },
+  {
+    "x": 376,
+    "y": 316,
+    "width": 76,
+    "height": 4
+  },
+  {
+    "x": 952,
+    "y": 316,
+    "width": 72,
+    "height": 4
+  },
+  {
+    "x": 1060,
+    "y": 316,
+    "width": 56,
     "height": 4
   },
   {
@@ -1762,75 +2410,147 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 32
   },
   {
+    "x": 96,
+    "y": 320,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 120,
+    "y": 320,
+    "width": 12,
+    "height": 4
+  },
+  {
     "x": 284,
     "y": 320,
-    "width": 56,
+    "width": 60,
     "height": 4
   },
   {
     "x": 380,
     "y": 320,
-    "width": 16,
+    "width": 64,
     "height": 4
   },
   {
-    "x": 1008,
+    "x": 960,
+    "y": 320,
+    "width": 60,
+    "height": 4
+  },
+  {
+    "x": 1056,
+    "y": 320,
+    "width": 60,
+    "height": 4
+  },
+  {
+    "x": 1268,
     "y": 320,
     "width": 16,
     "height": 4
   },
   {
-    "x": 1064,
+    "x": 1292,
     "y": 320,
-    "width": 52,
+    "width": 12,
+    "height": 12
+  },
+  {
+    "x": 96,
+    "y": 324,
+    "width": 12,
+    "height": 8
+  },
+  {
+    "x": 132,
+    "y": 324,
+    "width": 12,
     "height": 4
   },
   {
     "x": 284,
     "y": 324,
+    "width": 64,
+    "height": 4
+  },
+  {
+    "x": 384,
+    "y": 324,
+    "width": 52,
+    "height": 4
+  },
+  {
+    "x": 968,
+    "y": 324,
+    "width": 48,
+    "height": 4
+  },
+  {
+    "x": 1052,
+    "y": 324,
     "width": 60,
     "height": 4
   },
   {
-    "x": 376,
+    "x": 1256,
     "y": 324,
     "width": 12,
     "height": 4
   },
   {
-    "x": 1012,
+    "x": 1272,
     "y": 324,
-    "width": 16,
+    "width": 8,
     "height": 4
   },
   {
-    "x": 1060,
-    "y": 324,
-    "width": 52,
+    "x": 136,
+    "y": 328,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 144,
+    "y": 328,
+    "width": 8,
     "height": 4
   },
   {
     "x": 288,
     "y": 328,
+    "width": 64,
+    "height": 4
+  },
+  {
+    "x": 388,
+    "y": 328,
+    "width": 40,
+    "height": 4
+  },
+  {
+    "x": 976,
+    "y": 328,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 1048,
+    "y": 328,
     "width": 60,
     "height": 4
   },
   {
-    "x": 372,
+    "x": 1248,
     "y": 328,
-    "width": 12,
+    "width": 8,
     "height": 4
   },
   {
-    "x": 1020,
+    "x": 1276,
     "y": 328,
-    "width": 12,
-    "height": 4
-  },
-  {
-    "x": 1056,
-    "y": 328,
-    "width": 52,
+    "width": 4,
     "height": 4
   },
   {
@@ -1840,52 +2560,106 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 16
   },
   {
-    "x": 292,
-    "y": 332,
-    "width": 60,
-    "height": 4
-  },
-  {
-    "x": 368,
+    "x": 40,
     "y": 332,
     "width": 8,
     "height": 4
   },
   {
-    "x": 1028,
+    "x": 92,
     "y": 332,
-    "width": 8,
-    "height": 4
+    "width": 20,
+    "height": 8
   },
   {
-    "x": 1052,
+    "x": 144,
     "y": 332,
-    "width": 56,
+    "width": 20,
     "height": 4
   },
   {
     "x": 292,
+    "y": 332,
+    "width": 64,
+    "height": 4
+  },
+  {
+    "x": 392,
+    "y": 332,
+    "width": 28,
+    "height": 4
+  },
+  {
+    "x": 980,
+    "y": 332,
+    "width": 28,
+    "height": 4
+  },
+  {
+    "x": 1044,
+    "y": 332,
+    "width": 64,
+    "height": 4
+  },
+  {
+    "x": 1252,
+    "y": 332,
+    "width": 8,
+    "height": 8
+  },
+  {
+    "x": 1288,
+    "y": 332,
+    "width": 20,
+    "height": 8
+  },
+  {
+    "x": 1348,
+    "y": 332,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 36,
+    "y": 336,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 292,
+    "y": 336,
+    "width": 68,
+    "height": 4
+  },
+  {
+    "x": 392,
+    "y": 336,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 988,
+    "y": 336,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 1040,
     "y": 336,
     "width": 64,
     "height": 4
   },
   {
-    "x": 364,
+    "x": 1348,
     "y": 336,
-    "width": 8,
+    "width": 16,
     "height": 4
   },
   {
-    "x": 1032,
-    "y": 336,
-    "width": 8,
-    "height": 4
-  },
-  {
-    "x": 1044,
-    "y": 336,
-    "width": 60,
-    "height": 4
+    "x": 32,
+    "y": 340,
+    "width": 20,
+    "height": 8
   },
   {
     "x": 300,
@@ -1894,385 +2668,859 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 1040,
+    "x": 392,
     "y": 340,
-    "width": 60,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 996,
+    "y": 340,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 1036,
+    "y": 340,
+    "width": 64,
+    "height": 4
+  },
+  {
+    "x": 1348,
+    "y": 340,
+    "width": 24,
     "height": 4
   },
   {
     "x": 304,
     "y": 344,
-    "width": 56,
+    "width": 64,
     "height": 4
   },
   {
-    "x": 1044,
+    "x": 388,
     "y": 344,
-    "width": 48,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 396,
+    "y": 344,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1004,
+    "y": 344,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 1032,
+    "y": 344,
+    "width": 60,
+    "height": 4
+  },
+  {
+    "x": 1348,
+    "y": 344,
+    "width": 20,
+    "height": 8
+  },
+  {
+    "x": 1376,
+    "y": 344,
+    "width": 4,
     "height": 4
   },
   {
     "x": 0,
     "y": 348,
     "width": 16,
-    "height": 8
+    "height": 4
+  },
+  {
+    "x": 20,
+    "y": 348,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 36,
+    "y": 348,
+    "width": 16,
+    "height": 4
   },
   {
     "x": 308,
     "y": 348,
-    "width": 44,
+    "width": 60,
     "height": 4
   },
   {
-    "x": 1048,
+    "x": 372,
     "y": 348,
-    "width": 36,
-    "height": 4
+    "width": 4,
+    "height": 8
   },
   {
-    "x": 1384,
+    "x": 392,
     "y": 348,
-    "width": 18,
-    "height": 4
-  },
-  {
-    "x": 312,
-    "y": 352,
-    "width": 36,
-    "height": 4
-  },
-  {
-    "x": 1056,
-    "y": 352,
-    "width": 28,
-    "height": 4
-  },
-  {
-    "x": 1388,
-    "y": 352,
-    "width": 14,
-    "height": 8
-  },
-  {
-    "x": 0,
-    "y": 356,
-    "width": 12,
-    "height": 8
-  },
-  {
-    "x": 320,
-    "y": 356,
-    "width": 24,
-    "height": 4
-  },
-  {
-    "x": 1060,
-    "y": 356,
-    "width": 20,
-    "height": 4
-  },
-  {
-    "x": 320,
-    "y": 360,
-    "width": 16,
-    "height": 4
-  },
-  {
-    "x": 1064,
-    "y": 360,
-    "width": 16,
-    "height": 4
-  },
-  {
-    "x": 1392,
-    "y": 360,
-    "width": 10,
-    "height": 4
-  },
-  {
-    "x": 0,
-    "y": 364,
-    "width": 8,
-    "height": 4
-  },
-  {
-    "x": 324,
-    "y": 364,
-    "width": 8,
-    "height": 4
-  },
-  {
-    "x": 1068,
-    "y": 364,
-    "width": 12,
-    "height": 4
-  },
-  {
-    "x": 1396,
-    "y": 364,
-    "width": 6,
-    "height": 8
-  },
-  {
-    "x": 0,
-    "y": 368,
-    "width": 4,
-    "height": 12
-  },
-  {
-    "x": 324,
-    "y": 368,
     "width": 4,
     "height": 4
   },
   {
-    "x": 1076,
-    "y": 368,
-    "width": 4,
-    "height": 4
-  },
-  {
-    "x": 320,
-    "y": 372,
-    "width": 4,
-    "height": 4
-  },
-  {
-    "x": 1400,
-    "y": 372,
-    "width": 2,
+    "x": 1032,
+    "y": 348,
+    "width": 52,
     "height": 8
-  },
-  {
-    "x": 0,
-    "y": 408,
-    "width": 4,
-    "height": 12
-  },
-  {
-    "x": 1400,
-    "y": 408,
-    "width": 2,
-    "height": 8
-  },
-  {
-    "x": 1396,
-    "y": 416,
-    "width": 6,
-    "height": 8
-  },
-  {
-    "x": 0,
-    "y": 420,
-    "width": 8,
-    "height": 8
-  },
-  {
-    "x": 1392,
-    "y": 424,
-    "width": 10,
-    "height": 8
-  },
-  {
-    "x": 0,
-    "y": 428,
-    "width": 12,
-    "height": 4
-  },
-  {
-    "x": 0,
-    "y": 432,
-    "width": 16,
-    "height": 4
-  },
-  {
-    "x": 1388,
-    "y": 432,
-    "width": 14,
-    "height": 4
-  },
-  {
-    "x": 0,
-    "y": 436,
-    "width": 20,
-    "height": 4
-  },
-  {
-    "x": 1384,
-    "y": 436,
-    "width": 18,
-    "height": 4
-  },
-  {
-    "x": 0,
-    "y": 440,
-    "width": 24,
-    "height": 4
-  },
-  {
-    "x": 1380,
-    "y": 440,
-    "width": 22,
-    "height": 4
-  },
-  {
-    "x": 0,
-    "y": 444,
-    "width": 28,
-    "height": 4
   },
   {
     "x": 1376,
-    "y": 444,
+    "y": 348,
     "width": 26,
     "height": 4
   },
   {
     "x": 0,
-    "y": 448,
-    "width": 32,
+    "y": 352,
+    "width": 28,
+    "height": 4
+  },
+  {
+    "x": 40,
+    "y": 352,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 312,
+    "y": 352,
+    "width": 56,
+    "height": 4
+  },
+  {
+    "x": 1356,
+    "y": 352,
+    "width": 4,
     "height": 4
   },
   {
     "x": 1372,
-    "y": 448,
+    "y": 352,
     "width": 30,
     "height": 4
   },
   {
     "x": 0,
-    "y": 452,
+    "y": 356,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 320,
+    "y": 356,
+    "width": 56,
+    "height": 8
+  },
+  {
+    "x": 1028,
+    "y": 356,
+    "width": 52,
+    "height": 4
+  },
+  {
+    "x": 1376,
+    "y": 356,
+    "width": 26,
+    "height": 4
+  },
+  {
+    "x": 0,
+    "y": 360,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 1024,
+    "y": 360,
+    "width": 56,
+    "height": 4
+  },
+  {
+    "x": 1368,
+    "y": 360,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1380,
+    "y": 360,
+    "width": 22,
+    "height": 4
+  },
+  {
+    "x": 0,
+    "y": 364,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 324,
+    "y": 364,
+    "width": 48,
+    "height": 4
+  },
+  {
+    "x": 1032,
+    "y": 364,
+    "width": 48,
+    "height": 4
+  },
+  {
+    "x": 1368,
+    "y": 364,
+    "width": 34,
+    "height": 4
+  },
+  {
+    "x": 0,
+    "y": 368,
+    "width": 28,
+    "height": 8
+  },
+  {
+    "x": 324,
+    "y": 368,
+    "width": 44,
+    "height": 4
+  },
+  {
+    "x": 1036,
+    "y": 368,
+    "width": 44,
+    "height": 4
+  },
+  {
+    "x": 1372,
+    "y": 368,
+    "width": 30,
+    "height": 4
+  },
+  {
+    "x": 320,
+    "y": 372,
+    "width": 40,
+    "height": 4
+  },
+  {
+    "x": 1040,
+    "y": 372,
+    "width": 40,
+    "height": 4
+  },
+  {
+    "x": 1376,
+    "y": 372,
+    "width": 26,
+    "height": 8
+  },
+  {
+    "x": 0,
+    "y": 376,
+    "width": 24,
+    "height": 12
+  },
+  {
+    "x": 320,
+    "y": 376,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 1044,
+    "y": 376,
+    "width": 40,
+    "height": 4
+  },
+  {
+    "x": 316,
+    "y": 380,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 1052,
+    "y": 380,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 1380,
+    "y": 380,
+    "width": 22,
+    "height": 12
+  },
+  {
+    "x": 312,
+    "y": 384,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 1056,
+    "y": 384,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 0,
+    "y": 388,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 308,
+    "y": 388,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 1060,
+    "y": 388,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 0,
+    "y": 392,
+    "width": 16,
+    "height": 8
+  },
+  {
+    "x": 304,
+    "y": 392,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 1064,
+    "y": 392,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 1384,
+    "y": 392,
+    "width": 18,
+    "height": 8
+  },
+  {
+    "x": 300,
+    "y": 396,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 1068,
+    "y": 396,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 0,
+    "y": 400,
+    "width": 24,
+    "height": 12
+  },
+  {
+    "x": 296,
+    "y": 400,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 1072,
+    "y": 400,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 1380,
+    "y": 400,
+    "width": 22,
+    "height": 12
+  },
+  {
+    "x": 200,
+    "y": 404,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 292,
+    "y": 404,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 1076,
+    "y": 404,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 292,
+    "y": 408,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 1080,
+    "y": 408,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 1216,
+    "y": 408,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 0,
+    "y": 412,
+    "width": 28,
+    "height": 8
+  },
+  {
+    "x": 180,
+    "y": 412,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 288,
+    "y": 412,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 1084,
+    "y": 412,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 1216,
+    "y": 412,
+    "width": 8,
+    "height": 8
+  },
+  {
+    "x": 1376,
+    "y": 412,
+    "width": 26,
+    "height": 4
+  },
+  {
+    "x": 176,
+    "y": 416,
+    "width": 8,
+    "height": 8
+  },
+  {
+    "x": 284,
+    "y": 416,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 1084,
+    "y": 416,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 1372,
+    "y": 416,
+    "width": 30,
+    "height": 8
+  },
+  {
+    "x": 0,
+    "y": 420,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 280,
+    "y": 420,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 1088,
+    "y": 420,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 1216,
+    "y": 420,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 0,
+    "y": 424,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 172,
+    "y": 424,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 276,
+    "y": 424,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 1092,
+    "y": 424,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 1216,
+    "y": 424,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 1368,
+    "y": 424,
+    "width": 34,
+    "height": 4
+  },
+  {
+    "x": 0,
+    "y": 428,
     "width": 40,
     "height": 4
   },
   {
     "x": 168,
-    "y": 452,
-    "width": 4,
+    "y": 428,
+    "width": 16,
     "height": 4
   },
   {
-    "x": 1228,
-    "y": 452,
-    "width": 8,
+    "x": 276,
+    "y": 428,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 1096,
+    "y": 428,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 1216,
+    "y": 428,
+    "width": 20,
     "height": 4
   },
   {
     "x": 1364,
-    "y": 452,
+    "y": 428,
     "width": 38,
     "height": 4
   },
   {
     "x": 0,
-    "y": 456,
+    "y": 432,
     "width": 48,
     "height": 4
   },
   {
     "x": 160,
-    "y": 456,
-    "width": 12,
+    "y": 432,
+    "width": 24,
     "height": 4
   },
   {
-    "x": 1232,
-    "y": 456,
-    "width": 12,
+    "x": 272,
+    "y": 432,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 1096,
+    "y": 432,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 1216,
+    "y": 432,
+    "width": 28,
     "height": 4
   },
   {
     "x": 1356,
-    "y": 456,
+    "y": 432,
     "width": 46,
     "height": 4
   },
   {
     "x": 0,
-    "y": 460,
-    "width": 56,
+    "y": 436,
+    "width": 52,
     "height": 4
   },
   {
-    "x": 152,
-    "y": 460,
-    "width": 20,
-    "height": 4
-  },
-  {
-    "x": 1236,
-    "y": 460,
-    "width": 16,
-    "height": 4
-  },
-  {
-    "x": 1348,
-    "y": 460,
-    "width": 54,
-    "height": 4
-  },
-  {
-    "x": 0,
-    "y": 464,
-    "width": 68,
-    "height": 4
-  },
-  {
-    "x": 140,
-    "y": 464,
-    "width": 28,
-    "height": 4
-  },
-  {
-    "x": 1236,
-    "y": 464,
-    "width": 28,
-    "height": 4
-  },
-  {
-    "x": 1336,
-    "y": 464,
-    "width": 66,
-    "height": 4
-  },
-  {
-    "x": 0,
-    "y": 468,
-    "width": 72,
-    "height": 12
-  },
-  {
-    "x": 128,
-    "y": 468,
-    "width": 40,
-    "height": 4
-  },
-  {
-    "x": 1236,
-    "y": 468,
-    "width": 36,
-    "height": 8
-  },
-  {
-    "x": 1328,
-    "y": 468,
-    "width": 74,
-    "height": 4
-  },
-  {
-    "x": 132,
-    "y": 472,
+    "x": 156,
+    "y": 436,
     "width": 32,
     "height": 4
   },
   {
-    "x": 1332,
-    "y": 472,
-    "width": 70,
+    "x": 268,
+    "y": 436,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 1100,
+    "y": 436,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 1216,
+    "y": 436,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 1352,
+    "y": 436,
+    "width": 50,
+    "height": 4
+  },
+  {
+    "x": 0,
+    "y": 440,
+    "width": 60,
+    "height": 4
+  },
+  {
+    "x": 144,
+    "y": 440,
+    "width": 40,
+    "height": 4
+  },
+  {
+    "x": 268,
+    "y": 440,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 1104,
+    "y": 440,
+    "width": 32,
     "height": 8
   },
   {
+    "x": 1220,
+    "y": 440,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 1344,
+    "y": 440,
+    "width": 58,
+    "height": 4
+  },
+  {
+    "x": 0,
+    "y": 444,
+    "width": 76,
+    "height": 4
+  },
+  {
     "x": 132,
+    "y": 444,
+    "width": 48,
+    "height": 4
+  },
+  {
+    "x": 264,
+    "y": 444,
+    "width": 32,
+    "height": 8
+  },
+  {
+    "x": 1224,
+    "y": 444,
+    "width": 48,
+    "height": 4
+  },
+  {
+    "x": 1328,
+    "y": 444,
+    "width": 74,
+    "height": 4
+  },
+  {
+    "x": 0,
+    "y": 448,
+    "width": 172,
+    "height": 16
+  },
+  {
+    "x": 1108,
+    "y": 448,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 1228,
+    "y": 448,
+    "width": 174,
+    "height": 8
+  },
+  {
+    "x": 260,
+    "y": 452,
+    "width": 32,
+    "height": 8
+  },
+  {
+    "x": 1112,
+    "y": 452,
+    "width": 32,
+    "height": 8
+  },
+  {
+    "x": 1232,
+    "y": 456,
+    "width": 170,
+    "height": 4
+  },
+  {
+    "x": 256,
+    "y": 460,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 1116,
+    "y": 460,
+    "width": 32,
+    "height": 8
+  },
+  {
+    "x": 1236,
+    "y": 460,
+    "width": 166,
+    "height": 8
+  },
+  {
+    "x": 0,
+    "y": 464,
+    "width": 120,
+    "height": 4
+  },
+  {
+    "x": 124,
+    "y": 464,
+    "width": 44,
+    "height": 4
+  },
+  {
+    "x": 256,
+    "y": 464,
+    "width": 28,
+    "height": 4
+  },
+  {
+    "x": 0,
+    "y": 468,
+    "width": 96,
+    "height": 4
+  },
+  {
+    "x": 104,
+    "y": 468,
+    "width": 64,
+    "height": 4
+  },
+  {
+    "x": 252,
+    "y": 468,
+    "width": 32,
+    "height": 8
+  },
+  {
+    "x": 1120,
+    "y": 468,
+    "width": 32,
+    "height": 8
+  },
+  {
+    "x": 1236,
+    "y": 468,
+    "width": 60,
+    "height": 8
+  },
+  {
+    "x": 1304,
+    "y": 468,
+    "width": 98,
+    "height": 4
+  },
+  {
+    "x": 0,
+    "y": 472,
+    "width": 92,
+    "height": 16
+  },
+  {
+    "x": 108,
+    "y": 472,
+    "width": 56,
+    "height": 4
+  },
+  {
+    "x": 1312,
+    "y": 472,
+    "width": 90,
+    "height": 8
+  },
+  {
+    "x": 108,
+    "y": 476,
+    "width": 52,
+    "height": 4
+  },
+  {
+    "x": 248,
+    "y": 476,
+    "width": 32,
+    "height": 8
+  },
+  {
+    "x": 1124,
     "y": 476,
     "width": 28,
     "height": 4
@@ -2280,49 +3528,49 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 1240,
     "y": 476,
-    "width": 32,
+    "width": 52,
     "height": 4
   },
   {
-    "x": 0,
+    "x": 108,
     "y": 480,
-    "width": 68,
+    "width": 48,
     "height": 8
   },
   {
-    "x": 132,
+    "x": 1124,
     "y": 480,
-    "width": 24,
-    "height": 4
+    "width": 32,
+    "height": 8
   },
   {
     "x": 1244,
     "y": 480,
-    "width": 24,
+    "width": 52,
     "height": 4
   },
   {
-    "x": 1336,
+    "x": 1308,
     "y": 480,
-    "width": 66,
+    "width": 94,
     "height": 4
   },
   {
-    "x": 136,
+    "x": 248,
     "y": 484,
-    "width": 20,
+    "width": 28,
     "height": 4
   },
   {
     "x": 1248,
     "y": 484,
-    "width": 20,
+    "width": 48,
     "height": 8
   },
   {
-    "x": 1336,
+    "x": 1308,
     "y": 484,
-    "width": 24,
+    "width": 52,
     "height": 4
   },
   {
@@ -2340,19 +3588,31 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 48,
     "y": 488,
-    "width": 20,
+    "width": 44,
+    "height": 8
+  },
+  {
+    "x": 108,
+    "y": 488,
+    "width": 44,
     "height": 4
   },
   {
-    "x": 136,
+    "x": 244,
     "y": 488,
-    "width": 16,
-    "height": 4
+    "width": 32,
+    "height": 8
   },
   {
-    "x": 1336,
+    "x": 1128,
     "y": 488,
-    "width": 16,
+    "width": 32,
+    "height": 8
+  },
+  {
+    "x": 1308,
+    "y": 488,
+    "width": 44,
     "height": 4
   },
   {
@@ -2362,40 +3622,52 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 8
   },
   {
-    "x": 48,
+    "x": 108,
     "y": 492,
-    "width": 16,
-    "height": 4
-  },
-  {
-    "x": 136,
-    "y": 492,
-    "width": 12,
+    "width": 40,
     "height": 4
   },
   {
     "x": 1256,
     "y": 492,
-    "width": 8,
+    "width": 40,
     "height": 4
   },
   {
-    "x": 1340,
+    "x": 1308,
     "y": 492,
-    "width": 8,
+    "width": 40,
     "height": 8
   },
   {
     "x": 56,
     "y": 496,
-    "width": 8,
+    "width": 36,
     "height": 4
   },
   {
-    "x": 140,
+    "x": 108,
     "y": 496,
-    "width": 4,
+    "width": 36,
     "height": 4
+  },
+  {
+    "x": 244,
+    "y": 496,
+    "width": 28,
+    "height": 4
+  },
+  {
+    "x": 1132,
+    "y": 496,
+    "width": 28,
+    "height": 8
+  },
+  {
+    "x": 1264,
+    "y": 496,
+    "width": 28,
+    "height": 8
   },
   {
     "x": 1388,
@@ -2410,10 +3682,190 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 12
   },
   {
+    "x": 64,
+    "y": 500,
+    "width": 28,
+    "height": 4
+  },
+  {
+    "x": 108,
+    "y": 500,
+    "width": 32,
+    "height": 8
+  },
+  {
+    "x": 240,
+    "y": 500,
+    "width": 32,
+    "height": 8
+  },
+  {
+    "x": 1308,
+    "y": 500,
+    "width": 32,
+    "height": 8
+  },
+  {
+    "x": 60,
+    "y": 504,
+    "width": 32,
+    "height": 12
+  },
+  {
+    "x": 1132,
+    "y": 504,
+    "width": 32,
+    "height": 8
+  },
+  {
+    "x": 1264,
+    "y": 504,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 108,
+    "y": 508,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 240,
+    "y": 508,
+    "width": 28,
+    "height": 8
+  },
+  {
+    "x": 1260,
+    "y": 508,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 1312,
+    "y": 508,
+    "width": 32,
+    "height": 4
+  },
+  {
     "x": 0,
     "y": 512,
     "width": 16,
     "height": 12
+  },
+  {
+    "x": 108,
+    "y": 512,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 136,
+    "y": 512,
+    "width": 8,
+    "height": 8
+  },
+  {
+    "x": 1136,
+    "y": 512,
+    "width": 28,
+    "height": 8
+  },
+  {
+    "x": 1260,
+    "y": 512,
+    "width": 8,
+    "height": 8
+  },
+  {
+    "x": 1272,
+    "y": 512,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 1308,
+    "y": 512,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 60,
+    "y": 516,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 76,
+    "y": 516,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 112,
+    "y": 516,
+    "width": 12,
+    "height": 8
+  },
+  {
+    "x": 236,
+    "y": 516,
+    "width": 32,
+    "height": 8
+  },
+  {
+    "x": 1276,
+    "y": 516,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 1312,
+    "y": 516,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 60,
+    "y": 520,
+    "width": 4,
+    "height": 12
+  },
+  {
+    "x": 80,
+    "y": 520,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 140,
+    "y": 520,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1136,
+    "y": 520,
+    "width": 32,
+    "height": 12
+  },
+  {
+    "x": 1256,
+    "y": 520,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 1276,
+    "y": 520,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 1316,
+    "y": 520,
+    "width": 12,
+    "height": 4
   },
   {
     "x": 1384,
@@ -2428,6 +3880,18 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 4
   },
   {
+    "x": 80,
+    "y": 524,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 236,
+    "y": 524,
+    "width": 28,
+    "height": 12
+  },
+  {
     "x": 0,
     "y": 528,
     "width": 28,
@@ -2440,6 +3904,204 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 8
   },
   {
+    "x": 1140,
+    "y": 532,
+    "width": 28,
+    "height": 8
+  },
+  {
+    "x": 0,
+    "y": 536,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 60,
+    "y": 536,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 76,
+    "y": 536,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 232,
+    "y": 536,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 1276,
+    "y": 536,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 1292,
+    "y": 536,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1344,
+    "y": 536,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 1368,
+    "y": 536,
+    "width": 34,
+    "height": 4
+  },
+  {
+    "x": 0,
+    "y": 540,
+    "width": 264,
+    "height": 8
+  },
+  {
+    "x": 1140,
+    "y": 540,
+    "width": 156,
+    "height": 4
+  },
+  {
+    "x": 1304,
+    "y": 540,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1312,
+    "y": 540,
+    "width": 90,
+    "height": 4
+  },
+  {
+    "x": 1140,
+    "y": 544,
+    "width": 262,
+    "height": 4
+  },
+  {
+    "x": 0,
+    "y": 548,
+    "width": 236,
+    "height": 8
+  },
+  {
+    "x": 240,
+    "y": 548,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 1140,
+    "y": 548,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 1164,
+    "y": 548,
+    "width": 238,
+    "height": 4
+  },
+  {
+    "x": 244,
+    "y": 552,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 256,
+    "y": 552,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 1140,
+    "y": 552,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1148,
+    "y": 552,
+    "width": 254,
+    "height": 4
+  },
+  {
+    "x": 1148,
+    "y": 556,
+    "width": 4,
+    "height": 8
+  },
+  {
+    "x": 1148,
+    "y": 572,
+    "width": 4,
+    "height": 8
+  },
+  {
+    "x": 0,
+    "y": 580,
+    "width": 264,
+    "height": 12
+  },
+  {
+    "x": 1140,
+    "y": 580,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1148,
+    "y": 580,
+    "width": 254,
+    "height": 4
+  },
+  {
+    "x": 1136,
+    "y": 584,
+    "width": 266,
+    "height": 8
+  },
+  {
+    "x": 0,
+    "y": 592,
+    "width": 136,
+    "height": 4
+  },
+  {
+    "x": 188,
+    "y": 592,
+    "width": 80,
+    "height": 4
+  },
+  {
+    "x": 1136,
+    "y": 592,
+    "width": 76,
+    "height": 4
+  },
+  {
+    "x": 1232,
+    "y": 592,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 1280,
+    "y": 592,
+    "width": 122,
+    "height": 4
+  },
+  {
     "x": 0,
     "y": 596,
     "width": 108,
@@ -2448,13 +4110,13 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 196,
     "y": 596,
-    "width": 40,
+    "width": 72,
     "height": 4
   },
   {
-    "x": 1164,
+    "x": 1136,
     "y": 596,
-    "width": 44,
+    "width": 72,
     "height": 4
   },
   {
@@ -2472,14 +4134,14 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 200,
     "y": 600,
-    "width": 36,
-    "height": 4
+    "width": 68,
+    "height": 8
   },
   {
-    "x": 1164,
+    "x": 1136,
     "y": 600,
-    "width": 40,
-    "height": 12
+    "width": 68,
+    "height": 4
   },
   {
     "x": 1300,
@@ -2488,16 +4150,22 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 20
   },
   {
-    "x": 200,
+    "x": 1132,
     "y": 604,
-    "width": 40,
-    "height": 12
+    "width": 72,
+    "height": 8
   },
   {
-    "x": 1164,
+    "x": 200,
+    "y": 608,
+    "width": 72,
+    "height": 8
+  },
+  {
+    "x": 1132,
     "y": 612,
-    "width": 36,
-    "height": 4
+    "width": 68,
+    "height": 8
   },
   {
     "x": 0,
@@ -2508,19 +4176,19 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 204,
     "y": 616,
-    "width": 40,
+    "width": 68,
     "height": 4
-  },
-  {
-    "x": 1160,
-    "y": 616,
-    "width": 40,
-    "height": 8
   },
   {
     "x": 208,
     "y": 620,
-    "width": 36,
+    "width": 64,
+    "height": 4
+  },
+  {
+    "x": 1128,
+    "y": 620,
+    "width": 72,
     "height": 4
   },
   {
@@ -2538,13 +4206,13 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 216,
     "y": 624,
-    "width": 28,
+    "width": 60,
     "height": 4
   },
   {
-    "x": 1160,
+    "x": 1128,
     "y": 624,
-    "width": 36,
+    "width": 68,
     "height": 4
   },
   {
@@ -2562,13 +4230,13 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 220,
     "y": 628,
-    "width": 24,
+    "width": 56,
     "height": 4
   },
   {
-    "x": 1156,
+    "x": 1128,
     "y": 628,
-    "width": 36,
+    "width": 64,
     "height": 4
   },
   {
@@ -2586,13 +4254,13 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 224,
     "y": 632,
-    "width": 24,
+    "width": 56,
     "height": 8
   },
   {
-    "x": 1156,
+    "x": 1124,
     "y": 632,
-    "width": 24,
+    "width": 56,
     "height": 8
   },
   {
@@ -2616,13 +4284,13 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 228,
     "y": 640,
-    "width": 24,
-    "height": 8
+    "width": 52,
+    "height": 4
   },
   {
-    "x": 1152,
+    "x": 1120,
     "y": 640,
-    "width": 24,
+    "width": 56,
     "height": 4
   },
   {
@@ -2632,9 +4300,15 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 8
   },
   {
-    "x": 1152,
+    "x": 228,
     "y": 644,
-    "width": 20,
+    "width": 56,
+    "height": 4
+  },
+  {
+    "x": 1120,
+    "y": 644,
+    "width": 52,
     "height": 4
   },
   {
@@ -2646,13 +4320,13 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 232,
     "y": 648,
-    "width": 20,
+    "width": 52,
     "height": 4
   },
   {
-    "x": 1148,
+    "x": 1116,
     "y": 648,
-    "width": 20,
+    "width": 52,
     "height": 8
   },
   {
@@ -2664,7 +4338,7 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 232,
     "y": 652,
-    "width": 24,
+    "width": 56,
     "height": 8
   },
   {
@@ -2674,9 +4348,9 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 1144,
+    "x": 1112,
     "y": 656,
-    "width": 24,
+    "width": 56,
     "height": 8
   },
   {
@@ -2688,7 +4362,7 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 236,
     "y": 660,
-    "width": 24,
+    "width": 56,
     "height": 8
   },
   {
@@ -2698,9 +4372,9 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 1140,
+    "x": 1108,
     "y": 664,
-    "width": 28,
+    "width": 60,
     "height": 4
   },
   {
@@ -2712,13 +4386,13 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 240,
     "y": 668,
-    "width": 24,
+    "width": 56,
     "height": 4
   },
   {
-    "x": 1140,
+    "x": 1108,
     "y": 668,
-    "width": 24,
+    "width": 56,
     "height": 4
   },
   {
@@ -2736,19 +4410,19 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 240,
     "y": 672,
-    "width": 28,
+    "width": 60,
     "height": 8
   },
   {
-    "x": 1136,
+    "x": 1104,
     "y": 672,
-    "width": 28,
+    "width": 60,
     "height": 4
   },
   {
-    "x": 1136,
+    "x": 1100,
     "y": 676,
-    "width": 24,
+    "width": 60,
     "height": 4
   },
   {
@@ -2760,25 +4434,25 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 244,
     "y": 680,
-    "width": 28,
+    "width": 60,
     "height": 4
   },
   {
-    "x": 1132,
+    "x": 1100,
     "y": 680,
-    "width": 24,
+    "width": 56,
     "height": 4
   },
   {
     "x": 248,
     "y": 684,
-    "width": 28,
-    "height": 8
+    "width": 60,
+    "height": 4
   },
   {
-    "x": 1128,
+    "x": 1096,
     "y": 684,
-    "width": 28,
+    "width": 60,
     "height": 4
   },
   {
@@ -2788,33 +4462,27 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 12
   },
   {
-    "x": 1128,
+    "x": 248,
     "y": 688,
-    "width": 24,
+    "width": 64,
+    "height": 8
+  },
+  {
+    "x": 1092,
+    "y": 688,
+    "width": 60,
     "height": 4
   },
   {
-    "x": 248,
+    "x": 1088,
     "y": 692,
-    "width": 32,
-    "height": 4
-  },
-  {
-    "x": 1124,
-    "y": 692,
-    "width": 28,
-    "height": 4
+    "width": 64,
+    "height": 8
   },
   {
     "x": 248,
     "y": 696,
-    "width": 36,
-    "height": 4
-  },
-  {
-    "x": 1120,
-    "y": 696,
-    "width": 32,
+    "width": 68,
     "height": 4
   },
   {
@@ -2826,43 +4494,49 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 252,
     "y": 700,
-    "width": 32,
+    "width": 68,
     "height": 4
   },
   {
-    "x": 1116,
+    "x": 1084,
     "y": 700,
-    "width": 32,
+    "width": 64,
     "height": 4
   },
   {
     "x": 256,
     "y": 704,
-    "width": 32,
+    "width": 68,
     "height": 4
   },
   {
-    "x": 1112,
+    "x": 1080,
     "y": 704,
-    "width": 36,
-    "height": 8
+    "width": 68,
+    "height": 4
   },
   {
     "x": 256,
     "y": 708,
-    "width": 36,
+    "width": 72,
+    "height": 4
+  },
+  {
+    "x": 1076,
+    "y": 708,
+    "width": 72,
     "height": 4
   },
   {
     "x": 256,
     "y": 712,
-    "width": 40,
+    "width": 76,
     "height": 4
   },
   {
-    "x": 1108,
+    "x": 1072,
     "y": 712,
-    "width": 36,
+    "width": 72,
     "height": 4
   },
   {
@@ -2874,13 +4548,13 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 260,
     "y": 716,
-    "width": 40,
+    "width": 72,
     "height": 4
   },
   {
-    "x": 1104,
+    "x": 1068,
     "y": 716,
-    "width": 40,
+    "width": 76,
     "height": 4
   },
   {
@@ -2898,13 +4572,13 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 260,
     "y": 720,
-    "width": 44,
+    "width": 76,
     "height": 4
   },
   {
-    "x": 1100,
+    "x": 1064,
     "y": 720,
-    "width": 40,
+    "width": 76,
     "height": 4
   },
   {
@@ -2922,13 +4596,13 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 264,
     "y": 724,
-    "width": 44,
+    "width": 76,
     "height": 4
   },
   {
-    "x": 1096,
+    "x": 1060,
     "y": 724,
-    "width": 40,
+    "width": 76,
     "height": 4
   },
   {
@@ -2958,13 +4632,13 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 268,
     "y": 728,
-    "width": 44,
+    "width": 80,
     "height": 4
   },
   {
-    "x": 1092,
+    "x": 1056,
     "y": 728,
-    "width": 40,
+    "width": 76,
     "height": 4
   },
   {
@@ -2982,13 +4656,13 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 268,
     "y": 732,
-    "width": 48,
+    "width": 84,
     "height": 4
   },
   {
-    "x": 1088,
+    "x": 1052,
     "y": 732,
-    "width": 44,
+    "width": 80,
     "height": 4
   },
   {
@@ -3000,13 +4674,13 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 272,
     "y": 736,
-    "width": 48,
+    "width": 84,
     "height": 4
   },
   {
-    "x": 1084,
+    "x": 1048,
     "y": 736,
-    "width": 44,
+    "width": 80,
     "height": 4
   },
   {
@@ -3036,13 +4710,13 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 272,
     "y": 740,
-    "width": 52,
+    "width": 88,
     "height": 4
   },
   {
-    "x": 1080,
+    "x": 1044,
     "y": 740,
-    "width": 44,
+    "width": 80,
     "height": 4
   },
   {
@@ -3066,13 +4740,13 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 276,
     "y": 744,
-    "width": 52,
+    "width": 88,
     "height": 4
   },
   {
-    "x": 1076,
+    "x": 1036,
     "y": 744,
-    "width": 44,
+    "width": 84,
     "height": 4
   },
   {
@@ -3090,13 +4764,13 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 280,
     "y": 748,
-    "width": 40,
+    "width": 92,
     "height": 4
   },
   {
-    "x": 1080,
+    "x": 1032,
     "y": 748,
-    "width": 36,
+    "width": 84,
     "height": 4
   },
   {
@@ -3120,13 +4794,13 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 284,
     "y": 752,
-    "width": 32,
+    "width": 92,
     "height": 4
   },
   {
-    "x": 1088,
+    "x": 1028,
     "y": 752,
-    "width": 28,
+    "width": 88,
     "height": 4
   },
   {
@@ -3150,14 +4824,32 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 288,
     "y": 756,
-    "width": 20,
+    "width": 92,
     "height": 4
   },
   {
-    "x": 1092,
+    "x": 404,
     "y": 756,
-    "width": 20,
+    "width": 12,
     "height": 4
+  },
+  {
+    "x": 988,
+    "y": 756,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 1020,
+    "y": 756,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1028,
+    "y": 756,
+    "width": 84,
+    "height": 8
   },
   {
     "x": 0,
@@ -3174,13 +4866,31 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 288,
     "y": 760,
-    "width": 16,
+    "width": 88,
     "height": 4
   },
   {
-    "x": 1100,
+    "x": 380,
     "y": 760,
-    "width": 12,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 396,
+    "y": 760,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 984,
+    "y": 760,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 1016,
+    "y": 760,
+    "width": 4,
     "height": 4
   },
   {
@@ -3192,43 +4902,109 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 288,
     "y": 764,
-    "width": 12,
+    "width": 92,
     "height": 4
   },
   {
-    "x": 1104,
+    "x": 388,
     "y": 764,
     "width": 8,
     "height": 4
   },
   {
+    "x": 400,
+    "y": 764,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 980,
+    "y": 764,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 1008,
+    "y": 764,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 1020,
+    "y": 764,
+    "width": 92,
+    "height": 4
+  },
+  {
     "x": 124,
     "y": 768,
-    "width": 24,
+    "width": 60,
     "height": 4
   },
   {
     "x": 288,
     "y": 768,
-    "width": 4,
+    "width": 88,
     "height": 4
   },
   {
-    "x": 1256,
+    "x": 404,
     "y": 768,
     "width": 20,
     "height": 4
   },
   {
+    "x": 976,
+    "y": 768,
+    "width": 28,
+    "height": 4
+  },
+  {
+    "x": 1024,
+    "y": 768,
+    "width": 88,
+    "height": 4
+  },
+  {
+    "x": 1216,
+    "y": 768,
+    "width": 60,
+    "height": 4
+  },
+  {
     "x": 104,
+    "y": 772,
+    "width": 108,
+    "height": 4
+  },
+  {
+    "x": 288,
+    "y": 772,
+    "width": 84,
+    "height": 4
+  },
+  {
+    "x": 400,
     "y": 772,
     "width": 28,
     "height": 4
   },
   {
-    "x": 1272,
+    "x": 972,
     "y": 772,
-    "width": 24,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 1028,
+    "y": 772,
+    "width": 88,
+    "height": 4
+  },
+  {
+    "x": 1192,
+    "y": 772,
+    "width": 104,
     "height": 4
   },
   {
@@ -3240,151 +5016,451 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 100,
     "y": 776,
-    "width": 20,
+    "width": 120,
     "height": 4
   },
   {
-    "x": 1280,
+    "x": 280,
     "y": 776,
-    "width": 20,
+    "width": 80,
+    "height": 4
+  },
+  {
+    "x": 404,
+    "y": 776,
+    "width": 28,
+    "height": 4
+  },
+  {
+    "x": 968,
+    "y": 776,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 1040,
+    "y": 776,
+    "width": 80,
+    "height": 8
+  },
+  {
+    "x": 1184,
+    "y": 776,
+    "width": 116,
     "height": 4
   },
   {
     "x": 100,
     "y": 780,
-    "width": 12,
+    "width": 124,
     "height": 4
   },
   {
-    "x": 1288,
+    "x": 280,
     "y": 780,
-    "width": 12,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 292,
+    "y": 780,
+    "width": 72,
+    "height": 4
+  },
+  {
+    "x": 412,
+    "y": 780,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 964,
+    "y": 780,
+    "width": 28,
+    "height": 4
+  },
+  {
+    "x": 1180,
+    "y": 780,
+    "width": 120,
     "height": 4
   },
   {
     "x": 100,
     "y": 784,
-    "width": 8,
+    "width": 52,
     "height": 4
   },
   {
-    "x": 368,
+    "x": 192,
     "y": 784,
-    "width": 12,
+    "width": 36,
     "height": 4
   },
   {
-    "x": 1024,
+    "x": 284,
     "y": 784,
-    "width": 8,
+    "width": 4,
     "height": 4
   },
   {
-    "x": 1296,
+    "x": 292,
     "y": 784,
-    "width": 8,
+    "width": 76,
+    "height": 4
+  },
+  {
+    "x": 416,
+    "y": 784,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 964,
+    "y": 784,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 1040,
+    "y": 784,
+    "width": 68,
+    "height": 4
+  },
+  {
+    "x": 1116,
+    "y": 784,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1176,
+    "y": 784,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 1252,
+    "y": 784,
+    "width": 52,
     "height": 4
   },
   {
     "x": 96,
     "y": 788,
-    "width": 4,
-    "height": 4
-  },
-  {
-    "x": 364,
-    "y": 788,
-    "width": 24,
-    "height": 4
-  },
-  {
-    "x": 1016,
-    "y": 788,
-    "width": 24,
-    "height": 4
-  },
-  {
-    "x": 1300,
-    "y": 788,
-    "width": 4,
-    "height": 4
-  },
-  {
-    "x": 356,
-    "y": 792,
     "width": 40,
     "height": 4
   },
   {
-    "x": 1008,
+    "x": 204,
+    "y": 788,
+    "width": 28,
+    "height": 4
+  },
+  {
+    "x": 292,
+    "y": 788,
+    "width": 60,
+    "height": 4
+  },
+  {
+    "x": 356,
+    "y": 788,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 420,
+    "y": 788,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 968,
+    "y": 788,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 1028,
+    "y": 788,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 1048,
+    "y": 788,
+    "width": 68,
+    "height": 4
+  },
+  {
+    "x": 1168,
+    "y": 788,
+    "width": 28,
+    "height": 4
+  },
+  {
+    "x": 1264,
+    "y": 788,
+    "width": 40,
+    "height": 4
+  },
+  {
+    "x": 96,
+    "y": 792,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 216,
+    "y": 792,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 292,
+    "y": 792,
+    "width": 56,
+    "height": 4
+  },
+  {
+    "x": 352,
+    "y": 792,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 408,
     "y": 792,
     "width": 36,
     "height": 4
   },
   {
-    "x": 352,
-    "y": 796,
-    "width": 48,
+    "x": 960,
+    "y": 792,
+    "width": 16,
     "height": 4
   },
   {
-    "x": 1000,
+    "x": 980,
+    "y": 792,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 1032,
+    "y": 792,
+    "width": 80,
+    "height": 4
+  },
+  {
+    "x": 1168,
+    "y": 792,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 1276,
+    "y": 792,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 92,
+    "y": 796,
+    "width": 28,
+    "height": 4
+  },
+  {
+    "x": 224,
+    "y": 796,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 292,
     "y": 796,
     "width": 52,
     "height": 4
   },
   {
-    "x": 344,
-    "y": 800,
-    "width": 64,
+    "x": 348,
+    "y": 796,
+    "width": 12,
     "height": 4
   },
   {
-    "x": 996,
+    "x": 400,
+    "y": 796,
+    "width": 52,
+    "height": 4
+  },
+  {
+    "x": 952,
+    "y": 796,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 976,
+    "y": 796,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 1044,
+    "y": 796,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 1060,
+    "y": 796,
+    "width": 48,
+    "height": 4
+  },
+  {
+    "x": 1168,
+    "y": 796,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 1284,
+    "y": 796,
+    "width": 28,
+    "height": 4
+  },
+  {
+    "x": 88,
+    "y": 800,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 228,
+    "y": 800,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 292,
+    "y": 800,
+    "width": 56,
+    "height": 4
+  },
+  {
+    "x": 392,
+    "y": 800,
+    "width": 68,
+    "height": 4
+  },
+  {
+    "x": 944,
+    "y": 800,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 968,
+    "y": 800,
+    "width": 44,
+    "height": 4
+  },
+  {
+    "x": 1052,
     "y": 800,
     "width": 60,
     "height": 4
   },
   {
-    "x": 68,
-    "y": 804,
-    "width": 16,
+    "x": 1168,
+    "y": 800,
+    "width": 4,
     "height": 4
   },
   {
-    "x": 340,
-    "y": 804,
-    "width": 76,
+    "x": 1288,
+    "y": 800,
+    "width": 28,
     "height": 4
-  },
-  {
-    "x": 988,
-    "y": 804,
-    "width": 76,
-    "height": 4
-  },
-  {
-    "x": 1320,
-    "y": 804,
-    "width": 16,
-    "height": 8
   },
   {
     "x": 68,
-    "y": 808,
-    "width": 12,
+    "y": 804,
+    "width": 40,
     "height": 4
   },
   {
-    "x": 332,
-    "y": 808,
-    "width": 92,
+    "x": 288,
+    "y": 804,
+    "width": 52,
     "height": 4
   },
   {
-    "x": 980,
+    "x": 384,
+    "y": 804,
+    "width": 84,
+    "height": 4
+  },
+  {
+    "x": 936,
+    "y": 804,
+    "width": 84,
+    "height": 4
+  },
+  {
+    "x": 1064,
+    "y": 804,
+    "width": 48,
+    "height": 4
+  },
+  {
+    "x": 1296,
+    "y": 804,
+    "width": 40,
+    "height": 4
+  },
+  {
+    "x": 68,
     "y": 808,
-    "width": 88,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 280,
+    "y": 808,
+    "width": 48,
+    "height": 4
+  },
+  {
+    "x": 376,
+    "y": 808,
+    "width": 64,
+    "height": 4
+  },
+  {
+    "x": 444,
+    "y": 808,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 924,
+    "y": 808,
+    "width": 104,
+    "height": 4
+  },
+  {
+    "x": 1072,
+    "y": 808,
+    "width": 48,
+    "height": 4
+  },
+  {
+    "x": 1300,
+    "y": 808,
+    "width": 36,
     "height": 4
   },
   {
@@ -3396,73 +5472,109 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 64,
     "y": 812,
-    "width": 16,
+    "width": 36,
     "height": 4
   },
   {
-    "x": 328,
+    "x": 276,
     "y": 812,
-    "width": 104,
+    "width": 44,
     "height": 4
   },
   {
-    "x": 972,
+    "x": 364,
     "y": 812,
-    "width": 104,
+    "width": 124,
     "height": 4
   },
   {
-    "x": 1324,
+    "x": 912,
     "y": 812,
-    "width": 12,
+    "width": 124,
+    "height": 4
+  },
+  {
+    "x": 1084,
+    "y": 812,
+    "width": 40,
+    "height": 4
+  },
+  {
+    "x": 1304,
+    "y": 812,
+    "width": 32,
     "height": 4
   },
   {
     "x": 64,
     "y": 816,
-    "width": 12,
+    "width": 32,
     "height": 4
   },
   {
-    "x": 320,
+    "x": 272,
     "y": 816,
-    "width": 120,
+    "width": 36,
     "height": 4
   },
   {
-    "x": 960,
+    "x": 356,
     "y": 816,
-    "width": 120,
+    "width": 144,
     "height": 4
   },
   {
-    "x": 1328,
+    "x": 904,
     "y": 816,
-    "width": 8,
+    "width": 140,
+    "height": 4
+  },
+  {
+    "x": 1092,
+    "y": 816,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 1308,
+    "y": 816,
+    "width": 28,
     "height": 4
   },
   {
     "x": 48,
     "y": 820,
-    "width": 28,
+    "width": 44,
     "height": 4
   },
   {
-    "x": 316,
+    "x": 264,
     "y": 820,
-    "width": 136,
+    "width": 36,
     "height": 4
   },
   {
-    "x": 952,
+    "x": 348,
     "y": 820,
-    "width": 136,
+    "width": 164,
     "height": 4
   },
   {
-    "x": 1328,
+    "x": 892,
     "y": 820,
-    "width": 28,
+    "width": 160,
+    "height": 4
+  },
+  {
+    "x": 1104,
+    "y": 820,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 1308,
+    "y": 820,
+    "width": 48,
     "height": 4
   },
   {
@@ -3474,139 +5586,211 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 44,
     "y": 824,
-    "width": 28,
-    "height": 8
-  },
-  {
-    "x": 308,
-    "y": 824,
-    "width": 152,
+    "width": 48,
     "height": 4
   },
   {
-    "x": 944,
-    "y": 824,
-    "width": 148,
-    "height": 4
-  },
-  {
-    "x": 1332,
+    "x": 264,
     "y": 824,
     "width": 24,
+    "height": 4
+  },
+  {
+    "x": 340,
+    "y": 824,
+    "width": 184,
+    "height": 4
+  },
+  {
+    "x": 876,
+    "y": 824,
+    "width": 188,
+    "height": 4
+  },
+  {
+    "x": 1112,
+    "y": 824,
+    "width": 28,
+    "height": 4
+  },
+  {
+    "x": 1312,
+    "y": 824,
+    "width": 44,
+    "height": 4
+  },
+  {
+    "x": 44,
+    "y": 828,
+    "width": 44,
     "height": 8
   },
   {
-    "x": 304,
+    "x": 256,
     "y": 828,
     "width": 24,
+    "height": 4
+  },
+  {
+    "x": 332,
+    "y": 828,
+    "width": 16,
     "height": 4
   },
   {
     "x": 352,
     "y": 828,
-    "width": 120,
+    "width": 188,
     "height": 4
   },
   {
-    "x": 932,
+    "x": 864,
     "y": 828,
-    "width": 168,
+    "width": 208,
     "height": 4
   },
   {
-    "x": 44,
-    "y": 832,
-    "width": 24,
-    "height": 8
+    "x": 1120,
+    "y": 828,
+    "width": 28,
+    "height": 4
   },
   {
-    "x": 296,
+    "x": 1316,
+    "y": 828,
+    "width": 40,
+    "height": 4
+  },
+  {
+    "x": 256,
     "y": 832,
-    "width": 28,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 324,
+    "y": 832,
+    "width": 16,
     "height": 4
   },
   {
     "x": 360,
     "y": 832,
-    "width": 120,
+    "width": 196,
     "height": 4
   },
   {
-    "x": 920,
+    "x": 848,
     "y": 832,
-    "width": 128,
+    "width": 200,
     "height": 4
   },
   {
-    "x": 1076,
+    "x": 1064,
     "y": 832,
-    "width": 28,
+    "width": 16,
     "height": 4
   },
   {
-    "x": 1332,
+    "x": 1128,
     "y": 832,
-    "width": 28,
+    "width": 20,
     "height": 4
   },
   {
-    "x": 292,
+    "x": 1316,
+    "y": 832,
+    "width": 44,
+    "height": 8
+  },
+  {
+    "x": 44,
     "y": 836,
-    "width": 28,
+    "width": 40,
+    "height": 4
+  },
+  {
+    "x": 252,
+    "y": 836,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 312,
+    "y": 836,
+    "width": 20,
     "height": 4
   },
   {
     "x": 368,
     "y": 836,
-    "width": 124,
+    "width": 204,
     "height": 4
   },
   {
-    "x": 908,
+    "x": 828,
     "y": 836,
-    "width": 136,
+    "width": 216,
     "height": 4
   },
   {
-    "x": 1080,
+    "x": 1072,
     "y": 836,
-    "width": 32,
+    "width": 16,
     "height": 4
   },
   {
-    "x": 1336,
+    "x": 1132,
     "y": 836,
-    "width": 24,
-    "height": 8
+    "width": 16,
+    "height": 4
   },
   {
     "x": 40,
     "y": 840,
-    "width": 28,
+    "width": 44,
     "height": 8
   },
   {
-    "x": 288,
+    "x": 248,
     "y": 840,
-    "width": 24,
+    "width": 16,
+    "height": 8
+  },
+  {
+    "x": 304,
+    "y": 840,
+    "width": 20,
     "height": 4
   },
   {
     "x": 368,
     "y": 840,
-    "width": 136,
+    "width": 228,
     "height": 4
   },
   {
-    "x": 896,
+    "x": 808,
     "y": 840,
-    "width": 144,
+    "width": 232,
     "height": 4
   },
   {
-    "x": 1088,
+    "x": 1080,
     "y": 840,
-    "width": 28,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 1136,
+    "y": 840,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 1320,
+    "y": 840,
+    "width": 40,
     "height": 4
   },
   {
@@ -3616,33 +5800,39 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 12
   },
   {
-    "x": 280,
+    "x": 296,
     "y": 844,
-    "width": 28,
+    "width": 20,
     "height": 4
   },
   {
     "x": 368,
     "y": 844,
-    "width": 152,
+    "width": 256,
     "height": 4
   },
   {
-    "x": 884,
+    "x": 780,
     "y": 844,
-    "width": 156,
+    "width": 260,
     "height": 4
   },
   {
-    "x": 1092,
+    "x": 1088,
     "y": 844,
-    "width": 32,
-    "height": 8
+    "width": 16,
+    "height": 4
   },
   {
-    "x": 1336,
+    "x": 1140,
     "y": 844,
-    "width": 28,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 1320,
+    "y": 844,
+    "width": 44,
     "height": 4
   },
   {
@@ -3654,56 +5844,98 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 36,
     "y": 848,
-    "width": 28,
+    "width": 44,
     "height": 4
   },
   {
-    "x": 276,
+    "x": 248,
     "y": 848,
-    "width": 32,
-    "height": 8
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 288,
+    "y": 848,
+    "width": 20,
+    "height": 4
   },
   {
     "x": 372,
     "y": 848,
-    "width": 164,
+    "width": 296,
     "height": 4
   },
   {
-    "x": 868,
+    "x": 736,
     "y": 848,
-    "width": 168,
+    "width": 120,
     "height": 4
   },
   {
-    "x": 1336,
+    "x": 860,
     "y": 848,
-    "width": 32,
+    "width": 176,
+    "height": 4
+  },
+  {
+    "x": 1092,
+    "y": 848,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 1136,
+    "y": 848,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 1320,
+    "y": 848,
+    "width": 48,
     "height": 8
   },
   {
     "x": 0,
     "y": 852,
-    "width": 64,
+    "width": 80,
     "height": 8
+  },
+  {
+    "x": 252,
+    "y": 852,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 284,
+    "y": 852,
+    "width": 24,
+    "height": 4
   },
   {
     "x": 384,
     "y": 852,
-    "width": 168,
+    "width": 316,
     "height": 4
   },
   {
-    "x": 852,
+    "x": 704,
     "y": 852,
-    "width": 180,
+    "width": 328,
     "height": 4
   },
   {
     "x": 1096,
     "y": 852,
-    "width": 28,
-    "height": 16
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 1132,
+    "y": 852,
+    "width": 20,
+    "height": 4
   },
   {
     "x": 1396,
@@ -3712,28 +5944,46 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 4
   },
   {
+    "x": 252,
+    "y": 856,
+    "width": 20,
+    "height": 4
+  },
+  {
     "x": 276,
     "y": 856,
     "width": 28,
-    "height": 24
+    "height": 4
   },
   {
     "x": 388,
     "y": 856,
-    "width": 180,
+    "width": 304,
     "height": 4
   },
   {
-    "x": 832,
+    "x": 712,
     "y": 856,
-    "width": 196,
+    "width": 316,
     "height": 4
   },
   {
-    "x": 1336,
+    "x": 1096,
     "y": 856,
-    "width": 66,
-    "height": 20
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 1132,
+    "y": 856,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 1320,
+    "y": 856,
+    "width": 82,
+    "height": 8
   },
   {
     "x": 0,
@@ -3744,97 +5994,133 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 28,
     "y": 860,
-    "width": 36,
+    "width": 52,
     "height": 4
+  },
+  {
+    "x": 256,
+    "y": 860,
+    "width": 48,
+    "height": 8
   },
   {
     "x": 396,
     "y": 860,
-    "width": 196,
+    "width": 292,
     "height": 4
   },
   {
-    "x": 812,
+    "x": 712,
     "y": 860,
-    "width": 192,
+    "width": 292,
+    "height": 4
+  },
+  {
+    "x": 1096,
+    "y": 860,
+    "width": 52,
     "height": 4
   },
   {
     "x": 32,
     "y": 864,
-    "width": 32,
+    "width": 48,
     "height": 4
   },
   {
     "x": 404,
     "y": 864,
-    "width": 216,
+    "width": 268,
     "height": 4
   },
   {
-    "x": 784,
+    "x": 728,
     "y": 864,
-    "width": 212,
+    "width": 268,
+    "height": 4
+  },
+  {
+    "x": 1096,
+    "y": 864,
+    "width": 48,
+    "height": 16
+  },
+  {
+    "x": 1324,
+    "y": 864,
+    "width": 78,
     "height": 4
   },
   {
     "x": 32,
     "y": 868,
-    "width": 36,
+    "width": 52,
     "height": 4
+  },
+  {
+    "x": 260,
+    "y": 868,
+    "width": 44,
+    "height": 12
   },
   {
     "x": 408,
     "y": 868,
-    "width": 236,
+    "width": 260,
     "height": 4
   },
   {
-    "x": 768,
+    "x": 736,
     "y": 868,
-    "width": 224,
+    "width": 256,
     "height": 4
   },
   {
-    "x": 1096,
+    "x": 1328,
     "y": 868,
-    "width": 32,
-    "height": 16
+    "width": 74,
+    "height": 4
   },
   {
     "x": 28,
     "y": 872,
-    "width": 40,
+    "width": 56,
     "height": 8
   },
   {
     "x": 416,
     "y": 872,
-    "width": 228,
+    "width": 248,
     "height": 4
   },
   {
-    "x": 768,
+    "x": 740,
     "y": 872,
-    "width": 220,
+    "width": 248,
+    "height": 4
+  },
+  {
+    "x": 1320,
+    "y": 872,
+    "width": 82,
     "height": 4
   },
   {
     "x": 428,
     "y": 876,
-    "width": 216,
+    "width": 244,
     "height": 4
   },
   {
-    "x": 768,
+    "x": 728,
     "y": 876,
-    "width": 212,
+    "width": 252,
     "height": 4
   },
   {
-    "x": 1336,
+    "x": 1320,
     "y": 876,
-    "width": 36,
+    "width": 52,
     "height": 4
   },
   {
@@ -3846,32 +6132,38 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 32,
     "y": 880,
-    "width": 36,
-    "height": 4
+    "width": 56,
+    "height": 12
   },
   {
-    "x": 272,
+    "x": 256,
     "y": 880,
-    "width": 32,
-    "height": 12
+    "width": 48,
+    "height": 8
   },
   {
     "x": 440,
     "y": 880,
-    "width": 204,
+    "width": 232,
     "height": 4
   },
   {
-    "x": 768,
+    "x": 732,
     "y": 880,
-    "width": 200,
-    "height": 8
+    "width": 236,
+    "height": 4
   },
   {
-    "x": 1332,
+    "x": 1096,
     "y": 880,
-    "width": 40,
+    "width": 52,
     "height": 12
+  },
+  {
+    "x": 1316,
+    "y": 880,
+    "width": 56,
+    "height": 8
   },
   {
     "x": 1400,
@@ -3880,123 +6172,165 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 100
   },
   {
-    "x": 32,
-    "y": 884,
-    "width": 40,
-    "height": 12
-  },
-  {
     "x": 448,
     "y": 884,
-    "width": 196,
+    "width": 224,
     "height": 4
   },
   {
-    "x": 1096,
+    "x": 728,
     "y": 884,
-    "width": 36,
-    "height": 12
+    "width": 240,
+    "height": 4
+  },
+  {
+    "x": 252,
+    "y": 888,
+    "width": 52,
+    "height": 8
   },
   {
     "x": 456,
     "y": 888,
-    "width": 188,
+    "width": 216,
     "height": 4
   },
   {
-    "x": 768,
+    "x": 732,
     "y": 888,
-    "width": 184,
+    "width": 220,
     "height": 4
   },
   {
-    "x": 268,
-    "y": 892,
-    "width": 36,
+    "x": 1312,
+    "y": 888,
+    "width": 60,
     "height": 8
+  },
+  {
+    "x": 32,
+    "y": 892,
+    "width": 60,
+    "height": 4
   },
   {
     "x": 460,
     "y": 892,
-    "width": 184,
+    "width": 212,
     "height": 16
   },
   {
-    "x": 768,
+    "x": 732,
     "y": 892,
-    "width": 176,
-    "height": 8
+    "width": 212,
+    "height": 4
   },
   {
-    "x": 1328,
+    "x": 1096,
     "y": 892,
-    "width": 44,
+    "width": 56,
     "height": 4
   },
   {
     "x": 32,
     "y": 896,
-    "width": 44,
+    "width": 64,
+    "height": 4
+  },
+  {
+    "x": 248,
+    "y": 896,
+    "width": 56,
+    "height": 4
+  },
+  {
+    "x": 728,
+    "y": 896,
+    "width": 216,
     "height": 4
   },
   {
     "x": 1096,
     "y": 896,
-    "width": 40,
+    "width": 60,
     "height": 4
   },
   {
-    "x": 1328,
+    "x": 1308,
     "y": 896,
-    "width": 40,
+    "width": 60,
     "height": 4
   },
   {
     "x": 32,
     "y": 900,
-    "width": 48,
-    "height": 8
+    "width": 68,
+    "height": 4
   },
   {
-    "x": 264,
+    "x": 244,
     "y": 900,
-    "width": 40,
-    "height": 8
+    "width": 60,
+    "height": 4
   },
   {
-    "x": 768,
+    "x": 728,
     "y": 900,
-    "width": 144,
+    "width": 184,
     "height": 4
   },
   {
     "x": 1096,
     "y": 900,
-    "width": 44,
-    "height": 8
+    "width": 64,
+    "height": 4
   },
   {
-    "x": 1324,
+    "x": 1304,
     "y": 900,
-    "width": 44,
-    "height": 8
+    "width": 64,
+    "height": 4
   },
   {
-    "x": 768,
+    "x": 32,
     "y": 904,
-    "width": 140,
+    "width": 72,
+    "height": 4
+  },
+  {
+    "x": 240,
+    "y": 904,
+    "width": 64,
+    "height": 4
+  },
+  {
+    "x": 728,
+    "y": 904,
+    "width": 180,
+    "height": 4
+  },
+  {
+    "x": 1096,
+    "y": 904,
+    "width": 68,
+    "height": 4
+  },
+  {
+    "x": 1300,
+    "y": 904,
+    "width": 68,
     "height": 4
   },
   {
     "x": 32,
     "y": 908,
-    "width": 52,
+    "width": 76,
     "height": 4
   },
   {
-    "x": 260,
+    "x": 236,
     "y": 908,
-    "width": 44,
+    "width": 68,
     "height": 4
   },
   {
@@ -4014,37 +6348,37 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 568,
     "y": 908,
-    "width": 76,
+    "width": 104,
     "height": 12
   },
   {
-    "x": 768,
+    "x": 728,
     "y": 908,
-    "width": 124,
+    "width": 164,
     "height": 4
   },
   {
     "x": 1096,
     "y": 908,
-    "width": 48,
+    "width": 72,
     "height": 4
   },
   {
-    "x": 1320,
+    "x": 1296,
     "y": 908,
-    "width": 48,
+    "width": 72,
     "height": 4
   },
   {
     "x": 32,
     "y": 912,
-    "width": 56,
-    "height": 8
+    "width": 80,
+    "height": 4
   },
   {
-    "x": 256,
+    "x": 232,
     "y": 912,
-    "width": 48,
+    "width": 72,
     "height": 4
   },
   {
@@ -4060,9 +6394,9 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 768,
+    "x": 728,
     "y": 912,
-    "width": 64,
+    "width": 104,
     "height": 24
   },
   {
@@ -4074,19 +6408,25 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 1096,
     "y": 912,
-    "width": 52,
+    "width": 76,
     "height": 4
   },
   {
-    "x": 1316,
+    "x": 1292,
     "y": 912,
-    "width": 52,
-    "height": 8
+    "width": 76,
+    "height": 4
   },
   {
-    "x": 252,
+    "x": 32,
     "y": 916,
-    "width": 52,
+    "width": 84,
+    "height": 4
+  },
+  {
+    "x": 224,
+    "y": 916,
+    "width": 80,
     "height": 4
   },
   {
@@ -4104,19 +6444,31 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 1096,
     "y": 916,
-    "width": 56,
+    "width": 80,
+    "height": 4
+  },
+  {
+    "x": 1284,
+    "y": 916,
+    "width": 84,
     "height": 4
   },
   {
     "x": 32,
     "y": 920,
-    "width": 52,
+    "width": 64,
     "height": 4
   },
   {
-    "x": 248,
+    "x": 104,
     "y": 920,
-    "width": 56,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 220,
+    "y": 920,
+    "width": 84,
     "height": 4
   },
   {
@@ -4128,7 +6480,7 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 572,
     "y": 920,
-    "width": 72,
+    "width": 100,
     "height": 16
   },
   {
@@ -4146,25 +6498,37 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 1096,
     "y": 920,
-    "width": 60,
+    "width": 88,
     "height": 4
   },
   {
-    "x": 1320,
+    "x": 1280,
     "y": 920,
-    "width": 48,
+    "width": 20,
     "height": 4
+  },
+  {
+    "x": 1308,
+    "y": 920,
+    "width": 60,
+    "height": 8
   },
   {
     "x": 32,
     "y": 924,
-    "width": 48,
+    "width": 60,
     "height": 4
   },
   {
-    "x": 244,
+    "x": 108,
     "y": 924,
-    "width": 60,
+    "width": 28,
+    "height": 4
+  },
+  {
+    "x": 208,
+    "y": 924,
+    "width": 96,
     "height": 4
   },
   {
@@ -4182,25 +6546,31 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 1100,
     "y": 924,
-    "width": 60,
+    "width": 96,
     "height": 4
   },
   {
-    "x": 1324,
+    "x": 1272,
     "y": 924,
-    "width": 44,
+    "width": 24,
     "height": 4
   },
   {
     "x": 32,
     "y": 928,
-    "width": 44,
+    "width": 56,
     "height": 4
   },
   {
-    "x": 236,
+    "x": 112,
     "y": 928,
-    "width": 68,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 196,
+    "y": 928,
+    "width": 108,
     "height": 4
   },
   {
@@ -4212,25 +6582,31 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 1100,
     "y": 928,
-    "width": 64,
+    "width": 108,
     "height": 4
   },
   {
-    "x": 1328,
+    "x": 1256,
     "y": 928,
-    "width": 40,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 1312,
+    "y": 928,
+    "width": 56,
     "height": 4
   },
   {
     "x": 36,
     "y": 932,
-    "width": 36,
+    "width": 48,
     "height": 4
   },
   {
-    "x": 232,
+    "x": 116,
     "y": 932,
-    "width": 72,
+    "width": 188,
     "height": 4
   },
   {
@@ -4248,25 +6624,31 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 1100,
     "y": 932,
-    "width": 72,
+    "width": 140,
     "height": 4
   },
   {
-    "x": 1328,
+    "x": 1244,
     "y": 932,
-    "width": 36,
+    "width": 44,
+    "height": 4
+  },
+  {
+    "x": 1316,
+    "y": 932,
+    "width": 48,
     "height": 4
   },
   {
     "x": 40,
     "y": 936,
-    "width": 28,
-    "height": 8
+    "width": 44,
+    "height": 4
   },
   {
-    "x": 224,
+    "x": 120,
     "y": 936,
-    "width": 76,
+    "width": 180,
     "height": 4
   },
   {
@@ -4278,13 +6660,13 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 596,
     "y": 936,
-    "width": 48,
+    "width": 76,
     "height": 4
   },
   {
-    "x": 768,
+    "x": 728,
     "y": 936,
-    "width": 60,
+    "width": 100,
     "height": 4
   },
   {
@@ -4296,19 +6678,25 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 1104,
     "y": 936,
-    "width": 76,
+    "width": 180,
     "height": 4
   },
   {
-    "x": 1332,
+    "x": 1320,
     "y": 936,
-    "width": 28,
+    "width": 40,
     "height": 4
   },
   {
-    "x": 212,
+    "x": 40,
     "y": 940,
-    "width": 84,
+    "width": 40,
+    "height": 4
+  },
+  {
+    "x": 124,
+    "y": 940,
+    "width": 172,
     "height": 4
   },
   {
@@ -4320,13 +6708,13 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 616,
     "y": 940,
-    "width": 28,
+    "width": 56,
     "height": 4
   },
   {
-    "x": 768,
+    "x": 728,
     "y": 940,
-    "width": 48,
+    "width": 88,
     "height": 4
   },
   {
@@ -4338,31 +6726,25 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 1108,
     "y": 940,
-    "width": 80,
+    "width": 172,
     "height": 4
   },
   {
-    "x": 1336,
+    "x": 1324,
     "y": 940,
-    "width": 24,
+    "width": 36,
     "height": 4
   },
   {
     "x": 40,
     "y": 944,
-    "width": 24,
+    "width": 36,
     "height": 4
   },
   {
-    "x": 132,
+    "x": 120,
     "y": 944,
-    "width": 8,
-    "height": 4
-  },
-  {
-    "x": 200,
-    "y": 944,
-    "width": 96,
+    "width": 176,
     "height": 4
   },
   {
@@ -4374,13 +6756,13 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 620,
     "y": 944,
-    "width": 24,
+    "width": 52,
     "height": 8
   },
   {
-    "x": 768,
+    "x": 728,
     "y": 944,
-    "width": 32,
+    "width": 72,
     "height": 4
   },
   {
@@ -4392,31 +6774,25 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 1108,
     "y": 944,
-    "width": 92,
+    "width": 176,
     "height": 4
   },
   {
-    "x": 1260,
+    "x": 1328,
     "y": 944,
-    "width": 8,
-    "height": 4
-  },
-  {
-    "x": 1340,
-    "y": 944,
-    "width": 20,
+    "width": 32,
     "height": 4
   },
   {
     "x": 40,
     "y": 948,
-    "width": 20,
+    "width": 32,
     "height": 4
   },
   {
-    "x": 132,
+    "x": 116,
     "y": 948,
-    "width": 164,
+    "width": 180,
     "height": 4
   },
   {
@@ -4426,9 +6802,9 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 768,
+    "x": 728,
     "y": 948,
-    "width": 4,
+    "width": 44,
     "height": 4
   },
   {
@@ -4440,25 +6816,25 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 1116,
     "y": 948,
-    "width": 156,
+    "width": 168,
     "height": 4
   },
   {
-    "x": 1344,
+    "x": 1332,
     "y": 948,
-    "width": 16,
+    "width": 28,
     "height": 4
   },
   {
     "x": 40,
     "y": 952,
-    "width": 16,
+    "width": 28,
     "height": 4
   },
   {
-    "x": 128,
+    "x": 112,
     "y": 952,
-    "width": 164,
+    "width": 180,
     "height": 4
   },
   {
@@ -4470,7 +6846,13 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 628,
     "y": 952,
-    "width": 16,
+    "width": 44,
+    "height": 4
+  },
+  {
+    "x": 728,
+    "y": 952,
+    "width": 40,
     "height": 4
   },
   {
@@ -4482,25 +6864,25 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 1116,
     "y": 952,
-    "width": 160,
+    "width": 172,
     "height": 4
   },
   {
-    "x": 1348,
+    "x": 1336,
     "y": 952,
-    "width": 12,
+    "width": 24,
     "height": 4
   },
   {
     "x": 44,
     "y": 956,
-    "width": 8,
+    "width": 20,
     "height": 4
   },
   {
-    "x": 124,
+    "x": 112,
     "y": 956,
-    "width": 160,
+    "width": 172,
     "height": 4
   },
   {
@@ -4512,8 +6894,14 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 640,
     "y": 956,
-    "width": 4,
+    "width": 32,
     "height": 4
+  },
+  {
+    "x": 728,
+    "y": 956,
+    "width": 36,
+    "height": 40
   },
   {
     "x": 876,
@@ -4524,31 +6912,37 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 1120,
     "y": 956,
-    "width": 160,
+    "width": 172,
     "height": 4
   },
   {
-    "x": 1352,
+    "x": 1340,
     "y": 956,
-    "width": 8,
+    "width": 20,
     "height": 4
   },
   {
     "x": 44,
     "y": 960,
-    "width": 4,
+    "width": 16,
     "height": 4
   },
   {
-    "x": 120,
+    "x": 108,
     "y": 960,
-    "width": 160,
+    "width": 172,
     "height": 4
   },
   {
     "x": 372,
     "y": 960,
     "width": 160,
+    "height": 4
+  },
+  {
+    "x": 644,
+    "y": 960,
+    "width": 28,
     "height": 4
   },
   {
@@ -4560,13 +6954,25 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 1120,
     "y": 960,
-    "width": 164,
+    "width": 176,
     "height": 4
   },
   {
-    "x": 116,
+    "x": 1344,
+    "y": 960,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 44,
     "y": 964,
-    "width": 164,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 104,
+    "y": 964,
+    "width": 176,
     "height": 4
   },
   {
@@ -4574,6 +6980,12 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "y": 964,
     "width": 168,
     "height": 4
+  },
+  {
+    "x": 648,
+    "y": 964,
+    "width": 24,
+    "height": 52
   },
   {
     "x": 868,
@@ -4590,14 +7002,26 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 1176,
     "y": 964,
-    "width": 108,
+    "width": 124,
     "height": 4
   },
   {
-    "x": 112,
+    "x": 1344,
+    "y": 964,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 40,
     "y": 968,
-    "width": 112,
-    "height": 8
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 100,
+    "y": 968,
+    "width": 124,
+    "height": 4
   },
   {
     "x": 252,
@@ -4626,7 +7050,25 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 1176,
     "y": 968,
-    "width": 112,
+    "width": 128,
+    "height": 4
+  },
+  {
+    "x": 1348,
+    "y": 968,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 36,
+    "y": 972,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 96,
+    "y": 972,
+    "width": 128,
     "height": 4
   },
   {
@@ -4650,13 +7092,25 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 1176,
     "y": 972,
-    "width": 116,
+    "width": 132,
     "height": 4
   },
   {
-    "x": 108,
+    "x": 1352,
+    "y": 972,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 32,
     "y": 976,
-    "width": 112,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 92,
+    "y": 976,
+    "width": 128,
     "height": 4
   },
   {
@@ -4680,13 +7134,25 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 1180,
     "y": 976,
-    "width": 116,
+    "width": 132,
     "height": 4
   },
   {
-    "x": 104,
+    "x": 1356,
+    "y": 976,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 32,
     "y": 980,
-    "width": 116,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 88,
+    "y": 980,
+    "width": 132,
     "height": 4
   },
   {
@@ -4698,7 +7164,13 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 1180,
     "y": 980,
-    "width": 120,
+    "width": 136,
+    "height": 4
+  },
+  {
+    "x": 1360,
+    "y": 980,
+    "width": 12,
     "height": 4
   },
   {
@@ -4714,15 +7186,27 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 100,
+    "x": 28,
     "y": 984,
-    "width": 120,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 84,
+    "y": 984,
+    "width": 136,
     "height": 4
   },
   {
     "x": 1180,
     "y": 984,
-    "width": 124,
+    "width": 140,
+    "height": 8
+  },
+  {
+    "x": 1364,
+    "y": 984,
+    "width": 12,
     "height": 4
   },
   {
@@ -4732,9 +7216,15 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 96,
+    "x": 24,
     "y": 988,
-    "width": 124,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 80,
+    "y": 988,
+    "width": 140,
     "height": 4
   },
   {
@@ -4744,9 +7234,9 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 1180,
+    "x": 1368,
     "y": 988,
-    "width": 128,
+    "width": 12,
     "height": 4
   },
   {
@@ -4758,13 +7248,13 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 0,
     "y": 992,
-    "width": 20,
+    "width": 32,
     "height": 4
   },
   {
-    "x": 92,
+    "x": 76,
     "y": 992,
-    "width": 8,
+    "width": 24,
     "height": 4
   },
   {
@@ -4788,25 +7278,31 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 1304,
     "y": 992,
-    "width": 8,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 1372,
+    "y": 992,
+    "width": 12,
     "height": 4
   },
   {
     "x": 1388,
     "y": 992,
     "width": 14,
-    "height": 8
+    "height": 4
   },
   {
     "x": 0,
     "y": 996,
-    "width": 16,
+    "width": 28,
     "height": 4
   },
   {
-    "x": 88,
+    "x": 76,
     "y": 996,
-    "width": 8,
+    "width": 20,
     "height": 4
   },
   {
@@ -4814,6 +7310,12 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "y": 996,
     "width": 92,
     "height": 12
+  },
+  {
+    "x": 728,
+    "y": 996,
+    "width": 32,
+    "height": 8
   },
   {
     "x": 1180,
@@ -4824,19 +7326,25 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 1304,
     "y": 996,
-    "width": 12,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 1376,
+    "y": 996,
+    "width": 26,
     "height": 4
   },
   {
     "x": 0,
     "y": 1000,
-    "width": 12,
+    "width": 24,
     "height": 4
   },
   {
-    "x": 84,
+    "x": 72,
     "y": 1000,
-    "width": 12,
+    "width": 24,
     "height": 4
   },
   {
@@ -4848,25 +7356,25 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 1304,
     "y": 1000,
-    "width": 16,
+    "width": 28,
     "height": 4
   },
   {
-    "x": 1392,
+    "x": 1380,
     "y": 1000,
-    "width": 10,
-    "height": 4
+    "width": 22,
+    "height": 8
   },
   {
     "x": 0,
     "y": 1004,
-    "width": 8,
+    "width": 20,
     "height": 4
   },
   {
-    "x": 80,
+    "x": 68,
     "y": 1004,
-    "width": 16,
+    "width": 28,
     "height": 4
   },
   {
@@ -4874,6 +7382,12 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "y": 1004,
     "width": 176,
     "height": 4
+  },
+  {
+    "x": 728,
+    "y": 1004,
+    "width": 36,
+    "height": 76
   },
   {
     "x": 864,
@@ -4884,25 +7398,19 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 1308,
     "y": 1004,
-    "width": 12,
-    "height": 4
-  },
-  {
-    "x": 1396,
-    "y": 1004,
-    "width": 6,
+    "width": 28,
     "height": 4
   },
   {
     "x": 0,
     "y": 1008,
-    "width": 4,
+    "width": 16,
     "height": 4
   },
   {
-    "x": 76,
+    "x": 64,
     "y": 1008,
-    "width": 16,
+    "width": 28,
     "height": 4
   },
   {
@@ -4932,13 +7440,25 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 1312,
     "y": 1008,
-    "width": 12,
+    "width": 28,
     "height": 4
   },
   {
-    "x": 1400,
+    "x": 1384,
     "y": 1008,
-    "width": 2,
+    "width": 18,
+    "height": 4
+  },
+  {
+    "x": 0,
+    "y": 1012,
+    "width": 12,
+    "height": 8
+  },
+  {
+    "x": 60,
+    "y": 1012,
+    "width": 16,
     "height": 4
   },
   {
@@ -4966,9 +7486,21 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 72,
+    "x": 1328,
+    "y": 1012,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 1388,
+    "y": 1012,
+    "width": 14,
+    "height": 4
+  },
+  {
+    "x": 56,
     "y": 1016,
-    "width": 4,
+    "width": 20,
     "height": 4
   },
   {
@@ -4990,6 +7522,12 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 4
   },
   {
+    "x": 644,
+    "y": 1016,
+    "width": 28,
+    "height": 12
+  },
+  {
     "x": 868,
     "y": 1016,
     "width": 164,
@@ -5004,7 +7542,25 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 1328,
     "y": 1016,
-    "width": 4,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 1392,
+    "y": 1016,
+    "width": 10,
+    "height": 4
+  },
+  {
+    "x": 0,
+    "y": 1020,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 52,
+    "y": 1020,
+    "width": 16,
     "height": 4
   },
   {
@@ -5032,6 +7588,30 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 4
   },
   {
+    "x": 1336,
+    "y": 1020,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 1396,
+    "y": 1020,
+    "width": 6,
+    "height": 4
+  },
+  {
+    "x": 0,
+    "y": 1024,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 48,
+    "y": 1024,
+    "width": 16,
+    "height": 4
+  },
+  {
     "x": 368,
     "y": 1024,
     "width": 156,
@@ -5044,10 +7624,46 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 8
   },
   {
+    "x": 1340,
+    "y": 1024,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 1400,
+    "y": 1024,
+    "width": 2,
+    "height": 4
+  },
+  {
+    "x": 44,
+    "y": 1028,
+    "width": 16,
+    "height": 4
+  },
+  {
     "x": 640,
     "y": 1028,
-    "width": 4,
+    "width": 32,
     "height": 8
+  },
+  {
+    "x": 1344,
+    "y": 1028,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 0,
+    "y": 1032,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 40,
+    "y": 1032,
+    "width": 16,
+    "height": 4
   },
   {
     "x": 368,
@@ -5074,9 +7690,27 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 4
   },
   {
+    "x": 1348,
+    "y": 1032,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 1400,
+    "y": 1032,
+    "width": 2,
+    "height": 4
+  },
+  {
     "x": 0,
     "y": 1036,
-    "width": 4,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 40,
+    "y": 1036,
+    "width": 12,
     "height": 4
   },
   {
@@ -5088,7 +7722,7 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 636,
     "y": 1036,
-    "width": 8,
+    "width": 36,
     "height": 4
   },
   {
@@ -5098,15 +7732,27 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 1400,
+    "x": 1352,
     "y": 1036,
-    "width": 2,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 1396,
+    "y": 1036,
+    "width": 6,
     "height": 4
   },
   {
     "x": 0,
     "y": 1040,
-    "width": 8,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 36,
+    "y": 1040,
+    "width": 12,
     "height": 4
   },
   {
@@ -5118,7 +7764,7 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 632,
     "y": 1040,
-    "width": 12,
+    "width": 40,
     "height": 36
   },
   {
@@ -5128,13 +7774,25 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 1396,
+    "x": 1356,
     "y": 1040,
-    "width": 6,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 1392,
+    "y": 1040,
+    "width": 10,
     "height": 4
   },
   {
     "x": 0,
+    "y": 1044,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 32,
     "y": 1044,
     "width": 12,
     "height": 4
@@ -5152,22 +7810,28 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 1392,
+    "x": 1356,
     "y": 1044,
-    "width": 10,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 1388,
+    "y": 1044,
+    "width": 14,
     "height": 4
   },
   {
     "x": 0,
     "y": 1048,
-    "width": 16,
+    "width": 20,
     "height": 4
   },
   {
-    "x": 40,
+    "x": 28,
     "y": 1048,
-    "width": 4,
-    "height": 8
+    "width": 16,
+    "height": 4
   },
   {
     "x": 888,
@@ -5178,20 +7842,20 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 1356,
     "y": 1048,
-    "width": 4,
+    "width": 20,
     "height": 4
   },
   {
-    "x": 1388,
+    "x": 1384,
     "y": 1048,
-    "width": 14,
+    "width": 18,
     "height": 4
   },
   {
     "x": 0,
     "y": 1052,
-    "width": 20,
-    "height": 4
+    "width": 44,
+    "height": 8
   },
   {
     "x": 416,
@@ -5208,38 +7872,8 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 1356,
     "y": 1052,
-    "width": 8,
-    "height": 4
-  },
-  {
-    "x": 1384,
-    "y": 1052,
-    "width": 18,
-    "height": 4
-  },
-  {
-    "x": 0,
-    "y": 1056,
-    "width": 24,
-    "height": 4
-  },
-  {
-    "x": 36,
-    "y": 1056,
-    "width": 8,
-    "height": 4
-  },
-  {
-    "x": 1356,
-    "y": 1056,
-    "width": 12,
-    "height": 4
-  },
-  {
-    "x": 1376,
-    "y": 1056,
-    "width": 26,
-    "height": 4
+    "width": 46,
+    "height": 12
   },
   {
     "x": 0,
@@ -5257,12 +7891,6 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
     "x": 904,
     "y": 1060,
     "width": 84,
-    "height": 4
-  },
-  {
-    "x": 1356,
-    "y": 1060,
-    "width": 46,
     "height": 4
   },
   {
@@ -5322,13 +7950,19 @@ export const GENERATED_ARENA_CLIFF_COLLIDERS = [
   {
     "x": 636,
     "y": 1076,
-    "width": 8,
-    "height": 8
+    "width": 36,
+    "height": 4
   },
   {
     "x": 932,
     "y": 1076,
     "width": 40,
+    "height": 4
+  },
+  {
+    "x": 636,
+    "y": 1080,
+    "width": 128,
     "height": 4
   },
   {

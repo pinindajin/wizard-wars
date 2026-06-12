@@ -14,7 +14,7 @@ import { PLAYER_RADIUS_PX } from "../../../shared/balance-config"
 import { terrainStateAtPosition } from "../../../shared/collision/terrainHazards"
 
 describe("playerCollisionSystem", () => {
-  it("keeps grounded lava players from being shoved onto land", () => {
+  it("keeps grounded lava players from being shoved off lava", () => {
     const world = createWorld()
     const pusher = addEntity(world)
     const lavaPlayer = addEntity(world)
@@ -36,7 +36,7 @@ describe("playerCollisionSystem", () => {
     TerrainState.kind[lavaPlayer] = TERRAIN_KIND.lava
 
     expect(terrainStateAtPosition(Position.x[lavaPlayer], Position.y[lavaPlayer])).toBe("lava")
-    expect(terrainStateAtPosition(Position.x[lavaPlayer], 65)).toBe("land")
+    expect(terrainStateAtPosition(Position.x[lavaPlayer], 61)).toBe("cliff")
 
     playerCollisionSystem({ world } as SimCtx)
 

@@ -108,7 +108,7 @@ describe("indexedWorldCollision", () => {
   })
 
   it("falls back to full resolution when local indexed passes cannot clear a deep overlap", () => {
-    const start = { x: 26.7907, y: 601.9871 }
+    const start = { x: 1150, y: 90 }
     const indexed = resolveAgainstWorldIndexed(
       start.x,
       start.y,

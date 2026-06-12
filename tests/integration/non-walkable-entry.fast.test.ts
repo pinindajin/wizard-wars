@@ -53,21 +53,25 @@ function queue(payload: PlayerInputPayload): Map<string, PlayerInputPayload[]> {
 function sampleUpperBlocker(): { x: number; y: number; minY: number } {
   const bounds = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
   const topClearance = PLAYER_WORLD_COLLISION_RADIUS_Y_PX - PLAYER_WORLD_COLLISION_OFFSET_Y_PX
-  for (const rect of ARENA_NON_WALKABLE_COLLIDERS) {
-    if (rect.y >= 320 || rect.width < 32) continue
-    const x = rect.x + rect.width / 2
-    const y = rect.y + rect.height + topClearance + 3
-    if (
-      canOccupyWorldPosition(
+  const blocker = ARENA_NON_WALKABLE_COLLIDERS
+    .filter((rect) => {
+      if (rect.y >= 420) return false
+      const x = rect.x + rect.width / 2
+      const y = rect.y + rect.height + topClearance + 3
+      return canOccupyWorldPosition(
         x,
         y,
         PLAYER_WORLD_COLLISION_FOOTPRINT,
         bounds,
         ARENA_WORLD_COLLIDERS,
       )
-    ) {
-      return { x, y, minY: rect.y + rect.height + topClearance }
-    }
+    })
+    .sort((a, b) => b.width * b.height - a.width * a.height)[0]
+  if (blocker) {
+    const rect = blocker
+    const x = rect.x + rect.width / 2
+    const y = rect.y + rect.height + topClearance + 3
+    return { x, y, minY: rect.y + rect.height + topClearance }
   }
   throw new Error("expected upper native non-walkable blocker with legal start")
 }
