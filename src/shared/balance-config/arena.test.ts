@@ -17,12 +17,14 @@ import {
 } from "@/shared/balance-config/arena"
 import {
   PLAYER_WORLD_COLLISION_OFFSET_Y_PX,
+  PLAYER_WORLD_COLLISION_FOOTPRINT,
   PLAYER_WORLD_COLLISION_RADIUS_X_PX,
   PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
 } from "@/shared/balance-config/combat"
 import {
   ARENA_LAYOUT_IMPORTED_TILE_FIRST_GID,
 } from "@/shared/balance-config/arena-layout"
+import { canOccupyWorldPosition } from "@/shared/collision/worldCollision"
 
 /**
  * Tests whether a player spawn oval overlaps a generated collider rectangle.
@@ -43,6 +45,84 @@ function spawnOverlapsCollider(
   const dx = (x - nearestX) / PLAYER_WORLD_COLLISION_RADIUS_X_PX
   const dy = (ellipseCenterY - nearestY) / PLAYER_WORLD_COLLISION_RADIUS_Y_PX
   return dx * dx + dy * dy < 1
+}
+
+function pointOverlapsCollider(
+  x: number,
+  y: number,
+  rect: { x: number; y: number; width: number; height: number },
+): boolean {
+  return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height
+}
+
+function hasFootprintReachablePath(
+  start: { x: number; y: number },
+  target: { x: number; y: number },
+  bounds: { minX: number; maxX: number; minY: number; maxY: number },
+  step: number,
+): boolean {
+  const cols = Math.floor((bounds.maxX - bounds.minX) / step) + 1
+  const rows = Math.floor((bounds.maxY - bounds.minY) / step) + 1
+  const legal = new Uint8Array(cols * rows)
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const x = bounds.minX + col * step
+      const y = bounds.minY + row * step
+      legal[row * cols + col] = canOccupyWorldPosition(
+        x,
+        y,
+        PLAYER_WORLD_COLLISION_FOOTPRINT,
+        { width: ARENA_WIDTH, height: ARENA_HEIGHT },
+        ARENA_WORLD_COLLIDERS,
+      )
+        ? 1
+        : 0
+    }
+  }
+
+  const nearestLegal = (point: { x: number; y: number }) => {
+    let best: { col: number; row: number; distSq: number } | null = null
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        if (!legal[row * cols + col]) continue
+        const x = bounds.minX + col * step
+        const y = bounds.minY + row * step
+        const distSq = (x - point.x) ** 2 + (y - point.y) ** 2
+        if (!best || distSq < best.distSq) best = { col, row, distSq }
+      }
+    }
+    return best
+  }
+
+  const first = nearestLegal(start)
+  const last = nearestLegal(target)
+  expect(first, "start has nearby legal footprint center").not.toBeNull()
+  expect(last, "target has nearby legal footprint center").not.toBeNull()
+  if (!first || !last) return false
+
+  const seen = new Uint8Array(cols * rows)
+  const queue: { col: number; row: number }[] = [first]
+  seen[first.row * cols + first.col] = 1
+  for (let head = 0; head < queue.length; head++) {
+    const current = queue[head]!
+    if (current.col === last.col && current.row === last.row) return true
+    for (const [dc, dr] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ] as const) {
+      const col = current.col + dc
+      const row = current.row + dr
+      if (col < 0 || col >= cols || row < 0 || row >= rows) continue
+      const index = row * cols + col
+      if (seen[index] || !legal[index]) continue
+      seen[index] = 1
+      queue.push({ col, row })
+    }
+  }
+
+  return false
 }
 
 describe("arena constants", () => {
@@ -102,6 +182,31 @@ describe("arena constants", () => {
 
   it("starts imported terrain after the 16 original terrain GIDs", () => {
     expect(ARENA_LAYOUT_IMPORTED_TILE_FIRST_GID).toBe(17)
+  })
+
+  it("keeps the top-left platform connected through its diagonal bridge", () => {
+    const samples = [
+      { label: "platform", x: 164, y: 154 },
+      { label: "platform seam", x: 218, y: 206 },
+      { label: "bridge upper", x: 248, y: 220 },
+      { label: "bridge middle", x: 320, y: 280 },
+      { label: "bridge lower", x: 392, y: 350 },
+      { label: "main arena join", x: 430, y: 365 },
+    ]
+    for (const sample of samples) {
+      const blockingCollider = ARENA_NON_WALKABLE_COLLIDERS.find((rect) =>
+        pointOverlapsCollider(sample.x, sample.y, rect),
+      )
+      expect(blockingCollider, sample.label).toBeUndefined()
+    }
+    expect(
+      hasFootprintReachablePath(
+        { x: 164, y: 154 },
+        { x: 430, y: 365 },
+        { minX: 40, maxX: 520, minY: 50, maxY: 430 },
+        4,
+      ),
+    ).toBe(true)
   })
 })
 

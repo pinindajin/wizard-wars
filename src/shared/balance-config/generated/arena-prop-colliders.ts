@@ -4,40 +4,52 @@
  */
 export const GENERATED_ARENA_PROP_COLLIDERS = [
   {
-    "x": 122,
-    "y": 130,
-    "width": 21,
-    "height": 16
+    "x": 121,
+    "y": 74,
+    "width": 23,
+    "height": 12
   },
   {
-    "x": 215,
-    "y": 133,
-    "width": 21,
-    "height": 16
+    "x": 213,
+    "y": 84,
+    "width": 23,
+    "height": 12
   },
   {
-    "x": 62,
-    "y": 105,
-    "width": 20,
-    "height": 16
+    "x": 59,
+    "y": 122,
+    "width": 22,
+    "height": 12
   },
   {
-    "x": 1054,
-    "y": 130,
-    "width": 21,
-    "height": 16
+    "x": 258,
+    "y": 186,
+    "width": 23,
+    "height": 12
   },
   {
-    "x": 1185,
-    "y": 133,
-    "width": 21,
-    "height": 16
+    "x": 156,
+    "y": 234,
+    "width": 23,
+    "height": 12
   },
   {
-    "x": 1317,
-    "y": 105,
-    "width": 20,
-    "height": 16
+    "x": 1053,
+    "y": 134,
+    "width": 23,
+    "height": 12
+  },
+  {
+    "x": 1184,
+    "y": 137,
+    "width": 23,
+    "height": 12
+  },
+  {
+    "x": 1316,
+    "y": 109,
+    "width": 22,
+    "height": 12
   },
   {
     "x": 1312,
@@ -46,16 +58,16 @@ export const GENERATED_ARENA_PROP_COLLIDERS = [
     "height": 24
   },
   {
-    "x": 1296,
-    "y": 411,
-    "width": 21,
-    "height": 16
+    "x": 1295,
+    "y": 415,
+    "width": 23,
+    "height": 12
   },
   {
-    "x": 27,
-    "y": 411,
-    "width": 21,
-    "height": 16
+    "x": 26,
+    "y": 415,
+    "width": 23,
+    "height": 12
   },
   {
     "x": 87,
@@ -124,52 +136,52 @@ export const GENERATED_ARENA_PROP_COLLIDERS = [
     "height": 40
   },
   {
-    "x": 511,
-    "y": 572,
-    "width": 21,
-    "height": 16
+    "x": 510,
+    "y": 576,
+    "width": 23,
+    "height": 12
   },
   {
-    "x": 894,
-    "y": 572,
-    "width": 21,
-    "height": 16
+    "x": 893,
+    "y": 576,
+    "width": 23,
+    "height": 12
   },
   {
-    "x": 936,
-    "y": 407,
-    "width": 21,
-    "height": 16
+    "x": 935,
+    "y": 411,
+    "width": 23,
+    "height": 12
   },
   {
-    "x": 454,
-    "y": 407,
-    "width": 21,
-    "height": 16
+    "x": 453,
+    "y": 411,
+    "width": 23,
+    "height": 12
   },
   {
-    "x": 640,
-    "y": 193,
-    "width": 21,
-    "height": 16
+    "x": 639,
+    "y": 197,
+    "width": 23,
+    "height": 12
   },
   {
-    "x": 767,
-    "y": 193,
-    "width": 21,
-    "height": 16
+    "x": 766,
+    "y": 197,
+    "width": 23,
+    "height": 12
   },
   {
-    "x": 640,
-    "y": 858,
-    "width": 21,
-    "height": 16
+    "x": 639,
+    "y": 862,
+    "width": 23,
+    "height": 12
   },
   {
-    "x": 775,
-    "y": 858,
-    "width": 21,
-    "height": 16
+    "x": 774,
+    "y": 862,
+    "width": 23,
+    "height": 12
   },
   {
     "x": 508,
@@ -208,28 +220,28 @@ export const GENERATED_ARENA_PROP_COLLIDERS = [
     "height": 13
   },
   {
-    "x": 382,
-    "y": 848,
-    "width": 21,
-    "height": 16
+    "x": 381,
+    "y": 852,
+    "width": 23,
+    "height": 12
   },
   {
-    "x": 1007,
-    "y": 848,
-    "width": 21,
-    "height": 16
+    "x": 1006,
+    "y": 852,
+    "width": 23,
+    "height": 12
   },
   {
-    "x": 1286,
-    "y": 907,
-    "width": 21,
-    "height": 16
+    "x": 1285,
+    "y": 911,
+    "width": 23,
+    "height": 12
   },
   {
-    "x": 96,
-    "y": 907,
-    "width": 21,
-    "height": 16
+    "x": 95,
+    "y": 911,
+    "width": 23,
+    "height": 12
   },
   {
     "x": 145,

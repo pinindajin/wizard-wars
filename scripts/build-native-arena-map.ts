@@ -64,6 +64,8 @@ const DETAIL_CROPS = [
   { label: "Right side neck", x: 1182, y: 330, width: 220, height: 270 },
 ] as const
 
+const TOP_LEFT_CORNER_CROP = { x: 0, y: 0, width: 470, height: 390 } as const
+
 const REGION_NONE: RegionClass = 0
 const REGION_WALKABLE: RegionClass = 1
 const REGION_LAVA: RegionClass = 2
@@ -90,9 +92,11 @@ const PROP_IDS = [
 ] as const
 
 const PLACEMENTS: readonly Placement[] = [
-  { propId: "brazier-tower", x: 132, y: 146, scale: 0.24 },
-  { propId: "brazier-tower", x: 225, y: 149, scale: 0.24 },
-  { propId: "brazier-tower", x: 72, y: 121, scale: 0.23 },
+  { propId: "brazier-tower", x: 132, y: 86, scale: 0.24 },
+  { propId: "brazier-tower", x: 224, y: 96, scale: 0.24 },
+  { propId: "brazier-tower", x: 70, y: 134, scale: 0.23 },
+  { propId: "brazier-tower", x: 269, y: 198, scale: 0.24 },
+  { propId: "brazier-tower", x: 167, y: 246, scale: 0.24 },
   { propId: "brazier-tower", x: 1064, y: 146, scale: 0.24 },
   { propId: "brazier-tower", x: 1195, y: 149, scale: 0.24 },
   { propId: "brazier-tower", x: 1327, y: 121, scale: 0.23 },
@@ -136,10 +140,27 @@ const PLACEMENTS: readonly Placement[] = [
   { propId: "lava-spire-cluster", x: 1240, y: 1008, scale: 0.28, flipX: true },
 ]
 
+type PropColliderSpec = {
+  readonly widthRatio: number
+  readonly heightRatio: number
+  readonly offsetXRatio?: number
+  readonly bottomOffsetRatio?: number
+}
+
+const DEFAULT_PROP_COLLIDER_SPEC: PropColliderSpec = {
+  widthRatio: 0.72,
+  heightRatio: 0.3,
+}
+
+const PROP_COLLIDER_SPECS: Record<string, PropColliderSpec> = {
+  "brazier-tower": { widthRatio: 0.8, heightRatio: 0.22 },
+}
+
 let WALKABLE_MASK = createMask()
 let LAVA_MASK = createMask()
 let CLIFF_MASK = createMask()
 let WALKABLE_RECTS: readonly Rect[] = []
+let NON_WALKABLE_RECTS: readonly Rect[] = []
 let LAVA_RECTS: readonly Rect[] = []
 let CLIFF_RECTS: readonly Rect[] = []
 
@@ -581,16 +602,191 @@ function rectsFromClassifiedGrid(grid: ClassifiedGrid, klass: RegionClass): Rect
   return merged.sort((a, b) => a.y - b.y || a.x - b.x || a.width - b.width || a.height - b.height)
 }
 
+function rectsFromMask(mask: Mask, cellSize: number): Rect[] {
+  const empty = createMask()
+  const classified = classifiedGridFromMasks(
+    { walkable: empty, lava: mask, cliff: empty },
+    cellSize,
+  )
+  return rectsFromClassifiedGrid(classified, REGION_LAVA)
+}
+
+function cloneMask(mask: Mask): Mask {
+  return { data: mask.data.slice(), width: mask.width, height: mask.height }
+}
+
+function isBasePixelLavaLike(base: RawImage, x: number, y: number): boolean {
+  const p = (y * base.width + x) * 4
+  const r = base.data[p]!
+  const g = base.data[p + 1]!
+  const b = base.data[p + 2]!
+  return isLavaSeed(r, g, b) || (r >= 95 && g >= 18 && b <= 88 && r - g >= 24 && g - b >= 4)
+}
+
+function satellitePlatformTopMask(centerX: number): Mask {
+  const mask = createMask()
+  const mirror = centerX < ARENA_WIDTH / 2 ? 1 : -1
+  const points = [
+    { dx: -96, y: 392 },
+    { dx: -70, y: 371 },
+    { dx: -35, y: 359 },
+    { dx: 0, y: 356 },
+    { dx: 34, y: 361 },
+    { dx: 56, y: 376 },
+    { dx: 63, y: 396 },
+    { dx: 52, y: 418 },
+    { dx: 20, y: 426 },
+    { dx: -65, y: 426 },
+    { dx: -96, y: 410 },
+  ].map(({ dx, y }) => ({ x: centerX + mirror * dx, y }))
+  fillPolygon(mask, points)
+  return mask
+}
+
+function refineSideSatellitePlatformMasks(
+  masks: { walkable: Mask; lava: Mask; cliff: Mask },
+  base: RawImage,
+  centerX: number,
+): void {
+  const x0 = Math.max(0, Math.floor(centerX - 120))
+  const x1 = Math.min(ARENA_WIDTH - 1, Math.ceil(centerX + 120))
+  const y0 = 320
+  const y1 = 484
+  const platformTop = satellitePlatformTopMask(centerX)
+
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      const i = maskIndex(x, y)
+      const wasWalkable = masks.walkable.data[i] === 1
+      if (platformTop.data[i]) {
+        masks.walkable.data[i] = 1
+        masks.lava.data[i] = 0
+        masks.cliff.data[i] = 0
+        continue
+      }
+
+      if (!wasWalkable) continue
+
+      masks.walkable.data[i] = 0
+      if (isBasePixelLavaLike(base, x, y)) {
+        masks.lava.data[i] = 1
+        masks.cliff.data[i] = 0
+      } else {
+        masks.lava.data[i] = 0
+        masks.cliff.data[i] = 1
+      }
+    }
+  }
+}
+
+function applyComputerVisionGuidedMaskRefinements(
+  masks: { walkable: Mask; lava: Mask; cliff: Mask },
+  base: RawImage,
+): void {
+  // The side satellite platforms cannot be represented by a full ellipse: the
+  // visible front wall is a cliff face. This CV-calibrated mask keeps only the
+  // detected top stone deck and returns the remaining crop pixels to lava/cliff.
+  refineSideSatellitePlatformMasks(masks, base, 103)
+  refineSideSatellitePlatformMasks(masks, base, 1299)
+}
+
+function paintWalkablePolygon(
+  masks: { walkable: Mask; lava: Mask; cliff: Mask },
+  points: readonly { x: number; y: number }[],
+): void {
+  const patch = createMask()
+  fillPolygon(patch, points)
+  for (let i = 0; i < patch.data.length; i++) {
+    if (!patch.data[i]) continue
+    masks.walkable.data[i] = 1
+    masks.lava.data[i] = 0
+    masks.cliff.data[i] = 0
+  }
+}
+
+function applyCardinalConnectorUnions(masks: { walkable: Mask; lava: Mask; cliff: Mask }): void {
+  for (const points of [
+    [
+      { x: 646, y: 248 },
+      { x: 756, y: 248 },
+      { x: 756, y: 274 },
+      { x: 646, y: 274 },
+    ],
+    [
+      { x: 626, y: 768 },
+      { x: 786, y: 768 },
+      { x: 786, y: 842 },
+      { x: 626, y: 842 },
+    ],
+    [
+      { x: 340, y: 528 },
+      { x: 446, y: 528 },
+      { x: 446, y: 606 },
+      { x: 340, y: 606 },
+    ],
+    [
+      { x: 956, y: 528 },
+      { x: 1062, y: 528 },
+      { x: 1062, y: 606 },
+      { x: 956, y: 606 },
+    ],
+  ] as const) {
+    paintWalkablePolygon(masks, points)
+  }
+}
+
+function applyTopLeftFootprintClearance(mask: Mask): void {
+  // Runtime collision uses a 40x18 oval footprint against AABB rectangles. The
+  // visual bridge deck is narrower than the legal center path, so this grants
+  // hidden clearance while visual `WalkableAreas` remains art-aligned.
+  fillRotatedRect(mask, 323, 286, 214, 48, 43)
+  fillPolygon(mask, [
+    { x: 207, y: 198 },
+    { x: 268, y: 194 },
+    { x: 292, y: 221 },
+    { x: 267, y: 249 },
+    { x: 211, y: 229 },
+  ])
+  fillPolygon(mask, [
+    { x: 374, y: 334 },
+    { x: 416, y: 337 },
+    { x: 434, y: 361 },
+    { x: 399, y: 389 },
+    { x: 374, y: 363 },
+  ])
+}
+
 async function buildArenaGeometry(): Promise<void> {
   const walkable = await loadMaskImage("walkable-mask.png")
   const lava = await loadMaskImage("lava-mask.png")
   const cliff = await loadMaskImage("cliff-mask.png")
+  const base = await loadRaw(SOURCE_BASE)
+  applyComputerVisionGuidedMaskRefinements({ walkable, lava, cliff }, base)
+  applyCardinalConnectorUnions({ walkable, lava, cliff })
   assertExclusiveMasks({ walkable, lava, cliff })
-  const classified = classifiedGridFromMasks({ walkable, lava, cliff }, REGION_CELL_PX)
+  const visualClassified = classifiedGridFromMasks({ walkable, lava, cliff }, REGION_CELL_PX)
+  const movementWalkable = cloneMask(walkable)
+  applyTopLeftFootprintClearance(movementWalkable)
+  const runtimeLava = cloneMask(lava)
+  const runtimeCliff = cloneMask(cliff)
+  for (let i = 0; i < movementWalkable.data.length; i++) {
+    if (!movementWalkable.data[i]) continue
+    runtimeLava.data[i] = 0
+    runtimeCliff.data[i] = 0
+  }
+  const classified = classifiedGridFromMasks(
+    { walkable: movementWalkable, lava: runtimeLava, cliff: runtimeCliff },
+    REGION_CELL_PX,
+  )
+  const movementBlocking = createMask()
+  for (let i = 0; i < movementBlocking.data.length; i++) {
+    movementBlocking.data[i] = movementWalkable.data[i] ? 0 : 1
+  }
   WALKABLE_MASK = walkable
   LAVA_MASK = lava
   CLIFF_MASK = cliff
-  WALKABLE_RECTS = rectsFromClassifiedGrid(classified, REGION_WALKABLE)
+  WALKABLE_RECTS = rectsFromClassifiedGrid(visualClassified, REGION_WALKABLE)
+  NON_WALKABLE_RECTS = rectsFromMask(movementBlocking, REGION_CELL_PX)
   LAVA_RECTS = rectsFromClassifiedGrid(classified, REGION_LAVA)
   CLIFF_RECTS = rectsFromClassifiedGrid(classified, REGION_CLIFF)
 }
@@ -857,12 +1053,15 @@ function numberedPlacementSvg(): Buffer {
 function scaledColliderForPlacement(props: readonly PropDef[], placement: Placement, index: number): Rect & { name: string } {
   const prop = props.find((p) => p.id === placement.propId)
   if (!prop) throw new Error(`Unknown prop ${placement.propId}`)
-  const width = Math.max(8, Math.round(prop.width * placement.scale * 0.72))
-  const height = Math.max(8, Math.round(prop.height * placement.scale * 0.3))
+  const spec = PROP_COLLIDER_SPECS[placement.propId] ?? DEFAULT_PROP_COLLIDER_SPEC
+  const width = Math.max(8, Math.round(prop.width * placement.scale * spec.widthRatio))
+  const height = Math.max(8, Math.round(prop.height * placement.scale * spec.heightRatio))
+  const offsetX = Math.round(prop.width * placement.scale * (spec.offsetXRatio ?? 0))
+  const bottomOffset = Math.round(prop.height * placement.scale * (spec.bottomOffsetRatio ?? 0))
   return {
     name: `propCollider_${String(index).padStart(3, "0")}`,
-    x: Math.round(placement.x - width / 2),
-    y: Math.round(placement.y - height),
+    x: Math.round(placement.x + offsetX - width / 2),
+    y: Math.round(placement.y - bottomOffset - height),
     width,
     height,
   }
@@ -1006,6 +1205,61 @@ async function writeGeometryDetailCropSheet(): Promise<void> {
     .toFile(resolve(REVIEW_DIR, "walkable-detail-crops.png"))
 }
 
+async function writeTopLeftCornerWorkbench(): Promise<void> {
+  const crop = TOP_LEFT_CORNER_CROP
+  const sources = [
+    { label: "Base", path: BASE_OUT },
+    { label: "Target Objects", path: SOURCE_TARGET },
+    { label: "Walkable", path: resolve(REVIEW_DIR, "walkable-lines.png") },
+    { label: "Combined", path: resolve(REVIEW_DIR, "all-overlays-combined.png") },
+    { label: "Object Colliders", path: resolve(REVIEW_DIR, "object-collision-yellow-highlight.png") },
+  ] as const
+  const scale = 2
+  const panelWidth = crop.width * scale
+  const panelHeight = crop.height * scale
+  const labelHeight = 34
+  const gap = 12
+  const columns = 2
+  const rows = Math.ceil(sources.length / columns)
+  const width = columns * panelWidth + (columns + 1) * gap
+  const height = rows * (labelHeight + panelHeight) + (rows + 1) * gap
+  const composites: sharp.OverlayOptions[] = []
+
+  for (let i = 0; i < sources.length; i++) {
+    const source = sources[i]!
+    const col = i % columns
+    const row = Math.floor(i / columns)
+    const left = gap + col * (panelWidth + gap)
+    const top = gap + row * (labelHeight + panelHeight + gap)
+    composites.push({
+      input: textSvg(panelWidth, labelHeight, source.label, { fontSize: 18, y: 23 }),
+      left,
+      top,
+    })
+    composites.push({
+      input: await sharp(source.path)
+        .extract({ left: crop.x, top: crop.y, width: crop.width, height: crop.height })
+        .resize(panelWidth, panelHeight, { kernel: "nearest" })
+        .png()
+        .toBuffer(),
+      left,
+      top: top + labelHeight,
+    })
+  }
+
+  await sharp({
+    create: {
+      width,
+      height,
+      channels: 4,
+      background: { r: 16, g: 16, b: 16, alpha: 1 },
+    },
+  })
+    .composite(composites)
+    .png()
+    .toFile(resolve(REVIEW_DIR, "top-left-corner-workbench.png"))
+}
+
 async function writeOverlayImages(props: readonly PropDef[]): Promise<void> {
   const propColliders = PLACEMENTS.map((p, i) => scaledColliderForPlacement(props, p, i))
 
@@ -1084,6 +1338,7 @@ async function writeOverlayImages(props: readonly PropDef[]): Promise<void> {
     .toFile(resolve(REVIEW_DIR, "numbered-placement-overlay.png"))
 
   await writeGeometryDetailCropSheet()
+  await writeTopLeftCornerWorkbench()
 }
 
 function rectangleSceneObject(
@@ -1163,8 +1418,8 @@ function writeSceneAndRuntimeSources(props: readonly PropDef[]): void {
     const label = `cliffArea_${String(i).padStart(3, "0")}`
     displayList.push(rectangleSceneObject(label, label, CLIFF_RECTS[i]!, 0xffffff))
   }
-  for (let i = 0; i < [...LAVA_RECTS, ...CLIFF_RECTS].length; i++) {
-    const rect = [...LAVA_RECTS, ...CLIFF_RECTS][i]!
+  for (let i = 0; i < NON_WALKABLE_RECTS.length; i++) {
+    const rect = NON_WALKABLE_RECTS[i]!
     const label = `nonWalkableArea_${String(i).padStart(3, "0")}`
     displayList.push(rectangleSceneObject(label, label, rect, 0xff0000))
   }
@@ -1270,6 +1525,7 @@ function writeMetadata(props: readonly PropDef[]): void {
     props,
     placements: PLACEMENTS,
     propColliders,
+    nonWalkableAreas: NON_WALKABLE_RECTS,
     lavaAreas: LAVA_RECTS,
     cliffAreas: CLIFF_RECTS,
     walkableAreas: WALKABLE_RECTS,

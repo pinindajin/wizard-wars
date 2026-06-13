@@ -3,20 +3,32 @@
     {
       "propId": "brazier-tower",
       "x": 132,
-      "y": 146,
+      "y": 86,
       "scale": 0.24
     },
     {
       "propId": "brazier-tower",
-      "x": 225,
-      "y": 149,
+      "x": 224,
+      "y": 96,
       "scale": 0.24
     },
     {
       "propId": "brazier-tower",
-      "x": 72,
-      "y": 121,
+      "x": 70,
+      "y": 134,
       "scale": 0.23
+    },
+    {
+      "propId": "brazier-tower",
+      "x": 269,
+      "y": 198,
+      "scale": 0.24
+    },
+    {
+      "propId": "brazier-tower",
+      "x": 167,
+      "y": 246,
+      "scale": 0.24
     },
     {
       "propId": "brazier-tower",
@@ -246,279 +258,293 @@
   "propColliders": [
     {
       "name": "propCollider_000",
-      "x": 122,
-      "y": 130,
-      "width": 21,
-      "height": 16
+      "x": 121,
+      "y": 74,
+      "width": 23,
+      "height": 12
     },
     {
       "name": "propCollider_001",
-      "x": 215,
-      "y": 133,
-      "width": 21,
-      "height": 16
+      "x": 213,
+      "y": 84,
+      "width": 23,
+      "height": 12
     },
     {
       "name": "propCollider_002",
-      "x": 62,
-      "y": 105,
-      "width": 20,
-      "height": 16
+      "x": 59,
+      "y": 122,
+      "width": 22,
+      "height": 12
     },
     {
       "name": "propCollider_003",
-      "x": 1054,
-      "y": 130,
-      "width": 21,
-      "height": 16
+      "x": 258,
+      "y": 186,
+      "width": 23,
+      "height": 12
     },
     {
       "name": "propCollider_004",
-      "x": 1185,
-      "y": 133,
-      "width": 21,
-      "height": 16
+      "x": 156,
+      "y": 234,
+      "width": 23,
+      "height": 12
     },
     {
       "name": "propCollider_005",
-      "x": 1317,
-      "y": 105,
-      "width": 20,
-      "height": 16
+      "x": 1053,
+      "y": 134,
+      "width": 23,
+      "height": 12
     },
     {
       "name": "propCollider_006",
+      "x": 1184,
+      "y": 137,
+      "width": 23,
+      "height": 12
+    },
+    {
+      "name": "propCollider_007",
+      "x": 1316,
+      "y": 109,
+      "width": 22,
+      "height": 12
+    },
+    {
+      "name": "propCollider_008",
       "x": 1312,
       "y": 222,
       "width": 29,
       "height": 24
     },
     {
-      "name": "propCollider_007",
-      "x": 1296,
-      "y": 411,
-      "width": 21,
-      "height": 16
-    },
-    {
-      "name": "propCollider_008",
-      "x": 27,
-      "y": 411,
-      "width": 21,
-      "height": 16
-    },
-    {
       "name": "propCollider_009",
+      "x": 1295,
+      "y": 415,
+      "width": 23,
+      "height": 12
+    },
+    {
+      "name": "propCollider_010",
+      "x": 26,
+      "y": 415,
+      "width": 23,
+      "height": 12
+    },
+    {
+      "name": "propCollider_011",
       "x": 87,
       "y": 369,
       "width": 33,
       "height": 13
     },
     {
-      "name": "propCollider_010",
+      "name": "propCollider_012",
       "x": 1240,
       "y": 366,
       "width": 41,
       "height": 17
     },
     {
-      "name": "propCollider_011",
+      "name": "propCollider_013",
       "x": 431,
       "y": 435,
       "width": 56,
       "height": 42
     },
     {
-      "name": "propCollider_012",
+      "name": "propCollider_014",
       "x": 587,
       "y": 355,
       "width": 52,
       "height": 39
     },
     {
-      "name": "propCollider_013",
+      "name": "propCollider_015",
       "x": 780,
       "y": 355,
       "width": 52,
       "height": 39
     },
     {
-      "name": "propCollider_014",
+      "name": "propCollider_016",
       "x": 980,
       "y": 521,
       "width": 56,
       "height": 42
     },
     {
-      "name": "propCollider_015",
+      "name": "propCollider_017",
       "x": 922,
       "y": 683,
       "width": 54,
       "height": 40
     },
     {
-      "name": "propCollider_016",
+      "name": "propCollider_018",
       "x": 753,
       "y": 742,
       "width": 52,
       "height": 39
     },
     {
-      "name": "propCollider_017",
+      "name": "propCollider_019",
       "x": 624,
       "y": 742,
       "width": 52,
       "height": 39
     },
     {
-      "name": "propCollider_018",
+      "name": "propCollider_020",
       "x": 435,
       "y": 666,
       "width": 54,
       "height": 40
     },
     {
-      "name": "propCollider_019",
+      "name": "propCollider_021",
       "x": 377,
       "y": 548,
       "width": 54,
       "height": 40
     },
     {
-      "name": "propCollider_020",
-      "x": 511,
-      "y": 572,
-      "width": 21,
-      "height": 16
-    },
-    {
-      "name": "propCollider_021",
-      "x": 894,
-      "y": 572,
-      "width": 21,
-      "height": 16
-    },
-    {
       "name": "propCollider_022",
-      "x": 936,
-      "y": 407,
-      "width": 21,
-      "height": 16
+      "x": 510,
+      "y": 576,
+      "width": 23,
+      "height": 12
     },
     {
       "name": "propCollider_023",
-      "x": 454,
-      "y": 407,
-      "width": 21,
-      "height": 16
+      "x": 893,
+      "y": 576,
+      "width": 23,
+      "height": 12
     },
     {
       "name": "propCollider_024",
-      "x": 640,
-      "y": 193,
-      "width": 21,
-      "height": 16
+      "x": 935,
+      "y": 411,
+      "width": 23,
+      "height": 12
     },
     {
       "name": "propCollider_025",
-      "x": 767,
-      "y": 193,
-      "width": 21,
-      "height": 16
+      "x": 453,
+      "y": 411,
+      "width": 23,
+      "height": 12
     },
     {
       "name": "propCollider_026",
-      "x": 640,
-      "y": 858,
-      "width": 21,
-      "height": 16
+      "x": 639,
+      "y": 197,
+      "width": 23,
+      "height": 12
     },
     {
       "name": "propCollider_027",
-      "x": 775,
-      "y": 858,
-      "width": 21,
-      "height": 16
+      "x": 766,
+      "y": 197,
+      "width": 23,
+      "height": 12
     },
     {
       "name": "propCollider_028",
+      "x": 639,
+      "y": 862,
+      "width": 23,
+      "height": 12
+    },
+    {
+      "name": "propCollider_029",
+      "x": 774,
+      "y": 862,
+      "width": 23,
+      "height": 12
+    },
+    {
+      "name": "propCollider_030",
       "x": 508,
       "y": 429,
       "width": 80,
       "height": 16
     },
     {
-      "name": "propCollider_029",
+      "name": "propCollider_031",
       "x": 828,
       "y": 429,
       "width": 80,
       "height": 16
     },
     {
-      "name": "propCollider_030",
+      "name": "propCollider_032",
       "x": 520,
       "y": 661,
       "width": 77,
       "height": 15
     },
     {
-      "name": "propCollider_031",
+      "name": "propCollider_033",
       "x": 822,
       "y": 661,
       "width": 77,
       "height": 15
     },
     {
-      "name": "propCollider_032",
+      "name": "propCollider_034",
       "x": 634,
       "y": 547,
       "width": 32,
       "height": 13
     },
     {
-      "name": "propCollider_033",
+      "name": "propCollider_035",
       "x": 759,
       "y": 547,
       "width": 32,
       "height": 13
     },
     {
-      "name": "propCollider_034",
-      "x": 382,
-      "y": 848,
-      "width": 21,
-      "height": 16
-    },
-    {
-      "name": "propCollider_035",
-      "x": 1007,
-      "y": 848,
-      "width": 21,
-      "height": 16
-    },
-    {
       "name": "propCollider_036",
-      "x": 1286,
-      "y": 907,
-      "width": 21,
-      "height": 16
+      "x": 381,
+      "y": 852,
+      "width": 23,
+      "height": 12
     },
     {
       "name": "propCollider_037",
-      "x": 96,
-      "y": 907,
-      "width": 21,
-      "height": 16
+      "x": 1006,
+      "y": 852,
+      "width": 23,
+      "height": 12
     },
     {
       "name": "propCollider_038",
+      "x": 1285,
+      "y": 911,
+      "width": 23,
+      "height": 12
+    },
+    {
+      "name": "propCollider_039",
+      "x": 95,
+      "y": 911,
+      "width": 23,
+      "height": 12
+    },
+    {
+      "name": "propCollider_040",
       "x": 145,
       "y": 985,
       "width": 38,
       "height": 23
     },
     {
-      "name": "propCollider_039",
+      "name": "propCollider_041",
       "x": 1221,
       "y": 985,
       "width": 38,
