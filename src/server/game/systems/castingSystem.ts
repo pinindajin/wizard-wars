@@ -689,7 +689,6 @@ export function castingSystem(ctx: SimCtx): void {
         PlayerInput.abilityTargetX[eid],
         PlayerInput.abilityTargetY[eid],
       )
-      if (homingOrbTarget === null) continue
       if (!consumeHomingOrbCharge(eid, currentTick, serverTimeMs)) continue
     }
 
@@ -710,6 +709,8 @@ export function castingSystem(ctx: SimCtx): void {
     Casting.capturedTargetEid[eid] = homingOrbTarget?.eid ?? -1
     if (homingOrbTarget) {
       ctx.homingOrbCastTargetPlayerMap.set(eid, homingOrbTarget.userId)
+    } else if (abilityId === "homing_orb") {
+      ctx.homingOrbCastTargetPlayerMap.delete(eid)
     }
     const targetDx = Casting.capturedTargetX[eid] - Casting.capturedPositionX[eid]
     const targetDy = Casting.capturedTargetY[eid] - Casting.capturedPositionY[eid]

@@ -111,6 +111,7 @@ function addCaster(world: ReturnType<typeof createWorld>, x = 100, y = 100): num
   Cooldown.lightningBolt[eid] = 0
   Cooldown.healingPotion[eid] = 0
   Cooldown.jump[eid] = 0
+  Cooldown.homingOrb[eid] = 0
   AbilityRuntime.jumpCharges[eid] = JUMP_MAX_CHARGES
   AbilityRuntime.jumpRechargeReadyTick[eid] = 0
   AbilityRuntime.jumpRechargeEndsAtMs[eid] = 0
@@ -148,21 +149,36 @@ describe("castingSystem homing orb charges and target lock", () => {
     return caster
   }
 
-  it("rejects homing orb without spending a charge when no target exists", () => {
+  it("casts homing orb without a target and spends a charge", () => {
     const world = createWorld()
     const caster = addHomingCaster(world)
+    const commandBuffer = createCommandBuffer()
     const ctx = emptyCtx({
       world,
       currentTick: 20,
       serverTimeMs: 1_000,
+      commandBuffer,
       entityPlayerMap: new Map([[caster, "caster"]]),
     })
 
     castingSystem(ctx)
 
-    expect(hasComponent(world, caster, Casting)).toBe(false)
-    expect(AbilityRuntime.homingOrbCharges[caster]).toBe(HOMING_ORB_MAX_CHARGES)
-    expect(AbilityRuntime.homingOrbRechargeReadyTick[caster]).toBe(0)
+    expect(hasComponent(world, caster, Casting)).toBe(true)
+    expect(AbilityRuntime.homingOrbCharges[caster]).toBe(HOMING_ORB_MAX_CHARGES - 1)
+    expect(AbilityRuntime.homingOrbRechargeReadyTick[caster]).toBe(20 + homingRechargeTicks)
+
+    PlayerInput.abilitySlot[caster] = -1
+    ctx.currentTick =
+      20 + msToTickOffset(getSpellAnimationConfig("red_wizard", "homing_orb").durationMs)
+    castingSystem(ctx)
+    commandBuffer.execute(world)
+
+    expect(ctx.homingOrbLaunches).toHaveLength(1)
+    expect(ctx.homingOrbLaunches[0]!.ownerId).toBe("caster")
+    expect(ctx.homingOrbLaunches[0]).not.toHaveProperty("targetId")
+    expect(hasComponent(world, ctx.homingOrbLaunches[0]!.id, HomingOrbTag)).toBe(true)
+    expect(HomingOrb.targetEid[ctx.homingOrbLaunches[0]!.id]).toBe(-1)
+    expect(ctx.homingOrbTargetPlayerMap.has(ctx.homingOrbLaunches[0]!.id)).toBe(false)
   })
 
   it("spends a charge and launches at the target closest to the captured cursor", () => {
