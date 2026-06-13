@@ -152,6 +152,8 @@ export const playerSnapshotSchema = z.object({
 
 /** Max simultaneous fireballs included in a full sync (safety cap for Zod). */
 const MAX_FIREBALLS_IN_SYNC = 128
+/** Max simultaneous Homing Orbs included in a full sync (safety cap for Zod). */
+const MAX_HOMING_ORBS_IN_SYNC = 128
 
 /** Single fireball row in `GameStateSync`. */
 export const fireballSnapshotSchema = z.object({
@@ -161,6 +163,51 @@ export const fireballSnapshotSchema = z.object({
   y: z.number().finite(),
   vx: z.number().finite(),
   vy: z.number().finite(),
+})
+
+/** Single Homing Orb row in `GameStateSync`. */
+export const homingOrbSnapshotSchema = z.object({
+  id: z.number().int().nonnegative(),
+  ownerId: z.string().min(1).max(256),
+  targetId: z.string().min(1).max(256).optional(),
+  x: z.number().finite(),
+  y: z.number().finite(),
+  vx: z.number().finite(),
+  vy: z.number().finite(),
+  headingRad: z.number().finite(),
+  expiresAtServerTimeMs: z.number().finite().nonnegative(),
+})
+
+/** Server → clients: Homing Orb launch payload. */
+export const homingOrbLaunchPayloadSchema = homingOrbSnapshotSchema
+
+/** Single Homing Orb movement delta row. */
+export const homingOrbDeltaSchema = z.object({
+  id: z.number().int().nonnegative(),
+  x: z.number().finite(),
+  y: z.number().finite(),
+  vx: z.number().finite(),
+  vy: z.number().finite(),
+  headingRad: z.number().finite(),
+  targetId: z.string().min(1).max(256).optional(),
+})
+
+/** Server → clients: Homing Orb batch update payload. */
+export const homingOrbBatchUpdatePayloadSchema = z.object({
+  deltas: z.array(homingOrbDeltaSchema).max(MAX_HOMING_ORBS_IN_SYNC),
+  removedIds: z.array(z.number().int().nonnegative()).max(MAX_HOMING_ORBS_IN_SYNC),
+  seq: z.number().int().nonnegative(),
+})
+
+/** Server → clients: Homing Orb hit or expiry impact payload. */
+export const homingOrbImpactPayloadSchema = z.object({
+  id: z.number().int().nonnegative(),
+  x: z.number().finite(),
+  y: z.number().finite(),
+  reason: z.enum(["hit", "expired"]),
+  targetId: z.string().min(1).max(256).optional(),
+  hitPlayerIds: z.array(z.string().min(1).max(256)).max(MAX_PLAYERS_PER_MATCH).optional(),
+  damage: z.number().finite().nonnegative().optional(),
 })
 
 /** Shared combat telegraph shape schema. */
@@ -195,6 +242,7 @@ export const combatTelegraphStartPayloadSchema = z.object({
 export const gameStateSyncPayloadSchema = z.object({
   players: z.array(playerSnapshotSchema).max(MAX_PLAYERS_PER_MATCH),
   fireballs: z.array(fireballSnapshotSchema).max(MAX_FIREBALLS_IN_SYNC),
+  homingOrbs: z.array(homingOrbSnapshotSchema).max(MAX_HOMING_ORBS_IN_SYNC).optional(),
   activeTelegraphs: z.array(combatTelegraphStartPayloadSchema).max(64).optional(),
   seq: z.number().int().nonnegative(),
   serverTimeMs: z.number().finite().nonnegative(),

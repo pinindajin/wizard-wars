@@ -222,6 +222,8 @@ export type GameStateSyncPayload = {
   readonly players: readonly PlayerSnapshot[]
   /** Active fireball projectiles (empty when none). */
   readonly fireballs: readonly FireballSnapshot[]
+  /** Active Homing Orb projectiles (empty when none). */
+  readonly homingOrbs?: readonly HomingOrbSnapshot[]
   /** Active combat telegraphs that should be reconstructed by reconnecting clients. */
   readonly activeTelegraphs?: readonly CombatTelegraphStartPayload[]
   readonly seq: number
@@ -244,6 +246,48 @@ export type FireballBatchUpdatePayload = {
   readonly deltas: readonly { id: number; x: number; y: number }[]
   readonly removedIds: readonly number[]
   readonly seq: number
+}
+
+/** A Homing Orb projectile snapshot for reconnect/full sync. */
+export type HomingOrbSnapshot = {
+  readonly id: number
+  readonly ownerId: string
+  readonly targetId?: string
+  readonly x: number
+  readonly y: number
+  readonly vx: number
+  readonly vy: number
+  readonly headingRad: number
+  readonly expiresAtServerTimeMs: number
+}
+
+/** Server → all: Homing Orb launched. */
+export type HomingOrbLaunchPayload = HomingOrbSnapshot
+
+/** Homing Orb batch update. */
+export type HomingOrbBatchUpdatePayload = {
+  readonly deltas: readonly {
+    readonly id: number
+    readonly x: number
+    readonly y: number
+    readonly vx: number
+    readonly vy: number
+    readonly headingRad: number
+    readonly targetId?: string
+  }[]
+  readonly removedIds: readonly number[]
+  readonly seq: number
+}
+
+/** Server → all: Homing Orb hit or expired. */
+export type HomingOrbImpactPayload = {
+  readonly id: number
+  readonly x: number
+  readonly y: number
+  readonly reason: "hit" | "expired"
+  readonly targetId?: string
+  readonly hitPlayerIds?: readonly string[]
+  readonly damage?: number
 }
 
 /** Server loop degradation reasons surfaced to the performance indicator UI. */

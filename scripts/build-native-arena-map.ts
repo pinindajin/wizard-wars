@@ -704,6 +704,267 @@ function paintWalkablePolygon(
   }
 }
 
+function paintWalkableEllipse(
+  masks: { walkable: Mask; lava: Mask; cliff: Mask },
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number,
+): void {
+  const patch = createMask()
+  fillEllipse(patch, cx, cy, rx, ry)
+  for (let i = 0; i < patch.data.length; i++) {
+    if (!patch.data[i]) continue
+    masks.walkable.data[i] = 1
+    masks.lava.data[i] = 0
+    masks.cliff.data[i] = 0
+  }
+}
+
+function paintWalkableRotatedRect(
+  masks: { walkable: Mask; lava: Mask; cliff: Mask },
+  cx: number,
+  cy: number,
+  width: number,
+  height: number,
+  degrees: number,
+): void {
+  const patch = createMask()
+  fillRotatedRect(patch, cx, cy, width, height, degrees)
+  for (let i = 0; i < patch.data.length; i++) {
+    if (!patch.data[i]) continue
+    masks.walkable.data[i] = 1
+    masks.lava.data[i] = 0
+    masks.cliff.data[i] = 0
+  }
+}
+
+function reclassifyPatchFromBase(
+  masks: { walkable: Mask; lava: Mask; cliff: Mask },
+  base: RawImage,
+  patch: Mask,
+): void {
+  for (let y = 0; y < ARENA_HEIGHT; y++) {
+    for (let x = 0; x < ARENA_WIDTH; x++) {
+      const i = maskIndex(x, y)
+      if (!patch.data[i]) continue
+      masks.walkable.data[i] = 0
+      if (isBasePixelLavaLike(base, x, y)) {
+        masks.lava.data[i] = 1
+        masks.cliff.data[i] = 0
+      } else {
+        masks.lava.data[i] = 0
+        masks.cliff.data[i] = 1
+      }
+    }
+  }
+}
+
+function replaceWalkablePolygon(
+  masks: { walkable: Mask; lava: Mask; cliff: Mask },
+  base: RawImage,
+  clearPoints: readonly { x: number; y: number }[],
+  walkablePoints: readonly { x: number; y: number }[],
+): void {
+  const patch = createMask()
+  fillPolygon(patch, clearPoints)
+  reclassifyPatchFromBase(masks, base, patch)
+  paintWalkablePolygon(masks, walkablePoints)
+}
+
+function reclassifyPolygonFromBase(
+  masks: { walkable: Mask; lava: Mask; cliff: Mask },
+  base: RawImage,
+  points: readonly { x: number; y: number }[],
+): void {
+  const patch = createMask()
+  fillPolygon(patch, points)
+  reclassifyPatchFromBase(masks, base, patch)
+}
+
+function applyWalkableSurfaceCompletion(
+  masks: { walkable: Mask; lava: Mask; cliff: Mask },
+  base: RawImage,
+): void {
+  // These patches are calibrated from the base art after the broad masks are
+  // loaded. They fill walkable stone deck surfaces that the first pass misses:
+  // small jump islands, circular side decks, and connector seams.
+  for (const [cx, cy, rx, ry] of [
+    [452, 990, 80, 52],
+    [950, 990, 80, 52],
+    [409, 34, 64, 30],
+    [993, 34, 64, 30],
+  ] as const) {
+    paintWalkableEllipse(masks, cx, cy, rx, ry)
+  }
+
+  for (const points of [
+    [
+      { x: 0, y: 383 },
+      { x: 16, y: 363 },
+      { x: 52, y: 344 },
+      { x: 96, y: 337 },
+      { x: 139, y: 342 },
+      { x: 176, y: 359 },
+      { x: 205, y: 386 },
+      { x: 205, y: 413 },
+      { x: 181, y: 439 },
+      { x: 137, y: 454 },
+      { x: 87, y: 454 },
+      { x: 38, y: 443 },
+      { x: 6, y: 420 },
+      { x: 0, y: 407 },
+    ],
+    [
+      { x: 1402, y: 383 },
+      { x: 1386, y: 363 },
+      { x: 1350, y: 344 },
+      { x: 1306, y: 337 },
+      { x: 1263, y: 342 },
+      { x: 1226, y: 359 },
+      { x: 1197, y: 386 },
+      { x: 1197, y: 413 },
+      { x: 1221, y: 439 },
+      { x: 1265, y: 454 },
+      { x: 1315, y: 454 },
+      { x: 1364, y: 443 },
+      { x: 1396, y: 420 },
+      { x: 1402, y: 407 },
+    ],
+    [
+      { x: 68, y: 452 },
+      { x: 132, y: 452 },
+      { x: 148, y: 540 },
+      { x: 52, y: 540 },
+    ],
+    [
+      { x: 1270, y: 452 },
+      { x: 1334, y: 452 },
+      { x: 1350, y: 540 },
+      { x: 1254, y: 540 },
+    ],
+  ] as const) {
+    paintWalkablePolygon(masks, points)
+  }
+
+  reclassifyPolygonFromBase(masks, base, [
+    { x: 0, y: 324 },
+    { x: 220, y: 324 },
+    { x: 220, y: 586 },
+    { x: 0, y: 586 },
+  ])
+  paintWalkableEllipse(masks, 103, 394, 104, 64)
+  paintWalkablePolygon(masks, [
+    { x: 64, y: 450 },
+    { x: 136, y: 450 },
+    { x: 156, y: 600 },
+    { x: 40, y: 600 },
+  ])
+
+  reclassifyPolygonFromBase(masks, base, [
+    { x: 1182, y: 324 },
+    { x: 1402, y: 324 },
+    { x: 1402, y: 586 },
+    { x: 1182, y: 586 },
+  ])
+  paintWalkableEllipse(masks, 1299, 394, 104, 64)
+  paintWalkablePolygon(masks, [
+    { x: 1266, y: 450 },
+    { x: 1338, y: 450 },
+    { x: 1362, y: 600 },
+    { x: 1246, y: 600 },
+  ])
+
+  for (const [cx, cy, width, height, degrees] of [
+    [62, 986, 156, 54, -48],
+    [1340, 986, 156, 54, 48],
+  ] as const) {
+    paintWalkableRotatedRect(masks, cx, cy, width, height, degrees)
+  }
+
+  replaceWalkablePolygon(
+    masks,
+    base,
+    [
+      { x: 214, y: 178 },
+      { x: 448, y: 334 },
+      { x: 400, y: 393 },
+      { x: 188, y: 232 },
+    ],
+    [
+      { x: 246, y: 191 },
+      { x: 274, y: 200 },
+      { x: 418, y: 338 },
+      { x: 394, y: 361 },
+      { x: 222, y: 220 },
+      { x: 232, y: 202 },
+    ],
+  )
+  replaceWalkablePolygon(
+    masks,
+    base,
+    [
+      { x: 1188, y: 178 },
+      { x: 954, y: 334 },
+      { x: 1002, y: 393 },
+      { x: 1214, y: 232 },
+    ],
+    [
+      { x: 1156, y: 191 },
+      { x: 1128, y: 200 },
+      { x: 984, y: 338 },
+      { x: 1008, y: 361 },
+      { x: 1180, y: 220 },
+      { x: 1170, y: 202 },
+    ],
+  )
+  replaceWalkablePolygon(
+    masks,
+    base,
+    [
+      { x: 240, y: 780 },
+      { x: 450, y: 730 },
+      { x: 472, y: 792 },
+      { x: 285, y: 898 },
+      { x: 210, y: 880 },
+    ],
+    [
+      { x: 266, y: 819 },
+      { x: 287, y: 807 },
+      { x: 425, y: 759 },
+      { x: 445, y: 775 },
+      { x: 283, y: 867 },
+      { x: 253, y: 856 },
+    ],
+  )
+  replaceWalkablePolygon(
+    masks,
+    base,
+    [
+      { x: 1162, y: 780 },
+      { x: 952, y: 730 },
+      { x: 930, y: 792 },
+      { x: 1117, y: 898 },
+      { x: 1192, y: 880 },
+    ],
+    [
+      { x: 1136, y: 819 },
+      { x: 1115, y: 807 },
+      { x: 977, y: 759 },
+      { x: 957, y: 775 },
+      { x: 1119, y: 867 },
+      { x: 1149, y: 856 },
+    ],
+  )
+
+  paintWalkablePolygon(masks, [
+    { x: 636, y: 758 },
+    { x: 776, y: 758 },
+    { x: 776, y: 846 },
+    { x: 636, y: 846 },
+  ])
+}
+
 function applyCardinalConnectorUnions(masks: { walkable: Mask; lava: Mask; cliff: Mask }): void {
   for (const points of [
     [
@@ -739,20 +1000,20 @@ function applyTopLeftFootprintClearance(mask: Mask): void {
   // Runtime collision uses a 40x18 oval footprint against AABB rectangles. The
   // visual bridge deck is narrower than the legal center path, so this grants
   // hidden clearance while visual `WalkableAreas` remains art-aligned.
-  fillRotatedRect(mask, 323, 286, 214, 48, 43)
+  fillRotatedRect(mask, 323, 286, 252, 72, 43)
   fillPolygon(mask, [
-    { x: 207, y: 198 },
-    { x: 268, y: 194 },
-    { x: 292, y: 221 },
-    { x: 267, y: 249 },
-    { x: 211, y: 229 },
+    { x: 188, y: 176 },
+    { x: 266, y: 184 },
+    { x: 302, y: 224 },
+    { x: 266, y: 258 },
+    { x: 194, y: 238 },
   ])
   fillPolygon(mask, [
-    { x: 374, y: 334 },
-    { x: 416, y: 337 },
-    { x: 434, y: 361 },
-    { x: 399, y: 389 },
-    { x: 374, y: 363 },
+    { x: 350, y: 296 },
+    { x: 438, y: 322 },
+    { x: 458, y: 356 },
+    { x: 424, y: 386 },
+    { x: 360, y: 360 },
   ])
 }
 
@@ -762,6 +1023,7 @@ async function buildArenaGeometry(): Promise<void> {
   const cliff = await loadMaskImage("cliff-mask.png")
   const base = await loadRaw(SOURCE_BASE)
   applyComputerVisionGuidedMaskRefinements({ walkable, lava, cliff }, base)
+  applyWalkableSurfaceCompletion({ walkable, lava, cliff }, base)
   applyCardinalConnectorUnions({ walkable, lava, cliff })
   assertExclusiveMasks({ walkable, lava, cliff })
   const visualClassified = classifiedGridFromMasks({ walkable, lava, cliff }, REGION_CELL_PX)

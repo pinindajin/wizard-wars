@@ -892,11 +892,17 @@ describe("PlayerRenderSystem.computeHeroHudYOffsets", () => {
 })
 
 describe("PlayerRenderSystem.shouldShowFireballChannel", () => {
-  it("returns true only when both light_cast AND castingAbilityId='fireball' hold", () => {
+  it("returns true when light_cast is paired with fireball-style channel spells", () => {
     expect(
       PlayerRenderSystem.shouldShowFireballChannel({
         animState: "light_cast",
         castingAbilityId: "fireball",
+      }),
+    ).toBe(true)
+    expect(
+      PlayerRenderSystem.shouldShowFireballChannel({
+        animState: "light_cast",
+        castingAbilityId: "homing_orb",
       }),
     ).toBe(true)
   })

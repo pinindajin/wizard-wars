@@ -28,6 +28,8 @@ import {
   HERO_INDEX,
   ABILITY_INDEX,
   FireballTag,
+  HomingOrb,
+  HomingOrbTag,
   JumpArc,
   TerrainState,
   TERRAIN_KIND_TO_STATE,
@@ -42,6 +44,7 @@ import {
   STARTING_GOLD,
   PLAYER_RADIUS_PX,
   JUMP_MAX_CHARGES,
+  HOMING_ORB_MAX_CHARGES,
 } from "../../shared/balance-config"
 import { DEFAULT_HERO_ID, getHeroPrimaryMeleeAttackId } from "../../shared/balance-config/heroes"
 import {
@@ -53,6 +56,10 @@ import type {
   PlayerDelta,
   FireballLaunchPayload,
   FireballImpactPayload,
+  HomingOrbBatchUpdatePayload,
+  HomingOrbImpactPayload,
+  HomingOrbLaunchPayload,
+  HomingOrbSnapshot,
   LightningBoltPayload,
   PrimaryMeleeAttackPayload,
   PlayerDeathPayload,
@@ -200,6 +207,18 @@ export type FireballPrevState = {
   y: number
 }
 
+/** Snapshot of a Homing Orb's movement state used to compute deltas each tick. */
+export type HomingOrbPrevState = {
+  x: number
+  y: number
+  vx: number
+  vy: number
+  headingRad: number
+}
+
+/** Mutable Homing Orb delta row accumulated inside one simulation tick. */
+export type HomingOrbDelta = HomingOrbBatchUpdatePayload["deltas"][number]
+
 /** Latest received weapon cursor for latency-sensitive swing facing snapshots. */
 export type FreshestWeaponAim = {
   weaponTargetX: number
@@ -230,6 +249,12 @@ export type SimCtx = {
   fireballOwnerMap: Map<number, string>
   /** fireball entity ID → simulation tick when launched */
   fireballCreatedAtTickMap: Map<number, number>
+  /** Homing Orb entity ID → owner userId. */
+  homingOrbOwnerMap: Map<number, string>
+  /** Homing Orb entity ID → locked target userId for stale entity-id protection. */
+  homingOrbTargetPlayerMap: Map<number, string>
+  /** Caster entity ID → accepted cast target userId until effect time. */
+  homingOrbCastTargetPlayerMap: Map<number, string>
 
   inputMap: Map<string, PlayerInputPayload>
   /**
@@ -257,6 +282,9 @@ export type SimCtx = {
   fireballLaunches: FireballLaunchPayload[]
   fireballImpacts: FireballImpactPayload[]
   fireballRemovedIds: number[]
+  homingOrbLaunches: HomingOrbLaunchPayload[]
+  homingOrbImpacts: HomingOrbImpactPayload[]
+  homingOrbRemovedIds: number[]
   lightningBolts: LightningBoltPayload[]
   primaryMeleeAttacks: PrimaryMeleeAttackPayload[]
   combatTelegraphStarts: CombatTelegraphStartPayload[]
@@ -273,6 +301,7 @@ export type SimCtx = {
   // ── Cross-tick state ──
   prevPlayerStates: Map<number, PlayerPrevState>
   prevFireballStates: Map<number, FireballPrevState>
+  prevHomingOrbStates: Map<number, HomingOrbPrevState>
   killStats: Map<string, KillStats>
   /**
    * Active primary melee swings keyed by caster eid. Persists across ticks for
@@ -288,6 +317,7 @@ export type SimCtx = {
   // ── Written by playerDeltaSystem and projectileDeltaSystem ──
   playerDeltas: PlayerDelta[]
   fireballDeltas: { id: number; x: number; y: number }[]
+  homingOrbDeltas: HomingOrbDelta[]
 }
 
 // ─── SimOutput ────────────────────────────────────────────────────────────
@@ -297,10 +327,14 @@ export type SimOutput = {
   playerDeltas: PlayerDelta[]
   fireballDeltas: { id: number; x: number; y: number }[]
   fireballRemovedIds: number[]
+  homingOrbDeltas: HomingOrbDelta[]
+  homingOrbRemovedIds: number[]
   playerDeaths: PlayerDeathPayload[]
   playerRespawns: PlayerRespawnPayload[]
   fireballLaunches: FireballLaunchPayload[]
   fireballImpacts: FireballImpactPayload[]
+  homingOrbLaunches: HomingOrbLaunchPayload[]
+  homingOrbImpacts: HomingOrbImpactPayload[]
   lightningBolts: LightningBoltPayload[]
   primaryMeleeAttacks: PrimaryMeleeAttackPayload[]
   combatTelegraphStarts: CombatTelegraphStartPayload[]
@@ -372,9 +406,13 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
   const playerHeroIdMap = new Map<string, string>()
   const fireballOwnerMap = new Map<number, string>()
   const fireballCreatedAtTickMap = new Map<number, number>()
+  const homingOrbOwnerMap = new Map<number, string>()
+  const homingOrbTargetPlayerMap = new Map<number, string>()
+  const homingOrbCastTargetPlayerMap = new Map<number, string>()
   const commandBuffer = createCommandBuffer()
   const prevPlayerStates = new Map<number, PlayerPrevState>()
   const prevFireballStates = new Map<number, FireballPrevState>()
+  const prevHomingOrbStates = new Map<number, HomingOrbPrevState>()
   const killStats = new Map<string, KillStats>()
   const lastProcessedInputSeqByPlayer = new Map<string, number>()
   const lastInputTickByPlayer = new Map<string, number>()
@@ -444,11 +482,15 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     Hero.typeIndex[eid] = heroIndex
 
     Cooldown.fireball[eid] = 0
+    Cooldown.homingOrb[eid] = 0
     Cooldown.lightningBolt[eid] = 0
     Cooldown.primaryMelee[eid] = 0
     Cooldown.healingPotion[eid] = 0
     Cooldown.jump[eid] = 0
     AbilityRuntime.fireballCooldownEndsAtMs[eid] = 0
+    AbilityRuntime.homingOrbCharges[eid] = HOMING_ORB_MAX_CHARGES
+    AbilityRuntime.homingOrbRechargeReadyTick[eid] = 0
+    AbilityRuntime.homingOrbRechargeEndsAtMs[eid] = 0
     AbilityRuntime.lightningBoltCooldownEndsAtMs[eid] = 0
     AbilityRuntime.healingPotionCooldownEndsAtMs[eid] = 0
     AbilityRuntime.jumpCharges[eid] = JUMP_MAX_CHARGES
@@ -552,6 +594,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     lastProcessedInputSeqByPlayer.delete(userId)
     lastInputTickByPlayer.delete(userId)
     activeMeleeAttacks.delete(eid)
+    homingOrbCastTargetPlayerMap.delete(eid)
     invulnerableExpiresAtTickByEntity.delete(eid)
     for (const [id, telegraph] of activeCombatTelegraphs) {
       if (telegraph.casterId === userId) activeCombatTelegraphs.delete(id)
@@ -656,11 +699,30 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       })
     }
 
+    const homingOrbs: HomingOrbSnapshot[] = []
+    for (const orbEid of query(world, [HomingOrbTag])) {
+      const ownerId = homingOrbOwnerMap.get(orbEid)
+      if (ownerId === undefined) continue
+      const targetId = homingOrbTargetPlayerMap.get(orbEid)
+      homingOrbs.push({
+        id: orbEid,
+        ownerId,
+        ...(targetId !== undefined ? { targetId } : {}),
+        x: Position.x[orbEid],
+        y: Position.y[orbEid],
+        vx: Velocity.vx[orbEid],
+        vy: Velocity.vy[orbEid],
+        headingRad: HomingOrb.headingRad[orbEid],
+        expiresAtServerTimeMs:
+          serverTimeMs + Math.max(0, HomingOrb.expiresAtTick[orbEid] - currentTick) * TICK_MS,
+      })
+    }
+
     const activeTelegraphs = [...activeCombatTelegraphs.values()].filter(
       (telegraph) => telegraph.endsAtServerTimeMs > serverTimeMs,
     )
 
-    return { players, fireballs, activeTelegraphs, seq: 0, serverTimeMs }
+    return { players, fireballs, homingOrbs, activeTelegraphs, seq: 0, serverTimeMs }
   }
 
   // ── tick ─────────────────────────────────────────────────────────────
@@ -741,6 +803,9 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       playerHeroIdMap,
       fireballOwnerMap,
       fireballCreatedAtTickMap,
+      homingOrbOwnerMap,
+      homingOrbTargetPlayerMap,
+      homingOrbCastTargetPlayerMap,
       inputMap,
       freshestWeaponAimByPlayer,
       lastProcessedInputSeqByPlayer,
@@ -754,6 +819,9 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       fireballLaunches: [],
       fireballImpacts: [],
       fireballRemovedIds: [],
+      homingOrbLaunches: [],
+      homingOrbImpacts: [],
+      homingOrbRemovedIds: [],
       lightningBolts: [],
       primaryMeleeAttacks: [],
       combatTelegraphStarts: [],
@@ -765,12 +833,14 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       hostEndSignal,
       prevPlayerStates,
       prevFireballStates,
+      prevHomingOrbStates,
       killStats,
       activeMeleeAttacks,
       activeCombatTelegraphs,
       invulnerableExpiresAtTickByEntity,
       playerDeltas: [],
       fireballDeltas: [],
+      homingOrbDeltas: [],
     }
 
     // ── System pipeline ──────────────────────────────────────────────
@@ -803,10 +873,14 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       playerDeltas: ctx.playerDeltas,
       fireballDeltas: ctx.fireballDeltas,
       fireballRemovedIds: ctx.fireballRemovedIds,
+      homingOrbDeltas: ctx.homingOrbDeltas,
+      homingOrbRemovedIds: ctx.homingOrbRemovedIds,
       playerDeaths: ctx.playerDeaths,
       playerRespawns: ctx.playerRespawns,
       fireballLaunches: ctx.fireballLaunches,
       fireballImpacts: ctx.fireballImpacts,
+      homingOrbLaunches: ctx.homingOrbLaunches,
+      homingOrbImpacts: ctx.homingOrbImpacts,
       lightningBolts: ctx.lightningBolts,
       primaryMeleeAttacks: ctx.primaryMeleeAttacks,
       combatTelegraphStarts: ctx.combatTelegraphStarts,

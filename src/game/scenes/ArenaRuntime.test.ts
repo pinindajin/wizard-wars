@@ -36,6 +36,18 @@ const playerRenderMock = vi.hoisted(() => ({
   destroy: vi.fn(),
 }))
 
+const projectileRenderMock = vi.hoisted(() => ({
+  applyFullSyncFireballs: vi.fn(),
+  applyFullSyncHomingOrbs: vi.fn(),
+  spawnFireball: vi.fn(),
+  spawnHomingOrb: vi.fn(),
+  applyBatchUpdate: vi.fn(),
+  applyHomingOrbBatchUpdate: vi.fn(),
+  destroyFireball: vi.fn(),
+  destroyHomingOrb: vi.fn(),
+  update: vi.fn(),
+}))
+
 const keyboardControllerMock = vi.hoisted(() => ({
   enable: vi.fn(),
   collectInput: vi.fn(),
@@ -100,13 +112,7 @@ vi.mock("../ecs/systems/PlayerRenderSystem", () => ({
 }))
 
 vi.mock("../ecs/systems/ProjectileRenderSystem", () => ({
-  ProjectileRenderSystem: vi.fn().mockImplementation(() => ({
-    applyFullSyncFireballs: vi.fn(),
-    spawnFireball: vi.fn(),
-    applyBatchUpdate: vi.fn(),
-    destroyFireball: vi.fn(),
-    update: vi.fn(),
-  })),
+  ProjectileRenderSystem: vi.fn().mockImplementation(() => projectileRenderMock),
 }))
 
 vi.mock("../ecs/systems/LightningBoltRenderSystem", () => ({
@@ -416,6 +422,56 @@ describe("ArenaRuntime lifecycle", () => {
     })
 
     expect(soundPlaySpy).toHaveBeenCalledWith(SFX_KEYS.fireballCast)
+  })
+
+  it("spawns Homing Orb and plays its cast SFX when HomingOrbLaunch is received", () => {
+    const { runtime, connection } = makeRuntime()
+
+    runtime.start()
+    soundPlaySpy.mockClear()
+    projectileRenderMock.spawnHomingOrb.mockClear()
+
+    const payload = {
+      id: 9,
+      ownerId: "p1",
+      targetId: "p2",
+      x: 10,
+      y: 20,
+      vx: 120,
+      vy: 0,
+      headingRad: 0,
+      expiresAtServerTimeMs: 15_000,
+    }
+    connection.emit({
+      type: WsEvent.HomingOrbLaunch,
+      payload,
+    })
+
+    expect(projectileRenderMock.spawnHomingOrb).toHaveBeenCalledWith(payload)
+    expect(soundPlaySpy).toHaveBeenCalledWith(SFX_KEYS.homingOrbCast)
+  })
+
+  it("destroys Homing Orb and plays impact/expiry SFX when HomingOrbImpact is received", () => {
+    const { runtime, connection } = makeRuntime()
+
+    runtime.start()
+    soundPlaySpy.mockClear()
+    projectileRenderMock.destroyHomingOrb.mockClear()
+
+    connection.emit({
+      type: WsEvent.HomingOrbImpact,
+      payload: {
+        id: 9,
+        x: 10,
+        y: 20,
+        reason: "expired",
+        hitPlayerIds: ["p2"],
+        damage: 4,
+      },
+    })
+
+    expect(projectileRenderMock.destroyHomingOrb).toHaveBeenCalledWith(9)
+    expect(soundPlaySpy).toHaveBeenCalledWith(SFX_KEYS.homingOrbExpire)
   })
 
   it("sends a fresh input sequence for each fixed sim step in one render frame", () => {

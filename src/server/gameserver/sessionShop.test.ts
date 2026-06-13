@@ -35,6 +35,15 @@ describe("attemptPurchase", () => {
     expect(economy.abilitySlots).toContain("lightning_bolt")
   })
 
+  it("purchases homing orb for the standard shop cost and adds it to ability slots", () => {
+    const economy = createSessionEconomy()
+    const result = attemptPurchase(economy, "homing_orb")
+    expect(result.success).toBe(true)
+    expect(economy.gold).toBe(STARTING_GOLD - SHOP_ITEM_COST)
+    expect(economy.ownedItemIds.has("homing_orb")).toBe(true)
+    expect(economy.abilitySlots).toContain("homing_orb")
+  })
+
   it("purchases jump for 0 gold into an empty ability slot", () => {
     const economy = createSessionEconomy()
     economy.gold = 0

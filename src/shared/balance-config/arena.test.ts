@@ -208,6 +208,36 @@ describe("arena constants", () => {
       ),
     ).toBe(true)
   })
+
+  it("keeps native jump islands and side island bridge seams walkable", () => {
+    const samples = [
+      { label: "bottom-left island", x: 452, y: 990 },
+      { label: "bottom-right island", x: 950, y: 990 },
+      { label: "top-left tiny island", x: 409, y: 34 },
+      { label: "top-right tiny island", x: 993, y: 34 },
+      { label: "left side bridge seam", x: 103, y: 568 },
+      { label: "right side bridge seam", x: 1300, y: 568 },
+      { label: "left side deck", x: 103, y: 394 },
+      { label: "right side deck", x: 1299, y: 394 },
+    ]
+
+    for (const sample of samples) {
+      const blockingCollider = ARENA_NON_WALKABLE_COLLIDERS.find((rect) =>
+        pointOverlapsCollider(sample.x, sample.y, rect),
+      )
+      expect(blockingCollider, `${sample.label} point blocker`).toBeUndefined()
+      expect(
+        canOccupyWorldPosition(
+          sample.x,
+          sample.y,
+          PLAYER_WORLD_COLLISION_FOOTPRINT,
+          { width: ARENA_WIDTH, height: ARENA_HEIGHT },
+          ARENA_WORLD_COLLIDERS,
+        ),
+        `${sample.label} footprint`,
+      ).toBe(true)
+    }
+  })
 })
 
 describe("spawn points", () => {

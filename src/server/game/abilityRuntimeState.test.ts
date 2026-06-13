@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest"
 
 import {
   FIREBALL_COOLDOWN_MS,
+  HOMING_ORB_CHARGE_RECHARGE_MS,
+  HOMING_ORB_MAX_CHARGES,
   JUMP_CHARGE_RECHARGE_MS,
   JUMP_MAX_CHARGES,
   TICK_MS,
@@ -24,6 +26,9 @@ function resetRuntime(): void {
   AbilityRuntime.jumpCharges[EID] = JUMP_MAX_CHARGES
   AbilityRuntime.jumpRechargeReadyTick[EID] = 0
   AbilityRuntime.jumpRechargeEndsAtMs[EID] = 0
+  AbilityRuntime.homingOrbCharges[EID] = HOMING_ORB_MAX_CHARGES
+  AbilityRuntime.homingOrbRechargeReadyTick[EID] = 0
+  AbilityRuntime.homingOrbRechargeEndsAtMs[EID] = 0
 }
 
 function readyStates(): AbilityRuntimeStates {
@@ -41,6 +46,14 @@ function readyStates(): AbilityRuntimeStates {
       cooldownDurationMs: null,
       charges: JUMP_MAX_CHARGES,
       maxCharges: JUMP_MAX_CHARGES,
+      rechargeEndsAtServerTimeMs: null,
+      rechargeDurationMs: null,
+    },
+    homing_orb: {
+      cooldownEndsAtServerTimeMs: null,
+      cooldownDurationMs: null,
+      charges: HOMING_ORB_MAX_CHARGES,
+      maxCharges: HOMING_ORB_MAX_CHARGES,
       rechargeEndsAtServerTimeMs: null,
       rechargeDurationMs: null,
     },
@@ -85,6 +98,29 @@ describe("abilityRuntimeStatesForPlayer", () => {
       charges: 0,
       cooldownEndsAtServerTimeMs: 12_000,
       cooldownDurationMs: Math.ceil(JUMP_CHARGE_RECHARGE_MS / TICK_MS) * TICK_MS,
+    })
+  })
+
+  it("mirrors homing orb charges and recharge timing", () => {
+    resetRuntime()
+    AbilityRuntime.homingOrbCharges[EID] = 3
+    AbilityRuntime.homingOrbRechargeEndsAtMs[EID] = 30_000
+
+    const usable = abilityRuntimeStatesForPlayer(EID, 10).homing_orb
+    expect(usable).toMatchObject({
+      charges: 3,
+      maxCharges: HOMING_ORB_MAX_CHARGES,
+      cooldownEndsAtServerTimeMs: null,
+      rechargeEndsAtServerTimeMs: 30_000,
+      rechargeDurationMs: Math.ceil(HOMING_ORB_CHARGE_RECHARGE_MS / TICK_MS) * TICK_MS,
+    })
+
+    AbilityRuntime.homingOrbCharges[EID] = 0
+    const depleted = abilityRuntimeStatesForPlayer(EID, 10).homing_orb
+    expect(depleted).toMatchObject({
+      charges: 0,
+      cooldownEndsAtServerTimeMs: 30_000,
+      cooldownDurationMs: Math.ceil(HOMING_ORB_CHARGE_RECHARGE_MS / TICK_MS) * TICK_MS,
     })
   })
 })

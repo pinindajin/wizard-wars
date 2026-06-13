@@ -18,6 +18,12 @@ describe("resolveSfxKeyForAction", () => {
     expect(resolveSfxKeyForAction("ranger", "spell:jump")).toBe("sfx-jump")
   })
 
+  it("returns castSfxKey for spell:homing_orb", () => {
+    expect(resolveSfxKeyForAction("red_wizard", "spell:homing_orb")).toBe(
+      SFX_KEYS.homingOrbCast,
+    )
+  })
+
   it("returns swingSfxKey for each hero primary action", () => {
     for (const heroId of Object.keys(HERO_CONFIGS)) {
       const hero = HERO_CONFIGS[heroId]!

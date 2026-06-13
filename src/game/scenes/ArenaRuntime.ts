@@ -9,6 +9,9 @@ import type {
   FireballLaunchPayload,
   FireballBatchUpdatePayload,
   FireballImpactPayload,
+  HomingOrbBatchUpdatePayload,
+  HomingOrbImpactPayload,
+  HomingOrbLaunchPayload,
   LightningBoltPayload,
   PrimaryMeleeAttackPayload,
   CombatTelegraphStartPayload,
@@ -347,6 +350,7 @@ export class ArenaRuntime {
           this.networkSyncSystem.applyFullSync(payload)
           this.playerRenderSystem.applyFullSync(payload)
           this.projectileRenderSystem.applyFullSyncFireballs(payload.fireballs)
+          this.projectileRenderSystem.applyFullSyncHomingOrbs(payload.homingOrbs ?? [])
           this.combatTelegraphRenderSystem.applyFullSync(payload.activeTelegraphs ?? [])
           this._ensureMatchLive()
           break
@@ -365,6 +369,23 @@ export class ArenaRuntime {
           const payload = message.payload as FireballImpactPayload
           this.projectileRenderSystem.destroyFireball(payload.id)
           this.soundManager.play(SFX_KEYS.fireballImpact)
+          break
+        }
+        case WsEvent.HomingOrbLaunch:
+          this.projectileRenderSystem.spawnHomingOrb(message.payload as HomingOrbLaunchPayload)
+          this.soundManager.play(SFX_KEYS.homingOrbCast)
+          break
+        case WsEvent.HomingOrbBatchUpdate:
+          this.projectileRenderSystem.applyHomingOrbBatchUpdate(
+            message.payload as HomingOrbBatchUpdatePayload,
+          )
+          break
+        case WsEvent.HomingOrbImpact: {
+          const payload = message.payload as HomingOrbImpactPayload
+          this.projectileRenderSystem.destroyHomingOrb(payload.id)
+          this.soundManager.play(
+            payload.reason === "expired" ? SFX_KEYS.homingOrbExpire : SFX_KEYS.homingOrbImpact,
+          )
           break
         }
         case WsEvent.LightningBolt:
