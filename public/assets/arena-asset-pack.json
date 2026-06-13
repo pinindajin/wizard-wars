@@ -35,6 +35,15 @@
             },
             {
                 "type": "spritesheet",
+                "key": "homing-orb",
+                "url": "/assets/sprites/abilities/homing-orb-fly.png",
+                "frameConfig": {
+                    "frameWidth": 256,
+                    "frameHeight": 256
+                }
+            },
+            {
+                "type": "spritesheet",
                 "key": "fireball-channel",
                 "url": "/assets/sprites/abilities/fireball-channel.png",
                 "frameConfig": {
@@ -155,6 +164,21 @@
                 "type": "audio",
                 "key": "sfx-fireball-impact",
                 "url": ["/assets/sounds/sfx-fireball-impact.mp3"]
+            },
+            {
+                "type": "audio",
+                "key": "sfx-homing-orb-cast",
+                "url": ["/assets/sounds/sfx-homing-orb-cast.mp3"]
+            },
+            {
+                "type": "audio",
+                "key": "sfx-homing-orb-impact",
+                "url": ["/assets/sounds/sfx-homing-orb-impact.mp3"]
+            },
+            {
+                "type": "audio",
+                "key": "sfx-homing-orb-expire",
+                "url": ["/assets/sounds/sfx-homing-orb-expire.mp3"]
             },
             {
                 "type": "audio",

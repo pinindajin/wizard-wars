@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { mergeFireballBatch, mergePlayerBatch } from "./networkBatching"
+import { mergeFireballBatch, mergeHomingOrbBatch, mergePlayerBatch } from "./networkBatching"
 
 describe("server network batching", () => {
   it("merges player deltas by entity id with later fields winning", () => {
@@ -48,6 +48,28 @@ describe("server network batching", () => {
     expect(merged).toEqual({
       deltas: [],
       removedIds: [8],
+    })
+  })
+
+  it("merges homing orb deltas and lets removals win per id", () => {
+    const merged = mergeHomingOrbBatch([
+      {
+        deltas: [{ id: 9, x: 1, y: 2, vx: 3, vy: 4, headingRad: 0.1 }],
+        removedIds: [10],
+      },
+      {
+        deltas: [{ id: 9, x: 5, y: 6, vx: 7, vy: 8, headingRad: 0.2, targetId: "p2" }],
+        removedIds: [9],
+      },
+      {
+        deltas: [{ id: 10, x: 11, y: 12, vx: 13, vy: 14, headingRad: 0.3 }],
+        removedIds: [],
+      },
+    ])
+
+    expect(merged).toEqual({
+      deltas: [{ id: 10, x: 11, y: 12, vx: 13, vy: 14, headingRad: 0.3 }],
+      removedIds: [9],
     })
   })
 })

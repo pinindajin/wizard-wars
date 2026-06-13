@@ -11,6 +11,8 @@ import {
   Position,
   Velocity,
   FireballTag,
+  HomingOrbTag,
+  Ownership,
   PlayerTag,
   DyingTag,
   DeadTag,
@@ -20,8 +22,11 @@ import {
 import type { SimCtx, DamageRequest } from "../simulation"
 import {
   FIREBALL_DAMAGE,
+  FIREBALL_HIT_RADIUS_PX,
   FIREBALL_KNOCKBACK_PX,
   FIREBALL_OWNER_SELF_DAMAGE_GRACE_MS,
+  HOMING_ORB_DAMAGE,
+  HOMING_ORB_HIT_RADIUS_PX,
   TICK_MS,
 } from "../../../shared/balance-config"
 import {
@@ -29,8 +34,6 @@ import {
   circleIntersectsRect,
 } from "../../../shared/collision/characterHitbox"
 
-/** Approximate fireball hit radius in pixels. */
-const FIREBALL_RADIUS = 8
 const FIREBALL_OWNER_SELF_DAMAGE_GRACE_TICKS = Math.ceil(
   FIREBALL_OWNER_SELF_DAMAGE_GRACE_MS / TICK_MS,
 )
@@ -43,6 +46,45 @@ function isWithinOwnerSelfDamageGrace(
   const createdAtTick = fireballCreatedAtTickMap.get(fbEid)
   return createdAtTick !== undefined &&
     currentTick - createdAtTick < FIREBALL_OWNER_SELF_DAMAGE_GRACE_TICKS
+}
+
+/**
+ * Returns true when a Homing Orb can directly damage a player entity.
+ *
+ * @param ctx - Simulation context.
+ * @param ownerEid - Projectile owner entity id.
+ * @param ownerUserId - Projectile owner user id.
+ * @param targetEid - Candidate player entity id.
+ * @returns True when the target is a live, vulnerable enemy.
+ */
+function isValidHomingOrbHitTarget(
+  ctx: SimCtx,
+  ownerEid: number,
+  ownerUserId: string | null,
+  targetEid: number,
+): boolean {
+  if (targetEid === ownerEid) return false
+  if (hasComponent(ctx.world, targetEid, DyingTag)) return false
+  if (hasComponent(ctx.world, targetEid, DeadTag)) return false
+  if (hasComponent(ctx.world, targetEid, SpectatorTag)) return false
+  if (hasComponent(ctx.world, targetEid, InvulnerableTag)) return false
+  const targetUserId = ctx.entityPlayerMap.get(targetEid)
+  if (targetUserId === undefined) return false
+  return ownerUserId === null || targetUserId !== ownerUserId
+}
+
+/**
+ * Removes a Homing Orb from all cross-tick maps and queues entity removal.
+ *
+ * @param ctx - Simulation context.
+ * @param orbEid - Homing Orb entity id.
+ */
+function removeHomingOrb(ctx: SimCtx, orbEid: number): void {
+  ctx.homingOrbRemovedIds.push(orbEid)
+  ctx.homingOrbOwnerMap.delete(orbEid)
+  ctx.homingOrbTargetPlayerMap.delete(orbEid)
+  ctx.prevHomingOrbStates.delete(orbEid)
+  ctx.commandBuffer.enqueue({ type: "removeEntity", eid: orbEid })
 }
 
 /**
@@ -60,6 +102,9 @@ export function projectileCollisionSystem(ctx: SimCtx): void {
     fireballCreatedAtTickMap,
     fireballRemovedIds,
     fireballImpacts,
+    homingOrbRemovedIds,
+    homingOrbImpacts,
+    homingOrbOwnerMap,
     damageRequests,
   } = ctx
 
@@ -89,7 +134,7 @@ export function projectileCollisionSystem(ctx: SimCtx): void {
       if (ownerInGrace && ownerUserId !== null && targetUserId === ownerUserId) continue
 
       const hitbox = characterHitboxForCenter(Position.x[playerEid], Position.y[playerEid])
-      if (!circleIntersectsRect(fbX, fbY, FIREBALL_RADIUS, hitbox)) continue
+      if (!circleIntersectsRect(fbX, fbY, FIREBALL_HIT_RADIUS_PX, hitbox)) continue
 
       // Hit!
       // Knockback direction: away from fireball origin
@@ -124,6 +169,47 @@ export function projectileCollisionSystem(ctx: SimCtx): void {
       fireballCreatedAtTickMap.delete(fbEid)
       commandBuffer.enqueue({ type: "removeEntity", eid: fbEid })
       break // fireball consumed
+    }
+  }
+
+  const removedHomingOrbsThisTick = new Set<number>(homingOrbRemovedIds)
+
+  for (const orbEid of query(world, [HomingOrbTag])) {
+    if (removedHomingOrbsThisTick.has(orbEid)) continue
+
+    const orbX = Position.x[orbEid]
+    const orbY = Position.y[orbEid]
+    const ownerEid = Ownership.ownerEid[orbEid]
+    const ownerUserId = homingOrbOwnerMap.get(orbEid) ?? null
+
+    for (const playerEid of query(world, [PlayerTag])) {
+      if (!isValidHomingOrbHitTarget(ctx, ownerEid, ownerUserId, playerEid)) continue
+
+      const targetUserId = entityPlayerMap.get(playerEid)
+      const hitbox = characterHitboxForCenter(Position.x[playerEid], Position.y[playerEid])
+      if (!circleIntersectsRect(orbX, orbY, HOMING_ORB_HIT_RADIUS_PX, hitbox)) continue
+
+      const req: DamageRequest = {
+        targetEid: playerEid,
+        damage: HOMING_ORB_DAMAGE,
+        killerUserId: ownerUserId,
+        killerAbilityId: "homing_orb",
+      }
+      damageRequests.push(req)
+
+      homingOrbImpacts.push({
+        id: orbEid,
+        x: orbX,
+        y: orbY,
+        reason: "hit",
+        targetId: targetUserId,
+        hitPlayerIds: targetUserId !== undefined ? [targetUserId] : [],
+        damage: HOMING_ORB_DAMAGE,
+      })
+
+      removedHomingOrbsThisTick.add(orbEid)
+      removeHomingOrb(ctx, orbEid)
+      break
     }
   }
 }

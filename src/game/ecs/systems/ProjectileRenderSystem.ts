@@ -4,21 +4,28 @@ import type {
   FireballLaunchPayload,
   FireballBatchUpdatePayload,
   FireballSnapshot,
+  HomingOrbBatchUpdatePayload,
+  HomingOrbLaunchPayload,
+  HomingOrbSnapshot,
 } from "@/shared/types"
 import {
   TICK_DT_SEC,
   TICK_MS,
 } from "@/shared/balance-config/rendering"
-import { ClientFireball } from "../components"
+import { ClientFireball, ClientHomingOrb } from "../components"
 import {
   FIREBALL_FLY_ANIM,
   FIREBALL_FLY_TEXTURE,
+  HOMING_ORB_FLY_ANIM,
+  HOMING_ORB_FLY_TEXTURE,
 } from "../../animation/FireballAnimDefs"
 
 /** Depth for fireball sprites — renders above tilemap, below name tags. */
 const FIREBALL_DEPTH = 10
 /** Scale applied to the fireball sprite (256-px source → ~50-px sprite). */
 const FIREBALL_SCALE = 0.2
+/** Scale applied to Homing Orb: 60% of Fireball's projectile size. */
+const HOMING_ORB_SCALE = FIREBALL_SCALE * 0.6
 
 /** Phaser texture key for the trail particle. */
 const EMBER_TEXTURE = "ember"
@@ -55,6 +62,15 @@ interface FireballRenderEntry {
   simCurrY: number
 }
 
+/** Per-Homing Orb render state: sprite + sim interpolation. */
+interface HomingOrbRenderEntry {
+  sprite: Phaser.GameObjects.Sprite
+  simPrevX: number
+  simPrevY: number
+  simCurrX: number
+  simCurrY: number
+}
+
 /**
  * Manages Phaser sprites and ember-trail particle emitters for all active
  * fireball projectiles. Spawns sprites on `FireballLaunch`, advances their
@@ -67,6 +83,7 @@ interface FireballRenderEntry {
 export class ProjectileRenderSystem {
   private scene: Phaser.Scene
   private entries: Map<number, FireballRenderEntry> = new Map()
+  private homingOrbEntries: Map<number, HomingOrbRenderEntry> = new Map()
   private simAccumulatorMs = 0
 
   /**
@@ -74,6 +91,51 @@ export class ProjectileRenderSystem {
    */
   constructor(scene: Phaser.Scene) {
     this.scene = scene
+  }
+
+  /**
+   * Spawns a Homing Orb sprite.
+   *
+   * Idempotent for the same id: a second call destroys and respawns so the
+   * sprite snaps to the latest authoritative position and heading.
+   *
+   * @param payload - HomingOrbLaunch event data from the server.
+   */
+  spawnHomingOrb(payload: HomingOrbLaunchPayload): void {
+    if (this.homingOrbEntries.has(payload.id)) {
+      this.destroyHomingOrb(payload.id)
+    }
+
+    ClientHomingOrb[payload.id] = {
+      x: payload.x,
+      y: payload.y,
+      vx: payload.vx,
+      vy: payload.vy,
+      headingRad: payload.headingRad,
+      ownerId: payload.ownerId,
+      ...(payload.targetId !== undefined ? { targetId: payload.targetId } : {}),
+    }
+
+    const sprite = this.scene.add.sprite(
+      payload.x,
+      payload.y,
+      HOMING_ORB_FLY_TEXTURE,
+    )
+    sprite.setScale(HOMING_ORB_SCALE)
+    sprite.setDepth(FIREBALL_DEPTH)
+    sprite.setRotation(payload.headingRad)
+
+    if (this.scene.anims?.exists(HOMING_ORB_FLY_ANIM)) {
+      sprite.play(HOMING_ORB_FLY_ANIM)
+    }
+
+    this.homingOrbEntries.set(payload.id, {
+      sprite,
+      simPrevX: payload.x,
+      simPrevY: payload.y,
+      simCurrX: payload.x,
+      simCurrY: payload.y,
+    })
   }
 
   /**
@@ -152,6 +214,20 @@ export class ProjectileRenderSystem {
   }
 
   /**
+   * Replaces all client Homing Orbs from a full `GameStateSync` snapshot.
+   *
+   * @param homingOrbs - Authoritative Homing Orb rows from the server.
+   */
+  applyFullSyncHomingOrbs(homingOrbs: readonly HomingOrbSnapshot[]): void {
+    for (const id of [...this.homingOrbEntries.keys()]) {
+      this.destroyHomingOrb(id)
+    }
+    for (const s of homingOrbs) {
+      this.spawnHomingOrb(s)
+    }
+  }
+
+  /**
    * Applies a batch position update for all active fireballs. Each
    * authoritative position collapses both `simPrev` and `simCurr` for
    * that fireball onto the server value so the next render step does
@@ -181,6 +257,37 @@ export class ProjectileRenderSystem {
   }
 
   /**
+   * Applies a batch movement update for all active Homing Orbs.
+   *
+   * @param payload - HomingOrbBatchUpdate event data from the server.
+   */
+  applyHomingOrbBatchUpdate(payload: HomingOrbBatchUpdatePayload): void {
+    for (const delta of payload.deltas) {
+      const orb = ClientHomingOrb[delta.id]
+      if (orb) {
+        orb.x = delta.x
+        orb.y = delta.y
+        orb.vx = delta.vx
+        orb.vy = delta.vy
+        orb.headingRad = delta.headingRad
+        if (delta.targetId !== undefined) orb.targetId = delta.targetId
+      }
+      const entry = this.homingOrbEntries.get(delta.id)
+      if (entry) {
+        entry.simPrevX = delta.x
+        entry.simPrevY = delta.y
+        entry.simCurrX = delta.x
+        entry.simCurrY = delta.y
+        entry.sprite.setPosition(delta.x, delta.y)
+        entry.sprite.setRotation(delta.headingRad)
+      }
+    }
+    for (const removedId of payload.removedIds) {
+      this.destroyHomingOrb(removedId)
+    }
+  }
+
+  /**
    * Destroys the sprite + trailing emitter for a fireball that has impacted
    * or expired. Emitter is stopped before destruction so any in-flight
    * particles fade naturally rather than vanishing instantly.
@@ -198,6 +305,20 @@ export class ProjectileRenderSystem {
       this.entries.delete(id)
     }
     delete ClientFireball[id]
+  }
+
+  /**
+   * Destroys the sprite for a Homing Orb that has impacted, expired, or been removed.
+   *
+   * @param id - Homing Orb entity id to remove.
+   */
+  destroyHomingOrb(id: number): void {
+    const entry = this.homingOrbEntries.get(id)
+    if (entry) {
+      entry.sprite.destroy()
+      this.homingOrbEntries.delete(id)
+    }
+    delete ClientHomingOrb[id]
   }
 
   /**
@@ -238,6 +359,16 @@ export class ProjectileRenderSystem {
       fb.x = entry.simCurrX
       fb.y = entry.simCurrY
     }
+    for (const [id, entry] of this.homingOrbEntries) {
+      const orb = ClientHomingOrb[id]
+      if (!orb) continue
+      entry.simPrevX = entry.simCurrX
+      entry.simPrevY = entry.simCurrY
+      entry.simCurrX += orb.vx * TICK_DT_SEC
+      entry.simCurrY += orb.vy * TICK_DT_SEC
+      orb.x = entry.simCurrX
+      orb.y = entry.simCurrY
+    }
   }
 
   private _renderStep(alpha: number): void {
@@ -248,12 +379,24 @@ export class ProjectileRenderSystem {
         entry.simPrevY + (entry.simCurrY - entry.simPrevY) * alpha
       entry.sprite.setPosition(x, y)
     }
+    for (const [id, entry] of this.homingOrbEntries) {
+      const x =
+        entry.simPrevX + (entry.simCurrX - entry.simPrevX) * alpha
+      const y =
+        entry.simPrevY + (entry.simCurrY - entry.simPrevY) * alpha
+      entry.sprite.setPosition(x, y)
+      const orb = ClientHomingOrb[id]
+      if (orb) entry.sprite.setRotation(orb.headingRad)
+    }
   }
 
   /** Destroys all active fireball sprites and emitters. Call on scene shutdown. */
   destroy(): void {
     for (const [id] of this.entries) {
       this.destroyFireball(id)
+    }
+    for (const [id] of this.homingOrbEntries) {
+      this.destroyHomingOrb(id)
     }
   }
 

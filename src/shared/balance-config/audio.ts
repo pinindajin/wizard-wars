@@ -41,6 +41,9 @@ export const WALK_FOOTSTEP_INTERVAL_MS =
 export const SFX_KEYS = {
   fireballCast: "sfx-fireball-cast",
   fireballImpact: "sfx-fireball-impact",
+  homingOrbCast: "sfx-homing-orb-cast",
+  homingOrbImpact: "sfx-homing-orb-impact",
+  homingOrbExpire: "sfx-homing-orb-expire",
   lightningCast: "sfx-lightning-cast",
   lightningImpact: "sfx-lightning-impact",
   axeSwing: "sfx-axe-swing",
@@ -58,6 +61,8 @@ export const SFX_KEYS = {
 /** SFX concurrency caps (max simultaneous instances). */
 export const SFX_CONCURRENCY: Record<string, number> = {
   [SFX_KEYS.fireballImpact]: 4,
+  [SFX_KEYS.homingOrbImpact]: 4,
+  [SFX_KEYS.homingOrbExpire]: 4,
   [SFX_KEYS.walkStep]: 2,
   [SFX_KEYS.axeSwing]: 4,
   [SFX_KEYS.playerHit]: 6,

@@ -54,6 +54,23 @@ export const ClientFireball: Record<
 > = {}
 
 /**
+ * Homing Orb projectile state.
+ * Maintained by ProjectileRenderSystem.
+ */
+export const ClientHomingOrb: Record<
+  number,
+  {
+    x: number
+    y: number
+    vx: number
+    vy: number
+    headingRad: number
+    ownerId: string
+    targetId?: string
+  }
+> = {}
+
+/**
  * Rendering interpolation state per player entity.
  * Stores the rendered (smoothed) position, separate from the authoritative server position.
  */

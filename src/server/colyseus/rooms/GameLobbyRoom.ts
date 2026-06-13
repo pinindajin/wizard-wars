@@ -14,6 +14,7 @@ import { RoomEvent } from "../../../shared/roomEvents"
 import type {
   AuthUser,
   FireballBatchUpdatePayload,
+  HomingOrbBatchUpdatePayload,
   LobbyPhase,
   LobbyPlayer,
   LobbyStatePayload,
@@ -69,7 +70,11 @@ import {
   PERFORMANCE_STATUS_WINDOW_MS,
   resolveGamePerformanceConfig,
 } from "../../game/performanceConfig"
-import { mergeFireballBatch, mergePlayerBatch } from "../../game/networkBatching"
+import {
+  mergeFireballBatch,
+  mergeHomingOrbBatch,
+  mergePlayerBatch,
+} from "../../game/networkBatching"
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -436,11 +441,19 @@ export class GameLobbyRoom extends Room {
     Pick<FireballBatchUpdatePayload, "deltas" | "removedIds">
   > = []
 
+  /** Pending Homing Orb visual deltas/removals awaiting the next network flush. */
+  private pendingHomingOrbBatches: Array<
+    Pick<HomingOrbBatchUpdatePayload, "deltas" | "removedIds">
+  > = []
+
   /** Monotonic sequence for player batch payloads. */
   private playerBatchSeq = 0
 
   /** Monotonic sequence for fireball batch payloads. */
   private fireballBatchSeq = 0
+
+  /** Monotonic sequence for Homing Orb batch payloads. */
+  private homingOrbBatchSeq = 0
 
   /** Last wall-clock time a cadence-limited network batch was flushed. */
   private lastNetworkFlushAtMs = 0
@@ -2202,6 +2215,7 @@ export class GameLobbyRoom extends Room {
     activeGameLoopRoomIds.delete(this.roomId)
     this.pendingPlayerDeltaBatches = []
     this.pendingFireballBatches = []
+    this.pendingHomingOrbBatches = []
   }
 
   // ---------------------------------------------------------------------------
@@ -2216,8 +2230,10 @@ export class GameLobbyRoom extends Room {
   private resetNetworkBatchingState(nowMs: number): void {
     this.pendingPlayerDeltaBatches = []
     this.pendingFireballBatches = []
+    this.pendingHomingOrbBatches = []
     this.playerBatchSeq = 0
     this.fireballBatchSeq = 0
+    this.homingOrbBatchSeq = 0
     this.lastNetworkFlushAtMs = nowMs
   }
 
@@ -2278,7 +2294,8 @@ export class GameLobbyRoom extends Room {
   private hasPendingVisualBatches(): boolean {
     return (
       this.pendingPlayerDeltaBatches.length > 0 ||
-      this.pendingFireballBatches.length > 0
+      this.pendingFireballBatches.length > 0 ||
+      this.pendingHomingOrbBatches.length > 0
     )
   }
 
@@ -2348,6 +2365,17 @@ export class GameLobbyRoom extends Room {
         this.broadcast(RoomEvent.FireballBatchUpdate, {
           ...fireballs,
           seq: this.fireballBatchSeq++,
+        })
+      }
+    }
+
+    if (this.pendingHomingOrbBatches.length > 0) {
+      const homingOrbs = mergeHomingOrbBatch(this.pendingHomingOrbBatches)
+      this.pendingHomingOrbBatches = []
+      if (homingOrbs.deltas.length > 0 || homingOrbs.removedIds.length > 0) {
+        this.broadcast(RoomEvent.HomingOrbBatchUpdate, {
+          ...homingOrbs,
+          seq: this.homingOrbBatchSeq++,
         })
       }
     }
@@ -2432,6 +2460,12 @@ export class GameLobbyRoom extends Room {
         removedIds: output.fireballRemovedIds,
       })
     }
+    if (output.homingOrbDeltas.length > 0 || output.homingOrbRemovedIds.length > 0) {
+      this.pendingHomingOrbBatches.push({
+        deltas: output.homingOrbDeltas,
+        removedIds: output.homingOrbRemovedIds,
+      })
+    }
 
     if (
       this.hasPendingVisualBatches() &&
@@ -2447,6 +2481,12 @@ export class GameLobbyRoom extends Room {
     }
     for (const impact of output.fireballImpacts) {
       this.broadcast(RoomEvent.FireballImpact, impact)
+    }
+    for (const launch of output.homingOrbLaunches) {
+      this.broadcast(RoomEvent.HomingOrbLaunch, launch)
+    }
+    for (const impact of output.homingOrbImpacts) {
+      this.broadcast(RoomEvent.HomingOrbImpact, impact)
     }
     for (const bolt of output.lightningBolts) {
       this.broadcast(RoomEvent.LightningBolt, bolt)

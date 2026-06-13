@@ -5,6 +5,8 @@ import {
   FIREBALL_CHANNEL_TEXTURE,
   FIREBALL_FLY_ANIM,
   FIREBALL_FLY_TEXTURE,
+  HOMING_ORB_FLY_ANIM,
+  HOMING_ORB_FLY_TEXTURE,
   LAVA_LAP_ANIM,
   registerFireballAnims,
 } from "./FireballAnimDefs"
@@ -39,20 +41,28 @@ function mockAnimManager() {
 }
 
 describe("registerFireballAnims", () => {
-  it("creates fly + channel anims with correct texture keys and frame ranges", () => {
+  it("creates fireball, homing orb, and channel anims with correct texture keys and frame ranges", () => {
     const { manager, created } = mockAnimManager()
 
     registerFireballAnims(manager as never)
 
     const fly = created.find((c) => c.key === FIREBALL_FLY_ANIM)
+    const homing = created.find((c) => c.key === HOMING_ORB_FLY_ANIM)
     const channel = created.find((c) => c.key === FIREBALL_CHANNEL_ANIM)
 
     expect(fly).toBeDefined()
+    expect(homing).toBeDefined()
     expect(channel).toBeDefined()
     expect(fly!.repeat).toBe(-1)
+    expect(homing!.repeat).toBe(-1)
     expect(channel!.repeat).toBe(-1)
     expect(fly!.frames).toEqual({
       texture: FIREBALL_FLY_TEXTURE,
+      start: 0,
+      end: 4,
+    })
+    expect(homing!.frames).toEqual({
+      texture: HOMING_ORB_FLY_TEXTURE,
       start: 0,
       end: 4,
     })
@@ -66,6 +76,7 @@ describe("registerFireballAnims", () => {
   it("is idempotent — does not recreate animations that already exist", () => {
     const { manager, existing } = mockAnimManager()
     existing.add(FIREBALL_FLY_ANIM)
+    existing.add(HOMING_ORB_FLY_ANIM)
     existing.add(FIREBALL_CHANNEL_ANIM)
     existing.add(LAVA_LAP_ANIM)
 

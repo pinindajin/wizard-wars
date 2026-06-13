@@ -48,6 +48,7 @@ import {
   INVULNERABLE_WINDOW_MS,
   TICK_MS,
   JUMP_MAX_CHARGES,
+  HOMING_ORB_MAX_CHARGES,
 } from "../../../shared/balance-config"
 
 const INVULNERABLE_TICKS = Math.ceil(INVULNERABLE_WINDOW_MS / TICK_MS)
@@ -134,11 +135,15 @@ function respawnPlayer(
   removeComponent(world, eid, DeadTag)
   addComponent(world, eid, InvulnerableTag)
   Cooldown.fireball[eid]    = 0
+  Cooldown.homingOrb[eid] = 0
   Cooldown.lightningBolt[eid] = 0
   Cooldown.primaryMelee[eid] = 0
   Cooldown.healingPotion[eid] = 0
   Cooldown.jump[eid] = 0
   AbilityRuntime.fireballCooldownEndsAtMs[eid] = 0
+  AbilityRuntime.homingOrbCharges[eid] = HOMING_ORB_MAX_CHARGES
+  AbilityRuntime.homingOrbRechargeReadyTick[eid] = 0
+  AbilityRuntime.homingOrbRechargeEndsAtMs[eid] = 0
   AbilityRuntime.lightningBoltCooldownEndsAtMs[eid] = 0
   AbilityRuntime.healingPotionCooldownEndsAtMs[eid] = 0
   AbilityRuntime.jumpCharges[eid] = JUMP_MAX_CHARGES

@@ -621,14 +621,17 @@ export class PlayerRenderSystem {
    * Returns whether the channel-cast overlay should be shown for `state`.
    *
    * Strict AND: the player must be in the `light_cast` animation state AND
-   * the server-reported `castingAbilityId` must be `"fireball"`. Mismatches
+   * the server-reported `castingAbilityId` must be Fireball or Homing Orb. Mismatches
    * (e.g. `light_cast` without an ability id) hide the overlay rather than
    * guess. Exposed as a function so tests can exercise the rule directly.
    */
   static shouldShowFireballChannel(
     state: Pick<(typeof ClientPlayerState)[number], "animState" | "castingAbilityId">,
   ): boolean {
-    return state.animState === "light_cast" && state.castingAbilityId === "fireball"
+    return (
+      state.animState === "light_cast" &&
+      (state.castingAbilityId === "fireball" || state.castingAbilityId === "homing_orb")
+    )
   }
 
   /**
@@ -1093,7 +1096,7 @@ export class PlayerRenderSystem {
 
       this._updateLavaSubmerge(entry, renderPos, state, isDying)
 
-      // --- Fireball channel overlay (light_cast + castingAbilityId=fireball) ---
+      // --- Fireball channel overlay (light_cast + light spell castingAbilityId) ---
       if (isDying && entry.channelOverlay) {
         entry.channelOverlay.setVisible(false)
       } else if (!isDying) {

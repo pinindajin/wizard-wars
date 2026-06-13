@@ -91,6 +91,20 @@ describe("ShopModal", () => {
     expect(conn.sendShopPurchase).toHaveBeenCalledWith("lightning_bolt")
   })
 
+  it("renders Homing Orb as a 10g ability and can buy it", () => {
+    const conn = makeConnection()
+    render(
+      <ShopModal shopState={makeState({ gold: 10 })} connection={conn} onClose={() => {}} />,
+    )
+    const item = screen.getByTestId("shop-item-homing_orb")
+    expect(item.textContent).toContain("Homing Orb")
+    expect(item.textContent).toContain("10g")
+
+    fireEvent.click(screen.getByTestId("shop-buy-homing_orb"))
+
+    expect(conn.sendShopPurchase).toHaveBeenCalledWith("homing_orb")
+  })
+
   it("clicking assign slot calls sendAssignAbility with id + slotIndex", () => {
     const conn = makeConnection()
     const state = makeState({ items: [{ itemId: "lightning_bolt" }] })
