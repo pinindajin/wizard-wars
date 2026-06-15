@@ -108,30 +108,41 @@ describe("indexedWorldCollision", () => {
   })
 
   it("falls back to full resolution when local indexed passes cannot clear a deep overlap", () => {
-    const start = { x: 1148, y: 230 }
+    const bounds = { width: 1000, height: 300 }
+    const footprint = { radiusX: 10, radiusY: 10, offsetY: 0 }
+    const colliders = Array.from({ length: 12 }, (_, index) => ({
+      x: 100 + index * 8,
+      y: 80,
+      width: 20,
+      height: 80,
+    }))
+    const colliderSet = createTestColliderSet(colliders)
+    const start = { x: 118, y: 100 }
     const indexed = resolveAgainstWorldIndexed(
       start.x,
       start.y,
-      PLAYER_WORLD_COLLISION_FOOTPRINT,
-      ARENA_BOUNDS,
+      footprint,
+      bounds,
+      colliderSet,
     )
 
+    expect(canOccupyWorldPosition(start.x, start.y, footprint, bounds, colliders)).toBe(false)
     expect(
       canOccupyWorldPosition(
         indexed.x,
         indexed.y,
-        PLAYER_WORLD_COLLISION_FOOTPRINT,
-        ARENA_BOUNDS,
-        ARENA_WORLD_COLLIDERS,
+        footprint,
+        bounds,
+        colliders,
       ),
     ).toBe(true)
     expect(indexed).toEqual(
       resolveAgainstWorld(
         start.x,
         start.y,
-        PLAYER_WORLD_COLLISION_FOOTPRINT,
-        ARENA_BOUNDS,
-        ARENA_WORLD_COLLIDERS,
+        footprint,
+        bounds,
+        colliders,
       ),
     )
   })

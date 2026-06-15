@@ -209,16 +209,16 @@ describe("arena constants", () => {
     ).toBe(true)
   })
 
-  it("keeps native jump islands and side island bridge seams walkable", () => {
+  it("keeps native jump islands, side decks, and horizontal bridges walkable", () => {
     const samples = [
       { label: "bottom-left island", x: 452, y: 990 },
       { label: "bottom-right island", x: 950, y: 990 },
-      { label: "top-left tiny island", x: 409, y: 34 },
-      { label: "top-right tiny island", x: 993, y: 34 },
-      { label: "left side bridge seam", x: 103, y: 568 },
-      { label: "right side bridge seam", x: 1300, y: 568 },
-      { label: "left side deck", x: 103, y: 394 },
-      { label: "right side deck", x: 1299, y: 394 },
+      { label: "top-left tiny island", x: 393, y: 43 },
+      { label: "top-right tiny island", x: 1009, y: 43 },
+      { label: "left horizontal bridge", x: 103, y: 568 },
+      { label: "right horizontal bridge", x: 1300, y: 568 },
+      { label: "left side deck", x: 104, y: 423 },
+      { label: "right side deck", x: 1298, y: 429 },
     ]
 
     for (const sample of samples) {
@@ -236,6 +236,26 @@ describe("arena constants", () => {
         ),
         `${sample.label} footprint`,
       ).toBe(true)
+    }
+  })
+
+  it("does not leave stale broad walkable residue around hand-guided side islands", () => {
+    const samples = [
+      { label: "top-left tiny island old spill", x: 465, y: 40 },
+      { label: "top-right tiny island old spill", x: 937, y: 40 },
+      { label: "left side deck old top crescent", x: 104, y: 340 },
+      { label: "right side deck old top crescent", x: 1298, y: 340 },
+      { label: "left side deck old vertical stem", x: 104, y: 510 },
+      { label: "right side deck old vertical stem", x: 1298, y: 510 },
+      { label: "left side deck old edge sliver", x: 10, y: 390 },
+      { label: "right side deck old edge sliver", x: 1392, y: 390 },
+    ]
+
+    for (const sample of samples) {
+      const blockingCollider = ARENA_NON_WALKABLE_COLLIDERS.find((rect) =>
+        pointOverlapsCollider(sample.x, sample.y, rect),
+      )
+      expect(blockingCollider, sample.label).toBeDefined()
     }
   })
 })

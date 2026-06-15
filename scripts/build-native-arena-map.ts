@@ -782,6 +782,111 @@ function reclassifyPolygonFromBase(
   reclassifyPatchFromBase(masks, base, patch)
 }
 
+function clearWalkableRect(
+  masks: { walkable: Mask; lava: Mask; cliff: Mask },
+  base: RawImage,
+  rect: Rect,
+): void {
+  reclassifyPolygonFromBase(masks, base, [
+    { x: rect.x, y: rect.y },
+    { x: rect.x + rect.width, y: rect.y },
+    { x: rect.x + rect.width, y: rect.y + rect.height },
+    { x: rect.x, y: rect.y + rect.height },
+  ])
+}
+
+function mirrorPointsX(points: readonly { x: number; y: number }[]): { x: number; y: number }[] {
+  return points.map((point) => ({ x: ARENA_WIDTH - point.x, y: point.y }))
+}
+
+function applyUserGuideWalkableReplacements(
+  masks: { walkable: Mask; lava: Mask; cliff: Mask },
+  base: RawImage,
+): void {
+  // User-provided guide crop is native scale. These replacements intentionally
+  // clear old broad patches in marked ROIs before repainting the guided deck.
+  for (const [rect, cx, cy, rx, ry] of [
+    [{ x: 40, y: 68, width: 270, height: 188 }, 164, 158, 112, 80],
+    [{ x: 1092, y: 68, width: 270, height: 188 }, 1238, 158, 112, 80],
+    [{ x: 320, y: 0, width: 160, height: 90 }, 393, 43, 40, 24],
+    [{ x: 922, y: 0, width: 160, height: 90 }, 1009, 43, 40, 24],
+    [{ x: 0, y: 324, width: 220, height: 164 }, 104, 423, 66, 45],
+    [{ x: 1182, y: 324, width: 220, height: 164 }, 1298, 423, 66, 45],
+  ] as const) {
+    clearWalkableRect(masks, base, rect)
+    paintWalkableEllipse(masks, cx, cy, rx, ry)
+  }
+
+  for (const rect of [
+    { x: 0, y: 488, width: 282, height: 134 },
+    { x: 1120, y: 488, width: 282, height: 134 },
+  ] as const) {
+    clearWalkableRect(masks, base, rect)
+  }
+  const leftHorizontalBridge = [
+    { x: 0, y: 544 },
+    { x: 20, y: 544 },
+    { x: 38, y: 552 },
+    { x: 252, y: 552 },
+    { x: 252, y: 588 },
+    { x: 38, y: 588 },
+    { x: 20, y: 610 },
+    { x: 0, y: 602 },
+    { x: 12, y: 584 },
+    { x: 0, y: 570 },
+  ] as const
+  paintWalkablePolygon(masks, leftHorizontalBridge)
+  paintWalkablePolygon(masks, mirrorPointsX(leftHorizontalBridge))
+
+  clearWalkableRect(masks, base, { x: 500, y: 76, width: 402, height: 176 })
+  const leftCastleTerrace = [
+    { x: 546, y: 125 },
+    { x: 572, y: 94 },
+    { x: 574, y: 150 },
+    { x: 610, y: 181 },
+    { x: 662, y: 198 },
+    { x: 662, y: 229 },
+    { x: 590, y: 216 },
+    { x: 530, y: 180 },
+    { x: 543, y: 158 },
+    { x: 529, y: 146 },
+  ] as const
+  paintWalkablePolygon(masks, leftCastleTerrace)
+  paintWalkablePolygon(masks, mirrorPointsX(leftCastleTerrace))
+  paintWalkablePolygon(masks, [
+    { x: 676, y: 248 },
+    { x: 731, y: 248 },
+    { x: 731, y: 164 },
+    { x: 710, y: 154 },
+    { x: 691, y: 154 },
+    { x: 676, y: 198 },
+  ])
+
+  const leftDiagonalClear = [
+    { x: 206, y: 184 },
+    { x: 448, y: 332 },
+    { x: 398, y: 392 },
+    { x: 186, y: 235 },
+  ] as const
+  const leftDiagonalBridge = [
+    { x: 224, y: 236 },
+    { x: 253, y: 226 },
+    { x: 392, y: 344 },
+    { x: 389, y: 358 },
+    { x: 360, y: 360 },
+    { x: 220, y: 240 },
+  ] as const
+  replaceWalkablePolygon(masks, base, leftDiagonalClear, leftDiagonalBridge)
+  replaceWalkablePolygon(
+    masks,
+    base,
+    mirrorPointsX(leftDiagonalClear),
+    mirrorPointsX(leftDiagonalBridge),
+  )
+  paintWalkableEllipse(masks, 164, 158, 112, 80)
+  paintWalkableEllipse(masks, 1238, 158, 112, 80)
+}
+
 function applyWalkableSurfaceCompletion(
   masks: { walkable: Mask; lava: Mask; cliff: Mask },
   base: RawImage,
@@ -1025,6 +1130,7 @@ async function buildArenaGeometry(): Promise<void> {
   applyComputerVisionGuidedMaskRefinements({ walkable, lava, cliff }, base)
   applyWalkableSurfaceCompletion({ walkable, lava, cliff }, base)
   applyCardinalConnectorUnions({ walkable, lava, cliff })
+  applyUserGuideWalkableReplacements({ walkable, lava, cliff }, base)
   assertExclusiveMasks({ walkable, lava, cliff })
   const visualClassified = classifiedGridFromMasks({ walkable, lava, cliff }, REGION_CELL_PX)
   const movementWalkable = cloneMask(walkable)
