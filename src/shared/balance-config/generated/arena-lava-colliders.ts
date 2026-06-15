@@ -1315,7 +1315,7 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
     "x": 312,
     "y": 164,
     "width": 192,
-    "height": 16
+    "height": 12
   },
   {
     "x": 864,
@@ -1333,25 +1333,169 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
     "x": 896,
     "y": 172,
     "width": 196,
-    "height": 8
+    "height": 4
+  },
+  {
+    "x": 312,
+    "y": 176,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 340,
+    "y": 176,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 368,
+    "y": 176,
+    "width": 88,
+    "height": 4
+  },
+  {
+    "x": 460,
+    "y": 176,
+    "width": 44,
+    "height": 4
+  },
+  {
+    "x": 896,
+    "y": 176,
+    "width": 48,
+    "height": 4
+  },
+  {
+    "x": 948,
+    "y": 176,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 972,
+    "y": 176,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 992,
+    "y": 176,
+    "width": 72,
+    "height": 4
+  },
+  {
+    "x": 1076,
+    "y": 176,
+    "width": 12,
+    "height": 4
   },
   {
     "x": 312,
     "y": 180,
-    "width": 196,
+    "width": 88,
+    "height": 4
+  },
+  {
+    "x": 404,
+    "y": 180,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 412,
+    "y": 180,
+    "width": 40,
+    "height": 4
+  },
+  {
+    "x": 456,
+    "y": 180,
+    "width": 52,
+    "height": 4
+  },
+  {
+    "x": 828,
+    "y": 180,
+    "width": 4,
     "height": 4
   },
   {
     "x": 900,
     "y": 180,
-    "width": 192,
-    "height": 12
+    "width": 64,
+    "height": 4
+  },
+  {
+    "x": 968,
+    "y": 180,
+    "width": 64,
+    "height": 4
+  },
+  {
+    "x": 1036,
+    "y": 180,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 1072,
+    "y": 180,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1080,
+    "y": 180,
+    "width": 8,
+    "height": 4
   },
   {
     "x": 312,
     "y": 184,
-    "width": 192,
-    "height": 16
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 332,
+    "y": 184,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 360,
+    "y": 184,
+    "width": 68,
+    "height": 4
+  },
+  {
+    "x": 436,
+    "y": 184,
+    "width": 68,
+    "height": 8
+  },
+  {
+    "x": 900,
+    "y": 184,
+    "width": 44,
+    "height": 4
+  },
+  {
+    "x": 948,
+    "y": 184,
+    "width": 56,
+    "height": 4
+  },
+  {
+    "x": 1008,
+    "y": 184,
+    "width": 52,
+    "height": 4
+  },
+  {
+    "x": 1064,
+    "y": 184,
+    "width": 24,
+    "height": 4
   },
   {
     "x": 4,
@@ -1360,15 +1504,63 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
     "height": 36
   },
   {
+    "x": 312,
+    "y": 188,
+    "width": 52,
+    "height": 4
+  },
+  {
+    "x": 368,
+    "y": 188,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 408,
+    "y": 188,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 420,
+    "y": 188,
+    "width": 8,
+    "height": 4
+  },
+  {
     "x": 892,
     "y": 188,
     "width": 4,
     "height": 4
   },
   {
+    "x": 900,
+    "y": 188,
+    "width": 188,
+    "height": 4
+  },
+  {
     "x": 1376,
     "y": 188,
     "width": 16,
+    "height": 4
+  },
+  {
+    "x": 312,
+    "y": 192,
+    "width": 80,
+    "height": 4
+  },
+  {
+    "x": 396,
+    "y": 192,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 424,
+    "y": 192,
+    "width": 80,
     "height": 4
   },
   {
@@ -1380,7 +1572,37 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 888,
     "y": 192,
-    "width": 204,
+    "width": 96,
+    "height": 4
+  },
+  {
+    "x": 988,
+    "y": 192,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 1004,
+    "y": 192,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 1028,
+    "y": 192,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 1048,
+    "y": 192,
+    "width": 28,
+    "height": 4
+  },
+  {
+    "x": 1080,
+    "y": 192,
+    "width": 8,
     "height": 4
   },
   {
@@ -1388,6 +1610,24 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
     "y": 192,
     "width": 28,
     "height": 8
+  },
+  {
+    "x": 312,
+    "y": 196,
+    "width": 44,
+    "height": 4
+  },
+  {
+    "x": 360,
+    "y": 196,
+    "width": 64,
+    "height": 4
+  },
+  {
+    "x": 428,
+    "y": 196,
+    "width": 76,
+    "height": 4
   },
   {
     "x": 860,
@@ -1398,13 +1638,61 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 892,
     "y": 196,
-    "width": 200,
+    "width": 76,
+    "height": 4
+  },
+  {
+    "x": 972,
+    "y": 196,
+    "width": 72,
+    "height": 4
+  },
+  {
+    "x": 1052,
+    "y": 196,
+    "width": 36,
     "height": 4
   },
   {
     "x": 312,
     "y": 200,
-    "width": 208,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 324,
+    "y": 200,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 344,
+    "y": 200,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 352,
+    "y": 200,
+    "width": 44,
+    "height": 4
+  },
+  {
+    "x": 400,
+    "y": 200,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 412,
+    "y": 200,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 452,
+    "y": 200,
+    "width": 68,
     "height": 4
   },
   {
@@ -1416,7 +1704,31 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 888,
     "y": 200,
-    "width": 204,
+    "width": 84,
+    "height": 4
+  },
+  {
+    "x": 980,
+    "y": 200,
+    "width": 28,
+    "height": 4
+  },
+  {
+    "x": 1012,
+    "y": 200,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 1052,
+    "y": 200,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 1068,
+    "y": 200,
+    "width": 24,
     "height": 4
   },
   {
@@ -1428,8 +1740,32 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 308,
     "y": 204,
-    "width": 204,
-    "height": 8
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 360,
+    "y": 204,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 368,
+    "y": 204,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 408,
+    "y": 204,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 428,
+    "y": 204,
+    "width": 84,
+    "height": 4
   },
   {
     "x": 876,
@@ -1446,8 +1782,68 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 892,
     "y": 204,
-    "width": 200,
+    "width": 52,
+    "height": 4
+  },
+  {
+    "x": 948,
+    "y": 204,
+    "width": 44,
+    "height": 4
+  },
+  {
+    "x": 996,
+    "y": 204,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 1032,
+    "y": 204,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1040,
+    "y": 204,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1056,
+    "y": 204,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 308,
+    "y": 208,
+    "width": 28,
     "height": 8
+  },
+  {
+    "x": 356,
+    "y": 208,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 384,
+    "y": 208,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 408,
+    "y": 208,
+    "width": 28,
+    "height": 4
+  },
+  {
+    "x": 440,
+    "y": 208,
+    "width": 72,
+    "height": 4
   },
   {
     "x": 528,
@@ -1462,9 +1858,75 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 308,
+    "x": 892,
+    "y": 208,
+    "width": 68,
+    "height": 4
+  },
+  {
+    "x": 968,
+    "y": 208,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 984,
+    "y": 208,
+    "width": 52,
+    "height": 4
+  },
+  {
+    "x": 1056,
+    "y": 208,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1068,
+    "y": 208,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 340,
     "y": 212,
-    "width": 212,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 368,
+    "y": 212,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 376,
+    "y": 212,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 384,
+    "y": 212,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 400,
+    "y": 212,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 416,
+    "y": 212,
+    "width": 28,
+    "height": 4
+  },
+  {
+    "x": 452,
+    "y": 212,
+    "width": 68,
     "height": 4
   },
   {
@@ -1476,14 +1938,80 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 876,
     "y": 212,
-    "width": 216,
+    "width": 68,
+    "height": 4
+  },
+  {
+    "x": 948,
+    "y": 212,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 956,
+    "y": 212,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 968,
+    "y": 212,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 976,
+    "y": 212,
+    "width": 44,
+    "height": 4
+  },
+  {
+    "x": 1028,
+    "y": 212,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1036,
+    "y": 212,
+    "width": 52,
     "height": 4
   },
   {
     "x": 312,
     "y": 216,
-    "width": 212,
-    "height": 12
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 324,
+    "y": 216,
+    "width": 28,
+    "height": 4
+  },
+  {
+    "x": 360,
+    "y": 216,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 384,
+    "y": 216,
+    "width": 48,
+    "height": 4
+  },
+  {
+    "x": 436,
+    "y": 216,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 448,
+    "y": 216,
+    "width": 76,
+    "height": 4
   },
   {
     "x": 528,
@@ -1500,7 +2028,67 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 868,
     "y": 216,
-    "width": 224,
+    "width": 84,
+    "height": 4
+  },
+  {
+    "x": 956,
+    "y": 216,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 992,
+    "y": 216,
+    "width": 48,
+    "height": 4
+  },
+  {
+    "x": 1044,
+    "y": 216,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 1060,
+    "y": 216,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 1084,
+    "y": 216,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 312,
+    "y": 220,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 348,
+    "y": 220,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 368,
+    "y": 220,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 404,
+    "y": 220,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 424,
+    "y": 220,
+    "width": 100,
     "height": 4
   },
   {
@@ -1536,7 +2124,31 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 900,
     "y": 220,
-    "width": 192,
+    "width": 64,
+    "height": 4
+  },
+  {
+    "x": 980,
+    "y": 220,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 1008,
+    "y": 220,
+    "width": 28,
+    "height": 4
+  },
+  {
+    "x": 1044,
+    "y": 220,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 1068,
+    "y": 220,
+    "width": 24,
     "height": 4
   },
   {
@@ -1549,6 +2161,60 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
     "x": 92,
     "y": 224,
     "width": 4,
+    "height": 4
+  },
+  {
+    "x": 312,
+    "y": 224,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 320,
+    "y": 224,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 348,
+    "y": 224,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 356,
+    "y": 224,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 368,
+    "y": 224,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 380,
+    "y": 224,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 416,
+    "y": 224,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 436,
+    "y": 224,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 448,
+    "y": 224,
+    "width": 76,
     "height": 4
   },
   {
@@ -1572,13 +2238,31 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 880,
     "y": 224,
-    "width": 216,
+    "width": 84,
     "height": 4
   },
   {
-    "x": 1156,
+    "x": 972,
+    "y": 224,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 988,
+    "y": 224,
+    "width": 52,
+    "height": 4
+  },
+  {
+    "x": 1044,
     "y": 224,
     "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1052,
+    "y": 224,
+    "width": 44,
     "height": 4
   },
   {
@@ -1596,7 +2280,19 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 316,
     "y": 228,
-    "width": 224,
+    "width": 44,
+    "height": 4
+  },
+  {
+    "x": 364,
+    "y": 228,
+    "width": 40,
+    "height": 4
+  },
+  {
+    "x": 408,
+    "y": 228,
+    "width": 132,
     "height": 4
   },
   {
@@ -1614,7 +2310,19 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 856,
     "y": 228,
-    "width": 236,
+    "width": 132,
+    "height": 4
+  },
+  {
+    "x": 992,
+    "y": 228,
+    "width": 84,
+    "height": 4
+  },
+  {
+    "x": 1080,
+    "y": 228,
+    "width": 12,
     "height": 4
   },
   {
@@ -1632,7 +2340,19 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 320,
     "y": 232,
-    "width": 216,
+    "width": 60,
+    "height": 4
+  },
+  {
+    "x": 388,
+    "y": 232,
+    "width": 44,
+    "height": 4
+  },
+  {
+    "x": 436,
+    "y": 232,
+    "width": 100,
     "height": 4
   },
   {
@@ -1650,13 +2370,43 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 852,
     "y": 232,
-    "width": 240,
+    "width": 164,
     "height": 4
+  },
+  {
+    "x": 1024,
+    "y": 232,
+    "width": 12,
+    "height": 8
+  },
+  {
+    "x": 1040,
+    "y": 232,
+    "width": 48,
+    "height": 8
   },
   {
     "x": 324,
     "y": 236,
-    "width": 216,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 344,
+    "y": 236,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 388,
+    "y": 236,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 416,
+    "y": 236,
+    "width": 124,
     "height": 4
   },
   {
@@ -1668,7 +2418,25 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 844,
     "y": 236,
-    "width": 244,
+    "width": 100,
+    "height": 4
+  },
+  {
+    "x": 952,
+    "y": 236,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 976,
+    "y": 236,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 988,
+    "y": 236,
+    "width": 24,
     "height": 4
   },
   {
@@ -1686,7 +2454,19 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 328,
     "y": 240,
-    "width": 228,
+    "width": 44,
+    "height": 4
+  },
+  {
+    "x": 400,
+    "y": 240,
+    "width": 48,
+    "height": 8
+  },
+  {
+    "x": 452,
+    "y": 240,
+    "width": 104,
     "height": 4
   },
   {
@@ -1704,19 +2484,55 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 892,
     "y": 240,
-    "width": 192,
+    "width": 52,
     "height": 4
   },
   {
-    "x": 1092,
+    "x": 960,
+    "y": 240,
+    "width": 44,
+    "height": 4
+  },
+  {
+    "x": 1008,
     "y": 240,
     "width": 4,
-    "height": 8
+    "height": 4
+  },
+  {
+    "x": 1028,
+    "y": 240,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 1056,
+    "y": 240,
+    "width": 40,
+    "height": 4
   },
   {
     "x": 332,
     "y": 244,
-    "width": 204,
+    "width": 40,
+    "height": 4
+  },
+  {
+    "x": 456,
+    "y": 244,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 464,
+    "y": 244,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 488,
+    "y": 244,
+    "width": 48,
     "height": 4
   },
   {
@@ -1728,7 +2544,25 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 864,
     "y": 244,
-    "width": 216,
+    "width": 72,
+    "height": 4
+  },
+  {
+    "x": 940,
+    "y": 244,
+    "width": 60,
+    "height": 4
+  },
+  {
+    "x": 1032,
+    "y": 244,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 1072,
+    "y": 244,
+    "width": 24,
     "height": 4
   },
   {
@@ -1738,9 +2572,27 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 336,
+    "x": 340,
     "y": 248,
-    "width": 180,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 348,
+    "y": 248,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 400,
+    "y": 248,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 412,
+    "y": 248,
+    "width": 104,
     "height": 4
   },
   {
@@ -1758,13 +2610,31 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 900,
     "y": 248,
-    "width": 176,
+    "width": 60,
     "height": 4
   },
   {
-    "x": 1088,
+    "x": 964,
     "y": 248,
-    "width": 8,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 972,
+    "y": 248,
+    "width": 28,
+    "height": 4
+  },
+  {
+    "x": 1040,
+    "y": 248,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 1060,
+    "y": 248,
+    "width": 36,
     "height": 4
   },
   {
@@ -1788,19 +2658,91 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 340,
     "y": 252,
-    "width": 228,
+    "width": 12,
     "height": 4
   },
   {
-    "x": 844,
+    "x": 364,
     "y": 252,
-    "width": 228,
+    "width": 8,
     "height": 4
   },
   {
-    "x": 1084,
+    "x": 376,
+    "y": 252,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 384,
+    "y": 252,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 396,
+    "y": 252,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 424,
+    "y": 252,
+    "width": 28,
+    "height": 4
+  },
+  {
+    "x": 456,
+    "y": 252,
+    "width": 60,
+    "height": 4
+  },
+  {
+    "x": 876,
+    "y": 252,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 888,
+    "y": 252,
+    "width": 40,
+    "height": 4
+  },
+  {
+    "x": 932,
+    "y": 252,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 952,
+    "y": 252,
+    "width": 28,
+    "height": 4
+  },
+  {
+    "x": 984,
     "y": 252,
     "width": 12,
+    "height": 4
+  },
+  {
+    "x": 1000,
+    "y": 252,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 1032,
+    "y": 252,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 1056,
+    "y": 252,
+    "width": 40,
     "height": 4
   },
   {
@@ -1816,21 +2758,69 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
     "height": 8
   },
   {
-    "x": 344,
+    "x": 348,
     "y": 256,
-    "width": 204,
+    "width": 4,
     "height": 4
   },
   {
-    "x": 856,
+    "x": 356,
     "y": 256,
-    "width": 212,
+    "width": 20,
     "height": 4
   },
   {
-    "x": 1076,
+    "x": 388,
     "y": 256,
     "width": 8,
+    "height": 4
+  },
+  {
+    "x": 404,
+    "y": 256,
+    "width": 76,
+    "height": 4
+  },
+  {
+    "x": 496,
+    "y": 256,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 896,
+    "y": 256,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 924,
+    "y": 256,
+    "width": 48,
+    "height": 4
+  },
+  {
+    "x": 976,
+    "y": 256,
+    "width": 28,
+    "height": 4
+  },
+  {
+    "x": 1024,
+    "y": 256,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1032,
+    "y": 256,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1040,
+    "y": 256,
+    "width": 44,
     "height": 4
   },
   {
@@ -1842,13 +2832,61 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 352,
     "y": 260,
-    "width": 176,
+    "width": 28,
     "height": 4
   },
   {
-    "x": 872,
+    "x": 388,
     "y": 260,
-    "width": 192,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 396,
+    "y": 260,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 424,
+    "y": 260,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 432,
+    "y": 260,
+    "width": 44,
+    "height": 4
+  },
+  {
+    "x": 924,
+    "y": 260,
+    "width": 52,
+    "height": 4
+  },
+  {
+    "x": 980,
+    "y": 260,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 1020,
+    "y": 260,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 1048,
+    "y": 260,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1056,
+    "y": 260,
+    "width": 12,
     "height": 4
   },
   {
@@ -1866,19 +2904,37 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 356,
     "y": 264,
-    "width": 168,
+    "width": 48,
     "height": 4
   },
   {
-    "x": 880,
+    "x": 408,
     "y": 264,
-    "width": 180,
+    "width": 52,
     "height": 4
   },
   {
-    "x": 1064,
+    "x": 940,
+    "y": 264,
+    "width": 56,
+    "height": 4
+  },
+  {
+    "x": 1000,
     "y": 264,
     "width": 16,
+    "height": 4
+  },
+  {
+    "x": 1020,
+    "y": 264,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1028,
+    "y": 264,
+    "width": 52,
     "height": 4
   },
   {
@@ -1890,19 +2946,19 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 360,
     "y": 268,
-    "width": 156,
-    "height": 4
-  },
-  {
-    "x": 780,
-    "y": 268,
     "width": 4,
     "height": 4
   },
   {
-    "x": 884,
+    "x": 368,
     "y": 268,
-    "width": 196,
+    "width": 84,
+    "height": 4
+  },
+  {
+    "x": 952,
+    "y": 268,
+    "width": 128,
     "height": 4
   },
   {
@@ -1920,19 +2976,43 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 164,
     "y": 272,
-    "width": 32,
-    "height": 4
+    "width": 20,
+    "height": 12
   },
   {
     "x": 364,
     "y": 272,
-    "width": 124,
+    "width": 28,
     "height": 4
   },
   {
-    "x": 916,
+    "x": 396,
     "y": 272,
-    "width": 152,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 420,
+    "y": 272,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 468,
+    "y": 272,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 928,
+    "y": 272,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 960,
+    "y": 272,
+    "width": 108,
     "height": 4
   },
   {
@@ -1942,9 +3022,9 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 1204,
+    "x": 1220,
     "y": 272,
-    "width": 32,
+    "width": 16,
     "height": 8
   },
   {
@@ -1954,21 +3034,27 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 164,
-    "y": 276,
-    "width": 48,
-    "height": 4
-  },
-  {
     "x": 368,
     "y": 276,
-    "width": 104,
+    "width": 24,
     "height": 4
   },
   {
-    "x": 928,
+    "x": 396,
     "y": 276,
-    "width": 148,
+    "width": 40,
+    "height": 4
+  },
+  {
+    "x": 964,
+    "y": 276,
+    "width": 40,
+    "height": 4
+  },
+  {
+    "x": 1008,
+    "y": 276,
+    "width": 68,
     "height": 4
   },
   {
@@ -1978,21 +3064,27 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
     "height": 12
   },
   {
-    "x": 164,
-    "y": 280,
-    "width": 60,
-    "height": 4
-  },
-  {
     "x": 372,
     "y": 280,
-    "width": 92,
+    "width": 12,
     "height": 4
   },
   {
-    "x": 940,
+    "x": 388,
     "y": 280,
-    "width": 116,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 980,
+    "y": 280,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 1016,
+    "y": 280,
+    "width": 40,
     "height": 4
   },
   {
@@ -2002,10 +3094,10 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 1200,
+    "x": 1220,
     "y": 280,
-    "width": 40,
-    "height": 8
+    "width": 20,
+    "height": 4
   },
   {
     "x": 12,
@@ -2016,25 +3108,19 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 160,
     "y": 284,
-    "width": 64,
-    "height": 4
-  },
-  {
-    "x": 236,
-    "y": 284,
-    "width": 8,
+    "width": 24,
     "height": 4
   },
   {
     "x": 376,
     "y": 284,
-    "width": 76,
+    "width": 44,
     "height": 4
   },
   {
-    "x": 948,
+    "x": 988,
     "y": 284,
-    "width": 84,
+    "width": 44,
     "height": 4
   },
   {
@@ -2050,9 +3136,9 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 1148,
+    "x": 1216,
     "y": 284,
-    "width": 16,
+    "width": 24,
     "height": 4
   },
   {
@@ -2064,31 +3150,31 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 160,
     "y": 288,
-    "width": 100,
-    "height": 4
+    "width": 28,
+    "height": 16
+  },
+  {
+    "x": 208,
+    "y": 288,
+    "width": 4,
+    "height": 8
   },
   {
     "x": 380,
-    "y": 288,
-    "width": 64,
-    "height": 4
-  },
-  {
-    "x": 952,
-    "y": 288,
-    "width": 92,
-    "height": 4
-  },
-  {
-    "x": 1144,
     "y": 288,
     "width": 28,
     "height": 4
   },
   {
-    "x": 1184,
+    "x": 992,
     "y": 288,
-    "width": 56,
+    "width": 52,
+    "height": 4
+  },
+  {
+    "x": 1212,
+    "y": 288,
+    "width": 28,
     "height": 4
   },
   {
@@ -2098,21 +3184,15 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 160,
-    "y": 292,
-    "width": 104,
-    "height": 4
-  },
-  {
     "x": 384,
     "y": 292,
-    "width": 52,
+    "width": 16,
     "height": 4
   },
   {
-    "x": 968,
+    "x": 1000,
     "y": 292,
-    "width": 52,
+    "width": 20,
     "height": 4
   },
   {
@@ -2122,10 +3202,22 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 1136,
+    "x": 1148,
     "y": 292,
-    "width": 108,
-    "height": 4
+    "width": 4,
+    "height": 8
+  },
+  {
+    "x": 1188,
+    "y": 292,
+    "width": 4,
+    "height": 12
+  },
+  {
+    "x": 1216,
+    "y": 292,
+    "width": 28,
+    "height": 12
   },
   {
     "x": 1280,
@@ -2140,27 +3232,21 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 160,
+    "x": 248,
     "y": 296,
-    "width": 112,
+    "width": 4,
     "height": 4
   },
   {
     "x": 388,
     "y": 296,
-    "width": 40,
+    "width": 8,
     "height": 4
   },
   {
-    "x": 976,
+    "x": 1004,
     "y": 296,
-    "width": 64,
-    "height": 4
-  },
-  {
-    "x": 1132,
-    "y": 296,
-    "width": 112,
+    "width": 36,
     "height": 4
   },
   {
@@ -2176,21 +3262,15 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 160,
+    "x": 232,
     "y": 300,
-    "width": 116,
-    "height": 4
+    "width": 4,
+    "height": 12
   },
   {
-    "x": 400,
+    "x": 248,
     "y": 300,
-    "width": 20,
-    "height": 4
-  },
-  {
-    "x": 980,
-    "y": 300,
-    "width": 24,
+    "width": 16,
     "height": 4
   },
   {
@@ -2200,10 +3280,10 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 1128,
+    "x": 1136,
     "y": 300,
-    "width": 116,
-    "height": 4
+    "width": 16,
+    "height": 8
   },
   {
     "x": 1268,
@@ -2214,19 +3294,19 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 8,
     "y": 304,
-    "width": 272,
+    "width": 180,
+    "height": 16
+  },
+  {
+    "x": 240,
+    "y": 304,
+    "width": 28,
     "height": 4
   },
   {
-    "x": 404,
+    "x": 992,
     "y": 304,
-    "width": 8,
-    "height": 4
-  },
-  {
-    "x": 988,
-    "y": 304,
-    "width": 8,
+    "width": 4,
     "height": 4
   },
   {
@@ -2236,27 +3316,153 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 1120,
+    "x": 1156,
     "y": 304,
-    "width": 272,
+    "width": 4,
     "height": 4
   },
   {
-    "x": 8,
-    "y": 308,
-    "width": 276,
-    "height": 12
+    "x": 1164,
+    "y": 304,
+    "width": 4,
+    "height": 4
   },
   {
-    "x": 1116,
-    "y": 308,
-    "width": 276,
+    "x": 1172,
+    "y": 304,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1184,
+    "y": 304,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 1216,
+    "y": 304,
+    "width": 176,
     "height": 8
   },
   {
-    "x": 1116,
+    "x": 208,
+    "y": 308,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 224,
+    "y": 308,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 240,
+    "y": 308,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 248,
+    "y": 308,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 1132,
+    "y": 308,
+    "width": 24,
+    "height": 8
+  },
+  {
+    "x": 1164,
+    "y": 308,
+    "width": 12,
+    "height": 8
+  },
+  {
+    "x": 1180,
+    "y": 308,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1188,
+    "y": 308,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 212,
+    "y": 312,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 228,
+    "y": 312,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 248,
+    "y": 312,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 1212,
+    "y": 312,
+    "width": 180,
+    "height": 4
+  },
+  {
+    "x": 200,
     "y": 316,
-    "width": 272,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 220,
+    "y": 316,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 228,
+    "y": 316,
+    "width": 44,
+    "height": 4
+  },
+  {
+    "x": 1128,
+    "y": 316,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 1140,
+    "y": 316,
+    "width": 36,
+    "height": 4
+  },
+  {
+    "x": 1188,
+    "y": 316,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1196,
+    "y": 316,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1208,
+    "y": 316,
+    "width": 180,
     "height": 4
   },
   {
@@ -2274,13 +3480,37 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 132,
     "y": 320,
-    "width": 152,
+    "width": 68,
     "height": 4
   },
   {
-    "x": 1116,
+    "x": 212,
     "y": 320,
-    "width": 152,
+    "width": 4,
+    "height": 8
+  },
+  {
+    "x": 224,
+    "y": 320,
+    "width": 48,
+    "height": 4
+  },
+  {
+    "x": 1132,
+    "y": 320,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 1152,
+    "y": 320,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 1192,
+    "y": 320,
+    "width": 76,
     "height": 4
   },
   {
@@ -2344,21 +3574,21 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 212,
-    "y": 324,
-    "width": 4,
-    "height": 4
-  },
-  {
     "x": 220,
     "y": 324,
-    "width": 64,
+    "width": 52,
     "height": 4
   },
   {
-    "x": 1112,
+    "x": 1132,
     "y": 324,
-    "width": 76,
+    "width": 48,
+    "height": 4
+  },
+  {
+    "x": 1184,
+    "y": 324,
+    "width": 4,
     "height": 4
   },
   {
@@ -2436,13 +3666,13 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 208,
     "y": 328,
-    "width": 80,
+    "width": 60,
     "height": 4
   },
   {
-    "x": 1108,
+    "x": 1132,
     "y": 328,
-    "width": 120,
+    "width": 96,
     "height": 4
   },
   {
@@ -2520,19 +3750,31 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 172,
     "y": 332,
-    "width": 120,
+    "width": 64,
     "height": 4
   },
   {
-    "x": 964,
+    "x": 240,
     "y": 332,
-    "width": 4,
+    "width": 32,
     "height": 4
   },
   {
-    "x": 1108,
+    "x": 1128,
     "y": 332,
-    "width": 96,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 1152,
+    "y": 332,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 1164,
+    "y": 332,
+    "width": 40,
     "height": 4
   },
   {
@@ -2580,25 +3822,25 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 132,
     "y": 336,
-    "width": 160,
+    "width": 116,
     "height": 4
   },
   {
-    "x": 972,
+    "x": 252,
+    "y": 336,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 1124,
     "y": 336,
     "width": 4,
-    "height": 4
+    "height": 8
   },
   {
-    "x": 984,
+    "x": 1132,
     "y": 336,
-    "width": 4,
-    "height": 4
-  },
-  {
-    "x": 1104,
-    "y": 336,
-    "width": 96,
+    "width": 68,
     "height": 4
   },
   {
@@ -2664,13 +3906,31 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 168,
     "y": 340,
-    "width": 132,
+    "width": 60,
     "height": 4
   },
   {
-    "x": 1100,
+    "x": 232,
     "y": 340,
-    "width": 132,
+    "width": 40,
+    "height": 4
+  },
+  {
+    "x": 288,
+    "y": 340,
+    "width": 4,
+    "height": 8
+  },
+  {
+    "x": 1132,
+    "y": 340,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 1144,
+    "y": 340,
+    "width": 88,
     "height": 4
   },
   {
@@ -2724,13 +3984,25 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 172,
     "y": 344,
-    "width": 132,
+    "width": 108,
     "height": 4
   },
   {
-    "x": 1092,
+    "x": 1052,
     "y": 344,
-    "width": 92,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1132,
+    "y": 344,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 1168,
+    "y": 344,
+    "width": 16,
     "height": 4
   },
   {
@@ -2784,31 +4056,19 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 204,
     "y": 348,
-    "width": 104,
+    "width": 40,
     "height": 4
   },
   {
-    "x": 988,
+    "x": 248,
     "y": 348,
-    "width": 4,
+    "width": 28,
     "height": 4
   },
   {
-    "x": 1000,
+    "x": 1124,
     "y": 348,
-    "width": 4,
-    "height": 8
-  },
-  {
-    "x": 1008,
-    "y": 348,
-    "width": 4,
-    "height": 8
-  },
-  {
-    "x": 1084,
-    "y": 348,
-    "width": 200,
+    "width": 160,
     "height": 4
   },
   {
@@ -2856,13 +4116,37 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 216,
     "y": 352,
-    "width": 96,
+    "width": 64,
     "height": 4
   },
   {
-    "x": 1084,
+    "x": 288,
     "y": 352,
-    "width": 188,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1108,
+    "y": 352,
+    "width": 4,
+    "height": 8
+  },
+  {
+    "x": 1116,
+    "y": 352,
+    "width": 44,
+    "height": 4
+  },
+  {
+    "x": 1164,
+    "y": 352,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 1180,
+    "y": 352,
+    "width": 92,
     "height": 4
   },
   {
@@ -2910,19 +4194,37 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 136,
     "y": 356,
-    "width": 184,
+    "width": 124,
     "height": 4
   },
   {
-    "x": 1004,
+    "x": 264,
+    "y": 356,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 288,
     "y": 356,
     "width": 8,
     "height": 4
   },
   {
-    "x": 1080,
+    "x": 1120,
     "y": 356,
-    "width": 108,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 1156,
+    "y": 356,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 1176,
+    "y": 356,
+    "width": 12,
     "height": 4
   },
   {
@@ -2964,19 +4266,49 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 200,
     "y": 360,
-    "width": 120,
+    "width": 32,
     "height": 4
   },
   {
-    "x": 1012,
+    "x": 236,
     "y": 360,
-    "width": 12,
+    "width": 44,
     "height": 4
   },
   {
-    "x": 1080,
+    "x": 288,
     "y": 360,
-    "width": 184,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1088,
+    "y": 360,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1108,
+    "y": 360,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 1124,
+    "y": 360,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1132,
+    "y": 360,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 1172,
+    "y": 360,
+    "width": 92,
     "height": 4
   },
   {
@@ -3030,25 +4362,25 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 156,
     "y": 364,
-    "width": 168,
+    "width": 144,
     "height": 4
   },
   {
-    "x": 996,
+    "x": 304,
+    "y": 364,
+    "width": 4,
+    "height": 8
+  },
+  {
+    "x": 312,
     "y": 364,
     "width": 4,
     "height": 4
   },
   {
-    "x": 1012,
+    "x": 1100,
     "y": 364,
-    "width": 4,
-    "height": 4
-  },
-  {
-    "x": 1080,
-    "y": 364,
-    "width": 124,
+    "width": 104,
     "height": 4
   },
   {
@@ -3090,13 +4422,31 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 160,
     "y": 368,
-    "width": 164,
+    "width": 72,
     "height": 4
   },
   {
-    "x": 1080,
+    "x": 236,
     "y": 368,
-    "width": 116,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 252,
+    "y": 368,
+    "width": 44,
+    "height": 4
+  },
+  {
+    "x": 1104,
+    "y": 368,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 1136,
+    "y": 368,
+    "width": 60,
     "height": 4
   },
   {
@@ -3126,25 +4476,31 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 160,
     "y": 372,
-    "width": 160,
+    "width": 64,
     "height": 4
   },
   {
-    "x": 1008,
+    "x": 232,
     "y": 372,
-    "width": 4,
+    "width": 76,
     "height": 4
   },
   {
-    "x": 1020,
+    "x": 1092,
     "y": 372,
-    "width": 4,
+    "width": 56,
     "height": 4
   },
   {
-    "x": 1080,
+    "x": 1152,
     "y": 372,
-    "width": 104,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 1176,
+    "y": 372,
+    "width": 8,
     "height": 4
   },
   {
@@ -3186,13 +4542,37 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 172,
     "y": 376,
-    "width": 148,
+    "width": 52,
     "height": 4
   },
   {
-    "x": 1084,
+    "x": 232,
     "y": 376,
-    "width": 108,
+    "width": 68,
+    "height": 4
+  },
+  {
+    "x": 304,
+    "y": 376,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1092,
+    "y": 376,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 1120,
+    "y": 376,
+    "width": 44,
+    "height": 4
+  },
+  {
+    "x": 1168,
+    "y": 376,
+    "width": 24,
     "height": 4
   },
   {
@@ -3216,13 +4596,37 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 164,
     "y": 380,
-    "width": 152,
+    "width": 56,
     "height": 4
   },
   {
-    "x": 1088,
+    "x": 240,
     "y": 380,
-    "width": 100,
+    "width": 44,
+    "height": 4
+  },
+  {
+    "x": 288,
+    "y": 380,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 1096,
+    "y": 380,
+    "width": 40,
+    "height": 4
+  },
+  {
+    "x": 1144,
+    "y": 380,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 1164,
+    "y": 380,
+    "width": 24,
     "height": 4
   },
   {
@@ -3250,15 +4654,33 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 220,
+    "x": 248,
     "y": 384,
-    "width": 92,
+    "width": 8,
     "height": 4
   },
   {
-    "x": 1092,
+    "x": 268,
     "y": 384,
-    "width": 96,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 1100,
+    "y": 384,
+    "width": 32,
+    "height": 4
+  },
+  {
+    "x": 1140,
+    "y": 384,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 1176,
+    "y": 384,
+    "width": 12,
     "height": 4
   },
   {
@@ -3294,13 +4716,67 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 180,
     "y": 388,
-    "width": 128,
+    "width": 44,
     "height": 4
   },
   {
-    "x": 1096,
+    "x": 228,
     "y": 388,
-    "width": 124,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 236,
+    "y": 388,
+    "width": 28,
+    "height": 4
+  },
+  {
+    "x": 268,
+    "y": 388,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 296,
+    "y": 388,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 308,
+    "y": 388,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1104,
+    "y": 388,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1116,
+    "y": 388,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 1136,
+    "y": 388,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 1152,
+    "y": 388,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 1184,
+    "y": 388,
+    "width": 36,
     "height": 4
   },
   {
@@ -3330,13 +4806,31 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 200,
     "y": 392,
-    "width": 104,
+    "width": 28,
     "height": 4
   },
   {
-    "x": 1100,
+    "x": 232,
     "y": 392,
-    "width": 100,
+    "width": 48,
+    "height": 4
+  },
+  {
+    "x": 1120,
+    "y": 392,
+    "width": 28,
+    "height": 4
+  },
+  {
+    "x": 1152,
+    "y": 392,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 1176,
+    "y": 392,
+    "width": 24,
     "height": 4
   },
   {
@@ -3354,13 +4848,31 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 180,
     "y": 396,
-    "width": 120,
+    "width": 76,
     "height": 4
   },
   {
-    "x": 1104,
+    "x": 264,
     "y": 396,
-    "width": 80,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 1120,
+    "y": 396,
+    "width": 40,
+    "height": 4
+  },
+  {
+    "x": 1164,
+    "y": 396,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1172,
+    "y": 396,
+    "width": 12,
     "height": 4
   },
   {
@@ -3378,14 +4890,32 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 180,
     "y": 400,
-    "width": 116,
+    "width": 100,
     "height": 4
   },
   {
-    "x": 1108,
+    "x": 1120,
     "y": 400,
-    "width": 108,
-    "height": 8
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 1148,
+    "y": 400,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 1160,
+    "y": 400,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 1176,
+    "y": 400,
+    "width": 40,
+    "height": 4
   },
   {
     "x": 180,
@@ -3396,7 +4926,43 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 212,
     "y": 404,
-    "width": 80,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 236,
+    "y": 404,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 248,
+    "y": 404,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 272,
+    "y": 404,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 1120,
+    "y": 404,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 1140,
+    "y": 404,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 1172,
+    "y": 404,
+    "width": 44,
     "height": 4
   },
   {
@@ -3414,13 +4980,19 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 208,
     "y": 408,
-    "width": 84,
+    "width": 44,
     "height": 4
   },
   {
-    "x": 1112,
+    "x": 256,
     "y": 408,
-    "width": 72,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 1120,
+    "y": 408,
+    "width": 64,
     "height": 4
   },
   {
@@ -3444,49 +5016,91 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 220,
     "y": 412,
-    "width": 68,
+    "width": 28,
     "height": 4
   },
   {
-    "x": 1116,
+    "x": 256,
     "y": 412,
-    "width": 68,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 1128,
+    "y": 412,
+    "width": 56,
     "height": 4
   },
   {
     "x": 184,
     "y": 416,
-    "width": 100,
+    "width": 44,
     "height": 4
   },
   {
-    "x": 1120,
+    "x": 232,
     "y": 416,
-    "width": 64,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 244,
+    "y": 416,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 1132,
+    "y": 416,
+    "width": 12,
+    "height": 4
+  },
+  {
+    "x": 1148,
+    "y": 416,
+    "width": 36,
     "height": 4
   },
   {
     "x": 188,
     "y": 420,
-    "width": 92,
+    "width": 48,
     "height": 4
   },
   {
-    "x": 1124,
+    "x": 240,
     "y": 420,
-    "width": 92,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 1136,
+    "y": 420,
+    "width": 80,
     "height": 4
   },
   {
     "x": 188,
     "y": 424,
-    "width": 88,
+    "width": 56,
     "height": 4
   },
   {
-    "x": 1124,
+    "x": 248,
     "y": 424,
-    "width": 88,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 1136,
+    "y": 424,
+    "width": 20,
+    "height": 4
+  },
+  {
+    "x": 1160,
+    "y": 424,
+    "width": 52,
     "height": 4
   },
   {
@@ -3498,13 +5112,25 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 200,
     "y": 428,
-    "width": 76,
+    "width": 28,
     "height": 4
   },
   {
-    "x": 1128,
+    "x": 232,
     "y": 428,
-    "width": 60,
+    "width": 4,
+    "height": 4
+  },
+  {
+    "x": 240,
+    "y": 428,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 1136,
+    "y": 428,
+    "width": 52,
     "height": 4
   },
   {
@@ -3528,25 +5154,49 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 220,
     "y": 432,
-    "width": 52,
+    "width": 28,
     "height": 4
   },
   {
-    "x": 1132,
+    "x": 252,
     "y": 432,
-    "width": 80,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 1140,
+    "y": 432,
+    "width": 16,
+    "height": 4
+  },
+  {
+    "x": 1164,
+    "y": 432,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 1176,
+    "y": 432,
+    "width": 36,
     "height": 4
   },
   {
     "x": 188,
     "y": 436,
-    "width": 80,
+    "width": 40,
     "height": 4
   },
   {
-    "x": 1132,
+    "x": 232,
     "y": 436,
-    "width": 84,
+    "width": 24,
+    "height": 4
+  },
+  {
+    "x": 1144,
+    "y": 436,
+    "width": 72,
     "height": 4
   },
   {
@@ -3558,14 +5208,20 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 204,
     "y": 440,
-    "width": 64,
+    "width": 52,
     "height": 4
   },
   {
-    "x": 1136,
+    "x": 1144,
     "y": 440,
-    "width": 80,
-    "height": 8
+    "width": 28,
+    "height": 4
+  },
+  {
+    "x": 1176,
+    "y": 440,
+    "width": 40,
+    "height": 4
   },
   {
     "x": 184,
@@ -3582,7 +5238,13 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 216,
     "y": 444,
-    "width": 48,
+    "width": 40,
+    "height": 4
+  },
+  {
+    "x": 1148,
+    "y": 444,
+    "width": 68,
     "height": 4
   },
   {
@@ -3594,13 +5256,13 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 188,
     "y": 448,
-    "width": 76,
+    "width": 64,
     "height": 4
   },
   {
-    "x": 1140,
+    "x": 1152,
     "y": 448,
-    "width": 44,
+    "width": 32,
     "height": 4
   },
   {
@@ -3618,13 +5280,13 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 196,
     "y": 452,
-    "width": 64,
+    "width": 52,
     "height": 4
   },
   {
-    "x": 1144,
+    "x": 1152,
     "y": 452,
-    "width": 60,
+    "width": 52,
     "height": 4
   },
   {
@@ -3636,25 +5298,19 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 184,
     "y": 456,
-    "width": 76,
-    "height": 4
+    "width": 64,
+    "height": 8
   },
   {
-    "x": 1144,
+    "x": 1152,
     "y": 456,
-    "width": 72,
+    "width": 64,
     "height": 4
   },
   {
-    "x": 184,
+    "x": 1152,
     "y": 460,
-    "width": 72,
-    "height": 4
-  },
-  {
-    "x": 1148,
-    "y": 460,
-    "width": 36,
+    "width": 32,
     "height": 4
   },
   {
@@ -3672,13 +5328,13 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 200,
     "y": 464,
-    "width": 56,
+    "width": 44,
     "height": 4
   },
   {
-    "x": 1148,
+    "x": 1156,
     "y": 464,
-    "width": 68,
+    "width": 60,
     "height": 4
   },
   {
@@ -3696,13 +5352,13 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 220,
     "y": 468,
-    "width": 32,
+    "width": 24,
     "height": 4
   },
   {
-    "x": 1152,
+    "x": 1160,
     "y": 468,
-    "width": 68,
+    "width": 60,
     "height": 4
   },
   {
@@ -3732,13 +5388,13 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 204,
     "y": 472,
-    "width": 48,
+    "width": 36,
     "height": 4
   },
   {
-    "x": 1152,
+    "x": 1160,
     "y": 472,
-    "width": 60,
+    "width": 52,
     "height": 4
   },
   {
@@ -3750,13 +5406,19 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 184,
     "y": 476,
-    "width": 64,
+    "width": 56,
     "height": 4
   },
   {
-    "x": 1152,
+    "x": 1160,
     "y": 476,
-    "width": 48,
+    "width": 8,
+    "height": 4
+  },
+  {
+    "x": 1172,
+    "y": 476,
+    "width": 28,
     "height": 4
   },
   {
@@ -3792,13 +5454,13 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 180,
     "y": 480,
-    "width": 68,
+    "width": 56,
     "height": 4
   },
   {
-    "x": 1156,
+    "x": 1164,
     "y": 480,
-    "width": 28,
+    "width": 20,
     "height": 8
   },
   {
@@ -3822,7 +5484,7 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
   {
     "x": 212,
     "y": 484,
-    "width": 36,
+    "width": 24,
     "height": 4
   },
   {
@@ -3979,12 +5641,6 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
     "x": 168,
     "y": 500,
     "width": 64,
-    "height": 4
-  },
-  {
-    "x": 280,
-    "y": 500,
-    "width": 4,
     "height": 4
   },
   {
@@ -4636,18 +6292,6 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 276,
-    "y": 540,
-    "width": 8,
-    "height": 4
-  },
-  {
-    "x": 1120,
-    "y": 540,
-    "width": 4,
-    "height": 4
-  },
-  {
     "x": 1300,
     "y": 540,
     "width": 4,
@@ -4660,164 +6304,8 @@ export const GENERATED_ARENA_LAVA_COLLIDERS = [
     "height": 4
   },
   {
-    "x": 268,
-    "y": 548,
-    "width": 8,
-    "height": 4
-  },
-  {
-    "x": 280,
-    "y": 548,
-    "width": 4,
-    "height": 40
-  },
-  {
-    "x": 1120,
-    "y": 548,
-    "width": 4,
-    "height": 4
-  },
-  {
-    "x": 1128,
-    "y": 548,
-    "width": 4,
-    "height": 4
-  },
-  {
     "x": 1160,
     "y": 548,
-    "width": 4,
-    "height": 4
-  },
-  {
-    "x": 252,
-    "y": 556,
-    "width": 4,
-    "height": 4
-  },
-  {
-    "x": 260,
-    "y": 556,
-    "width": 4,
-    "height": 4
-  },
-  {
-    "x": 268,
-    "y": 556,
-    "width": 4,
-    "height": 4
-  },
-  {
-    "x": 1144,
-    "y": 556,
-    "width": 4,
-    "height": 4
-  },
-  {
-    "x": 252,
-    "y": 560,
-    "width": 20,
-    "height": 4
-  },
-  {
-    "x": 1120,
-    "y": 560,
-    "width": 4,
-    "height": 4
-  },
-  {
-    "x": 1128,
-    "y": 560,
-    "width": 4,
-    "height": 4
-  },
-  {
-    "x": 1136,
-    "y": 560,
-    "width": 12,
-    "height": 4
-  },
-  {
-    "x": 252,
-    "y": 564,
-    "width": 24,
-    "height": 8
-  },
-  {
-    "x": 1120,
-    "y": 564,
-    "width": 28,
-    "height": 4
-  },
-  {
-    "x": 1128,
-    "y": 568,
-    "width": 20,
-    "height": 4
-  },
-  {
-    "x": 252,
-    "y": 572,
-    "width": 4,
-    "height": 4
-  },
-  {
-    "x": 260,
-    "y": 572,
-    "width": 4,
-    "height": 4
-  },
-  {
-    "x": 268,
-    "y": 572,
-    "width": 4,
-    "height": 4
-  },
-  {
-    "x": 1128,
-    "y": 572,
-    "width": 4,
-    "height": 4
-  },
-  {
-    "x": 1136,
-    "y": 572,
-    "width": 12,
-    "height": 4
-  },
-  {
-    "x": 252,
-    "y": 576,
-    "width": 20,
-    "height": 4
-  },
-  {
-    "x": 1120,
-    "y": 576,
-    "width": 4,
-    "height": 4
-  },
-  {
-    "x": 1132,
-    "y": 576,
-    "width": 16,
-    "height": 4
-  },
-  {
-    "x": 272,
-    "y": 584,
-    "width": 4,
-    "height": 4
-  },
-  {
-    "x": 280,
-    "y": 592,
-    "width": 4,
-    "height": 4
-  },
-  {
-    "x": 280,
-    "y": 600,
     "width": 4,
     "height": 4
   },

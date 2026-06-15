@@ -840,16 +840,28 @@ function applyUserGuideWalkableReplacements(
 
   clearWalkableRect(masks, base, { x: 500, y: 76, width: 402, height: 176 })
   const leftCastleTerrace = [
-    { x: 546, y: 125 },
     { x: 572, y: 94 },
+    { x: 555, y: 104 },
+    { x: 545, y: 112 },
+    { x: 536, y: 120 },
+    { x: 532, y: 128 },
+    { x: 530, y: 138 },
+    { x: 532, y: 146 },
+    { x: 540, y: 154 },
+    { x: 553, y: 164 },
+    { x: 570, y: 178 },
+    { x: 595, y: 196 },
+    { x: 614, y: 205 },
+    { x: 664, y: 225 },
+    { x: 664, y: 198 },
+    { x: 648, y: 195 },
+    { x: 636, y: 193 },
+    { x: 624, y: 187 },
+    { x: 612, y: 178 },
+    { x: 600, y: 172 },
+    { x: 588, y: 167 },
+    { x: 583, y: 157 },
     { x: 574, y: 150 },
-    { x: 610, y: 181 },
-    { x: 662, y: 198 },
-    { x: 662, y: 229 },
-    { x: 590, y: 216 },
-    { x: 530, y: 180 },
-    { x: 543, y: 158 },
-    { x: 529, y: 146 },
   ] as const
   paintWalkablePolygon(masks, leftCastleTerrace)
   paintWalkablePolygon(masks, mirrorPointsX(leftCastleTerrace))
@@ -862,29 +874,100 @@ function applyUserGuideWalkableReplacements(
     { x: 676, y: 198 },
   ])
 
+  const topArenaBandClear = [
+    { x: 390, y: 244 },
+    { x: 1012, y: 244 },
+    { x: 1012, y: 348 },
+    { x: 390, y: 348 },
+  ] as const
+  const topArenaBand = [
+    { x: 395, y: 336 },
+    { x: 425, y: 315 },
+    { x: 460, y: 299 },
+    { x: 500, y: 283 },
+    { x: 547, y: 267 },
+    { x: 620, y: 251 },
+    { x: 767, y: 251 },
+    { x: 857, y: 267 },
+    { x: 909, y: 283 },
+    { x: 923, y: 336 },
+    { x: 923, y: 348 },
+    { x: 395, y: 348 },
+  ] as const
+  reclassifyPolygonFromBase(masks, base, topArenaBandClear)
+  paintWalkablePolygon(masks, topArenaBand)
+  paintWalkablePolygon(masks, [
+    { x: 676, y: 248 },
+    { x: 731, y: 248 },
+    { x: 731, y: 164 },
+    { x: 710, y: 154 },
+    { x: 691, y: 154 },
+    { x: 676, y: 198 },
+  ])
+
+  const leftArenaJoinClear = [
+    { x: 228, y: 320 },
+    { x: 504, y: 320 },
+    { x: 504, y: 626 },
+    { x: 228, y: 626 },
+  ] as const
+  const leftArenaJoin = [
+    { x: 254, y: 626 },
+    { x: 504, y: 626 },
+    { x: 504, y: 282 },
+    { x: 460, y: 299 },
+    { x: 425, y: 315 },
+    { x: 397, y: 336 },
+    { x: 362, y: 358 },
+    { x: 334, y: 384 },
+    { x: 312, y: 410 },
+    { x: 294, y: 436 },
+    { x: 280, y: 462 },
+    { x: 267, y: 488 },
+    { x: 259, y: 514 },
+    { x: 250, y: 540 },
+    { x: 248, y: 586 },
+  ] as const
+  reclassifyPolygonFromBase(masks, base, leftArenaJoinClear)
+  reclassifyPolygonFromBase(masks, base, mirrorPointsX(leftArenaJoinClear))
+
   const leftDiagonalClear = [
-    { x: 206, y: 184 },
-    { x: 448, y: 332 },
-    { x: 398, y: 392 },
-    { x: 186, y: 235 },
+    { x: 190, y: 176 },
+    { x: 458, y: 176 },
+    { x: 458, y: 392 },
+    { x: 182, y: 392 },
+    { x: 182, y: 218 },
   ] as const
   const leftDiagonalBridge = [
-    { x: 224, y: 236 },
-    { x: 253, y: 226 },
-    { x: 392, y: 344 },
-    { x: 389, y: 358 },
-    { x: 360, y: 360 },
-    { x: 220, y: 240 },
+    { x: 254, y: 208 },
+    { x: 267, y: 228 },
+    { x: 281, y: 248 },
+    { x: 300, y: 268 },
+    { x: 328, y: 288 },
+    { x: 356, y: 308 },
+    { x: 393, y: 336 },
+    { x: 362, y: 360 },
+    { x: 346, y: 340 },
+    { x: 333, y: 330 },
+    { x: 320, y: 320 },
+    { x: 307, y: 310 },
+    { x: 294, y: 300 },
+    { x: 281, y: 290 },
+    { x: 267, y: 280 },
+    { x: 256, y: 265 },
+    { x: 245, y: 250 },
+    { x: 231, y: 233 },
   ] as const
-  replaceWalkablePolygon(masks, base, leftDiagonalClear, leftDiagonalBridge)
-  replaceWalkablePolygon(
-    masks,
-    base,
-    mirrorPointsX(leftDiagonalClear),
-    mirrorPointsX(leftDiagonalBridge),
-  )
+  reclassifyPolygonFromBase(masks, base, leftDiagonalClear)
+  reclassifyPolygonFromBase(masks, base, mirrorPointsX(leftDiagonalClear))
+  paintWalkablePolygon(masks, leftArenaJoin)
+  paintWalkablePolygon(masks, mirrorPointsX(leftArenaJoin))
+  paintWalkablePolygon(masks, leftDiagonalBridge)
+  paintWalkablePolygon(masks, mirrorPointsX(leftDiagonalBridge))
   paintWalkableEllipse(masks, 164, 158, 112, 80)
   paintWalkableEllipse(masks, 1238, 158, 112, 80)
+  paintWalkablePolygon(masks, leftHorizontalBridge)
+  paintWalkablePolygon(masks, mirrorPointsX(leftHorizontalBridge))
 }
 
 function applyWalkableSurfaceCompletion(
@@ -1651,6 +1734,19 @@ async function writeOverlayImages(props: readonly PropDef[]): Promise<void> {
     ["lava-lines.png", LAVA_MASK, { r: 255, g: 60, b: 0 }, 36, 255],
     ["cliff-lines.png", CLIFF_MASK, { r: 255, g: 255, b: 255 }, 24, 255],
   ] as const
+  const rawWalkableMask = Buffer.alloc(ARENA_WIDTH * ARENA_HEIGHT * 4)
+  for (let i = 0; i < WALKABLE_MASK.data.length; i++) {
+    const value = WALKABLE_MASK.data[i] ? 255 : 0
+    const p = i * 4
+    rawWalkableMask[p] = value
+    rawWalkableMask[p + 1] = value
+    rawWalkableMask[p + 2] = value
+    rawWalkableMask[p + 3] = 255
+  }
+  await sharp(rawWalkableMask, { raw: { width: ARENA_WIDTH, height: ARENA_HEIGHT, channels: 4 } })
+    .png()
+    .toFile(resolve(REVIEW_DIR, "walkable-mask-filled.png"))
+
   for (const [name, mask, color, fillAlpha, lineAlpha] of maskOverlays) {
     await sharp(BASE_OUT)
       .composite([{ input: await maskLayerPng(mask, color, fillAlpha, lineAlpha), left: 0, top: 0 }])
