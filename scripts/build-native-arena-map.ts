@@ -65,6 +65,7 @@ const DETAIL_CROPS = [
 ] as const
 
 const TOP_LEFT_CORNER_CROP = { x: 0, y: 0, width: 470, height: 390 } as const
+const BOTTOM_HALF_REVIEW_CROP = { x: 0, y: 670, width: ARENA_WIDTH, height: ARENA_HEIGHT - 670 } as const
 
 const REGION_NONE: RegionClass = 0
 const REGION_WALKABLE: RegionClass = 1
@@ -721,6 +722,31 @@ function paintWalkableEllipse(
   }
 }
 
+function paintWalkableEllipseInRect(
+  masks: { walkable: Mask; lava: Mask; cliff: Mask },
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number,
+  rect: Rect,
+): void {
+  const patch = createMask()
+  fillEllipse(patch, cx, cy, rx, ry)
+  const minX = Math.max(0, Math.floor(rect.x))
+  const maxX = Math.min(ARENA_WIDTH - 1, Math.ceil(rect.x + rect.width))
+  const minY = Math.max(0, Math.floor(rect.y))
+  const maxY = Math.min(ARENA_HEIGHT - 1, Math.ceil(rect.y + rect.height))
+  for (let y = minY; y <= maxY; y++) {
+    for (let x = minX; x <= maxX; x++) {
+      const i = maskIndex(x, y)
+      if (!patch.data[i]) continue
+      masks.walkable.data[i] = 1
+      masks.lava.data[i] = 0
+      masks.cliff.data[i] = 0
+    }
+  }
+}
+
 function paintWalkableRotatedRect(
   masks: { walkable: Mask; lava: Mask; cliff: Mask },
   cx: number,
@@ -1144,6 +1170,14 @@ function applyWalkableSurfaceCompletion(
       { x: 1149, y: 856 },
     ],
   )
+  paintWalkableEllipseInRect(masks, 701, 558, 468, 312, {
+    x: 0,
+    y: 700,
+    width: ARENA_WIDTH,
+    height: 220,
+  })
+  paintWalkableEllipse(masks, 171, 858, 106, 91)
+  paintWalkableEllipse(masks, 1231, 858, 106, 91)
 
   paintWalkablePolygon(masks, [
     { x: 636, y: 758 },
@@ -1711,6 +1745,21 @@ async function writeTopLeftCornerWorkbench(): Promise<void> {
     .toFile(resolve(REVIEW_DIR, "top-left-corner-workbench.png"))
 }
 
+async function writeBottomHalfReviewCrops(): Promise<void> {
+  const crop = BOTTOM_HALF_REVIEW_CROP
+  const sources = [
+    ["walkable-bottom-half-review.png", resolve(REVIEW_DIR, "walkable-lines.png")],
+    ["combined-bottom-half-review.png", resolve(REVIEW_DIR, "all-overlays-combined.png")],
+  ] as const
+
+  for (const [name, path] of sources) {
+    await sharp(path)
+      .extract({ left: crop.x, top: crop.y, width: crop.width, height: crop.height })
+      .png()
+      .toFile(resolve(REVIEW_DIR, name))
+  }
+}
+
 async function writeOverlayImages(props: readonly PropDef[]): Promise<void> {
   const propColliders = PLACEMENTS.map((p, i) => scaledColliderForPlacement(props, p, i))
 
@@ -1803,6 +1852,7 @@ async function writeOverlayImages(props: readonly PropDef[]): Promise<void> {
 
   await writeGeometryDetailCropSheet()
   await writeTopLeftCornerWorkbench()
+  await writeBottomHalfReviewCrops()
 }
 
 function rectangleSceneObject(
