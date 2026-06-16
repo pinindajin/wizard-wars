@@ -54,6 +54,10 @@ const BASE_OUT = resolve(MAP_DIR, "arena-base.png")
 const SOURCE_BASE = process.env.WW_ARENA_SOURCE_BASE ?? resolve(SOURCE_IMAGE_DIR, "map-base.png")
 const SOURCE_OBJECTS = process.env.WW_ARENA_SOURCE_OBJECTS ?? resolve(SOURCE_IMAGE_DIR, "map-objects.png")
 const SOURCE_TARGET = process.env.WW_ARENA_SOURCE_TARGET ?? resolve(SOURCE_IMAGE_DIR, "map-with-objects.png")
+const SOURCE_WALKABLE_GUIDE =
+  process.env.WW_ARENA_WALKABLE_GUIDE ?? resolve(SOURCE_IMAGE_DIR, "walkable-guide.png")
+const WALKABLE_GUIDE_WIDTH = 922
+const WALKABLE_GUIDE_HEIGHT = 735
 
 const DETAIL_CROPS = [
   { label: "Top-left diagonal", x: 210, y: 165, width: 260, height: 210 },
@@ -175,6 +179,18 @@ function createMask(fill = 0): Mask {
 
 function maskIndex(x: number, y: number): number {
   return y * ARENA_WIDTH + x
+}
+
+function bitmapIndex(width: number, x: number, y: number): number {
+  return y * width + x
+}
+
+function createSizedMask(width: number, height: number, fill = 0): Mask {
+  return {
+    data: new Uint8Array(width * height).fill(fill),
+    width,
+    height,
+  }
 }
 
 function fillEllipse(mask: Mask, cx: number, cy: number, rx: number, ry: number): void {
@@ -499,6 +515,246 @@ async function loadMaskImage(fileName: string): Promise<Mask> {
   return mask
 }
 
+function isWalkableGuideStroke(r: number, g: number, b: number, a: number): boolean {
+  return a > 120 && g >= 70 && r <= 105 && b <= 120 && g - r >= 18 && g - b >= 8
+}
+
+function dilateBitmapMask(mask: Mask, iterations: number): Mask {
+  let current = mask.data
+  for (let step = 0; step < iterations; step++) {
+    const next = current.slice()
+    for (let y = 1; y < mask.height - 1; y++) {
+      for (let x = 1; x < mask.width - 1; x++) {
+        const i = bitmapIndex(mask.width, x, y)
+        if (current[i]) continue
+        if (
+          current[i - 1] ||
+          current[i + 1] ||
+          current[i - mask.width] ||
+          current[i + mask.width] ||
+          current[i - mask.width - 1] ||
+          current[i - mask.width + 1] ||
+          current[i + mask.width - 1] ||
+          current[i + mask.width + 1]
+        ) {
+          next[i] = 1
+        }
+      }
+    }
+    current = next
+  }
+  return { data: current, width: mask.width, height: mask.height }
+}
+
+function floodOutsideBarrier(barrier: Mask): Mask {
+  const outside = createSizedMask(barrier.width, barrier.height)
+  const queue = new Int32Array(barrier.data.length)
+  let head = 0
+  let tail = 0
+
+  const push = (i: number): void => {
+    if (i < 0 || i >= outside.data.length || outside.data[i] || barrier.data[i]) return
+    outside.data[i] = 1
+    queue[tail++] = i
+  }
+
+  for (let x = 0; x < barrier.width; x++) {
+    push(bitmapIndex(barrier.width, x, 0))
+    push(bitmapIndex(barrier.width, x, barrier.height - 1))
+  }
+  for (let y = 0; y < barrier.height; y++) {
+    push(bitmapIndex(barrier.width, 0, y))
+    push(bitmapIndex(barrier.width, barrier.width - 1, y))
+  }
+
+  while (head < tail) {
+    const i = queue[head++]!
+    const x = i % barrier.width
+    const y = Math.floor(i / barrier.width)
+    if (x > 0) push(i - 1)
+    if (x < barrier.width - 1) push(i + 1)
+    if (y > 0) push(i - barrier.width)
+    if (y < barrier.height - 1) push(i + barrier.width)
+  }
+
+  return outside
+}
+
+function fillClosedGuideRegions(stroke: Mask, barrierDilation: number): Mask {
+  const barrier = dilateBitmapMask(stroke, barrierDilation)
+  const outside = floodOutsideBarrier(barrier)
+  const filled = createSizedMask(stroke.width, stroke.height)
+  for (let i = 0; i < filled.data.length; i++) {
+    filled.data[i] = !outside.data[i] && !barrier.data[i] ? 1 : 0
+  }
+  return filled
+}
+
+function unionMasks(a: Mask, b: Mask): Mask {
+  if (a.width !== b.width || a.height !== b.height) {
+    throw new Error(`Cannot union masks with different dimensions: ${a.width}x${a.height} vs ${b.width}x${b.height}.`)
+  }
+  const out = createSizedMask(a.width, a.height)
+  for (let i = 0; i < out.data.length; i++) {
+    out.data[i] = a.data[i] || b.data[i] ? 1 : 0
+  }
+  return out
+}
+
+function scaleGuideMaskToArena(source: Mask): Mask {
+  const scaled = createMask()
+  for (let y = 0; y < ARENA_HEIGHT; y++) {
+    const sourceY = Math.min(source.height - 1, Math.floor((y + 0.5) * (source.height / ARENA_HEIGHT)))
+    for (let x = 0; x < ARENA_WIDTH; x++) {
+      const sourceX = Math.min(source.width - 1, Math.floor((x + 0.5) * (source.width / ARENA_WIDTH)))
+      scaled.data[maskIndex(x, y)] = source.data[bitmapIndex(source.width, sourceX, sourceY)] ?? 0
+    }
+  }
+  return scaled
+}
+
+function paintGuideWalkablePatches(mask: Mask): void {
+  // The hand line leaves a tiny open seam where the north stair meets the
+  // arena ring; fill only that join so the guide shape remains authoritative.
+  fillPolygon(mask, [
+    { x: 675, y: 226 },
+    { x: 731, y: 226 },
+    { x: 731, y: 258 },
+    { x: 675, y: 258 },
+  ])
+
+  // The guide outlines the bottom stair hub with an open lower edge; this
+  // patch fills that intended walkable terminal after the guide-derived fill.
+  fillPolygon(mask, [
+    { x: 675, y: 885 },
+    { x: 731, y: 885 },
+    { x: 731, y: 998 },
+    { x: 761, y: 1014 },
+    { x: 772, y: 1040 },
+    { x: 747, y: 1064 },
+    { x: 657, y: 1064 },
+    { x: 632, y: 1040 },
+    { x: 643, y: 1014 },
+    { x: 675, y: 998 },
+  ])
+  fillPolygon(mask, [
+    { x: 674, y: 1038 },
+    { x: 730, y: 1038 },
+    { x: 730, y: 1092 },
+    { x: 674, y: 1092 },
+  ])
+}
+
+function componentFromPoint(mask: Mask, startX: number, startY: number): Uint8Array {
+  const reachable = new Uint8Array(mask.data.length)
+  const start = maskIndex(startX, startY)
+  if (!mask.data[start]) return reachable
+  const queue = new Int32Array(mask.data.length)
+  let head = 0
+  let tail = 0
+  reachable[start] = 1
+  queue[tail++] = start
+  while (head < tail) {
+    const i = queue[head++]!
+    const x = i % ARENA_WIDTH
+    const y = Math.floor(i / ARENA_WIDTH)
+    const neighbors = [
+      x > 0 ? i - 1 : -1,
+      x < ARENA_WIDTH - 1 ? i + 1 : -1,
+      y > 0 ? i - ARENA_WIDTH : -1,
+      y < ARENA_HEIGHT - 1 ? i + ARENA_WIDTH : -1,
+    ]
+    for (const n of neighbors) {
+      if (n < 0 || reachable[n] || !mask.data[n]) continue
+      reachable[n] = 1
+      queue[tail++] = n
+    }
+  }
+  return reachable
+}
+
+function assertWalkableGuideTopology(mask: Mask): void {
+  const main = componentFromPoint(mask, 701, 558)
+  const shouldReach = [
+    ["west bridge", 140, 570],
+    ["east bridge", 1262, 570],
+    ["north stair", 703, 225],
+    ["south stair", 703, 945],
+    ["top-left pad", 164, 151],
+    ["top-right pad", 1238, 151],
+    ["bottom-left pad", 171, 858],
+    ["bottom-right pad", 1231, 858],
+  ] as const
+  const shouldStaySeparate = [
+    ["left side jump island", 103, 423],
+    ["right side jump island", 1299, 423],
+    ["bottom-left jump island", 452, 990],
+    ["bottom-right jump island", 950, 990],
+    ["top-left tiny island", 409, 34],
+    ["top-right tiny island", 993, 34],
+    ["left castle ledge", 585, 150],
+    ["right castle ledge", 817, 150],
+  ] as const
+
+  const errors: string[] = []
+  for (const [label, x, y] of shouldReach) {
+    const i = maskIndex(x, y)
+    if (!mask.data[i]) {
+      errors.push(`${label} sample (${x}, ${y}) is not walkable`)
+    } else if (!main[i]) {
+      errors.push(`${label} sample (${x}, ${y}) is not connected to the main arena`)
+    }
+  }
+  for (const [label, x, y] of shouldStaySeparate) {
+    const i = maskIndex(x, y)
+    if (!mask.data[i]) {
+      errors.push(`${label} sample (${x}, ${y}) is not walkable`)
+    } else if (main[i]) {
+      errors.push(`${label} sample (${x}, ${y}) leaked into the main connected component`)
+    }
+  }
+  if (errors.length > 0) {
+    throw new Error(`Guide-derived walkable topology failed:\n${errors.map((error) => `- ${error}`).join("\n")}`)
+  }
+}
+
+async function loadGuideWalkableMask(): Promise<Mask> {
+  const image = sharp(SOURCE_WALKABLE_GUIDE).ensureAlpha()
+  const meta = await image.metadata()
+  const width = meta.width ?? 0
+  const height = meta.height ?? 0
+  if (width <= 0 || height <= 0) {
+    throw new Error(`${SOURCE_WALKABLE_GUIDE} could not be read as a walkable guide image.`)
+  }
+  if (width !== WALKABLE_GUIDE_WIDTH || height !== WALKABLE_GUIDE_HEIGHT) {
+    throw new Error(
+      `${SOURCE_WALKABLE_GUIDE} must be the annotated full-map guide at ` +
+        `${WALKABLE_GUIDE_WIDTH}x${WALKABLE_GUIDE_HEIGHT}; got ${width}x${height}.`,
+    )
+  }
+  const raw = await image.raw().toBuffer()
+  const stroke = createSizedMask(width, height)
+  let strokePixels = 0
+  for (let i = 0, p = 0; i < stroke.data.length; i++, p += 4) {
+    if (isWalkableGuideStroke(raw[p]!, raw[p + 1]!, raw[p + 2]!, raw[p + 3]!)) {
+      stroke.data[i] = 1
+      strokePixels++
+    }
+  }
+  if (strokePixels < 1000) {
+    throw new Error(`${SOURCE_WALKABLE_GUIDE} did not contain enough green guide pixels; found ${strokePixels}.`)
+  }
+
+  const preciseFill = fillClosedGuideRegions(stroke, 2)
+  const gapTolerantFill = fillClosedGuideRegions(stroke, 4)
+  const guideBoundary = dilateBitmapMask(stroke, 2)
+  const combinedGuideFill = unionMasks(unionMasks(preciseFill, gapTolerantFill), guideBoundary)
+  const walkable = scaleGuideMaskToArena(combinedGuideFill)
+  paintGuideWalkablePatches(walkable)
+  assertWalkableGuideTopology(walkable)
+  return walkable
+}
+
 function assertExclusiveMasks(masks: {
   readonly walkable: Mask
   readonly lava: Mask
@@ -601,15 +857,6 @@ function rectsFromClassifiedGrid(grid: ClassifiedGrid, klass: RegionClass): Rect
   }
 
   return merged.sort((a, b) => a.y - b.y || a.x - b.x || a.width - b.width || a.height - b.height)
-}
-
-function rectsFromMask(mask: Mask, cellSize: number): Rect[] {
-  const empty = createMask()
-  const classified = classifiedGridFromMasks(
-    { walkable: empty, lava: mask, cliff: empty },
-    cellSize,
-  )
-  return rectsFromClassifiedGrid(classified, REGION_LAVA)
 }
 
 function cloneMask(mask: Mask): Mask {
@@ -1240,14 +1487,10 @@ function applyTopLeftFootprintClearance(mask: Mask): void {
 }
 
 async function buildArenaGeometry(): Promise<void> {
-  const walkable = await loadMaskImage("walkable-mask.png")
-  const lava = await loadMaskImage("lava-mask.png")
-  const cliff = await loadMaskImage("cliff-mask.png")
   const base = await loadRaw(SOURCE_BASE)
-  applyComputerVisionGuidedMaskRefinements({ walkable, lava, cliff }, base)
-  applyWalkableSurfaceCompletion({ walkable, lava, cliff }, base)
-  applyCardinalConnectorUnions({ walkable, lava, cliff })
-  applyUserGuideWalkableReplacements({ walkable, lava, cliff }, base)
+  const walkable = await loadGuideWalkableMask()
+  const lava = buildLavaMask(base, walkable)
+  const cliff = buildCliffMask(walkable, lava)
   assertExclusiveMasks({ walkable, lava, cliff })
   const visualClassified = classifiedGridFromMasks({ walkable, lava, cliff }, REGION_CELL_PX)
   const movementWalkable = cloneMask(walkable)
@@ -1263,15 +1506,13 @@ async function buildArenaGeometry(): Promise<void> {
     { walkable: movementWalkable, lava: runtimeLava, cliff: runtimeCliff },
     REGION_CELL_PX,
   )
-  const movementBlocking = createMask()
-  for (let i = 0; i < movementBlocking.data.length; i++) {
-    movementBlocking.data[i] = movementWalkable.data[i] ? 0 : 1
-  }
   WALKABLE_MASK = walkable
   LAVA_MASK = lava
   CLIFF_MASK = cliff
   WALKABLE_RECTS = rectsFromClassifiedGrid(visualClassified, REGION_WALKABLE)
-  NON_WALKABLE_RECTS = rectsFromMask(movementBlocking, REGION_CELL_PX)
+  NON_WALKABLE_RECTS = rectsFromClassifiedGrid(classified, REGION_LAVA)
+    .concat(rectsFromClassifiedGrid(classified, REGION_CLIFF))
+    .sort((a, b) => a.y - b.y || a.x - b.x || a.width - b.width || a.height - b.height)
   LAVA_RECTS = rectsFromClassifiedGrid(classified, REGION_LAVA)
   CLIFF_RECTS = rectsFromClassifiedGrid(classified, REGION_CLIFF)
 }
@@ -2034,6 +2275,7 @@ function writeMetadata(props: readonly PropDef[]): void {
       base: repoPath(SOURCE_BASE),
       objects: repoPath(SOURCE_OBJECTS),
       target: repoPath(SOURCE_TARGET),
+      walkableGuide: repoPath(SOURCE_WALKABLE_GUIDE),
     },
     arena: { width: ARENA_WIDTH, height: ARENA_HEIGHT },
     props,

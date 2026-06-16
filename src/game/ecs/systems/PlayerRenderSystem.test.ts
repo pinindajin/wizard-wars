@@ -76,7 +76,6 @@ import { REPLAY_SMOOTHING_MS } from "@/shared/balance-config/rendering"
 
 const OPEN_TEST_POINT = ARENA_SPAWN_POINTS[0]!
 const ARENA_BOUNDS = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
-const OPEN_LAVA_EDGE_POINT = { x: 145, y: 57 }
 const REPRESENTATIVE_BLOCKER_MIN_AREA_PX = 1_000
 
 function canPlayerOccupy(x: number, y: number): boolean {
@@ -137,14 +136,17 @@ function sampleBlockedSmoothingCase() {
 }
 
 function sampleLavaRect() {
-  const lava = ARENA_LAVA_COLLIDERS.find((rect) =>
-    rect.x <= OPEN_LAVA_EDGE_POINT.x &&
-    rect.x + rect.width >= OPEN_LAVA_EDGE_POINT.x &&
-    rect.y <= OPEN_LAVA_EDGE_POINT.y &&
-    rect.y + rect.height >= OPEN_LAVA_EDGE_POINT.y,
-  )
-  if (!lava) throw new Error("Expected native lava at the upper-left platform edge")
-  return lava
+  for (const rect of [...ARENA_LAVA_COLLIDERS].sort((a, b) => a.y - b.y || a.x - b.x)) {
+    for (let y = Math.max(100, rect.y); y < Math.min(rect.y + rect.height, ARENA_HEIGHT - 20); y++) {
+      for (let x = rect.x + rect.width - 1; x >= rect.x; x--) {
+        if (x < 30 || x >= ARENA_WIDTH - 30) continue
+        if (terrainStateAtPosition(x, y) === "lava" && terrainStateAtPosition(x + 1, y) !== "lava") {
+          return { rect, point: { x, y } }
+        }
+      }
+    }
+  }
+  throw new Error("Expected native lava with a right-hand non-lava edge")
 }
 
 type TestRenderEntry = {
@@ -543,10 +545,10 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     const { scene, group } = mockSceneAndGroup()
     const sys = new PlayerRenderSystem(scene as never, group as never)
     sys.localPlayerId = "p1"
-    sampleLavaRect()
+    const lava = sampleLavaRect()
     const start = {
-      x: OPEN_LAVA_EDGE_POINT.x,
-      y: OPEN_LAVA_EDGE_POINT.y,
+      x: lava.point.x,
+      y: lava.point.y,
     }
     sys.applyFullSync(sync([snap({
       id: 1,
@@ -561,7 +563,7 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     const after = sys._getLocalSimForTest(1)
     expect(after).not.toBeNull()
     expect(terrainStateAtPosition(after!.simCurrX, after!.simCurrY)).toBe("lava")
-    expect(after!.simCurrX).toBeLessThanOrEqual(OPEN_LAVA_EDGE_POINT.x)
+    expect(after!.simCurrX).toBeLessThanOrEqual(lava.point.x)
   })
 
   it("snaps to a legal smooth target when blocker-gated smoothing cannot reach it", () => {

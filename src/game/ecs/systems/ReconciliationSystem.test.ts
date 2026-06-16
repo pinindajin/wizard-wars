@@ -40,17 +40,18 @@ function input(over: Partial<PlayerInputPayload> & { seq: number }): PlayerInput
   }
 }
 
-const OPEN_LAVA_EDGE_POINT = { x: 145, y: 57 }
-
 function sampleLavaRect() {
-  const lava = ARENA_LAVA_COLLIDERS.find((rect) =>
-    rect.x <= OPEN_LAVA_EDGE_POINT.x &&
-    rect.x + rect.width >= OPEN_LAVA_EDGE_POINT.x &&
-    rect.y <= OPEN_LAVA_EDGE_POINT.y &&
-    rect.y + rect.height >= OPEN_LAVA_EDGE_POINT.y,
-  )
-  if (!lava) throw new Error("Expected native lava at the upper-left platform edge")
-  return lava
+  for (const rect of [...ARENA_LAVA_COLLIDERS].sort((a, b) => a.y - b.y || a.x - b.x)) {
+    for (let y = Math.max(100, rect.y); y < Math.min(rect.y + rect.height, ARENA_HEIGHT - 20); y++) {
+      for (let x = rect.x + rect.width - 1; x >= rect.x; x--) {
+        if (x < 30 || x >= ARENA_WIDTH - 30) continue
+        if (terrainStateAtPosition(x, y) === "lava" && terrainStateAtPosition(x + 1, y) !== "lava") {
+          return { rect, point: { x, y } }
+        }
+      }
+    }
+  }
+  throw new Error("Expected native lava with a right-hand non-lava edge")
 }
 
 const noopCtx = {
@@ -219,10 +220,10 @@ describe("reconcileLocal", () => {
   })
 
   it("replays lava movement without walking onto land", () => {
-    sampleLavaRect()
+    const lava = sampleLavaRect()
     const start = {
-      x: OPEN_LAVA_EDGE_POINT.x,
-      y: OPEN_LAVA_EDGE_POINT.y,
+      x: lava.point.x,
+      y: lava.point.y,
     }
     const history = new LocalInputHistory()
     for (let seq = 20; seq < 60; seq++) {
@@ -237,6 +238,6 @@ describe("reconcileLocal", () => {
     )
 
     expect(terrainStateAtPosition(r.targetX, r.targetY)).toBe("lava")
-    expect(r.targetX).toBeLessThanOrEqual(OPEN_LAVA_EDGE_POINT.x)
+    expect(r.targetX).toBeLessThanOrEqual(lava.point.x)
   })
 })
