@@ -34,10 +34,10 @@ import {
   type MoveIntent,
   worldStepFromIntent,
 } from "@/shared/movementIntent"
-import { moveWithinWorld } from "@/shared/collision/worldCollision"
+import { moveWithinWorldIndexed } from "@/shared/collision/indexedWorldCollision"
+import { terrainColliderSetForPlayerState } from "@/shared/collision/arenaSpatialIndexes"
 import {
   worldCandidateGateForPlayerState,
-  worldCollidersForPlayerState,
 } from "@/shared/collision/worldCollidersForPlayer"
 import {
   ClientPosition,
@@ -621,14 +621,17 @@ export class PlayerRenderSystem {
    * Returns whether the channel-cast overlay should be shown for `state`.
    *
    * Strict AND: the player must be in the `light_cast` animation state AND
-   * the server-reported `castingAbilityId` must be `"fireball"`. Mismatches
+   * the server-reported `castingAbilityId` must be Fireball or Homing Orb. Mismatches
    * (e.g. `light_cast` without an ability id) hide the overlay rather than
    * guess. Exposed as a function so tests can exercise the rule directly.
    */
   static shouldShowFireballChannel(
     state: Pick<(typeof ClientPlayerState)[number], "animState" | "castingAbilityId">,
   ): boolean {
-    return state.animState === "light_cast" && state.castingAbilityId === "fireball"
+    return (
+      state.animState === "light_cast" &&
+      (state.castingAbilityId === "fireball" || state.castingAbilityId === "homing_orb")
+    )
   }
 
   /**
@@ -904,7 +907,7 @@ export class PlayerRenderSystem {
         state.animState === "primary_melee_attack"
           ? SWING_MOVE_SPEED_MULTIPLIER
           : 1
-      const colliders = worldCollidersForPlayerState(state.jumpZ ?? 0, state.terrainState, {
+      const colliderSet = terrainColliderSetForPlayerState(state.jumpZ ?? 0, state.terrainState, {
         jumpStartedInLava: state.jumpStartedInLava ?? false,
       })
       const candidateGate = worldCandidateGateForPlayerState(
@@ -922,14 +925,14 @@ export class PlayerRenderSystem {
           TICK_DT_SEC,
           castMoveMult * swingMult,
         )
-        const moved = moveWithinWorld(
+        const moved = moveWithinWorldIndexed(
           entry.simCurrX,
           entry.simCurrY,
           step.x,
           step.y,
           PLAYER_WORLD_COLLISION_FOOTPRINT,
           ARENA_BOUNDS,
-          colliders,
+          colliderSet,
           candidateGate,
         )
         entry.simCurrX = moved.x
@@ -946,14 +949,14 @@ export class PlayerRenderSystem {
         const pPredY = entry.simCurrY
         const targetStepX = pPredX + (entry.smoothTargetX - pPredX) * t - pPredX
         const targetStepY = pPredY + (entry.smoothTargetY - pPredY) * t - pPredY
-        const moved = moveWithinWorld(
+        const moved = moveWithinWorldIndexed(
           pPredX,
           pPredY,
           targetStepX,
           targetStepY,
           PLAYER_WORLD_COLLISION_FOOTPRINT,
           ARENA_BOUNDS,
-          colliders,
+          colliderSet,
           candidateGate,
         )
         entry.simCurrX = moved.x
@@ -1093,7 +1096,7 @@ export class PlayerRenderSystem {
 
       this._updateLavaSubmerge(entry, renderPos, state, isDying)
 
-      // --- Fireball channel overlay (light_cast + castingAbilityId=fireball) ---
+      // --- Fireball channel overlay (light_cast + light spell castingAbilityId) ---
       if (isDying && entry.channelOverlay) {
         entry.channelOverlay.setVisible(false)
       } else if (!isDying) {

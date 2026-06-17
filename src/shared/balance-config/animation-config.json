@@ -24,6 +24,11 @@
           "durationMs": 500,
           "effectTiming": "after"
         },
+        "spell:homing_orb": {
+          "type": "spell",
+          "durationMs": 500,
+          "effectTiming": "after"
+        },
         "spell:lightning_bolt": {
           "type": "spell",
           "durationMs": 700,
@@ -66,6 +71,11 @@
           "durationMs": 500,
           "effectTiming": "after"
         },
+        "spell:homing_orb": {
+          "type": "spell",
+          "durationMs": 500,
+          "effectTiming": "after"
+        },
         "spell:lightning_bolt": {
           "type": "spell",
           "durationMs": 700,
@@ -104,6 +114,11 @@
           "durationMs": 1417
         },
         "spell:fireball": {
+          "type": "spell",
+          "durationMs": 500,
+          "effectTiming": "after"
+        },
+        "spell:homing_orb": {
           "type": "spell",
           "durationMs": 500,
           "effectTiming": "after"

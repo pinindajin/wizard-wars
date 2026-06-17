@@ -5,8 +5,10 @@ import { GENERATED_ARENA_CLIFF_COLLIDERS } from "./generated/arena-cliff-collide
 import { GENERATED_ARENA_LAVA_TRANSITION_COLLIDERS } from "./generated/arena-lava-transition-colliders"
 import {
   ARENA_LAYOUT_COLS,
+  ARENA_LAYOUT_HEIGHT,
   ARENA_LAYOUT_ROWS,
   ARENA_LAYOUT_SPAWN_POINTS,
+  ARENA_LAYOUT_WIDTH,
 } from "./arena-layout"
 
 /**
@@ -18,8 +20,8 @@ import {
 export const TILE_SIZE_PX = 64
 export const ARENA_COLS = ARENA_LAYOUT_COLS
 export const ARENA_ROWS = ARENA_LAYOUT_ROWS
-export const ARENA_WIDTH = ARENA_COLS * TILE_SIZE_PX
-export const ARENA_HEIGHT = ARENA_ROWS * TILE_SIZE_PX
+export const ARENA_WIDTH = ARENA_LAYOUT_WIDTH
+export const ARENA_HEIGHT = ARENA_LAYOUT_HEIGHT
 export const ARENA_CENTER_X = ARENA_WIDTH / 2
 export const ARENA_CENTER_Y = ARENA_HEIGHT / 2
 

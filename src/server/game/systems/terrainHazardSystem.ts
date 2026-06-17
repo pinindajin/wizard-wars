@@ -20,8 +20,8 @@ import {
 } from "../../../shared/balance-config"
 import {
   nearestLavaCenter,
-  terrainStateAtPosition,
 } from "../../../shared/collision/terrainHazards"
+import { terrainStateAtPositionIndexed } from "../../../shared/collision/indexedWorldCollision"
 
 export function terrainHazardSystem(ctx: SimCtx): void {
   const { world, damageRequests } = ctx
@@ -43,7 +43,7 @@ export function terrainHazardSystem(ctx: SimCtx): void {
       continue
     }
 
-    const sampled = terrainStateAtPosition(Position.x[eid], Position.y[eid])
+    const sampled = terrainStateAtPositionIndexed(Position.x[eid], Position.y[eid])
     if (sampled === "lava") {
       TerrainState.kind[eid] = TERRAIN_KIND.lava
       const nextDamage = TerrainState.lavaDamageCarry[eid] + LAVA_DAMAGE_PER_SECOND * TICK_DT_SEC
@@ -84,7 +84,7 @@ export function terrainHazardSystem(ctx: SimCtx): void {
     Velocity.vx[eid] = nx / TICK_DT_SEC
     Velocity.vy[eid] = ny / TICK_DT_SEC
 
-    if (terrainStateAtPosition(Position.x[eid], Position.y[eid]) === "lava") {
+    if (terrainStateAtPositionIndexed(Position.x[eid], Position.y[eid]) === "lava") {
       TerrainState.kind[eid] = TERRAIN_KIND.lava
     }
   }

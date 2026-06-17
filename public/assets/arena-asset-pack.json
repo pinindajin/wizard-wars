@@ -6,14 +6,99 @@
     "arena": {
         "files": [
             {
+                "type": "image",
+                "key": "arena-base",
+                "url": "/assets/maps/arena-base.png"
+            },
+            {
                 "type": "tilemapTiledJSON",
                 "key": "arena",
                 "url": "/assets/tilemaps/arena.json"
             },
             {
                 "type": "image",
-                "key": "arena-terrain",
-                "url": "/assets/tilesets/arena-terrain.png"
+                "key": "arena-prop-large-obelisk",
+                "url": "/assets/sprites/arena-props/large-obelisk.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-medium-obelisk",
+                "url": "/assets/sprites/arena-props/medium-obelisk.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-tall-rune-pillar",
+                "url": "/assets/sprites/arena-props/tall-rune-pillar.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-brazier-tower",
+                "url": "/assets/sprites/arena-props/brazier-tower.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-small-obelisk",
+                "url": "/assets/sprites/arena-props/small-obelisk.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-squat-plinth",
+                "url": "/assets/sprites/arena-props/squat-plinth.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-curved-wall",
+                "url": "/assets/sprites/arena-props/curved-wall.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-broken-wall",
+                "url": "/assets/sprites/arena-props/broken-wall.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-straight-wall",
+                "url": "/assets/sprites/arena-props/straight-wall.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-square-wall-block",
+                "url": "/assets/sprites/arena-props/square-wall-block.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-lava-spire-cluster",
+                "url": "/assets/sprites/arena-props/lava-spire-cluster.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-basalt-cluster",
+                "url": "/assets/sprites/arena-props/basalt-cluster.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-round-rune-pillar",
+                "url": "/assets/sprites/arena-props/round-rune-pillar.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-short-basalt-cluster",
+                "url": "/assets/sprites/arena-props/short-basalt-cluster.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-stone-drum",
+                "url": "/assets/sprites/arena-props/stone-drum.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-short-wall-slab",
+                "url": "/assets/sprites/arena-props/short-wall-slab.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-small-rocks",
+                "url": "/assets/sprites/arena-props/small-rocks.png"
             },
             {
                 "type": "spritesheet",
@@ -28,6 +113,15 @@
                 "type": "spritesheet",
                 "key": "fireball",
                 "url": "/assets/sprites/abilities/fireball-fly.png",
+                "frameConfig": {
+                    "frameWidth": 256,
+                    "frameHeight": 256
+                }
+            },
+            {
+                "type": "spritesheet",
+                "key": "homing-orb",
+                "url": "/assets/sprites/abilities/homing-orb-fly.png",
                 "frameConfig": {
                     "frameWidth": 256,
                     "frameHeight": 256
@@ -57,164 +151,144 @@
                 }
             },
             {
-                "type": "image",
-                "key": "prop-barrel",
-                "url": "/assets/sprites/props/barrel.png"
-            },
-            {
-                "type": "image",
-                "key": "prop-battle-banner",
-                "url": "/assets/sprites/props/battle-banner.png"
-            },
-            {
-                "type": "image",
-                "key": "prop-boulder-rock",
-                "url": "/assets/sprites/props/boulder-rock.png"
-            },
-            {
-                "type": "image",
-                "key": "prop-brazier",
-                "url": "/assets/sprites/props/brazier.png"
-            },
-            {
-                "type": "image",
-                "key": "prop-cracked-shield",
-                "url": "/assets/sprites/props/cracked-shield.png"
-            },
-            {
-                "type": "image",
-                "key": "prop-crate",
-                "url": "/assets/sprites/props/crate.png"
-            },
-            {
-                "type": "image",
-                "key": "prop-fallen-log",
-                "url": "/assets/sprites/props/fallen-log.png"
-            },
-            {
-                "type": "image",
-                "key": "prop-fallen-pillar",
-                "url": "/assets/sprites/props/fallen-pillar.png"
-            },
-            {
-                "type": "image",
-                "key": "prop-mushroom-cluster",
-                "url": "/assets/sprites/props/mushroom-cluster.png"
-            },
-            {
-                "type": "image",
-                "key": "prop-oak-tree",
-                "url": "/assets/sprites/props/oak-tree.png"
-            },
-            {
-                "type": "image",
-                "key": "prop-pile-of-bones",
-                "url": "/assets/sprites/props/pile-of-bones.png"
-            },
-            {
-                "type": "image",
-                "key": "prop-rubble-pile",
-                "url": "/assets/sprites/props/rubble-pile.png"
-            },
-            {
-                "type": "image",
-                "key": "prop-skull",
-                "url": "/assets/sprites/props/skull.png"
-            },
-            {
-                "type": "image",
-                "key": "prop-treasure-chest",
-                "url": "/assets/sprites/props/treasure-chest.png"
-            },
-            {
-                "type": "image",
-                "key": "prop-tree-stump",
-                "url": "/assets/sprites/props/tree-stump.png"
-            },
-            {
                 "type": "audio",
                 "key": "music-lobby-01",
-                "url": ["/assets/music/lobby/wizard-wars-lobby-01-ost.mp3"]
+                "url": [
+                    "/assets/music/lobby/wizard-wars-lobby-01-ost.mp3"
+                ]
             },
             {
                 "type": "audio",
                 "key": "music-battle-01",
-                "url": ["/assets/music/battle/wizard-war-battle-ost-01.mp3"]
+                "url": [
+                    "/assets/music/battle/wizard-war-battle-ost-01.mp3"
+                ]
             },
             {
                 "type": "audio",
                 "key": "music-battle-02",
-                "url": ["/assets/music/battle/wizard-wars-battle-02-ost.mp3"]
+                "url": [
+                    "/assets/music/battle/wizard-wars-battle-02-ost.mp3"
+                ]
             },
             {
                 "type": "audio",
                 "key": "sfx-fireball-cast",
-                "url": ["/assets/sounds/sfx-fireball-cast.mp3"]
+                "url": [
+                    "/assets/sounds/sfx-fireball-cast.mp3"
+                ]
             },
             {
                 "type": "audio",
                 "key": "sfx-fireball-impact",
-                "url": ["/assets/sounds/sfx-fireball-impact.mp3"]
+                "url": [
+                    "/assets/sounds/sfx-fireball-impact.mp3"
+                ]
+            },
+            {
+                "type": "audio",
+                "key": "sfx-homing-orb-cast",
+                "url": [
+                    "/assets/sounds/sfx-homing-orb-cast.mp3"
+                ]
+            },
+            {
+                "type": "audio",
+                "key": "sfx-homing-orb-impact",
+                "url": [
+                    "/assets/sounds/sfx-homing-orb-impact.mp3"
+                ]
+            },
+            {
+                "type": "audio",
+                "key": "sfx-homing-orb-expire",
+                "url": [
+                    "/assets/sounds/sfx-homing-orb-expire.mp3"
+                ]
             },
             {
                 "type": "audio",
                 "key": "sfx-lightning-cast",
-                "url": ["/assets/sounds/sfx-lightning-cast.mp3"]
+                "url": [
+                    "/assets/sounds/sfx-lightning-cast.mp3"
+                ]
             },
             {
                 "type": "audio",
                 "key": "sfx-lightning-impact",
-                "url": ["/assets/sounds/sfx-lightning-impact.mp3"]
+                "url": [
+                    "/assets/sounds/sfx-lightning-impact.mp3"
+                ]
             },
             {
                 "type": "audio",
                 "key": "sfx-axe-swing",
-                "url": ["/assets/sounds/sfx-axe-swing.wav"]
+                "url": [
+                    "/assets/sounds/sfx-axe-swing.wav"
+                ]
             },
             {
                 "type": "audio",
                 "key": "sfx-axe-hit",
-                "url": ["/assets/sounds/sfx-axe-hit.mp3"]
+                "url": [
+                    "/assets/sounds/sfx-axe-hit.mp3"
+                ]
             },
             {
                 "type": "audio",
                 "key": "sfx-walk-step",
-                "url": ["/assets/sounds/dirt-walk-2.wav"]
+                "url": [
+                    "/assets/sounds/dirt-walk-2.wav"
+                ]
             },
             {
                 "type": "audio",
                 "key": "sfx-jump",
-                "url": ["/assets/sounds/dirt-jump.wav"]
+                "url": [
+                    "/assets/sounds/dirt-jump.wav"
+                ]
             },
             {
                 "type": "audio",
                 "key": "sfx-player-death",
-                "url": ["/assets/sounds/sfx-player-death.mp3"]
+                "url": [
+                    "/assets/sounds/sfx-player-death.mp3"
+                ]
             },
             {
                 "type": "audio",
                 "key": "sfx-player-hit",
-                "url": ["/assets/sounds/sfx-player-hit.mp3"]
+                "url": [
+                    "/assets/sounds/sfx-player-hit.mp3"
+                ]
             },
             {
                 "type": "audio",
                 "key": "sfx-hit-deal",
-                "url": ["/assets/sounds/sfx-hit-deal.wav"]
+                "url": [
+                    "/assets/sounds/sfx-hit-deal.wav"
+                ]
             },
             {
                 "type": "audio",
                 "key": "sfx-hit-taken",
-                "url": ["/assets/sounds/sfx-hit-taken.mp3"]
+                "url": [
+                    "/assets/sounds/sfx-hit-taken.mp3"
+                ]
             },
             {
                 "type": "audio",
                 "key": "sfx-countdown-beep",
-                "url": ["/assets/sounds/sfx-countdown-beep.mp3"]
+                "url": [
+                    "/assets/sounds/sfx-countdown-beep.mp3"
+                ]
             },
             {
                 "type": "audio",
                 "key": "sfx-countdown-go",
-                "url": ["/assets/sounds/sfx-countdown-go.mp3"]
+                "url": [
+                    "/assets/sounds/sfx-countdown-go.mp3"
+                ]
             }
         ]
     }

@@ -23,6 +23,11 @@ type PlayerMarker = {
   readonly ring: Phaser.GameObjects.Ellipse
 }
 
+type MinimapArenaBounds = {
+  readonly arenaWidth: number
+  readonly arenaHeight: number
+}
+
 function isUiInputFocused(): boolean {
   const el = document.activeElement
   if (!el) return false
@@ -73,7 +78,7 @@ export class MinimapController {
 
   constructor(
     private readonly scene: Phaser.Scene,
-    private readonly arenaMap: Phaser.Tilemaps.Tilemap,
+    private readonly bounds: MinimapArenaBounds,
   ) {
     this.corner = parseMinimapCorner(
       this.scene.game.registry.get(WW_MINIMAP_CORNER_REGISTRY_KEY),
@@ -86,8 +91,8 @@ export class MinimapController {
       viewport.height,
     )
     this.camera.setBackgroundColor("rgba(7, 10, 18, 0.82)")
-    this.camera.setBounds(0, 0, this.arenaMap.widthInPixels, this.arenaMap.heightInPixels)
-    this.camera.centerOn(this.arenaMap.widthInPixels / 2, this.arenaMap.heightInPixels / 2)
+    this.camera.setBounds(0, 0, this.bounds.arenaWidth, this.bounds.arenaHeight)
+    this.camera.centerOn(this.bounds.arenaWidth / 2, this.bounds.arenaHeight / 2)
     this.camera.setRoundPixels(false)
 
     this.frameEl = this.createFrameElement()
@@ -169,8 +174,8 @@ export class MinimapController {
     return computeMinimapViewport({
       canvasWidth: this.scene.scale.gameSize.width,
       canvasHeight: this.scene.scale.gameSize.height,
-      arenaWidth: this.arenaMap.widthInPixels,
-      arenaHeight: this.arenaMap.heightInPixels,
+      arenaWidth: this.bounds.arenaWidth,
+      arenaHeight: this.bounds.arenaHeight,
       corner: this.corner,
       mode: this.mode,
     })
@@ -181,11 +186,11 @@ export class MinimapController {
     this.camera.setViewport(viewport.x, viewport.y, viewport.width, viewport.height)
     this.camera.setZoom(
       Math.min(
-        viewport.width / this.arenaMap.widthInPixels,
-        viewport.height / this.arenaMap.heightInPixels,
+        viewport.width / this.bounds.arenaWidth,
+        viewport.height / this.bounds.arenaHeight,
       ),
     )
-    this.camera.centerOn(this.arenaMap.widthInPixels / 2, this.arenaMap.heightInPixels / 2)
+    this.camera.centerOn(this.bounds.arenaWidth / 2, this.bounds.arenaHeight / 2)
     this.updateFrameElement(viewport)
   }
 

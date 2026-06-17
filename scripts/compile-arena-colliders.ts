@@ -158,13 +158,19 @@ function lavaRectsFromGround(map: TiledMap): Rect[] {
 }
 
 function hazardRects(map: TiledMap, kind: "lava" | "cliff"): Rect[] {
-  const explicit = readColliderRects(map, kind === "lava" ? "LavaAreas" : "CliffAreas")
-  const lava = [...lavaRectsFromGround(map), ...explicit]
+  const explicitLava = readColliderRects(map, "LavaAreas")
+  const explicitCliff = readColliderRects(map, "CliffAreas")
+  const lava = [...lavaRectsFromGround(map), ...explicitLava]
   if (kind === "lava") return lava
+  if (!hasGroundLayer(map)) return explicitCliff
 
   const nonWalkable = readColliderRects(map, "NonWalkableAreas")
   const inferredCliff = nonWalkable.filter((rect) => !lava.some((lavaRect) => rectsOverlap(rect, lavaRect)))
-  return [...inferredCliff, ...readColliderRects(map, "CliffAreas")]
+  return [...inferredCliff, ...explicitCliff]
+}
+
+function hasGroundLayer(map: TiledMap): boolean {
+  return (map.layers ?? []).some((layer) => layer.type === "tilelayer" && layer.name === "Ground")
 }
 
 function buildSource(

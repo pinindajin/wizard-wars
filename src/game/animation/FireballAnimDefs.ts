@@ -6,6 +6,8 @@ import {
 
 /** Phaser texture key for the in-flight fireball sprite sheet. */
 export const FIREBALL_FLY_TEXTURE = "fireball"
+/** Phaser texture key for the in-flight Homing Orb sprite sheet. */
+export const HOMING_ORB_FLY_TEXTURE = "homing-orb"
 /** Phaser texture key for the channel/cast fireball sprite sheet. */
 export const FIREBALL_CHANNEL_TEXTURE = "fireball-channel"
 /** Phaser texture key for the lava lap overlay sprite sheet. */
@@ -13,6 +15,8 @@ export const LAVA_LAP_TEXTURE = "lava-lap"
 
 /** Animation key consumed by `ProjectileRenderSystem` for the flying projectile. */
 export const FIREBALL_FLY_ANIM = "fireball-fly"
+/** Animation key consumed by `ProjectileRenderSystem` for the Homing Orb projectile. */
+export const HOMING_ORB_FLY_ANIM = "homing-orb-fly"
 /** Animation key consumed by `PlayerRenderSystem` for the cast channel overlay. */
 export const FIREBALL_CHANNEL_ANIM = "fireball-channel"
 /** Animation key consumed by `PlayerRenderSystem` while a player is in lava. */
@@ -20,6 +24,8 @@ export const LAVA_LAP_ANIM = "lava-lap"
 
 /** Frame count baked into the in-flight fireball strip by `scripts/build-fireball-sheets.ts`. */
 const FIREBALL_FLY_FRAME_COUNT = 5
+/** Frame count baked into the Homing Orb fly strip by `scripts/build-homing-orb-sheets.ts`. */
+const HOMING_ORB_FLY_FRAME_COUNT = 5
 /** Frame count baked into the cast/channel fireball strip. */
 const FIREBALL_CHANNEL_FRAME_COUNT = 8
 
@@ -62,6 +68,18 @@ export const registerFireballAnims = (
         end: FIREBALL_CHANNEL_FRAME_COUNT - 1,
       }),
       frameRate: CHANNEL_FPS,
+      repeat: -1,
+    })
+  }
+
+  if (!animManager.exists(HOMING_ORB_FLY_ANIM)) {
+    animManager.create({
+      key: HOMING_ORB_FLY_ANIM,
+      frames: animManager.generateFrameNumbers(HOMING_ORB_FLY_TEXTURE, {
+        start: 0,
+        end: HOMING_ORB_FLY_FRAME_COUNT - 1,
+      }),
+      frameRate: FLY_FPS,
       repeat: -1,
     })
   }

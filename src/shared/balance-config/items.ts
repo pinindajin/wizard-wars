@@ -11,6 +11,13 @@ export type ShopItemConfig = {
 }
 
 export const SHOP_ITEMS: Record<string, ShopItemConfig> = {
+  homing_orb: {
+    id: "homing_orb",
+    displayName: "Homing Orb",
+    cost: SHOP_ITEM_COST,
+    category: "ability",
+    description: "Homes toward a locked target; 4 charges, restores 1 charge every 15s, 8 damage.",
+  },
   lightning_bolt: {
     id: "lightning_bolt",
     displayName: "Lightning Bolt",

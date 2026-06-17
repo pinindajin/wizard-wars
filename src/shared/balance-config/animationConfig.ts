@@ -118,12 +118,22 @@ export function megasheetClipForAnimationActionKey(actionKey: string): LadyWizar
   }
   if (actionKey.startsWith("spell:")) {
     const abilityId = actionKey.slice("spell:".length)
-    if (abilityId === "fireball") return "light_spell_cast"
+    if (isLightSpellCastAbilityId(abilityId)) return "light_spell_cast"
     if (abilityId === "jump") return "jump"
     return "heavy_spell_cast"
   }
   if (actionKey.startsWith("primary:")) return "summoned_axe_swing"
   throw new Error(`Unknown animation action key: ${actionKey}`)
+}
+
+/**
+ * Returns whether an ability should use the light spell cast atlas/megasheet clip.
+ *
+ * @param abilityId - Ability config id.
+ * @returns True for spells that share Fireball's light cast animation.
+ */
+function isLightSpellCastAbilityId(abilityId: string): boolean {
+  return abilityId === "fireball" || abilityId === "homing_orb"
 }
 
 export const animationConfigSchema = z.object({
@@ -453,7 +463,7 @@ export function getAnimationToolActions(
       config: actions.death,
     },
     ...Object.values(ABILITY_CONFIGS).map((ability): AnimationToolAction => {
-      const light = ability.id === "fireball"
+      const light = isLightSpellCastAbilityId(ability.id)
       const jump = ability.id === "jump"
       return {
         id: spellActionId(ability.id),

@@ -27,10 +27,9 @@ import {
   TICK_DT_SEC,
 } from "../../../shared/balance-config"
 import {
-  resolveJumpLandingWithGrace,
-} from "../../../shared/collision/worldCollision"
-import { ARENA_WORLD_COLLIDERS } from "../../../shared/balance-config/arena"
-import { terrainStateAtPosition } from "../../../shared/collision/terrainHazards"
+  resolveJumpLandingWithGraceIndexed,
+  terrainStateAtPositionIndexed,
+} from "../../../shared/collision/indexedWorldCollision"
 
 const ARENA_BOUNDS = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
 
@@ -73,7 +72,7 @@ export function jumpPhysicsSystem(ctx: SimCtx): void {
 
     const gx = Position.x[eid]
     const gy = Position.y[eid]
-    const terrainState = terrainStateAtPosition(gx, gy)
+    const terrainState = terrainStateAtPositionIndexed(gx, gy)
     if (terrainState === "lava") {
       TerrainState.kind[eid] = TERRAIN_KIND.lava
       continue
@@ -84,12 +83,11 @@ export function jumpPhysicsSystem(ctx: SimCtx): void {
       continue
     }
 
-    const landing = resolveJumpLandingWithGrace(
+    const landing = resolveJumpLandingWithGraceIndexed(
       gx,
       gy,
       PLAYER_WORLD_COLLISION_FOOTPRINT,
       ARENA_BOUNDS,
-      ARENA_WORLD_COLLIDERS,
       {
         movementX: Velocity.vx[eid],
         movementY: Velocity.vy[eid],

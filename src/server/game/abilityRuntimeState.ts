@@ -1,5 +1,7 @@
 import {
   FIREBALL_COOLDOWN_MS,
+  HOMING_ORB_CHARGE_RECHARGE_MS,
+  HOMING_ORB_MAX_CHARGES,
   JUMP_CHARGE_RECHARGE_MS,
   JUMP_MAX_CHARGES,
   LIGHTNING_COOLDOWN_MS,
@@ -11,6 +13,7 @@ import { AbilityRuntime, Cooldown } from "./components"
 
 const FIREBALL_COOLDOWN_TICKS = Math.ceil(FIREBALL_COOLDOWN_MS / TICK_MS)
 const LIGHTNING_COOLDOWN_TICKS = Math.ceil(LIGHTNING_COOLDOWN_MS / TICK_MS)
+const HOMING_ORB_RECHARGE_TICKS = Math.ceil(HOMING_ORB_CHARGE_RECHARGE_MS / TICK_MS)
 const JUMP_RECHARGE_TICKS = Math.ceil(JUMP_CHARGE_RECHARGE_MS / TICK_MS)
 
 /**
@@ -55,19 +58,62 @@ function cooldownState(
  * @param eid - Player entity id.
  * @returns Client-visible Jump runtime state.
  */
-function jumpState(eid: number): AbilityRuntimeState {
-  const charges = AbilityRuntime.jumpCharges[eid]
-  const recharging = charges < JUMP_MAX_CHARGES && AbilityRuntime.jumpRechargeEndsAtMs[eid] > 0
-  const rechargeEndsAtMs = recharging ? AbilityRuntime.jumpRechargeEndsAtMs[eid] : null
-  const rechargeDurationMs = recharging ? ticksToMs(JUMP_RECHARGE_TICKS) : null
+/**
+ * Builds a charge-based ability runtime state.
+ *
+ * @param charges - Current available charges.
+ * @param maxCharges - Maximum charge capacity.
+ * @param rechargeEndsAtMsValue - Server wall-clock time when the active recharge completes.
+ * @param rechargeTicks - Authoritative simulation ticks represented by one recharge.
+ * @returns Client-visible charge and recharge state.
+ */
+function chargeState(
+  charges: number,
+  maxCharges: number,
+  rechargeEndsAtMsValue: number,
+  rechargeTicks: number,
+): AbilityRuntimeState {
+  const recharging = charges < maxCharges && rechargeEndsAtMsValue > 0
+  const rechargeEndsAtMs = recharging ? rechargeEndsAtMsValue : null
+  const rechargeDurationMs = recharging ? ticksToMs(rechargeTicks) : null
   return {
     cooldownEndsAtServerTimeMs: charges === 0 ? rechargeEndsAtMs : null,
     cooldownDurationMs: charges === 0 ? rechargeDurationMs : null,
     charges,
-    maxCharges: JUMP_MAX_CHARGES,
+    maxCharges,
     rechargeEndsAtServerTimeMs: rechargeEndsAtMs,
     rechargeDurationMs,
   }
+}
+
+/**
+ * Builds the charge-based runtime state for Jump.
+ *
+ * @param eid - Player entity id.
+ * @returns Client-visible Jump runtime state.
+ */
+function jumpState(eid: number): AbilityRuntimeState {
+  return chargeState(
+    AbilityRuntime.jumpCharges[eid],
+    JUMP_MAX_CHARGES,
+    AbilityRuntime.jumpRechargeEndsAtMs[eid],
+    JUMP_RECHARGE_TICKS,
+  )
+}
+
+/**
+ * Builds the charge-based runtime state for Homing Orb.
+ *
+ * @param eid - Player entity id.
+ * @returns Client-visible Homing Orb runtime state.
+ */
+function homingOrbState(eid: number): AbilityRuntimeState {
+  return chargeState(
+    AbilityRuntime.homingOrbCharges[eid],
+    HOMING_ORB_MAX_CHARGES,
+    AbilityRuntime.homingOrbRechargeEndsAtMs[eid],
+    HOMING_ORB_RECHARGE_TICKS,
+  )
 }
 
 /**
@@ -94,6 +140,7 @@ export function abilityRuntimeStatesForPlayer(
       ticksToMs(LIGHTNING_COOLDOWN_TICKS),
       currentTick,
     ),
+    homing_orb: homingOrbState(eid),
     jump: jumpState(eid),
   }
 }

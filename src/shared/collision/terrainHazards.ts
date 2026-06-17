@@ -7,6 +7,8 @@ import {
 } from "../balance-config/arena"
 import { JUMP_AIRBORNE_LAVA_COLLISION_MIN_Z_PX } from "../balance-config/combat"
 import type { PlayerTerrainState } from "../types"
+import { ARENA_LAVA_COLLIDER_SET } from "./arenaSpatialIndexes"
+import { queryPointIds } from "./spatialIndex"
 import type { ArenaPropColliderRect, WorldCandidateGate } from "./worldCollision"
 
 export type TerrainColliderMode = PlayerTerrainState
@@ -45,9 +47,9 @@ export function pointInRects(
 ): boolean {
   return rects.some((rect) =>
     x >= rect.x &&
-    x <= rect.x + rect.width &&
+    x < rect.x + rect.width &&
     y >= rect.y &&
-    y <= rect.y + rect.height,
+    y < rect.y + rect.height,
   )
 }
 
@@ -65,7 +67,12 @@ export function terrainStateAtPosition(x: number, y: number): PlayerTerrainState
  * @returns True when the candidate center still samples as lava.
  */
 export function groundedLavaCandidateCanOccupy(x: number, y: number): boolean {
-  return terrainStateAtPosition(x, y) === "lava"
+  return queryPointIds(
+    ARENA_LAVA_COLLIDER_SET.index,
+    x,
+    y,
+    ARENA_LAVA_COLLIDER_SET.scratch,
+  ).length > 0
 }
 
 /**

@@ -6,7 +6,11 @@ import {
   ARENA_WIDTH,
   PLAYER_WORLD_COLLISION_FOOTPRINT,
 } from "../../../shared/balance-config"
-import { ARENA_WORLD_COLLIDERS } from "../../../shared/balance-config/arena"
+import {
+  ARENA_LAVA_COLLIDERS,
+  ARENA_NON_WALKABLE_COLLIDERS,
+  ARENA_WORLD_COLLIDERS,
+} from "../../../shared/balance-config/arena"
 import {
   canOccupyWorldPosition,
   type ArenaPropColliderRect,
@@ -23,6 +27,7 @@ import type { SimCtx } from "../simulation"
 import { knockbackSystem } from "./knockbackSystem"
 
 const ARENA_BOUNDS = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
+const REPRESENTATIVE_BLOCKER_MIN_AREA_PX = 1_000
 
 function addGroundedPlayerWithKnockback(
   x: number,
@@ -58,16 +63,47 @@ function canPlayerOccupy(x: number, y: number, colliders: readonly ArenaPropColl
   )
 }
 
+function sampleUpperKnockbackCase(): {
+  readonly blocker: ArenaPropColliderRect
+  readonly startX: number
+  readonly startY: number
+} {
+  const blocker = ARENA_WORLD_COLLIDERS
+    .filter((rect) =>
+      rect.y < 420 &&
+      rect.width * rect.height >= REPRESENTATIVE_BLOCKER_MIN_AREA_PX &&
+      canPlayerOccupy(
+        rect.x + rect.width / 2,
+        rect.y + rect.height + PLAYER_WORLD_COLLISION_FOOTPRINT.radiusY -
+          PLAYER_WORLD_COLLISION_FOOTPRINT.offsetY + 3,
+        ARENA_WORLD_COLLIDERS,
+      ),
+    )
+    .sort((a, b) => b.width * b.height - a.width * a.height)[0]
+  if (!blocker) throw new Error("Expected representative native upper blocker")
+  return {
+    blocker,
+    startX: blocker.x + blocker.width / 2,
+    startY:
+      blocker.y + blocker.height + PLAYER_WORLD_COLLISION_FOOTPRINT.radiusY -
+      PLAYER_WORLD_COLLISION_FOOTPRINT.offsetY + 3,
+  }
+}
+
+function sampleLavaRect(): ArenaPropColliderRect {
+  const lava = ARENA_LAVA_COLLIDERS.find((rect) =>
+    rect.x <= 132 &&
+    rect.x + rect.width >= 132 &&
+    rect.y <= 54 &&
+    rect.y + rect.height >= 54,
+  )
+  if (!lava) throw new Error("Expected native lava at the upper-left platform edge")
+  return lava
+}
+
 describe("knockbackSystem", () => {
-  it("keeps grounded land players out of border blockers during knockback", () => {
-    const topBorder = ARENA_WORLD_COLLIDERS[0]!
-    const startX = topBorder.x + 342
-    const startY =
-      topBorder.y +
-      topBorder.height +
-      PLAYER_WORLD_COLLISION_FOOTPRINT.radiusY -
-      PLAYER_WORLD_COLLISION_FOOTPRINT.offsetY +
-      2
+  it("keeps grounded land players out of upper blockers during knockback", () => {
+    const { blocker, startX, startY } = sampleUpperKnockbackCase()
     const { world, eid } = addGroundedPlayerWithKnockback(startX, startY, 0, -1)
 
     expect(canPlayerOccupy(Position.x[eid], Position.y[eid], ARENA_WORLD_COLLIDERS)).toBe(
@@ -77,8 +113,8 @@ describe("knockbackSystem", () => {
     knockbackSystem({ world } as SimCtx)
 
     expect(Position.y[eid]).toBeGreaterThanOrEqual(
-      topBorder.y +
-        topBorder.height +
+      blocker.y +
+        blocker.height +
         PLAYER_WORLD_COLLISION_FOOTPRINT.radiusY -
         PLAYER_WORLD_COLLISION_FOOTPRINT.offsetY,
     )
@@ -88,8 +124,8 @@ describe("knockbackSystem", () => {
   })
 
   it("keeps grounded land players out of existing non-walkable colliders during knockback", () => {
-    const blocker = ARENA_WORLD_COLLIDERS.find((rect) => {
-      if (rect.x <= 0 || rect.y <= 0 || rect.width < 64 || rect.height < 64) return false
+    const blocker = ARENA_NON_WALKABLE_COLLIDERS.find((rect) => {
+      if (rect.x <= 0 || rect.y <= 0 || rect.width < 8 || rect.height < 8) return false
       const startX = rect.x - PLAYER_WORLD_COLLISION_FOOTPRINT.radiusX - 2
       const startY = rect.y + rect.height / 2 - PLAYER_WORLD_COLLISION_FOOTPRINT.offsetY
       return canPlayerOccupy(startX, startY, ARENA_WORLD_COLLIDERS)
@@ -110,7 +146,7 @@ describe("knockbackSystem", () => {
     )
   })
 
-  it("keeps grounded lava players from being knocked onto land", () => {
+  it("keeps grounded lava players from being knocked off lava", () => {
     const world = createWorld()
     const eid = addEntity(world)
     addComponent(world, eid, PlayerTag)
@@ -118,11 +154,12 @@ describe("knockbackSystem", () => {
     addComponent(world, eid, TerrainState)
     addComponent(world, eid, Knockback)
 
-    Position.x[eid] = 352
-    Position.y[eid] = 160
+    sampleLavaRect()
+    Position.x[eid] = 132
+    Position.y[eid] = 54
     TerrainState.kind[eid] = TERRAIN_KIND.lava
-    Knockback.impulseX[eid] = 1
-    Knockback.impulseY[eid] = 0
+    Knockback.impulseX[eid] = 0
+    Knockback.impulseY[eid] = 1
     Knockback.remainingPx[eid] = 80
 
     for (let tick = 0; tick < 8; tick++) {

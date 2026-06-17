@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest"
 
 import {
   FireballTag,
+  HomingOrb,
+  HomingOrbTag,
   InvulnerableTag,
   Ownership,
   PlayerTag,
@@ -13,13 +15,16 @@ import { createCommandBuffer } from "../commandBuffer"
 import type { SimCtx } from "../simulation"
 import {
   FIREBALL_OWNER_SELF_DAMAGE_GRACE_MS,
+  HOMING_ORB_DAMAGE,
   TICK_MS,
 } from "../../../shared/balance-config"
+import { ARENA_PROP_COLLIDERS } from "../../../shared/balance-config/arena"
 import { projectileCollisionSystem } from "./projectileCollisionSystem"
 
 const FIREBALL_OWNER_SELF_DAMAGE_GRACE_TICKS = Math.ceil(
   FIREBALL_OWNER_SELF_DAMAGE_GRACE_MS / TICK_MS,
 )
+const FIREBALL_TEST_RADIUS_PX = 8
 
 function emptyCtx(overrides: Partial<SimCtx> = {}): SimCtx {
   return {
@@ -33,6 +38,9 @@ function emptyCtx(overrides: Partial<SimCtx> = {}): SimCtx {
     playerHeroIdMap: new Map(),
     fireballOwnerMap: new Map(),
     fireballCreatedAtTickMap: new Map(),
+    homingOrbOwnerMap: new Map(),
+    homingOrbTargetPlayerMap: new Map(),
+    homingOrbCastTargetPlayerMap: new Map(),
     inputMap: new Map(),
     lastProcessedInputSeqByPlayer: new Map(),
     commandBuffer: createCommandBuffer(),
@@ -45,6 +53,9 @@ function emptyCtx(overrides: Partial<SimCtx> = {}): SimCtx {
     fireballLaunches: [],
     fireballImpacts: [],
     fireballRemovedIds: [],
+    homingOrbLaunches: [],
+    homingOrbImpacts: [],
+    homingOrbRemovedIds: [],
     lightningBolts: [],
     primaryMeleeAttacks: [],
     combatTelegraphStarts: [],
@@ -56,12 +67,14 @@ function emptyCtx(overrides: Partial<SimCtx> = {}): SimCtx {
     hostEndSignal: false,
     prevPlayerStates: new Map(),
     prevFireballStates: new Map(),
+    prevHomingOrbStates: new Map(),
     killStats: new Map(),
     activeMeleeAttacks: new Map(),
     activeCombatTelegraphs: new Map(),
     invulnerableExpiresAtTickByEntity: new Map(),
     playerDeltas: [],
     fireballDeltas: [],
+    homingOrbDeltas: [],
     ...overrides,
   }
 }
@@ -85,6 +98,29 @@ function addFireball(world: ReturnType<typeof createWorld>, x: number, y: number
   Position.y[eid] = y
   Velocity.vx[eid] = 0
   Velocity.vy[eid] = 1
+  return eid
+}
+
+function addHomingOrb(
+  world: ReturnType<typeof createWorld>,
+  x: number,
+  y: number,
+  targetEid: number,
+): number {
+  const eid = addEntity(world)
+  addComponent(world, eid, HomingOrbTag)
+  addComponent(world, eid, Position)
+  addComponent(world, eid, Velocity)
+  addComponent(world, eid, Ownership)
+  addComponent(world, eid, HomingOrb)
+  Position.x[eid] = x
+  Position.y[eid] = y
+  Velocity.vx[eid] = 120
+  Velocity.vy[eid] = 0
+  HomingOrb.targetEid[eid] = targetEid
+  HomingOrb.headingRad[eid] = 0
+  HomingOrb.speedPxPerSec[eid] = 120
+  HomingOrb.expiresAtTick[eid] = 999
   return eid
 }
 
@@ -186,6 +222,49 @@ describe("projectileCollisionSystem", () => {
     expect(ctx.fireballImpacts[0]!.targetId).toBe("target")
   })
 
+  it("despawns fireballs on props before damaging a player behind the prop", () => {
+    const prop = ARENA_PROP_COLLIDERS[0]
+    if (!prop) throw new Error("Expected generated arena prop collider")
+
+    const world = createWorld()
+    const x = prop.x + prop.width / 2
+    const y = prop.y + prop.height / 2
+    const target = addPlayer(world, x, y)
+    const fireball = addFireball(world, x, y)
+    const ctx = emptyCtx({
+      world,
+      entityPlayerMap: new Map([[target, "target"]]),
+      fireballOwnerMap: new Map([[fireball, "caster"]]),
+    })
+
+    projectileCollisionSystem(ctx)
+
+    expect(ctx.damageRequests).toHaveLength(0)
+    expect(ctx.fireballImpacts).toEqual([{ id: fireball, x, y }])
+    expect(ctx.fireballRemovedIds).toEqual([fireball])
+    expect(ctx.fireballOwnerMap.has(fireball)).toBe(false)
+  })
+
+  it("despawns fireballs when only the fireball radius touches a prop edge", () => {
+    const prop = ARENA_PROP_COLLIDERS[0]
+    if (!prop) throw new Error("Expected generated arena prop collider")
+
+    const world = createWorld()
+    const x = prop.x - FIREBALL_TEST_RADIUS_PX
+    const y = prop.y + prop.height / 2
+    const fireball = addFireball(world, x, y)
+    const ctx = emptyCtx({
+      world,
+      fireballOwnerMap: new Map([[fireball, "caster"]]),
+    })
+
+    projectileCollisionSystem(ctx)
+
+    expect(ctx.damageRequests).toHaveLength(0)
+    expect(ctx.fireballImpacts).toEqual([{ id: fireball, x, y }])
+    expect(ctx.fireballRemovedIds).toEqual([fireball])
+  })
+
   it("misses when the fireball is outside the character hitbox", () => {
     const world = createWorld()
     addPlayer(world, 100, 100)
@@ -209,5 +288,43 @@ describe("projectileCollisionSystem", () => {
 
     expect(ctx.damageRequests).toHaveLength(0)
     expect(hasComponent(world, target, InvulnerableTag)).toBe(true)
+  })
+
+  it("homing orb direct hit damages one enemy without knockback", () => {
+    const world = createWorld()
+    const owner = addPlayer(world, 0, 0)
+    const target = addPlayer(world, 100, 100)
+    const orb = addHomingOrb(world, 100, 55, target)
+    const commandBuffer = createCommandBuffer()
+    const ctx = emptyCtx({
+      world,
+      commandBuffer,
+      entityPlayerMap: new Map([
+        [owner, "caster"],
+        [target, "target"],
+      ]),
+      homingOrbOwnerMap: new Map([[orb, "caster"]]),
+      homingOrbTargetPlayerMap: new Map([[orb, "target"]]),
+    })
+
+    projectileCollisionSystem(ctx)
+    commandBuffer.execute(world)
+
+    expect(ctx.damageRequests).toEqual([
+      {
+        targetEid: target,
+        damage: HOMING_ORB_DAMAGE,
+        killerUserId: "caster",
+        killerAbilityId: "homing_orb",
+      },
+    ])
+    expect(ctx.homingOrbImpacts[0]).toMatchObject({
+      id: orb,
+      reason: "hit",
+      targetId: "target",
+      damage: HOMING_ORB_DAMAGE,
+    })
+    expect(ctx.homingOrbRemovedIds).toEqual([orb])
+    expect(hasComponent(world, orb, HomingOrbTag)).toBe(false)
   })
 })

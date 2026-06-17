@@ -3,6 +3,11 @@ import {
   LIGHTNING_COOLDOWN_MS,
   FIREBALL_CAST_MS,
   LIGHTNING_CAST_MS,
+  HOMING_ORB_CAST_MS,
+  HOMING_ORB_CHARGE_RECHARGE_MS,
+  HOMING_ORB_COOLDOWN_MS,
+  HOMING_ORB_DAMAGE_PROPERTIES,
+  HOMING_ORB_MAX_CHARGES,
   JUMP_CHARGE_RECHARGE_MS,
   JUMP_MAX_CHARGES,
 } from "./combat"
@@ -46,6 +51,20 @@ export const ABILITY_CONFIGS: Record<string, AbilityConfig> = {
     cooldownMs: FIREBALL_COOLDOWN_MS,
     damageProperties: combineDamageProperties(DamageProperty.Magic, DamageProperty.Fire),
     castSfxKey: "sfx-fireball-cast",
+    castMoveSpeedMultiplier: 1.0,
+  },
+  homing_orb: {
+    id: "homing_orb",
+    displayName: "Homing Orb",
+    quick: false,
+    castMs: HOMING_ORB_CAST_MS,
+    cooldownMs: HOMING_ORB_COOLDOWN_MS,
+    charges: {
+      maxCharges: HOMING_ORB_MAX_CHARGES,
+      rechargeMs: HOMING_ORB_CHARGE_RECHARGE_MS,
+    },
+    damageProperties: HOMING_ORB_DAMAGE_PROPERTIES,
+    castSfxKey: "sfx-homing-orb-cast",
     castMoveSpeedMultiplier: 1.0,
   },
   lightning_bolt: {

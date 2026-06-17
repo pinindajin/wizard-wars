@@ -12,15 +12,19 @@ import {
   ARENA_PROP_COLLIDERS,
   ARENA_NON_WALKABLE_COLLIDERS,
   ARENA_WORLD_COLLIDERS,
+  ARENA_LAVA_COLLIDERS,
+  ARENA_CLIFF_COLLIDERS,
 } from "@/shared/balance-config/arena"
 import {
   PLAYER_WORLD_COLLISION_OFFSET_Y_PX,
+  PLAYER_WORLD_COLLISION_FOOTPRINT,
   PLAYER_WORLD_COLLISION_RADIUS_X_PX,
   PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
 } from "@/shared/balance-config/combat"
 import {
   ARENA_LAYOUT_IMPORTED_TILE_FIRST_GID,
 } from "@/shared/balance-config/arena-layout"
+import { canOccupyWorldPosition } from "@/shared/collision/worldCollision"
 
 /**
  * Tests whether a player spawn oval overlaps a generated collider rectangle.
@@ -43,12 +47,95 @@ function spawnOverlapsCollider(
   return dx * dx + dy * dy < 1
 }
 
+function pointOverlapsCollider(
+  x: number,
+  y: number,
+  rect: { x: number; y: number; width: number; height: number },
+): boolean {
+  return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height
+}
+
+function hasFootprintReachablePath(
+  start: { x: number; y: number },
+  target: { x: number; y: number },
+  bounds: { minX: number; maxX: number; minY: number; maxY: number },
+  step: number,
+): boolean {
+  const cols = Math.floor((bounds.maxX - bounds.minX) / step) + 1
+  const rows = Math.floor((bounds.maxY - bounds.minY) / step) + 1
+  const legal = new Uint8Array(cols * rows)
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const x = bounds.minX + col * step
+      const y = bounds.minY + row * step
+      legal[row * cols + col] = canOccupyWorldPosition(
+        x,
+        y,
+        PLAYER_WORLD_COLLISION_FOOTPRINT,
+        { width: ARENA_WIDTH, height: ARENA_HEIGHT },
+        ARENA_WORLD_COLLIDERS,
+      )
+        ? 1
+        : 0
+    }
+  }
+
+  const nearestLegal = (point: { x: number; y: number }) => {
+    let best: { col: number; row: number; distSq: number } | null = null
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        if (!legal[row * cols + col]) continue
+        const x = bounds.minX + col * step
+        const y = bounds.minY + row * step
+        const distSq = (x - point.x) ** 2 + (y - point.y) ** 2
+        if (!best || distSq < best.distSq) best = { col, row, distSq }
+      }
+    }
+    return best
+  }
+
+  const first = nearestLegal(start)
+  const last = nearestLegal(target)
+  expect(first, "start has nearby legal footprint center").not.toBeNull()
+  expect(last, "target has nearby legal footprint center").not.toBeNull()
+  if (!first || !last) return false
+
+  const seen = new Uint8Array(cols * rows)
+  const queue: { col: number; row: number }[] = [first]
+  seen[first.row * cols + first.col] = 1
+  for (let head = 0; head < queue.length; head++) {
+    const current = queue[head]!
+    if (current.col === last.col && current.row === last.row) return true
+    for (const [dc, dr] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ] as const) {
+      const col = current.col + dc
+      const row = current.row + dr
+      if (col < 0 || col >= cols || row < 0 || row >= rows) continue
+      const index = row * cols + col
+      if (seen[index] || !legal[index]) continue
+      seen[index] = 1
+      queue.push({ col, row })
+    }
+  }
+
+  return false
+}
+
 describe("arena constants", () => {
-  it("exposes prop colliders from generated Tiled export (may be empty)", () => {
+  it("exposes native prop colliders from generated editor export", () => {
     expect(Array.isArray(ARENA_PROP_COLLIDERS)).toBe(true)
+    expect(ARENA_PROP_COLLIDERS.length).toBeGreaterThan(0)
     for (const r of ARENA_PROP_COLLIDERS) {
       expect(r.width).toBeGreaterThan(0)
       expect(r.height).toBeGreaterThan(0)
+      expect(r.x).toBeGreaterThanOrEqual(0)
+      expect(r.y).toBeGreaterThanOrEqual(0)
+      expect(r.x + r.width).toBeLessThanOrEqual(ARENA_WIDTH)
+      expect(r.y + r.height).toBeLessThanOrEqual(ARENA_HEIGHT)
     }
   })
 
@@ -57,28 +144,35 @@ describe("arena constants", () => {
     expect(ARENA_WORLD_COLLIDERS.length).toBe(
       ARENA_PROP_COLLIDERS.length + ARENA_NON_WALKABLE_COLLIDERS.length,
     )
-    expect(
-      ARENA_NON_WALKABLE_COLLIDERS.some(
-        (rect) => rect.width >= TILE_SIZE_PX && rect.height >= TILE_SIZE_PX,
-      ),
-    ).toBe(true)
-    expect(
-      ARENA_NON_WALKABLE_COLLIDERS.some(
-        (rect) =>
-          rect.x % TILE_SIZE_PX === 0 &&
-          rect.y % TILE_SIZE_PX === 0 &&
-          rect.width % TILE_SIZE_PX === 0 &&
-          rect.height % TILE_SIZE_PX === 0,
-      ),
-    ).toBe(true)
+    for (const rect of ARENA_NON_WALKABLE_COLLIDERS) {
+      expect(rect.width).toBeGreaterThan(0)
+      expect(rect.height).toBeGreaterThan(0)
+      expect(rect.x).toBeGreaterThanOrEqual(0)
+      expect(rect.y).toBeGreaterThanOrEqual(0)
+      expect(rect.x + rect.width).toBeLessThanOrEqual(ARENA_WIDTH)
+      expect(rect.y + rect.height).toBeLessThanOrEqual(ARENA_HEIGHT)
+    }
   })
 
-  it("has generated dimensions at 64px per tile", () => {
+  it("exposes explicit native lava and cliff regions", () => {
+    expect(ARENA_LAVA_COLLIDERS.length).toBeGreaterThan(0)
+    expect(ARENA_CLIFF_COLLIDERS.length).toBeGreaterThan(0)
+    for (const rect of [...ARENA_LAVA_COLLIDERS, ...ARENA_CLIFF_COLLIDERS]) {
+      expect(rect.width).toBeGreaterThan(0)
+      expect(rect.height).toBeGreaterThan(0)
+      expect(rect.x).toBeGreaterThanOrEqual(0)
+      expect(rect.y).toBeGreaterThanOrEqual(0)
+      expect(rect.x + rect.width).toBeLessThanOrEqual(ARENA_WIDTH)
+      expect(rect.y + rect.height).toBeLessThanOrEqual(ARENA_HEIGHT)
+    }
+  })
+
+  it("has native image dimensions while retaining 64px broadphase cells", () => {
     expect(TILE_SIZE_PX).toBe(64)
+    expect(ARENA_WIDTH).toBe(1402)
+    expect(ARENA_HEIGHT).toBe(1122)
     expect(ARENA_COLS).toBeGreaterThan(0)
     expect(ARENA_ROWS).toBeGreaterThan(0)
-    expect(ARENA_COLS * TILE_SIZE_PX).toBe(ARENA_WIDTH)
-    expect(ARENA_ROWS * TILE_SIZE_PX).toBe(ARENA_HEIGHT)
   })
 
   it("has correct center coordinates", () => {
@@ -88,6 +182,81 @@ describe("arena constants", () => {
 
   it("starts imported terrain after the 16 original terrain GIDs", () => {
     expect(ARENA_LAYOUT_IMPORTED_TILE_FIRST_GID).toBe(17)
+  })
+
+  it("keeps the top-left platform connected through its diagonal bridge", () => {
+    const samples = [
+      { label: "platform", x: 164, y: 154 },
+      { label: "platform seam", x: 218, y: 206 },
+      { label: "bridge upper", x: 248, y: 220 },
+      { label: "bridge middle", x: 320, y: 280 },
+      { label: "bridge lower", x: 392, y: 350 },
+      { label: "main arena join", x: 430, y: 365 },
+    ]
+    for (const sample of samples) {
+      const blockingCollider = ARENA_NON_WALKABLE_COLLIDERS.find((rect) =>
+        pointOverlapsCollider(sample.x, sample.y, rect),
+      )
+      expect(blockingCollider, sample.label).toBeUndefined()
+    }
+    expect(
+      hasFootprintReachablePath(
+        { x: 164, y: 154 },
+        { x: 430, y: 365 },
+        { minX: 40, maxX: 520, minY: 50, maxY: 430 },
+        4,
+      ),
+    ).toBe(true)
+  })
+
+  it("keeps native jump islands, side decks, and horizontal bridges walkable", () => {
+    const samples = [
+      { label: "bottom-left island", x: 452, y: 990 },
+      { label: "bottom-right island", x: 950, y: 990 },
+      { label: "top-left tiny island", x: 393, y: 43 },
+      { label: "top-right tiny island", x: 1009, y: 43 },
+      { label: "left horizontal bridge", x: 103, y: 568 },
+      { label: "right horizontal bridge", x: 1300, y: 568 },
+      { label: "left side deck", x: 104, y: 423 },
+      { label: "right side deck", x: 1298, y: 429 },
+    ]
+
+    for (const sample of samples) {
+      const blockingCollider = ARENA_NON_WALKABLE_COLLIDERS.find((rect) =>
+        pointOverlapsCollider(sample.x, sample.y, rect),
+      )
+      expect(blockingCollider, `${sample.label} point blocker`).toBeUndefined()
+      expect(
+        canOccupyWorldPosition(
+          sample.x,
+          sample.y,
+          PLAYER_WORLD_COLLISION_FOOTPRINT,
+          { width: ARENA_WIDTH, height: ARENA_HEIGHT },
+          ARENA_WORLD_COLLIDERS,
+        ),
+        `${sample.label} footprint`,
+      ).toBe(true)
+    }
+  })
+
+  it("does not leave stale broad walkable residue around hand-guided side islands", () => {
+    const samples = [
+      { label: "top-left tiny island old spill", x: 465, y: 40 },
+      { label: "top-right tiny island old spill", x: 937, y: 40 },
+      { label: "left side deck old top crescent", x: 104, y: 340 },
+      { label: "right side deck old top crescent", x: 1298, y: 340 },
+      { label: "left side deck old vertical stem", x: 104, y: 510 },
+      { label: "right side deck old vertical stem", x: 1298, y: 510 },
+      { label: "left side deck old edge sliver", x: 10, y: 390 },
+      { label: "right side deck old edge sliver", x: 1392, y: 390 },
+    ]
+
+    for (const sample of samples) {
+      const blockingCollider = ARENA_NON_WALKABLE_COLLIDERS.find((rect) =>
+        pointOverlapsCollider(sample.x, sample.y, rect),
+      )
+      expect(blockingCollider, sample.label).toBeDefined()
+    }
   })
 })
 
@@ -115,9 +284,9 @@ describe("spawn points", () => {
     }
   })
 
-  it("no spawn point overlaps editor-authored non-walkable colliders", () => {
+  it("no spawn point overlaps editor-authored blocking colliders", () => {
     for (const sp of ARENA_SPAWN_POINTS) {
-      for (const rect of ARENA_NON_WALKABLE_COLLIDERS) {
+      for (const rect of ARENA_WORLD_COLLIDERS) {
         expect(spawnOverlapsCollider(sp.x, sp.y, rect)).toBe(false)
       }
     }

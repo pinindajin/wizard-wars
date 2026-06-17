@@ -41,7 +41,7 @@ export const REMOTE_EXTRAPOLATION_CAP_MS = 120
 /** Base tile size in pixels (also used for all asset sprites). */
 export const BASE_TILE_SIZE_PX = 64
 
-/** Y-sort depth offset: tilemap layer rendered behind everything at -1000. */
+/** Y-sort depth offset: arena base visual rendered behind everything at -1000. */
 export const TILEMAP_DEPTH = -1000
 
 /**
