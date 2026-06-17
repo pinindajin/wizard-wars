@@ -70,7 +70,7 @@ export function queryPointIds<T extends Aabb>(
   if (!bucket) return scratch.ids
   for (const id of bucket) {
     const item = index.items[id]!
-    if (pointInAabbInclusive(x, y, item)) scratch.ids.push(id)
+    if (pointInAabb(x, y, item)) scratch.ids.push(id)
   }
   scratch.ids.sort((a, b) => a - b)
   return scratch.ids
@@ -121,12 +121,12 @@ function cellKey(cellX: number, cellY: number): string {
   return `${cellX},${cellY}`
 }
 
-function pointInAabbInclusive(x: number, y: number, aabb: Aabb): boolean {
+function pointInAabb(x: number, y: number, aabb: Aabb): boolean {
   return (
     x >= aabb.x &&
-    x <= aabb.x + aabb.width &&
+    x < aabb.x + aabb.width &&
     y >= aabb.y &&
-    y <= aabb.y + aabb.height
+    y < aabb.y + aabb.height
   )
 }
 

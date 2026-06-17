@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest"
 import {
   ARENA_CLIFF_COLLIDERS,
   ARENA_LAVA_COLLIDERS,
+  ARENA_SPAWN_POINTS,
   LAVA_DAMAGE_PER_SECOND,
   TICK_RATE_HZ,
 } from "../../../shared/balance-config"
@@ -131,7 +132,8 @@ describe("terrain hazards", () => {
   it("continues processing players after earlier land and lava players", () => {
     const lava = ARENA_LAVA_COLLIDERS[1]!
     const world = createWorld()
-    const landPlayer = addPlayerAt(world, 1000, 1000)
+    const landSpawn = ARENA_SPAWN_POINTS[0]!
+    const landPlayer = addPlayerAt(world, landSpawn.x, landSpawn.y)
     const lavaPlayer = addPlayerAt(world, lava.x + lava.width / 2, lava.y + lava.height / 2)
     const laterLavaPlayer = addPlayerAt(world, lava.x + lava.width / 2, lava.y + lava.height / 2)
     const ctx = emptyCtx({ world })

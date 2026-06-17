@@ -9,6 +9,7 @@ import { ARENA_WORLD_COLLIDERS } from "@/shared/balance-config/arena"
 import {
   canOccupyWorldPosition,
   moveWithinWorld,
+  resolveAgainstWorld,
   resolveJumpLandingWithGrace,
   type ArenaPropColliderRect,
 } from "./worldCollision"
@@ -17,6 +18,7 @@ import type { IndexedColliderSet } from "./arenaSpatialIndexes"
 import {
   canOccupyWorldPositionIndexed,
   moveWithinWorldIndexed,
+  resolveAgainstWorldIndexed,
   resolveJumpLandingWithGraceIndexed,
   terrainStateAtPositionIndexed,
 } from "./indexedWorldCollision"
@@ -27,11 +29,11 @@ const ARENA_BOUNDS = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
 describe("indexedWorldCollision", () => {
   it("matches brute-force occupancy checks for representative points", () => {
     const points = [
-      { x: 3168, y: 1696 },
-      { x: 448, y: 128 },
-      { x: 2112, y: 1696 },
+      { x: 710, y: 562 },
+      { x: 448, y: 430 },
+      { x: 1030, y: 562 },
       { x: 64, y: 64 },
-      { x: 4224 - 20, y: 3392 - 20 },
+      { x: ARENA_WIDTH - 20, y: ARENA_HEIGHT - 20 },
     ]
 
     for (const point of points) {
@@ -75,10 +77,10 @@ describe("indexedWorldCollision", () => {
 
   it("matches brute-force movement resolution", () => {
     const cases = [
-      { x: 3168, y: 1696, stepX: 3, stepY: 0 },
+      { x: 710, y: 562, stepX: 3, stepY: 0 },
       { x: 384, y: 160, stepX: -4, stepY: 0 },
-      { x: 2080, y: 608, stepX: 0, stepY: 3 },
-      { x: 1056, y: 1888, stepX: 2, stepY: -2 },
+      { x: 935, y: 562, stepX: 0, stepY: 3 },
+      { x: 710, y: 910, stepX: 2, stepY: -2 },
     ]
 
     for (const c of cases) {
@@ -105,12 +107,52 @@ describe("indexedWorldCollision", () => {
     }
   })
 
+  it("falls back to full resolution when local indexed passes cannot clear a deep overlap", () => {
+    const bounds = { width: 1000, height: 300 }
+    const footprint = { radiusX: 10, radiusY: 10, offsetY: 0 }
+    const colliders = Array.from({ length: 12 }, (_, index) => ({
+      x: 100 + index * 8,
+      y: 80,
+      width: 20,
+      height: 80,
+    }))
+    const colliderSet = createTestColliderSet(colliders)
+    const start = { x: 118, y: 100 }
+    const indexed = resolveAgainstWorldIndexed(
+      start.x,
+      start.y,
+      footprint,
+      bounds,
+      colliderSet,
+    )
+
+    expect(canOccupyWorldPosition(start.x, start.y, footprint, bounds, colliders)).toBe(false)
+    expect(
+      canOccupyWorldPosition(
+        indexed.x,
+        indexed.y,
+        footprint,
+        bounds,
+        colliders,
+      ),
+    ).toBe(true)
+    expect(indexed).toEqual(
+      resolveAgainstWorld(
+        start.x,
+        start.y,
+        footprint,
+        bounds,
+        colliders,
+      ),
+    )
+  })
+
   it("matches brute-force jump landing checks", () => {
     const context = { movementX: 120, movementY: 0, gracePx: 6 }
     const cases = [
-      { x: 3168, y: 1696 },
-      { x: 448, y: 128 },
-      { x: 1184, y: 1184 },
+      { x: 710, y: 562 },
+      { x: 448, y: 430 },
+      { x: 1184, y: 856 },
     ]
 
     for (const c of cases) {
@@ -135,12 +177,13 @@ describe("indexedWorldCollision", () => {
     }
   })
 
-  it("matches brute-force terrain sampling and inclusive point boundaries", () => {
+  it("matches brute-force terrain sampling and half-open point boundaries", () => {
     const points = [
       { x: 256, y: 64 },
-      { x: 256 + 3904, y: 64 + 64 },
+      { x: 1110, y: 128 },
       { x: 0, y: 128 },
-      { x: 3104, y: 1056 },
+      { x: 710, y: 562 },
+      { x: 160, y: 18 },
     ]
 
     for (const point of points) {
@@ -148,6 +191,7 @@ describe("indexedWorldCollision", () => {
         terrainStateAtPosition(point.x, point.y),
       )
     }
+    expect(terrainStateAtPositionIndexed(160, 18)).toBe("cliff")
   })
 })
 

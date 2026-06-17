@@ -24,7 +24,10 @@ import {
   resolveAgainstWorld,
   type ArenaPropColliderRect,
 } from "../../../shared/collision/worldCollision"
-import { worldCollidersForPlayerState } from "../../../shared/collision/worldCollidersForPlayer"
+import {
+  resolveAgainstWorldIndexed,
+} from "../../../shared/collision/indexedWorldCollision"
+import { terrainColliderSetForPlayerState } from "../../../shared/collision/arenaSpatialIndexes"
 
 export type { ArenaPropColliderRect } from "../../../shared/collision/worldCollision"
 
@@ -65,15 +68,15 @@ export function worldCollisionSystem(ctx: SimCtx): void {
     const terrainState = TERRAIN_KIND_TO_STATE[TerrainState.kind[eid]] ?? "land"
     const jumpStartedInLava =
       hasComponent(world, eid, JumpArc) && JumpArc.startedInLava[eid] === 1
-    const colliders = worldCollidersForPlayerState(jumpZ, terrainState, {
+    const colliderSet = terrainColliderSetForPlayerState(jumpZ, terrainState, {
       jumpStartedInLava,
     })
-    const out = resolveAgainstWorld(
+    const out = resolveAgainstWorldIndexed(
       Position.x[eid],
       Position.y[eid],
       PLAYER_WORLD_COLLISION_FOOTPRINT,
       ARENA_BOUNDS,
-      colliders,
+      colliderSet,
     )
     Position.x[eid] = out.x
     Position.y[eid] = out.y

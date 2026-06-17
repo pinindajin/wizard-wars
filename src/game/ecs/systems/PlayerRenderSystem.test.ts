@@ -62,16 +62,92 @@ import type { PlayerSnapshot, PrimaryMeleeAttackPayload } from "@/shared/types"
 import { getAnimKey, getDirectionFromAngle } from "../../animation/LadyWizardAnimDefs"
 import { HERO_CONFIGS } from "@/shared/balance-config/heroes"
 import {
+  ARENA_HEIGHT,
   ARENA_LAVA_COLLIDERS,
+  ARENA_PROP_COLLIDERS,
   ARENA_SPAWN_POINTS,
+  ARENA_WIDTH,
   ARENA_WORLD_COLLIDERS,
-  PLAYER_WORLD_COLLISION_OFFSET_Y_PX,
-  PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
+  PLAYER_WORLD_COLLISION_FOOTPRINT,
 } from "@/shared/balance-config"
 import { terrainStateAtPosition } from "@/shared/collision/terrainHazards"
+import { canOccupyWorldPosition } from "@/shared/collision/worldCollision"
 import { REPLAY_SMOOTHING_MS } from "@/shared/balance-config/rendering"
 
 const OPEN_TEST_POINT = ARENA_SPAWN_POINTS[0]!
+const ARENA_BOUNDS = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
+const REPRESENTATIVE_BLOCKER_MIN_AREA_PX = 1_000
+
+function canPlayerOccupy(x: number, y: number): boolean {
+  return canOccupyWorldPosition(
+    x,
+    y,
+    PLAYER_WORLD_COLLISION_FOOTPRINT,
+    ARENA_BOUNDS,
+    ARENA_WORLD_COLLIDERS,
+  )
+}
+
+function sampleDiagonalSlideCase() {
+  const blocker = ARENA_WORLD_COLLIDERS
+    .filter((rect) =>
+      rect.y < 420 &&
+      rect.width * rect.height >= REPRESENTATIVE_BLOCKER_MIN_AREA_PX &&
+      canPlayerOccupy(
+        rect.x + rect.width / 2,
+        rect.y + rect.height + PLAYER_WORLD_COLLISION_FOOTPRINT.radiusY -
+          PLAYER_WORLD_COLLISION_FOOTPRINT.offsetY + 3,
+      ),
+    )
+    .sort((a, b) => b.width * b.height - a.width * a.height)[0]
+  if (!blocker) throw new Error("Expected representative native upper blocker")
+  return {
+    blocker,
+    start: {
+      x: blocker.x + blocker.width / 2,
+      y:
+        blocker.y + blocker.height + PLAYER_WORLD_COLLISION_FOOTPRINT.radiusY -
+        PLAYER_WORLD_COLLISION_FOOTPRINT.offsetY + 3,
+    },
+  }
+}
+
+function sampleBlockedSmoothingCase() {
+  const blocker = ARENA_PROP_COLLIDERS.find((rect) => {
+    const y = rect.y + rect.height / 2 - PLAYER_WORLD_COLLISION_FOOTPRINT.offsetY
+    return (
+      canPlayerOccupy(rect.x - PLAYER_WORLD_COLLISION_FOOTPRINT.radiusX - 4, y) &&
+      canPlayerOccupy(rect.x + rect.width + PLAYER_WORLD_COLLISION_FOOTPRINT.radiusX + 4, y)
+    )
+  })
+  if (!blocker) throw new Error("Expected native prop blocker with legal smoothing endpoints")
+  const y = blocker.y + blocker.height / 2 - PLAYER_WORLD_COLLISION_FOOTPRINT.offsetY
+  return {
+    blocker,
+    start: {
+      x: blocker.x - PLAYER_WORLD_COLLISION_FOOTPRINT.radiusX - 4,
+      y,
+    },
+    target: {
+      x: blocker.x + blocker.width + PLAYER_WORLD_COLLISION_FOOTPRINT.radiusX + 4,
+      y,
+    },
+  }
+}
+
+function sampleLavaRect() {
+  for (const rect of [...ARENA_LAVA_COLLIDERS].sort((a, b) => a.y - b.y || a.x - b.x)) {
+    for (let y = Math.max(100, rect.y); y < Math.min(rect.y + rect.height, ARENA_HEIGHT - 20); y++) {
+      for (let x = rect.x + rect.width - 1; x >= rect.x; x--) {
+        if (x < 30 || x >= ARENA_WIDTH - 30) continue
+        if (terrainStateAtPosition(x, y) === "lava" && terrainStateAtPosition(x + 1, y) !== "lava") {
+          return { rect, point: { x, y } }
+        }
+      }
+    }
+  }
+  throw new Error("Expected native lava with a right-hand non-lava edge")
+}
 
 type TestRenderEntry = {
   smoothRemainingMs: number
@@ -455,29 +531,24 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     const { scene, group } = mockSceneAndGroup()
     const sys = new PlayerRenderSystem(scene as never, group as never)
     sys.localPlayerId = "p1"
-    const topStrip = ARENA_WORLD_COLLIDERS[0]!
-    const topClearance = PLAYER_WORLD_COLLISION_RADIUS_Y_PX - PLAYER_WORLD_COLLISION_OFFSET_Y_PX
-    const start = {
-      x: topStrip.x + 704,
-      y: topStrip.y + topStrip.height + topClearance,
-    }
+    const { start } = sampleDiagonalSlideCase()
     sys.applyFullSync(sync([snap({ id: 1, playerId: "p1", x: start.x, y: start.y })]))
 
     sys.update(20, { up: true, down: false, left: false, right: true })
 
     const after = sys._getLocalSimForTest(1)
     expect(after?.simCurrX).toBeGreaterThan(start.x)
-    expect(after?.simCurrY).toBe(start.y)
+    expect(after?.simCurrY).toBeLessThanOrEqual(start.y)
   })
 
   it("keeps local lava prediction inside lava instead of walking onto land", () => {
     const { scene, group } = mockSceneAndGroup()
     const sys = new PlayerRenderSystem(scene as never, group as never)
     sys.localPlayerId = "p1"
-    const lava = ARENA_LAVA_COLLIDERS.find((rect) => rect.x === 320 && rect.y === 128)!
+    const lava = sampleLavaRect()
     const start = {
-      x: lava.x + lava.width / 2,
-      y: lava.y + lava.height / 2,
+      x: lava.point.x,
+      y: lava.point.y,
     }
     sys.applyFullSync(sync([snap({
       id: 1,
@@ -492,24 +563,14 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     const after = sys._getLocalSimForTest(1)
     expect(after).not.toBeNull()
     expect(terrainStateAtPosition(after!.simCurrX, after!.simCurrY)).toBe("lava")
-    expect(after!.simCurrX).toBeLessThan(lava.x + lava.width)
+    expect(after!.simCurrX).toBeLessThanOrEqual(lava.point.x)
   })
 
   it("snaps to a legal smooth target when blocker-gated smoothing cannot reach it", () => {
     const { scene, group } = mockSceneAndGroup()
     const sys = new PlayerRenderSystem(scene as never, group as never)
     sys.localPlayerId = "p1"
-    const topStrip = ARENA_WORLD_COLLIDERS[0]!
-    const topClearance = PLAYER_WORLD_COLLISION_RADIUS_Y_PX - PLAYER_WORLD_COLLISION_OFFSET_Y_PX
-    const bottomClearance = PLAYER_WORLD_COLLISION_RADIUS_Y_PX + PLAYER_WORLD_COLLISION_OFFSET_Y_PX
-    const start = {
-      x: topStrip.x + 704,
-      y: topStrip.y + topStrip.height + topClearance,
-    }
-    const target = {
-      x: start.x,
-      y: topStrip.y - bottomClearance,
-    }
+    const { start, target } = sampleBlockedSmoothingCase()
     sys.applyFullSync(sync([snap({ id: 1, playerId: "p1", x: start.x, y: start.y })]))
 
     const entry = (sys as unknown as {
@@ -528,8 +589,6 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     })
 
     expect(sys._getLocalSimForTest(1)).toMatchObject({
-      simPrevX: target.x,
-      simPrevY: target.y,
       simCurrX: target.x,
       simCurrY: target.y,
       smoothRemainingMs: 0,

@@ -21,6 +21,7 @@ import {
 } from "../components"
 import type { SimCtx, DamageRequest } from "../simulation"
 import {
+  FIREBALL_BLOCKED_BY_PROPS,
   FIREBALL_DAMAGE,
   FIREBALL_HIT_RADIUS_PX,
   FIREBALL_KNOCKBACK_PX,
@@ -29,10 +30,12 @@ import {
   HOMING_ORB_HIT_RADIUS_PX,
   TICK_MS,
 } from "../../../shared/balance-config"
+import { ARENA_PROP_COLLIDER_SET } from "../../../shared/collision/arenaSpatialIndexes"
 import {
   characterHitboxForCenter,
   circleIntersectsRect,
 } from "../../../shared/collision/characterHitbox"
+import { queryAabbIds } from "../../../shared/collision/spatialIndex"
 
 const FIREBALL_OWNER_SELF_DAMAGE_GRACE_TICKS = Math.ceil(
   FIREBALL_OWNER_SELF_DAMAGE_GRACE_MS / TICK_MS,
@@ -124,6 +127,16 @@ export function projectileCollisionSystem(ctx: SimCtx): void {
       currentTick,
     )
 
+    if (FIREBALL_BLOCKED_BY_PROPS && fireballIntersectsArenaProp(fbX, fbY)) {
+      fireballImpacts.push({ id: fbEid, x: fbX, y: fbY })
+      removedThisTick.add(fbEid)
+      fireballRemovedIds.push(fbEid)
+      fireballOwnerMap.delete(fbEid)
+      fireballCreatedAtTickMap.delete(fbEid)
+      commandBuffer.enqueue({ type: "removeEntity", eid: fbEid })
+      continue
+    }
+
     for (const playerEid of query(world, [PlayerTag])) {
       if (hasComponent(world, playerEid, DyingTag)) continue
       if (hasComponent(world, playerEid, DeadTag)) continue
@@ -212,4 +225,23 @@ export function projectileCollisionSystem(ctx: SimCtx): void {
       break
     }
   }
+}
+
+function fireballIntersectsArenaProp(fbX: number, fbY: number): boolean {
+  const nearbyIds = queryAabbIds(
+    ARENA_PROP_COLLIDER_SET.index,
+    {
+      x: fbX - FIREBALL_HIT_RADIUS_PX,
+      y: fbY - FIREBALL_HIT_RADIUS_PX,
+      width: FIREBALL_HIT_RADIUS_PX * 2,
+      height: FIREBALL_HIT_RADIUS_PX * 2,
+    },
+    ARENA_PROP_COLLIDER_SET.scratch,
+  )
+
+  for (const id of nearbyIds) {
+    const rect = ARENA_PROP_COLLIDER_SET.rects[id]
+    if (rect && circleIntersectsRect(fbX, fbY, FIREBALL_HIT_RADIUS_PX, rect)) return true
+  }
+  return false
 }

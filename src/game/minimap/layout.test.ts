@@ -5,8 +5,8 @@ import { computeMinimapViewport } from "./layout"
 const BASE = {
   canvasWidth: 1344,
   canvasHeight: 768,
-  arenaWidth: 4224,
-  arenaHeight: 3392,
+  arenaWidth: 1402,
+  arenaHeight: 1122,
 } as const
 
 describe("computeMinimapViewport", () => {
@@ -17,10 +17,10 @@ describe("computeMinimapViewport", () => {
       width: 208,
     })
     expect(computeMinimapViewport({ ...BASE, corner: "top_right", mode: "compact" }).x).toBe(1118)
-    expect(computeMinimapViewport({ ...BASE, corner: "bottom_left", mode: "compact" }).y).toBe(583)
+    expect(computeMinimapViewport({ ...BASE, corner: "bottom_left", mode: "compact" }).y).toBe(584)
     expect(computeMinimapViewport({ ...BASE, corner: "bottom_right", mode: "compact" })).toMatchObject({
       x: 1118,
-      y: 583,
+      y: 584,
     })
   })
 
@@ -31,6 +31,6 @@ describe("computeMinimapViewport", () => {
       mode: "expanded",
     })
 
-    expect(viewport).toEqual({ x: 337, y: 115, width: 670, height: 538 })
+    expect(viewport).toEqual({ x: 336, y: 115, width: 672, height: 538 })
   })
 })

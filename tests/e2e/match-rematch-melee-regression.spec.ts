@@ -156,7 +156,7 @@ test("rematch: second match primary melee has no console/page errors and exits m
             if (!g) return null
             const ready =
               g.textures.exists("lady-wizard") &&
-              g.textures.exists("arena-terrain") &&
+              g.textures.exists("arena-base") &&
               g.anims.exists("lady-wizard-walk-south") &&
               g.anims.exists("lady-wizard-summoned_axe_swing-south")
             return ready ? g : null
