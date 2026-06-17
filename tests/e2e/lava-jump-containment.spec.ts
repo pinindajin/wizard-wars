@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
 
+import { ARENA_HEIGHT, ARENA_WIDTH } from "../../src/shared/balance-config"
+import { terrainStateAtPosition } from "../../src/shared/collision/terrainHazards"
 import { buyAndAssignJump, startSinglePlayerMatch } from "./ability-cooldown-helpers"
 
 type TerrainState = "land" | "lava" | "cliff"
@@ -24,9 +26,65 @@ type PlayerInputOverrides = Partial<{
   readonly abilitySlot: number | null
 }>
 
-const SMALL_LAVA_CENTER = { x: 454, y: 129 } as const
-const SMALL_LAVA_JUMP_START = { x: 581, y: 129 } as const
-const SMALL_LAVA_RIGHT_EDGE_X = 606
+type LavaEscapeSample = {
+  readonly start: { readonly x: number; readonly y: number }
+  readonly landThresholdX: number
+  readonly input: PlayerInputOverrides
+}
+
+const PREFERRED_NATIVE_LAVA_EDGE_SAMPLE = {
+  start: { x: 24, y: 800 },
+  landThresholdX: 112,
+  input: { right: true },
+} as const satisfies LavaEscapeSample
+
+const LAVA_ESCAPE_START_DISTANCE_PX = 88
+const LAVA_ESCAPE_SCAN_STEP_PX = 4
+
+function isRightwardLavaEscapeSample(sample: LavaEscapeSample): boolean {
+  const { start, landThresholdX } = sample
+  return (
+    start.x > 0 &&
+    start.x < ARENA_WIDTH &&
+    start.y > 0 &&
+    start.y < ARENA_HEIGHT &&
+    terrainStateAtPosition(start.x, start.y) === "lava" &&
+    terrainStateAtPosition(start.x + 8, start.y) === "lava" &&
+    terrainStateAtPosition(landThresholdX, start.y) === "land" &&
+    terrainStateAtPosition(landThresholdX + 8, start.y) === "land"
+  )
+}
+
+function findRightwardLavaEscapeSample(): LavaEscapeSample {
+  if (isRightwardLavaEscapeSample(PREFERRED_NATIVE_LAVA_EDGE_SAMPLE)) {
+    return PREFERRED_NATIVE_LAVA_EDGE_SAMPLE
+  }
+
+  for (
+    let y = LAVA_ESCAPE_SCAN_STEP_PX;
+    y < ARENA_HEIGHT - LAVA_ESCAPE_SCAN_STEP_PX;
+    y += LAVA_ESCAPE_SCAN_STEP_PX
+  ) {
+    for (
+      let edgeX = LAVA_ESCAPE_START_DISTANCE_PX + LAVA_ESCAPE_SCAN_STEP_PX;
+      edgeX < ARENA_WIDTH - LAVA_ESCAPE_SCAN_STEP_PX * 2;
+      edgeX += LAVA_ESCAPE_SCAN_STEP_PX
+    ) {
+      const start = { x: edgeX - LAVA_ESCAPE_START_DISTANCE_PX, y }
+      const sample = { start, landThresholdX: edgeX, input: { right: true } }
+      if (
+        terrainStateAtPosition(edgeX - LAVA_ESCAPE_SCAN_STEP_PX, y) === "lava" &&
+        isRightwardLavaEscapeSample(sample)
+      ) {
+        return sample
+      }
+    }
+  }
+
+  throw new Error("Expected native arena geometry to contain a rightward lava-to-land jump edge")
+}
+
+const LAVA_ESCAPE_SAMPLE = findRightwardLavaEscapeSample()
 
 /**
  * Installs a browser-side recorder for authoritative player snapshots/deltas.
@@ -284,24 +342,43 @@ test("lava edge blocks WASD exit and Jump escapes to land", async ({ page }) => 
   await buyAndAssignJump(page)
   await installAuthoritativeStateRecorder(page)
 
-  await setE2ePlayerPosition(page, SMALL_LAVA_CENTER.x, SMALL_LAVA_CENTER.y)
-  await waitForAuthoritativePosition(page, SMALL_LAVA_CENTER.x, SMALL_LAVA_CENTER.y)
+  await setE2ePlayerPosition(
+    page,
+    LAVA_ESCAPE_SAMPLE.start.x,
+    LAVA_ESCAPE_SAMPLE.start.y,
+  )
+  await waitForAuthoritativePosition(
+    page,
+    LAVA_ESCAPE_SAMPLE.start.x,
+    LAVA_ESCAPE_SAMPLE.start.y,
+  )
   await waitForTerrain(page, "lava")
 
-  const moveRightSeq = await sendPlayerInput(page, { right: true })
+  const moveRightSeq = await sendPlayerInput(page, LAVA_ESCAPE_SAMPLE.input)
   await waitForProcessedInput(page, moveRightSeq)
   await page.waitForTimeout(900)
   const stopRightSeq = await sendPlayerInput(page, { right: false })
   await waitForProcessedInput(page, stopRightSeq)
 
   const afterWalk = await waitForTerrain(page, "lava")
-  expect(afterWalk.x).toBeLessThan(SMALL_LAVA_RIGHT_EDGE_X)
+  expect(afterWalk.x).toBeLessThan(LAVA_ESCAPE_SAMPLE.landThresholdX)
 
-  await setE2ePlayerPosition(page, SMALL_LAVA_JUMP_START.x, SMALL_LAVA_JUMP_START.y)
-  await waitForAuthoritativePosition(page, SMALL_LAVA_JUMP_START.x, SMALL_LAVA_JUMP_START.y)
+  await setE2ePlayerPosition(
+    page,
+    LAVA_ESCAPE_SAMPLE.start.x,
+    LAVA_ESCAPE_SAMPLE.start.y,
+  )
+  await waitForAuthoritativePosition(
+    page,
+    LAVA_ESCAPE_SAMPLE.start.x,
+    LAVA_ESCAPE_SAMPLE.start.y,
+  )
   await waitForTerrain(page, "lava")
 
-  const jumpSeq = await sendPlayerInput(page, { right: true, abilitySlot: 1 })
+  const jumpSeq = await sendPlayerInput(page, {
+    ...LAVA_ESCAPE_SAMPLE.input,
+    abilitySlot: 1,
+  })
   await waitForProcessedInput(page, jumpSeq)
   await expect
     .poll(async () => (await readAuthoritativeState(page))?.jumpZ ?? 0, {
@@ -321,5 +398,5 @@ test("lava edge blocks WASD exit and Jump escapes to land", async ({ page }) => 
 
   await sendPlayerInput(page, { right: false })
   const afterJump = await waitForTerrain(page, "land")
-  expect(afterJump.x).toBeGreaterThan(SMALL_LAVA_RIGHT_EDGE_X)
+  expect(afterJump.x).toBeGreaterThan(LAVA_ESCAPE_SAMPLE.landThresholdX)
 })
