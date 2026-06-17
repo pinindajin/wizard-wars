@@ -1,7 +1,14 @@
 import { expect, test, type Page } from "@playwright/test"
 
-import { ARENA_HEIGHT, ARENA_WIDTH } from "../../src/shared/balance-config"
+import {
+  ARENA_HEIGHT,
+  ARENA_WIDTH,
+  ARENA_WORLD_COLLIDERS,
+} from "../../src/shared/balance-config"
+import { PLAYER_WORLD_COLLISION_FOOTPRINT } from "../../src/shared/balance-config/combat"
+import { terrainColliderSetForPlayerState } from "../../src/shared/collision/arenaSpatialIndexes"
 import { terrainStateAtPosition } from "../../src/shared/collision/terrainHazards"
+import { canOccupyWorldPosition } from "../../src/shared/collision/worldCollision"
 import { buyAndAssignJump, startSinglePlayerMatch } from "./ability-cooldown-helpers"
 
 type TerrainState = "land" | "lava" | "cliff"
@@ -28,63 +35,82 @@ type PlayerInputOverrides = Partial<{
 
 type LavaEscapeSample = {
   readonly start: { readonly x: number; readonly y: number }
-  readonly landThresholdX: number
+  readonly landThreshold: { readonly x: number; readonly y: number }
+  readonly axis: "x" | "y"
+  readonly direction: -1 | 1
   readonly input: PlayerInputOverrides
 }
 
 const PREFERRED_NATIVE_LAVA_EDGE_SAMPLE = {
-  start: { x: 24, y: 800 },
-  landThresholdX: 112,
-  input: { right: true },
+  start: { x: 164, y: 36 },
+  landThreshold: { x: 164, y: 68 },
+  axis: "y",
+  direction: 1,
+  input: { down: true },
 } as const satisfies LavaEscapeSample
 
-const LAVA_ESCAPE_START_DISTANCE_PX = 88
-const LAVA_ESCAPE_SCAN_STEP_PX = 4
+const ARENA_BOUNDS = { width: ARENA_WIDTH, height: ARENA_HEIGHT } as const
+const LAVA_TERRAIN_COLLIDER_SET = terrainColliderSetForPlayerState(0, "lava")
 
-function isRightwardLavaEscapeSample(sample: LavaEscapeSample): boolean {
-  const { start, landThresholdX } = sample
-  return (
-    start.x > 0 &&
-    start.x < ARENA_WIDTH &&
-    start.y > 0 &&
-    start.y < ARENA_HEIGHT &&
-    terrainStateAtPosition(start.x, start.y) === "lava" &&
-    terrainStateAtPosition(start.x + 8, start.y) === "lava" &&
-    terrainStateAtPosition(landThresholdX, start.y) === "land" &&
-    terrainStateAtPosition(landThresholdX + 8, start.y) === "land"
+function sampleAxisValue(
+  point: { readonly x: number; readonly y: number },
+  sample: LavaEscapeSample,
+): number {
+  return sample.axis === "x" ? point.x : point.y
+}
+
+function isBeforeLandThreshold(
+  point: { readonly x: number; readonly y: number },
+  sample: LavaEscapeSample,
+): boolean {
+  const delta =
+    sampleAxisValue(point, sample) - sampleAxisValue(sample.landThreshold, sample)
+  return delta * sample.direction < 0
+}
+
+function isPastLandThreshold(
+  point: { readonly x: number; readonly y: number },
+  sample: LavaEscapeSample,
+): boolean {
+  const delta =
+    sampleAxisValue(point, sample) - sampleAxisValue(sample.landThreshold, sample)
+  return delta * sample.direction > 0
+}
+
+function assertNativeLavaEscapeSample(sample: LavaEscapeSample): LavaEscapeSample {
+  const startIsValidLava =
+    terrainStateAtPosition(sample.start.x, sample.start.y) === "lava" &&
+    canOccupyWorldPosition(
+      sample.start.x,
+      sample.start.y,
+      PLAYER_WORLD_COLLISION_FOOTPRINT,
+      ARENA_BOUNDS,
+      LAVA_TERRAIN_COLLIDER_SET.rects,
+    )
+  const landProbe = {
+    x: sample.landThreshold.x + (sample.axis === "x" ? sample.direction * 8 : 0),
+    y: sample.landThreshold.y + (sample.axis === "y" ? sample.direction * 8 : 0),
+  }
+  const thresholdIsValidLand =
+    terrainStateAtPosition(landProbe.x, landProbe.y) === "land" &&
+    canOccupyWorldPosition(
+      landProbe.x,
+      landProbe.y,
+      PLAYER_WORLD_COLLISION_FOOTPRINT,
+      ARENA_BOUNDS,
+      ARENA_WORLD_COLLIDERS,
+    )
+
+  if (startIsValidLava && thresholdIsValidLand) return sample
+
+  throw new Error(
+    "Expected native arena geometry to contain the configured lava-to-land jump edge",
   )
 }
 
-function findRightwardLavaEscapeSample(): LavaEscapeSample {
-  if (isRightwardLavaEscapeSample(PREFERRED_NATIVE_LAVA_EDGE_SAMPLE)) {
-    return PREFERRED_NATIVE_LAVA_EDGE_SAMPLE
-  }
-
-  for (
-    let y = LAVA_ESCAPE_SCAN_STEP_PX;
-    y < ARENA_HEIGHT - LAVA_ESCAPE_SCAN_STEP_PX;
-    y += LAVA_ESCAPE_SCAN_STEP_PX
-  ) {
-    for (
-      let edgeX = LAVA_ESCAPE_START_DISTANCE_PX + LAVA_ESCAPE_SCAN_STEP_PX;
-      edgeX < ARENA_WIDTH - LAVA_ESCAPE_SCAN_STEP_PX * 2;
-      edgeX += LAVA_ESCAPE_SCAN_STEP_PX
-    ) {
-      const start = { x: edgeX - LAVA_ESCAPE_START_DISTANCE_PX, y }
-      const sample = { start, landThresholdX: edgeX, input: { right: true } }
-      if (
-        terrainStateAtPosition(edgeX - LAVA_ESCAPE_SCAN_STEP_PX, y) === "lava" &&
-        isRightwardLavaEscapeSample(sample)
-      ) {
-        return sample
-      }
-    }
-  }
-
-  throw new Error("Expected native arena geometry to contain a rightward lava-to-land jump edge")
-}
-
-const LAVA_ESCAPE_SAMPLE = findRightwardLavaEscapeSample()
+const LAVA_ESCAPE_SAMPLE = assertNativeLavaEscapeSample(
+  PREFERRED_NATIVE_LAVA_EDGE_SAMPLE,
+)
 
 /**
  * Installs a browser-side recorder for authoritative player snapshots/deltas.
@@ -361,7 +387,7 @@ test("lava edge blocks WASD exit and Jump escapes to land", async ({ page }) => 
   await waitForProcessedInput(page, stopRightSeq)
 
   const afterWalk = await waitForTerrain(page, "lava")
-  expect(afterWalk.x).toBeLessThan(LAVA_ESCAPE_SAMPLE.landThresholdX)
+  expect(isBeforeLandThreshold(afterWalk, LAVA_ESCAPE_SAMPLE)).toBe(true)
 
   await setE2ePlayerPosition(
     page,
@@ -398,5 +424,5 @@ test("lava edge blocks WASD exit and Jump escapes to land", async ({ page }) => 
 
   await sendPlayerInput(page, { right: false })
   const afterJump = await waitForTerrain(page, "land")
-  expect(afterJump.x).toBeGreaterThan(LAVA_ESCAPE_SAMPLE.landThresholdX)
+  expect(isPastLandThreshold(afterJump, LAVA_ESCAPE_SAMPLE)).toBe(true)
 })
