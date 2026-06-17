@@ -614,6 +614,17 @@ function scaleGuideMaskToArena(source: Mask): Mask {
 }
 
 function paintGuideWalkablePatches(mask: Mask): void {
+  // The north doorway guide stroke leaves an upside-down U-shaped gap in front
+  // of the door. This fills the intended stair landing inside the rail outline.
+  fillPolygon(mask, [
+    { x: 684, y: 143 },
+    { x: 720, y: 143 },
+    { x: 735, y: 164 },
+    { x: 735, y: 234 },
+    { x: 669, y: 234 },
+    { x: 669, y: 164 },
+  ])
+
   // The hand line leaves a tiny open seam where the north stair meets the
   // arena ring; fill only that join so the guide shape remains authoritative.
   fillPolygon(mask, [
@@ -638,10 +649,16 @@ function paintGuideWalkablePatches(mask: Mask): void {
     { x: 675, y: 998 },
   ])
   fillPolygon(mask, [
+    { x: 650, y: 982 },
+    { x: 676, y: 982 },
+    { x: 676, y: 1004 },
+    { x: 650, y: 1004 },
+  ])
+  fillPolygon(mask, [
     { x: 674, y: 1038 },
     { x: 730, y: 1038 },
-    { x: 730, y: 1092 },
-    { x: 674, y: 1092 },
+    { x: 730, y: ARENA_HEIGHT },
+    { x: 674, y: ARENA_HEIGHT },
   ])
 }
 
