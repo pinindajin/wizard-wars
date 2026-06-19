@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import { CLOSE_CODE_ADMIN_CLOSED } from "@/shared/constants"
+import { RoomEvent } from "@/shared/roomEvents"
 import { TICK_MS } from "@/shared/balance-config/rendering"
 import type { PlayerInputPayload } from "@/shared/types"
 import type { SimOutput } from "@/server/game/simulation"
@@ -314,6 +316,109 @@ describe("GameLobbyRoom fixed-step loop", () => {
     callback?.(TICK_MS)
     expect(runGameLoop).toHaveBeenCalledWith(TICK_MS)
     ;(rawRoom as unknown as { gameLoopTimer: { clear: () => void } | null }).gameLoopTimer?.clear()
+  })
+
+  it("begins countdown with a synced MatchCountdownStart payload", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(70_000)
+
+    const room = new GameLobbyRoom()
+    const broadcast = vi.fn()
+    Object.assign(room as object, {
+      broadcast,
+      updateMetadataPhase: vi.fn(),
+    })
+
+    ;(room as unknown as { beginCountdown: () => void }).beginCountdown()
+
+    expect((room as unknown as { lobbyPhase: string }).lobbyPhase).toBe("COUNTDOWN")
+    expect(broadcast).toHaveBeenCalledWith(
+      RoomEvent.MatchCountdownStart,
+      expect.objectContaining({ startAtServerTimeMs: 70_000 }),
+    )
+    ;(room as unknown as { countdownTimer: { clear: () => void } | null })
+      .countdownTimer?.clear()
+  })
+
+  it("admin close locks and immediately disconnects an empty lobby", async () => {
+    const room = new GameLobbyRoom()
+    const lock = vi.fn().mockResolvedValue(undefined)
+    const disconnect = vi.fn()
+    Object.defineProperty(room, "clients", {
+      configurable: true,
+      value: [],
+    })
+    Object.assign(room as object, {
+      lock,
+      disconnect,
+      stopForAdminClose: vi.fn(),
+    })
+
+    const result = await room.adminCloseLobby({
+      adminUserId: "admin-1",
+      adminUsername: "Admin",
+      confirmed: false,
+    })
+
+    expect(lock).toHaveBeenCalledOnce()
+    expect(disconnect).toHaveBeenCalledWith(CLOSE_CODE_ADMIN_CLOSED)
+    expect(result).toEqual({
+      status: "closed",
+      occupied: false,
+      closeAtServerMs: null,
+    })
+  })
+
+  it("admin close broadcasts a countdown for occupied lobbies", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(80_000)
+
+    const room = new GameLobbyRoom()
+    const broadcast = vi.fn()
+    const disconnect = vi.fn()
+    const oldAdminCloseClear = vi.fn()
+    Object.defineProperty(room, "clients", {
+      configurable: true,
+      value: [{ userData: { playerId: "player-1" } }],
+    })
+    Object.assign(room as object, {
+      adminCloseTimer: { clear: oldAdminCloseClear },
+      broadcast,
+      disconnect,
+      lock: vi.fn().mockResolvedValue(undefined),
+      stopForAdminClose: vi.fn(),
+    })
+
+    const result = await room.adminCloseLobby({
+      adminUserId: "admin-1",
+      adminUsername: "Admin",
+      confirmed: true,
+    })
+
+    expect(broadcast).toHaveBeenCalledWith(
+      RoomEvent.LobbyAdminClosing,
+      expect.objectContaining({
+        reason: "admin_closed",
+        closeAtServerMs: 110_000,
+        countdownMs: 30_000,
+      }),
+    )
+    expect(result).toEqual({
+      status: "closing",
+      occupied: true,
+      closeAtServerMs: 110_000,
+      countdownMs: 30_000,
+    })
+    expect(oldAdminCloseClear).toHaveBeenCalledOnce()
+    expect(disconnect).not.toHaveBeenCalled()
+
+    vi.advanceTimersByTime(30_000)
+
+    expect(disconnect).toHaveBeenCalledWith(CLOSE_CODE_ADMIN_CLOSED)
+    expect(
+      (room as unknown as { adminCloseTimer: { clear: () => void } | null })
+        .adminCloseTimer,
+    ).toBeNull()
   })
 })
 

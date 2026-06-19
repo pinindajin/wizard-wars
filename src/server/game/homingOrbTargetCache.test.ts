@@ -91,6 +91,11 @@ describe("Homing Orb damageable target cache", () => {
     addPlayer(ctx, "dying", 120, 100, DyingTag)
     addPlayer(ctx, "spectator", 130, 100, SpectatorTag)
     addPlayer(ctx, "invulnerable", 140, 100, InvulnerableTag)
+    const unmapped = addEntity(ctx.world)
+    addComponent(ctx.world, unmapped, PlayerTag)
+    addComponent(ctx.world, unmapped, Position)
+    Position.x[unmapped] = 150
+    Position.y[unmapped] = 100
 
     const first = getHomingOrbDamageableTargets(ctx)
     const second = getHomingOrbDamageableTargets(ctx)

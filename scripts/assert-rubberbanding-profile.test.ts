@@ -103,7 +103,14 @@ describe("rubberbanding profile assertions", () => {
       "input-bandwidth": {
         idleInputMessagesPerSecond: 60,
         idleInputBytesPerSecond: 6_000,
+        maxActiveHeartbeatGapMs: 100,
+        maxIdleHeartbeatGapMs: 1_000,
         transitionAckLatencyMs: 80,
+        lostAbilityEdges: 0,
+        duplicateAbilityEdges: 0,
+        missedWeaponReleaseCount: 0,
+        legacyClientFailureCount: 0,
+        oldServerFallbackFailureCount: 0,
       },
       "swift-boots": { swiftBootsPredictionSnapPx: 12 },
     })
@@ -122,7 +129,14 @@ describe("rubberbanding profile assertions", () => {
       "input-bandwidth": {
         idleInputMessagesPerSecond: 7,
         idleInputBytesPerSecond: 700,
+        maxActiveHeartbeatGapMs: 101,
+        maxIdleHeartbeatGapMs: 1_001,
         transitionAckLatencyMs: 101,
+        lostAbilityEdges: 1,
+        duplicateAbilityEdges: 1,
+        missedWeaponReleaseCount: 1,
+        legacyClientFailureCount: 1,
+        oldServerFallbackFailureCount: 1,
       },
       "swift-boots": { swiftBootsPredictionSnapPx: 1 },
     })
@@ -138,7 +152,14 @@ describe("rubberbanding profile assertions", () => {
       "homing-orb-pressure homingOrbSnapOnBatchCount expected <= 0.0000, got 1.0000",
       "input-bandwidth idleInputMessagesPerSecond expected <= 6.0000, got 7.0000",
       "input-bandwidth idleInputBytesPerSecond expected <= 600.0000, got 700.0000",
+      "input-bandwidth maxActiveHeartbeatGapMs expected <= 100.0000, got 101.0000",
+      "input-bandwidth maxIdleHeartbeatGapMs expected <= 1000.0000, got 1001.0000",
       "input-bandwidth transitionAckLatencyMs expected <= 100.0000, got 101.0000",
+      "input-bandwidth lostAbilityEdges expected <= 0.0000, got 1.0000",
+      "input-bandwidth duplicateAbilityEdges expected <= 0.0000, got 1.0000",
+      "input-bandwidth missedWeaponReleaseCount expected <= 0.0000, got 1.0000",
+      "input-bandwidth legacyClientFailureCount expected <= 0.0000, got 1.0000",
+      "input-bandwidth oldServerFallbackFailureCount expected <= 0.0000, got 1.0000",
       "swift-boots swiftBootsPredictionSnapPx expected <= 0.0000, got 1.0000",
     ])
   })

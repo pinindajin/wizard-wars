@@ -16,6 +16,7 @@ import type {
   AuthUser,
   FireballBatchUpdatePayload,
   HomingOrbBatchUpdatePayload,
+  GameInputProtocolPayload,
   GameNetTimingPayload,
   GameStateSyncPayload,
   LobbyPhase,
@@ -25,6 +26,7 @@ import type {
   LobbyHostTransferPayload,
   LobbyScoreboardPayload,
   PlayerDelta,
+  PlayerInputPayload,
   ServerPerformanceStatusPayload,
   ScoreboardEntry,
 } from "../../../shared/types"
@@ -32,6 +34,7 @@ import {
   lobbyChatPayloadSchema,
   heroSelectPayloadSchema,
   playerInputPayloadSchema,
+  playerInputStatePayloadSchema,
   shopPurchasePayloadSchema,
   assignAbilityPayloadSchema,
   parseGameStateSyncPayload,
@@ -39,6 +42,7 @@ import {
   parsePlayerOwnerAckPayload,
   parseServerPerformanceStatusPayload,
 } from "../../../shared/validators"
+import { decodePlayerInputState } from "../../../shared/playerInputState"
 import {
   MAX_PLAYERS_PER_MATCH,
   MIN_PLAYERS_PER_MATCH,
@@ -430,10 +434,7 @@ export class GameLobbyRoom extends Room {
    * per player per tick (see `simulation.tick` semantics). Capped per
    * {@link INPUT_QUEUE_CAP_PER_PLAYER} to bound memory if a client floods.
    */
-  private readonly inputQueue = new Map<
-    string,
-    import("../../../shared/types").PlayerInputPayload[]
-  >()
+  private readonly inputQueue = new Map<string, PlayerInputPayload[]>()
 
   /** Runtime knobs for network cadence and performance reporting. */
   private readonly performanceConfig = resolveGamePerformanceConfig()
@@ -1223,6 +1224,11 @@ export class GameLobbyRoom extends Room {
       this.handlePlayerInput(client, payload)
     })
 
+    this.onMessage(RoomEvent.PlayerInputState, (client: Client, payload: unknown) => {
+      if (this.isAdminClosing) return
+      this.handlePlayerInputState(client, payload)
+    })
+
     this.onMessage(RoomEvent.ShopPurchase, (client: Client, payload: unknown) => {
       if (this.isAdminClosing) return
       this.handleShopPurchase(client, payload)
@@ -1256,44 +1262,59 @@ export class GameLobbyRoom extends Room {
    * @param payload - Raw inbound payload; validated with playerInputPayloadSchema.
    */
   private handlePlayerInput(client: Client, payload: unknown): void {
+    const pd = client.userData as PlayerData | undefined
     if (this.lobbyPhase !== "IN_PROGRESS" || !this.simulation) {
-      const pd = client.userData as PlayerData | undefined
-      logger.debug(
-        {
-          event: "room.player_input.rejected",
-          area: "netcode",
-          side: "server",
-          roomId: this.roomId,
-          playerId: pd?.playerId,
-          sessionId: client.sessionId,
-          phase: this.lobbyPhase,
-          reason: "wrong_phase",
-        },
-        "[GameLobbyRoom] player input rejected",
-      )
+      this.logRejectedPlayerInput(client, pd, "wrong_phase")
       return
     }
-    const pd = client.userData as PlayerData
     const result = playerInputPayloadSchema.safeParse(payload)
     if (!result.success) {
-      logger.debug(
-        {
-          event: "room.player_input.rejected",
-          area: "netcode",
-          side: "server",
-          roomId: this.roomId,
-          playerId: pd.playerId,
-          sessionId: client.sessionId,
-          phase: this.lobbyPhase,
-          reason: "invalid_payload",
-        },
-        "[GameLobbyRoom] player input rejected",
-      )
+      this.logRejectedPlayerInput(client, pd, "invalid_payload")
       return
     }
 
+    this.enqueueCanonicalPlayerInput(client, pd as PlayerData, result.data)
+  }
+
+  /**
+   * Decodes compact input state and enqueues it as canonical full player input.
+   *
+   * @param client - The sending client.
+   * @param payload - Raw inbound compact state payload.
+   */
+  private handlePlayerInputState(client: Client, payload: unknown): void {
+    const pd = client.userData as PlayerData | undefined
+    if (this.lobbyPhase !== "IN_PROGRESS" || !this.simulation) {
+      this.logRejectedPlayerInput(client, pd, "wrong_phase")
+      return
+    }
+    const result = playerInputStatePayloadSchema.safeParse(payload)
+    if (!result.success) {
+      this.logRejectedPlayerInput(client, pd, "invalid_payload")
+      return
+    }
+
+    this.enqueueCanonicalPlayerInput(
+      client,
+      pd as PlayerData,
+      decodePlayerInputState(result.data),
+    )
+  }
+
+  /**
+   * Enqueues canonical full input after either legacy validation or compact decode.
+   *
+   * @param client - Sending client.
+   * @param pd - Player data attached to the client.
+   * @param input - Canonical input payload to queue.
+   */
+  private enqueueCanonicalPlayerInput(
+    client: Client,
+    pd: PlayerData,
+    input: PlayerInputPayload,
+  ): void {
     const highest = this.highestAcceptedSeqByPlayer.get(pd.playerId) ?? -1
-    if (result.data.seq <= highest) {
+    if (input.seq <= highest) {
       logger.debug(
         {
           event: "room.player_input.dropped_duplicate",
@@ -1303,7 +1324,7 @@ export class GameLobbyRoom extends Room {
           playerId: pd.playerId,
           sessionId: client.sessionId,
           phase: this.lobbyPhase,
-          seq: result.data.seq,
+          seq: input.seq,
           highest,
           reason: "stale_or_duplicate_seq",
         },
@@ -1317,8 +1338,8 @@ export class GameLobbyRoom extends Room {
       queue = []
       this.inputQueue.set(pd.playerId, queue)
     }
-    queue.push(result.data)
-    this.highestAcceptedSeqByPlayer.set(pd.playerId, result.data.seq)
+    queue.push(input)
+    this.highestAcceptedSeqByPlayer.set(pd.playerId, input.seq)
 
     // Cap queue: drop from the front if it grows unbounded.
     while (queue.length > INPUT_QUEUE_CAP_PER_PLAYER) {
@@ -1333,13 +1354,40 @@ export class GameLobbyRoom extends Room {
           playerId: pd.playerId,
           sessionId: client.sessionId,
           phase: this.lobbyPhase,
-          seq: result.data.seq,
+          seq: input.seq,
           queueLength: queue.length,
           reason: "input_queue_cap",
         },
         "[GameLobbyRoom] player input queue capped",
       )
     }
+  }
+
+  /**
+   * Logs an inbound input rejection without duplicating legacy/compact branches.
+   *
+   * @param client - Sending client.
+   * @param pd - Optional player data attached to the client.
+   * @param reason - Rejection reason.
+   */
+  private logRejectedPlayerInput(
+    client: Client,
+    pd: PlayerData | undefined,
+    reason: "wrong_phase" | "invalid_payload",
+  ): void {
+    logger.debug(
+      {
+        event: "room.player_input.rejected",
+        area: "netcode",
+        side: "server",
+        roomId: this.roomId,
+        playerId: pd?.playerId,
+        sessionId: client.sessionId,
+        phase: this.lobbyPhase,
+        reason,
+      },
+      "[GameLobbyRoom] player input rejected",
+    )
   }
 
   /**
@@ -1745,6 +1793,22 @@ export class GameLobbyRoom extends Room {
   }
 
   /**
+   * Returns the room's preferred input transport while keeping both inbound
+   * handlers available during rollout.
+   *
+   * @returns Input protocol capability for match start and full sync.
+   */
+  private buildGameInputProtocolPayload(): GameInputProtocolPayload {
+    const configured = process.env.WW_INPUT_PROTOCOL
+    return {
+      protocolVersion: 1,
+      preferredTransport: configured === "legacy" ? "legacy" : "compact",
+      activeHeartbeatMs: 100,
+      idleHeartbeatMs: 1_000,
+    }
+  }
+
+  /**
    * Builds a full game-state sync payload with room-owned network timing attached.
    *
    * @param serverTimeMs - Server wall-clock time for the snapshot.
@@ -1757,6 +1821,7 @@ export class GameLobbyRoom extends Room {
     return parseGameStateSyncPayload({
       ...this.simulation.buildGameStateSyncPayload(serverTimeMs),
       timing: this.buildGameNetTimingPayload(),
+      input: this.buildGameInputProtocolPayload(),
     })
   }
 
@@ -1914,7 +1979,10 @@ export class GameLobbyRoom extends Room {
     }
 
     const gameStateSync = this.buildGameStateSyncPayload(nowMs)
-    this.broadcast(RoomEvent.MatchGo, { timing: this.buildGameNetTimingPayload() })
+    this.broadcast(RoomEvent.MatchGo, {
+      timing: this.buildGameNetTimingPayload(),
+      input: this.buildGameInputProtocolPayload(),
+    })
     this.broadcast(RoomEvent.GameStateSync, gameStateSync)
 
     this.startGameLoop(nowMs)

@@ -64,6 +64,7 @@ export const RoomEvent = {
 
   // Input
   PlayerInput: "player_input",
+  PlayerInputState: "player_input_state",
 
   // Damage display
   DamageFloat: "damage_float",

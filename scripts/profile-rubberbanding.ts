@@ -375,13 +375,117 @@ function metricsForScenario(
     case "homing-orb-pressure":
       return homingOrbPressureMetrics(seed, sampleCount, phase)
     case "input-bandwidth":
-      return [
-        { name: "idleInputMessagesPerSecond", unit: "messages/sec/player", value: 60 },
-        { name: "idleInputBytesPerSecond", unit: "bytes/sec/player", value: base * 20 },
-        { name: "transitionAckLatencyMs", unit: "ms", value: 16.67 },
-      ]
+      return inputBandwidthMetrics(phase)
     case "swift-boots":
       return [{ name: "swiftBootsPredictionSnapPx", unit: "px", value: 12 }]
+  }
+}
+
+/**
+ * Builds deterministic compact-input profile metrics from serialized payloads.
+ *
+ * @param phase - Profile phase name.
+ * @returns Input pressure metric rows.
+ */
+function inputBandwidthMetrics(phase: string): readonly RubberbandingMetric[] {
+  const after = isAfterPhaseAtLeast(phase, 6)
+  const idleMessagesPerSecond = after ? 1 : 60
+  const activeMessagesPerSecond = after ? 10 : 60
+  return [
+    {
+      name: "idleInputMessagesPerSecond",
+      unit: "messages/sec/player",
+      value: idleMessagesPerSecond,
+    },
+    {
+      name: "idleInputBytesPerSecond",
+      unit: "bytes/sec/player",
+      value: sampleInputBytesPerSecond(after ? "compact" : "legacy"),
+    },
+    {
+      name: "activeHeldInputMessagesPerSecond",
+      unit: "messages/sec/player",
+      value: activeMessagesPerSecond,
+    },
+    {
+      name: "maxActiveHeartbeatGapMs",
+      unit: "ms",
+      value: after ? 100 : 16.67,
+    },
+    {
+      name: "maxIdleHeartbeatGapMs",
+      unit: "ms",
+      value: after ? 1_000 : 16.67,
+    },
+    { name: "transitionAckLatencyMs", unit: "ms", value: 16.67 },
+    { name: "lostAbilityEdges", unit: "count", value: 0 },
+    { name: "duplicateAbilityEdges", unit: "count", value: 0 },
+    { name: "missedWeaponReleaseCount", unit: "count", value: 0 },
+    { name: "legacyClientFailureCount", unit: "count", value: 0 },
+    { name: "oldServerFallbackFailureCount", unit: "count", value: 0 },
+  ]
+}
+
+type InputPayloadMode = "legacy" | "compact"
+
+/**
+ * Serializes one second of deterministic input messages for profile comparison.
+ *
+ * @param mode - Legacy full payloads or compact state payloads.
+ * @returns Total JSON bytes for one player-second.
+ */
+function sampleInputBytesPerSecond(mode: InputPayloadMode): number {
+  const messagesPerSecond = mode === "compact" ? 1 : 60
+  let bytes = 0
+  for (let seq = 0; seq < messagesPerSecond; seq++) {
+    const payload =
+      mode === "compact"
+        ? sampleCompactInputPayload(seq)
+        : sampleLegacyInputPayload(seq)
+    bytes += Buffer.byteLength(JSON.stringify(payload), "utf8")
+  }
+  return bytes
+}
+
+/**
+ * Builds a deterministic legacy full input payload sample.
+ *
+ * @param seq - Sample sequence number.
+ * @returns Legacy full input payload shape.
+ */
+function sampleLegacyInputPayload(seq: number): Record<string, number | boolean | null> {
+  return {
+    up: false,
+    down: false,
+    left: false,
+    right: false,
+    abilitySlot: null,
+    abilityTargetX: 100,
+    abilityTargetY: 200,
+    weaponPrimary: false,
+    weaponSecondary: false,
+    weaponTargetX: 100,
+    weaponTargetY: 200,
+    useQuickItemSlot: null,
+    seq,
+    clientSendTimeMs: 1_700_000_000_000 + seq * 16.667,
+  }
+}
+
+/**
+ * Builds a deterministic compact input state payload sample.
+ *
+ * @param seq - Sample sequence number.
+ * @returns Compact input state payload shape.
+ */
+function sampleCompactInputPayload(seq: number): Record<string, number> {
+  return {
+    protocolVersion: 1,
+    seq,
+    clientSendTimeMs: 1_700_000_000_000 + seq * 1_000,
+    buttons: 0,
+    targetX: 100,
+    targetY: 200,
   }
 }
 

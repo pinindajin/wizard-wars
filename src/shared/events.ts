@@ -61,6 +61,7 @@ export const WsEvent = {
 
   // Input
   PlayerInput: "PLAYER_INPUT",
+  PlayerInputState: "PLAYER_INPUT_STATE",
 
   // Damage display
   DamageFloat: "DAMAGE_FLOAT",

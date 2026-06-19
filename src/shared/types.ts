@@ -251,6 +251,14 @@ export type GameNetTimingPayload = {
   readonly remoteRenderDelayMs: number
 }
 
+/** Server-advertised input transport preference for additive rollout. */
+export type GameInputProtocolPayload = {
+  readonly protocolVersion: 1
+  readonly preferredTransport: "legacy" | "compact"
+  readonly activeHeartbeatMs: number
+  readonly idleHeartbeatMs: number
+}
+
 /** Full game state sync for late-joiners or reconnects. */
 export type GameStateSyncPayload = {
   readonly players: readonly PlayerSnapshot[]
@@ -265,6 +273,8 @@ export type GameStateSyncPayload = {
   readonly serverTimeMs: number
   /** Optional net timing for dynamic remote interpolation. Missing means client fallback. */
   readonly timing?: GameNetTimingPayload
+  /** Optional input transport capability. Missing means legacy full input. */
+  readonly input?: GameInputProtocolPayload
 }
 
 /** A fireball projectile snapshot. */
@@ -548,6 +558,18 @@ export type PlayerInputPayload = {
   readonly clientSendTimeMs: number
 }
 
+/** Client → server: compact current input state for state-change transport. */
+export type PlayerInputStatePayload = {
+  readonly protocolVersion: 1
+  readonly seq: number
+  readonly clientSendTimeMs: number
+  readonly buttons: number
+  readonly targetX: number
+  readonly targetY: number
+  readonly abilitySlot?: number
+  readonly useQuickItemSlot?: number
+}
+
 /** Server → all: damage number floats. */
 export type DamageFloatPayload = {
   readonly targetId: string
@@ -618,6 +640,8 @@ export type MatchCountdownStartPayload = {
 export type MatchGoPayload = {
   /** Optional net timing; `{}` remains valid for legacy compatibility. */
   readonly timing?: GameNetTimingPayload
+  /** Optional input transport capability. Missing means legacy full input. */
+  readonly input?: GameInputProtocolPayload
 }
 
 /** Unified message shape for transport normalization. */

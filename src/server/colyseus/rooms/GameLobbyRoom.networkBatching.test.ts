@@ -39,10 +39,16 @@ function simOutput(overrides: Partial<SimOutput> = {}): SimOutput {
 
 describe("GameLobbyRoom network batching", () => {
   const originalE2e = process.env.WIZARD_WARS_E2E
+  const originalInputProtocol = process.env.WW_INPUT_PROTOCOL
 
   afterEach(() => {
     vi.useRealTimers()
     process.env.WIZARD_WARS_E2E = originalE2e
+    if (originalInputProtocol === undefined) {
+      delete process.env.WW_INPUT_PROTOCOL
+    } else {
+      process.env.WW_INPUT_PROTOCOL = originalInputProtocol
+    }
   })
 
   it("broadcasts identical net timing in MatchGo and initial GameStateSync", () => {
@@ -79,10 +85,35 @@ describe("GameLobbyRoom network batching", () => {
         netSendIntervalMs: 1000 / 30,
         remoteRenderDelayMs: 84,
       },
+      input: {
+        protocolVersion: 1,
+        preferredTransport: "compact",
+        activeHeartbeatMs: 100,
+        idleHeartbeatMs: 1_000,
+      },
     })
     expect(sync).toMatchObject({ timing: matchGo.timing })
+    expect(sync).toMatchObject({ input: matchGo.input })
 
     ;(room as unknown as { gameLoopTimer: { clear: () => void } | null }).gameLoopTimer?.clear()
+  })
+
+  it("advertises legacy input transport when the compact rollout env is disabled", () => {
+    process.env.WW_INPUT_PROTOCOL = "legacy"
+    const room = new GameLobbyRoom()
+
+    expect(
+      (
+        room as unknown as {
+          buildGameInputProtocolPayload: () => unknown
+        }
+      ).buildGameInputProtocolPayload(),
+    ).toEqual({
+      protocolVersion: 1,
+      preferredTransport: "legacy",
+      activeHeartbeatMs: 100,
+      idleHeartbeatMs: 1_000,
+    })
   })
 
   it("hydrates in-progress clients with net timing in GameStateSync", () => {
@@ -128,6 +159,12 @@ describe("GameLobbyRoom network batching", () => {
         netSendRateHz: 30,
         netSendIntervalMs: 1000 / 30,
         remoteRenderDelayMs: 84,
+      },
+      input: {
+        protocolVersion: 1,
+        preferredTransport: "compact",
+        activeHeartbeatMs: 100,
+        idleHeartbeatMs: 1_000,
       },
     })
   })
@@ -175,6 +212,51 @@ describe("GameLobbyRoom network batching", () => {
     expect(client.send).toHaveBeenCalledWith(
       RoomEvent.GameStateSync,
       expect.objectContaining({ seq: 13, serverTimeMs: 3_500 }),
+    )
+  })
+
+  it("handles request_resync by sending lobby and current GameStateSync payloads", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(3_750)
+
+    const room = new GameLobbyRoom()
+    const client = {
+      userData: {
+        playerId: "player-1",
+        username: "PlayerOne",
+        heroId: "red_wizard",
+      },
+      send: vi.fn(),
+    }
+    Object.assign(room as object, {
+      lobbyPhase: "IN_PROGRESS",
+      simulation: {
+        buildGameStateSyncPayload: vi.fn((serverTimeMs: number) => ({
+          players: [],
+          fireballs: [],
+          seq: 14,
+          serverTimeMs,
+        })),
+      },
+    })
+
+    ;(
+      room as unknown as {
+        handleRequestResync: (target: typeof client) => void
+      }
+    ).handleRequestResync(client)
+
+    expect(client.send).toHaveBeenCalledWith(
+      RoomEvent.LobbyState,
+      expect.objectContaining({ phase: "IN_PROGRESS" }),
+    )
+    expect(client.send).toHaveBeenCalledWith(
+      RoomEvent.GameStateSync,
+      expect.objectContaining({
+        seq: 14,
+        serverTimeMs: 3_750,
+        input: expect.objectContaining({ preferredTransport: "compact" }),
+      }),
     )
   })
 
@@ -505,5 +587,93 @@ describe("GameLobbyRoom network batching", () => {
       seq: 0,
       serverTimeMs: 3_000,
     })
+  })
+
+  it("skips empty Homing Orb pending batches after merge", () => {
+    const room = new GameLobbyRoom()
+    const broadcast = vi.fn()
+    Object.assign(room as object, {
+      broadcast,
+      pendingHomingOrbBatches: [{ deltas: [], removedIds: [], serverTimeMs: 3_100 }],
+    })
+
+    ;(room as unknown as { flushPendingVisualBatches: (serverTimeMs: number) => void })
+      .flushPendingVisualBatches(3_100)
+
+    expect(broadcast).not.toHaveBeenCalledWith(
+      RoomEvent.HomingOrbBatchUpdate,
+      expect.anything(),
+    )
+  })
+
+  it("broadcasts server performance status only after the reporting window elapses", () => {
+    const room = new GameLobbyRoom()
+    const broadcast = vi.fn()
+    Object.defineProperty(room, "clients", {
+      configurable: true,
+      value: [{ userData: { playerId: "player-1" } }],
+    })
+    Object.assign(room as object, {
+      broadcast,
+      performanceWindowStartedAtPerfMs: performance.now(),
+      performanceWindowCpuStart: process.cpuUsage(),
+      performanceDroppedDebtMs: 0,
+      performanceCatchUpCallbacks: 0,
+      performanceInputQueueDrops: 0,
+      performanceSimDurationMs: 0,
+      performanceBroadcastDurationMs: 0,
+      performanceEventLoopLagMs: 0,
+    })
+
+    ;(
+      room as unknown as {
+        maybeBroadcastServerPerformanceStatus: (serverTimeMs: number) => void
+      }
+    ).maybeBroadcastServerPerformanceStatus(4_000)
+
+    expect(broadcast).not.toHaveBeenCalled()
+
+    Object.assign(room as object, {
+      performanceWindowStartedAtPerfMs: performance.now() - 1_100,
+      performanceWindowCpuStart: process.cpuUsage(),
+      performanceDroppedDebtMs: 1,
+      performanceCatchUpCallbacks: 2,
+    })
+
+    ;(
+      room as unknown as {
+        maybeBroadcastServerPerformanceStatus: (serverTimeMs: number) => void
+      }
+    ).maybeBroadcastServerPerformanceStatus(5_000)
+
+    expect(broadcast).toHaveBeenCalledWith(
+      RoomEvent.ServerPerformanceStatus,
+      expect.objectContaining({
+        serverTimeMs: 5_000,
+        degraded: true,
+        reasons: expect.arrayContaining(["dropped_debt", "catch_up"]),
+        metrics: expect.objectContaining({
+          droppedDebtMs: 1,
+          catchUpCallbacks: 2,
+          connectedClients: 1,
+        }),
+      }),
+    )
+
+    broadcast.mockClear()
+    Object.assign(room as object, {
+      performanceWindowStartedAtPerfMs: performance.now() - 1_100,
+      performanceWindowCpuStart: process.cpuUsage(),
+      performanceDroppedDebtMs: 1,
+      performanceCatchUpCallbacks: 2,
+    })
+
+    ;(
+      room as unknown as {
+        maybeBroadcastServerPerformanceStatus: (serverTimeMs: number) => void
+      }
+    ).maybeBroadcastServerPerformanceStatus(5_500)
+
+    expect(broadcast).not.toHaveBeenCalled()
   })
 })

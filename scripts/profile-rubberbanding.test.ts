@@ -266,6 +266,40 @@ describe("rubberbanding profile report", () => {
     )
   })
 
+  it("models the Fix 6 compact input bandwidth and heartbeat improvement", () => {
+    const before = buildRubberbandingProfileReport({
+      phase: "phase-6-before",
+      commit: "abc123",
+      seed: 42,
+      sampleCount: 120,
+      generatedAt: "2026-06-19T00:00:00.000Z",
+    })
+    const after = buildRubberbandingProfileReport({
+      phase: "phase-6-after",
+      commit: "abc123",
+      seed: 42,
+      sampleCount: 120,
+      generatedAt: "2026-06-19T00:00:00.000Z",
+    })
+
+    const beforeInput = before.scenarios.find((scenario) => scenario.scenario === "input-bandwidth")
+    const afterInput = after.scenarios.find((scenario) => scenario.scenario === "input-bandwidth")
+    expect(metricValue(afterInput, "idleInputMessagesPerSecond")).toBeLessThanOrEqual(
+      metricValue(beforeInput, "idleInputMessagesPerSecond") * 0.1,
+    )
+    expect(metricValue(afterInput, "idleInputBytesPerSecond")).toBeLessThanOrEqual(
+      metricValue(beforeInput, "idleInputBytesPerSecond") * 0.1,
+    )
+    expect(metricValue(afterInput, "maxActiveHeartbeatGapMs")).toBeLessThanOrEqual(100)
+    expect(metricValue(afterInput, "maxIdleHeartbeatGapMs")).toBeLessThanOrEqual(1_000)
+    expect(metricValue(afterInput, "transitionAckLatencyMs")).toBeLessThanOrEqual(100)
+    expect(metricValue(afterInput, "lostAbilityEdges")).toBe(0)
+    expect(metricValue(afterInput, "duplicateAbilityEdges")).toBe(0)
+    expect(metricValue(afterInput, "missedWeaponReleaseCount")).toBe(0)
+    expect(metricValue(afterInput, "legacyClientFailureCount")).toBe(0)
+    expect(metricValue(afterInput, "oldServerFallbackFailureCount")).toBe(0)
+  })
+
 })
 
 describe("rubberbanding cause provenance", () => {

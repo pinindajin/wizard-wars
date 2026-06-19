@@ -7,10 +7,12 @@ import {
 import { MAX_PLAYERS_PER_MATCH } from "./balance-config/lobby"
 import type {
   GameStateSyncPayload,
+  PlayerInputStatePayload,
   PlayerDeathPayload,
   PlayerOwnerAckPayload,
   ServerPerformanceStatusPayload,
 } from "./types"
+import { PLAYER_INPUT_BUTTONS_MAX } from "./playerInputState"
 
 /** Username: alphanumeric + underscore, 3-20 chars, must be trimmed before comparison. */
 const USERNAME_REGEX = /^[a-zA-Z0-9_]+$/
@@ -59,6 +61,18 @@ export const playerInputPayloadSchema = z.object({
   useQuickItemSlot: z.number().int().min(0).max(QUICK_ITEM_SLOT_COUNT - 1).nullable(),
   seq: z.number().int().nonnegative(),
   clientSendTimeMs: z.number().finite().nonnegative(),
+})
+
+/** Schema for compact player input state. */
+export const playerInputStatePayloadSchema = z.object({
+  protocolVersion: z.literal(1),
+  seq: z.number().int().nonnegative(),
+  clientSendTimeMs: z.number().finite().nonnegative(),
+  buttons: z.number().int().min(0).max(PLAYER_INPUT_BUTTONS_MAX),
+  targetX: z.number().finite(),
+  targetY: z.number().finite(),
+  abilitySlot: z.number().int().min(0).max(ABILITY_BAR_SLOT_COUNT - 1).optional(),
+  useQuickItemSlot: z.number().int().min(0).max(QUICK_ITEM_SLOT_COUNT - 1).optional(),
 })
 
 /** Schema for shop purchase. */
@@ -283,6 +297,14 @@ export const gameNetTimingPayloadSchema = z.object({
   remoteRenderDelayMs: z.number().finite().positive(),
 })
 
+/** Input protocol advertised with match start/full sync. */
+export const gameInputProtocolPayloadSchema = z.object({
+  protocolVersion: z.literal(1),
+  preferredTransport: z.enum(["legacy", "compact"]),
+  activeHeartbeatMs: z.number().finite().positive(),
+  idleHeartbeatMs: z.number().finite().positive(),
+})
+
 /** Full `game_state_sync` payload (server + client). */
 export const gameStateSyncPayloadSchema = z.object({
   players: z.array(playerSnapshotSchema).max(MAX_PLAYERS_PER_MATCH),
@@ -292,6 +314,7 @@ export const gameStateSyncPayloadSchema = z.object({
   seq: z.number().int().nonnegative(),
   serverTimeMs: z.number().finite().nonnegative(),
   timing: gameNetTimingPayloadSchema.optional(),
+  input: gameInputProtocolPayloadSchema.optional(),
 })
 
 /** Server → clients: player eliminated (validated before broadcast). */
@@ -366,6 +389,18 @@ export function parsePlayerOwnerAckPayload(
   input: Readonly<unknown> | PlayerOwnerAckPayload,
 ): PlayerOwnerAckPayload {
   return playerOwnerAckPayloadSchema.parse(input) as PlayerOwnerAckPayload
+}
+
+/**
+ * Parses and returns a compact `PlayerInputStatePayload`.
+ *
+ * @param input - Unknown compact input state payload.
+ * @returns Validated compact input state payload.
+ */
+export function parsePlayerInputStatePayload(
+  input: Readonly<unknown> | PlayerInputStatePayload,
+): PlayerInputStatePayload {
+  return playerInputStatePayloadSchema.parse(input) as PlayerInputStatePayload
 }
 
 /**
