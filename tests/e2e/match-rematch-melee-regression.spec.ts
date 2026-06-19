@@ -37,12 +37,28 @@ async function installInputRecorder(page: import("@playwright/test").Page): Prom
       left: boolean
       right: boolean
     }
+    type PlayerInputState = {
+      buttons: number
+      abilitySlot?: number
+      useQuickItemSlot?: number
+    }
     type ConnectionLike = {
       sendPlayerInput: (input: PlayerInput) => void
+      sendPlayerInputState: (input: PlayerInputState) => void
     }
     type ArenaLike = {
       getConnection?: () => ConnectionLike
     }
+    const decodePlayerInputState = (input: PlayerInputState): PlayerInput => ({
+      up: (input.buttons & 1) !== 0,
+      down: (input.buttons & 2) !== 0,
+      left: (input.buttons & 4) !== 0,
+      right: (input.buttons & 8) !== 0,
+      weaponPrimary: (input.buttons & 16) !== 0,
+      weaponSecondary: (input.buttons & 32) !== 0,
+      abilitySlot: input.abilitySlot ?? null,
+      useQuickItemSlot: input.useQuickItemSlot ?? null,
+    })
     const w = globalThis as unknown as {
       __wwGame?: { scene: { getScene: (k: string) => unknown } }
       __wwInputLog?: PlayerInput[]
@@ -53,10 +69,15 @@ async function installInputRecorder(page: import("@playwright/test").Page): Prom
     const conn = arena?.getConnection?.()
     if (!conn) throw new Error("E2E input recorder: GameConnection missing")
     const original = conn.sendPlayerInput.bind(conn)
+    const originalState = conn.sendPlayerInputState.bind(conn)
     w.__wwInputLog = []
     conn.sendPlayerInput = (input: PlayerInput) => {
       w.__wwInputLog?.push({ ...input })
       original(input)
+    }
+    conn.sendPlayerInputState = (input: PlayerInputState) => {
+      w.__wwInputLog?.push(decodePlayerInputState(input))
+      originalState(input)
     }
     w.__wwInputRecorderInstalled = true
   })
