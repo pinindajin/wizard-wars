@@ -10,6 +10,8 @@ type LoopRoomInternals = {
   broadcast: ReturnType<typeof vi.fn>
   inputQueue: Map<string, PlayerInputPayload[]>
   gameLoopTimer: { clear: () => void } | null
+  adminCloseTimer: { clear: () => void } | null
+  disposalGraceTimer: { clear: () => void } | null
   lobbyPhase: string
   performanceCatchUpCallbacks: number
   performanceDroppedDebtMs: number
@@ -232,9 +234,14 @@ describe("GameLobbyRoom fixed-step loop", () => {
 
     const disposed = new GameLobbyRoom() as unknown as LoopRoomInternals & { onDispose: () => void }
     const disposeClear = vi.fn()
-    Object.assign(disposed, { gameLoopTimer: { clear: disposeClear } })
+    const adminCloseClear = vi.fn()
+    Object.assign(disposed, {
+      adminCloseTimer: { clear: adminCloseClear },
+      gameLoopTimer: { clear: disposeClear },
+    })
     disposed.onDispose()
     expect(disposeClear).toHaveBeenCalledOnce()
+    expect(adminCloseClear).toHaveBeenCalledOnce()
 
     const scoreboard = new GameLobbyRoom() as unknown as LoopRoomInternals & {
       transitionToScoreboard: (reason: "host_ended", entries: []) => void
@@ -259,8 +266,13 @@ describe("GameLobbyRoom fixed-step loop", () => {
       stopForAdminClose: () => void
     }
     const adminClear = vi.fn()
-    Object.assign(admin, { gameLoopTimer: { clear: adminClear } })
+    const disposalGraceClear = vi.fn()
+    Object.assign(admin, {
+      disposalGraceTimer: { clear: disposalGraceClear },
+      gameLoopTimer: { clear: adminClear },
+    })
     admin.stopForAdminClose()
+    expect(disposalGraceClear).toHaveBeenCalledOnce()
     expect(adminClear).toHaveBeenCalledOnce()
     expect(admin.gameLoopTimer).toBeNull()
   })

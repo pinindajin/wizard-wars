@@ -284,6 +284,9 @@ export const SwingingWeapon = {}
 /** Marks a player entity as currently invulnerable after respawn. */
 export const InvulnerableTag = {}
 
+/** Marks a player whose direct position write needs world-collision repair. */
+export const NeedsWorldCollisionResolution = {}
+
 export const TERRAIN_KIND = {
   land: 0,
   lava: 1,

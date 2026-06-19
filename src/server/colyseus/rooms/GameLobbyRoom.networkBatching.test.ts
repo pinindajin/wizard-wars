@@ -1,8 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { RoomEvent } from "@/shared/roomEvents"
-import type { SimOutput } from "@/server/game/simulation"
+import { createGameSimulation, type SimOutput } from "@/server/game/simulation"
 import { createSessionEconomy } from "@/server/gameserver/sessionShop"
+import { hasComponent } from "bitecs"
+import {
+  NeedsWorldCollisionResolution,
+  Position,
+  Velocity,
+} from "@/server/game/components"
 
 import { GameLobbyRoom } from "./GameLobbyRoom"
 
@@ -32,8 +38,11 @@ function simOutput(overrides: Partial<SimOutput> = {}): SimOutput {
 }
 
 describe("GameLobbyRoom network batching", () => {
+  const originalE2e = process.env.WIZARD_WARS_E2E
+
   afterEach(() => {
     vi.useRealTimers()
+    process.env.WIZARD_WARS_E2E = originalE2e
   })
 
   it("broadcasts identical net timing in MatchGo and initial GameStateSync", () => {
@@ -324,6 +333,82 @@ describe("GameLobbyRoom network batching", () => {
     expect(client.send).not.toHaveBeenCalled()
   })
 
+  it("skips owner ACK deltas without a live simulation or owner client", () => {
+    const room = new GameLobbyRoom()
+    ;(
+      room as unknown as {
+        sendOwnerAckDeltas: (
+          deltas: Array<{ id: number; lastProcessedInputSeq?: number }>,
+          serverTimeMs: number,
+        ) => void
+      }
+    ).sendOwnerAckDeltas([{ id: 1, lastProcessedInputSeq: 3 }], 1_000)
+
+    const buildPlayerOwnerAckPayload = vi.fn(() => ({
+      id: 1,
+      playerId: "missing-player",
+      x: 0,
+      y: 0,
+      vx: 0,
+      vy: 0,
+      lastProcessedInputSeq: 3,
+      serverTimeMs: 1_000,
+      replayContext: {
+        moveState: "idle",
+        terrainState: "land",
+        castingAbilityId: null,
+        jumpZ: 0,
+        jumpStartedInLava: false,
+        isSwinging: false,
+        hasSwiftBoots: false,
+      },
+    }))
+    Object.assign(room as object, {
+      simulation: {
+        entityPlayerMap: new Map([[1, "missing-player"]]),
+        buildPlayerOwnerAckPayload,
+      },
+    })
+
+    ;(
+      room as unknown as {
+        sendOwnerAckDeltas: (
+          deltas: Array<{ id: number; lastProcessedInputSeq?: number }>,
+          serverTimeMs: number,
+        ) => void
+      }
+    ).sendOwnerAckDeltas([{ id: 1, lastProcessedInputSeq: 3 }], 1_000)
+
+    expect(buildPlayerOwnerAckPayload).not.toHaveBeenCalled()
+  })
+
+  it("marks E2E forced player positions for world collision repair", () => {
+    process.env.WIZARD_WARS_E2E = "1"
+    const room = new GameLobbyRoom()
+    const simulation = createGameSimulation(1_000)
+    const eid = simulation.addPlayer("player-1", "PlayerOne", "red_wizard", 0)
+    const client = {
+      userData: { playerId: "player-1" },
+      send: vi.fn(),
+    }
+    Object.assign(room as object, {
+      lobbyPhase: "IN_PROGRESS",
+      simulation,
+    })
+
+    ;(
+      room as unknown as {
+        handleE2eSetPlayerPosition: (target: typeof client, payload: unknown) => void
+      }
+    ).handleE2eSetPlayerPosition(client, { x: 222, y: 333 })
+
+    expect(Position.x[eid]).toBe(222)
+    expect(Position.y[eid]).toBe(333)
+    expect(Velocity.vx[eid]).toBe(0)
+    expect(Velocity.vy[eid]).toBe(0)
+    expect(hasComponent(simulation.world, eid, NeedsWorldCollisionResolution)).toBe(true)
+  })
+
   it("flushes pending visual batches after cadence even when later ticks have no new output", () => {
     vi.useFakeTimers()
     vi.setSystemTime(1_000)
@@ -357,6 +442,53 @@ describe("GameLobbyRoom network batching", () => {
     expect(broadcast).toHaveBeenCalledWith(RoomEvent.FireballBatchUpdate, {
       deltas: [],
       removedIds: [42],
+      seq: 0,
+    })
+  })
+
+  it("queues Homing Orb visual batches from tick output", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(2_000)
+
+    const room = new GameLobbyRoom()
+    const broadcast = vi.fn()
+    Object.assign(room as object, {
+      broadcast,
+      lobbyPhase: "IN_PROGRESS",
+      lastNetworkFlushAtMs: 1_000,
+      simulation: {
+        tick: vi.fn().mockReturnValue(
+          simOutput({
+            homingOrbDeltas: [
+              {
+                id: 7,
+                x: 10,
+                y: 20,
+                vx: 1,
+                vy: 2,
+                headingRad: 0,
+              },
+            ],
+          }),
+        ),
+        entityPlayerMap: new Map(),
+      },
+    })
+
+    ;(room as unknown as { runGameTick: () => void }).runGameTick()
+
+    expect(broadcast).toHaveBeenCalledWith(RoomEvent.HomingOrbBatchUpdate, {
+      deltas: [
+        {
+          id: 7,
+          x: 10,
+          y: 20,
+          vx: 1,
+          vy: 2,
+          headingRad: 0,
+        },
+      ],
+      removedIds: [],
       seq: 0,
     })
   })

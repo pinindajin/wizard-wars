@@ -25,6 +25,7 @@ import {
   PlayerInput,
   PlayerTag,
   InvulnerableTag,
+  NeedsWorldCollisionResolution,
   HERO_INDEX,
   ABILITY_INDEX,
   FireballTag,
@@ -476,6 +477,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     addComponent(world, eid, QuickItemSlots)
     addComponent(world, eid, PlayerInput)
     addComponent(world, eid, TerrainState)
+    addComponent(world, eid, NeedsWorldCollisionResolution)
 
     Position.x[eid] = spawn.x
     Position.y[eid] = spawn.y
@@ -910,6 +912,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     economySystem(ctx)
     matchEndSystem(ctx)
     commandBuffer.execute(world)
+    worldCollisionSystem(ctx)
     playerDeltaSystem(ctx)
     projectileDeltaSystem(ctx)
 

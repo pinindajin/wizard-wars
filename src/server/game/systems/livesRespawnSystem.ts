@@ -36,6 +36,7 @@ import {
   JumpArc,
   TerrainState,
   TERRAIN_KIND,
+  NeedsWorldCollisionResolution,
 } from "../components"
 import type { SimCtx } from "../simulation"
 import {
@@ -117,6 +118,7 @@ function respawnPlayer(
 
   Position.x[eid] = spawnX
   Position.y[eid] = spawnY
+  addComponent(world, eid, NeedsWorldCollisionResolution)
   Facing.angle[eid] = facingAngle
   MoveFacing.angle[eid] = facingAngle
   Health.current[eid] = Health.max[eid] > 0 ? Health.max[eid] : DEFAULT_PLAYER_HEALTH

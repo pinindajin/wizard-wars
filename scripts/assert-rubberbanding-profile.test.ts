@@ -95,7 +95,7 @@ describe("rubberbanding profile assertions", () => {
         droppedDebtMs: 83.33,
         tickDeficitAfter100MsStall: 5,
       },
-      "world-collision": { worldCollisionP95Ms: 10 },
+      "world-collision": { worldCollisionP95Ms: 10, worldCollisionP99Ms: 20 },
       "homing-orb-pressure": { homingOrbBurstBytes: 10_000 },
       "input-bandwidth": {
         idleInputMessagesPerSecond: 60,
@@ -111,7 +111,7 @@ describe("rubberbanding profile assertions", () => {
         droppedDebtMs: 1,
         tickDeficitAfter100MsStall: 1,
       },
-      "world-collision": { worldCollisionP95Ms: 8 },
+      "world-collision": { worldCollisionP95Ms: 8, worldCollisionP99Ms: 15 },
       "homing-orb-pressure": { homingOrbBurstBytes: 7_000 },
       "input-bandwidth": {
         idleInputMessagesPerSecond: 7,
@@ -127,6 +127,7 @@ describe("rubberbanding profile assertions", () => {
       "server-loop-catch-up droppedDebtMs expected <= 0.0000, got 1.0000",
       "server-loop-catch-up tickDeficitAfter100MsStall expected <= 0.0000, got 1.0000",
       "world-collision worldCollisionP95Ms expected <= 7.0000, got 8.0000",
+      "world-collision worldCollisionP99Ms expected <= 14.0000, got 15.0000",
       "homing-orb-pressure homingOrbBurstBytes expected <= 6000.0000, got 7000.0000",
       "input-bandwidth idleInputMessagesPerSecond expected <= 6.0000, got 7.0000",
       "input-bandwidth idleInputBytesPerSecond expected <= 600.0000, got 700.0000",

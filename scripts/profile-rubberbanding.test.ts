@@ -210,6 +210,35 @@ describe("rubberbanding profile report", () => {
     expect(metricValue(afterLoop, "maxTicksInSingleCallbackAfter5sStall")).toBe(6)
   })
 
+  it("models the Fix 4 world-collision p95 and p99 improvement with sampled work", () => {
+    const before = buildRubberbandingProfileReport({
+      phase: "phase-4-before",
+      commit: "abc123",
+      seed: 42,
+      sampleCount: 120,
+      generatedAt: "2026-06-19T00:00:00.000Z",
+    })
+    const after = buildRubberbandingProfileReport({
+      phase: "phase-4-after",
+      commit: "abc123",
+      seed: 42,
+      sampleCount: 120,
+      generatedAt: "2026-06-19T00:00:00.000Z",
+    })
+
+    const beforeWorld = before.scenarios.find((scenario) => scenario.scenario === "world-collision")
+    const afterWorld = after.scenarios.find((scenario) => scenario.scenario === "world-collision")
+    expect(metricValue(afterWorld, "worldCollisionP95Ms")).toBeLessThanOrEqual(
+      metricValue(beforeWorld, "worldCollisionP95Ms") * 0.7,
+    )
+    expect(metricValue(afterWorld, "worldCollisionP99Ms")).toBeLessThanOrEqual(
+      metricValue(beforeWorld, "worldCollisionP99Ms") * 0.7,
+    )
+    expect(metricValue(afterWorld, "worldCollisionDirtyPlayersPerTick")).toBeLessThan(
+      metricValue(beforeWorld, "worldCollisionDirtyPlayersPerTick"),
+    )
+  })
+
 })
 
 describe("rubberbanding cause provenance", () => {

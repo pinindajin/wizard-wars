@@ -1,7 +1,19 @@
 import { writeFileSync } from "node:fs"
+import { performance } from "node:perf_hooks"
 import { pathToFileURL } from "node:url"
 
+import {
+  ARENA_HEIGHT,
+  ARENA_SPAWN_POINTS,
+  ARENA_WIDTH,
+  PLAYER_WORLD_COLLISION_FOOTPRINT,
+} from "@/shared/balance-config"
 import { resolveGameNetTiming } from "@/shared/balance-config/rendering"
+import { ARENA_WORLD_COLLIDER_SET } from "@/shared/collision/arenaSpatialIndexes"
+import {
+  canOccupyWorldPositionIndexed,
+  resolveAgainstWorldIndexed,
+} from "@/shared/collision/indexedWorldCollision"
 
 export const RUBBERBANDING_SCENARIOS = [
   "remote-interpolation",
@@ -70,6 +82,8 @@ type ClassifyRubberbandingCauseOptions = {
   readonly introducedBy: string | null
   readonly evidence: readonly string[]
 }
+
+type WorldCollisionSampleMode = "baseline-all-players" | "dirty-only"
 
 const PRIMARY_GAME_LOOP_COSTS: readonly RubberbandingCostReport[] = [
   {
@@ -213,7 +227,7 @@ export function buildRubberbandingProfileReport(
     warmupTicks,
     sampleCount,
     scenarios: RUBBERBANDING_SCENARIOS.map((scenario, index) =>
-      buildScenarioReport(scenario, seed, sampleCount, index, options.phase),
+      buildScenarioReport(scenario, seed, warmupTicks, sampleCount, index, options.phase),
     ),
     costs: [...PRIMARY_GAME_LOOP_COSTS],
     provenance: [...DEFAULT_PROVENANCE],
@@ -318,6 +332,7 @@ export function parseProfileArgs(argv: readonly string[]): {
 function buildScenarioReport(
   scenario: RubberbandingScenarioName,
   seed: number,
+  warmupTicks: number,
   sampleCount: number,
   index: number,
   phase: string,
@@ -325,7 +340,7 @@ function buildScenarioReport(
   const base = seed + sampleCount + index + 1
   return {
     scenario,
-    metrics: metricsForScenario(scenario, base, phase),
+    metrics: metricsForScenario(scenario, base, phase, seed, warmupTicks, sampleCount),
     network: {
       bytes: base * 64,
       messages: base,
@@ -344,6 +359,9 @@ function metricsForScenario(
   scenario: RubberbandingScenarioName,
   base: number,
   phase: string,
+  seed: number,
+  warmupTicks: number,
+  sampleCount: number,
 ): readonly RubberbandingMetric[] {
   switch (scenario) {
     case "remote-interpolation":
@@ -353,10 +371,7 @@ function metricsForScenario(
     case "server-loop-catch-up":
       return serverLoopCatchUpMetrics(phase)
     case "world-collision":
-      return [
-        { name: "worldCollisionP95Ms", unit: "ms", value: 1.5 },
-        { name: "worldCollisionP99Ms", unit: "ms", value: 2.5 },
-      ]
+      return worldCollisionMetrics(seed, warmupTicks, sampleCount, phase)
     case "homing-orb-pressure":
       return [{ name: "homingOrbBurstBytes", unit: "bytes", value: base * 256 }]
     case "input-bandwidth":
@@ -368,6 +383,136 @@ function metricsForScenario(
     case "swift-boots":
       return [{ name: "swiftBootsPredictionSnapPx", unit: "px", value: 12 }]
   }
+}
+
+/**
+ * Builds sampled world-collision metrics for the before/after repair paths.
+ *
+ * @param seed - Deterministic sample seed.
+ * @param warmupTicks - Samples to run before measurement.
+ * @param sampleCount - Number of measured ticks.
+ * @param phase - Profile phase name.
+ * @returns World-collision metric rows.
+ */
+function worldCollisionMetrics(
+  seed: number,
+  warmupTicks: number,
+  sampleCount: number,
+  phase: string,
+): readonly RubberbandingMetric[] {
+  const mode: WorldCollisionSampleMode = isAfterPhaseAtLeast(phase, 4)
+    ? "dirty-only"
+    : "baseline-all-players"
+  const samples = sampleWorldCollisionTickCosts(seed, warmupTicks, sampleCount, mode)
+  return [
+    { name: "worldCollisionP95Ms", unit: "ms", value: percentile(samples, 0.95) },
+    { name: "worldCollisionP99Ms", unit: "ms", value: percentile(samples, 0.99) },
+    {
+      name: "worldCollisionDirtyPlayersPerTick",
+      unit: "players/tick",
+      value: mode === "dirty-only" ? 2 : 12,
+    },
+    {
+      name: "worldCollisionColliderCount",
+      unit: "rects",
+      value: ARENA_WORLD_COLLIDER_SET.rects.length,
+    },
+  ]
+}
+
+/**
+ * Samples per-tick world-collision CPU cost for a deterministic player layout.
+ *
+ * @param seed - Deterministic sample seed.
+ * @param warmupTicks - Number of unrecorded warmup ticks.
+ * @param sampleCount - Number of recorded samples.
+ * @param mode - Baseline all-player repair or dirty-only repair.
+ * @returns Per-tick cost samples in milliseconds.
+ */
+function sampleWorldCollisionTickCosts(
+  seed: number,
+  warmupTicks: number,
+  sampleCount: number,
+  mode: WorldCollisionSampleMode,
+): readonly number[] {
+  const samples: number[] = []
+  const total = Math.max(0, warmupTicks) + Math.max(1, sampleCount)
+  for (let i = 0; i < total; i++) {
+    const cost = sampleWorldCollisionTickCost(seed + i, mode)
+    if (i >= warmupTicks) samples.push(cost)
+  }
+  return samples
+}
+
+/**
+ * Samples one simulated tick of world-collision repair work.
+ *
+ * @param seed - Deterministic tick seed.
+ * @param mode - Baseline all-player repair or dirty-only repair.
+ * @returns CPU cost in milliseconds.
+ */
+function sampleWorldCollisionTickCost(
+  seed: number,
+  mode: WorldCollisionSampleMode,
+): number {
+  const positions = sampleWorldCollisionPositions(seed)
+  const dirtyCount = mode === "dirty-only" ? 2 : positions.length
+  let operationFloorMs = 0
+  const start = performance.now()
+  for (let i = 0; i < dirtyCount; i++) {
+    const position = positions[i]!
+    operationFloorMs += 0.01
+    if (
+      canOccupyWorldPositionIndexed(
+        position.x,
+        position.y,
+        PLAYER_WORLD_COLLISION_FOOTPRINT,
+        { width: ARENA_WIDTH, height: ARENA_HEIGHT },
+        ARENA_WORLD_COLLIDER_SET,
+      )
+    ) {
+      continue
+    }
+    operationFloorMs += 0.01
+    resolveAgainstWorldIndexed(
+      position.x,
+      position.y,
+      PLAYER_WORLD_COLLISION_FOOTPRINT,
+      { width: ARENA_WIDTH, height: ARENA_HEIGHT },
+      ARENA_WORLD_COLLIDER_SET,
+    )
+  }
+  return Math.max(performance.now() - start, operationFloorMs)
+}
+
+/**
+ * Builds deterministic legal and illegal player positions for collision sampling.
+ *
+ * @param seed - Deterministic sample seed.
+ * @returns Twelve player positions.
+ */
+function sampleWorldCollisionPositions(seed: number): readonly { readonly x: number; readonly y: number }[] {
+  const legal = ARENA_SPAWN_POINTS[(seed % ARENA_SPAWN_POINTS.length + ARENA_SPAWN_POINTS.length) % ARENA_SPAWN_POINTS.length]!
+  const blockers = ARENA_WORLD_COLLIDER_SET.rects.filter((rect) => rect.width >= 40 && rect.height >= 40)
+  const positions = [{ x: legal.x, y: legal.y }]
+  for (let i = 0; i < 11; i++) {
+    const rect = blockers[(seed + i) % blockers.length]!
+    positions.push({ x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 })
+  }
+  return positions
+}
+
+/**
+ * Computes a percentile from sorted numeric samples.
+ *
+ * @param samples - Numeric samples.
+ * @param quantile - Quantile in `[0, 1]`.
+ * @returns Percentile value.
+ */
+function percentile(samples: readonly number[], quantile: number): number {
+  const sorted = [...samples].sort((a, b) => a - b)
+  const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * quantile) - 1))
+  return Number(sorted[index]!.toFixed(4))
 }
 
 /**

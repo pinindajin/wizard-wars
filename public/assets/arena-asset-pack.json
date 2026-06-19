@@ -11,11 +11,6 @@
                 "url": "/assets/maps/arena-base.png"
             },
             {
-                "type": "tilemapTiledJSON",
-                "key": "arena",
-                "url": "/assets/tilemaps/arena.json"
-            },
-            {
                 "type": "image",
                 "key": "arena-prop-large-obelisk",
                 "url": "/assets/sprites/arena-props/large-obelisk.png"

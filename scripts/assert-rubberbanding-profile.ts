@@ -36,7 +36,13 @@ const THRESHOLDS_BY_SCENARIO: ReadonlyMap<string, readonly MetricThreshold[]> = 
       { metric: "tickDeficitAfter100MsStall", absoluteMax: 0 },
     ],
   ],
-  ["world-collision", [{ metric: "worldCollisionP95Ms", relativeMaxRatio: 0.7 }]],
+  [
+    "world-collision",
+    [
+      { metric: "worldCollisionP95Ms", relativeMaxRatio: 0.7 },
+      { metric: "worldCollisionP99Ms", relativeMaxRatio: 0.7 },
+    ],
+  ],
   ["homing-orb-pressure", [{ metric: "homingOrbBurstBytes", relativeMaxRatio: 0.6 }]],
   [
     "input-bandwidth",

@@ -1,4 +1,4 @@
-import { hasComponent, removeComponent } from "bitecs"
+import { addComponent, hasComponent, removeComponent } from "bitecs"
 import { Room, type Client } from "colyseus"
 import { randomUUID } from "node:crypto"
 import { performance } from "node:perf_hooks"
@@ -58,6 +58,7 @@ import {
   Equipment,
   ABILITY_INDEX,
   JumpArc,
+  NeedsWorldCollisionResolution,
   Position,
   TerrainState,
   TERRAIN_KIND,
@@ -1364,6 +1365,7 @@ export class GameLobbyRoom extends Room {
 
     Position.x[eid] = x
     Position.y[eid] = y
+    addComponent(this.simulation.world, eid, NeedsWorldCollisionResolution)
     Velocity.vx[eid] = 0
     Velocity.vy[eid] = 0
     if (hasComponent(this.simulation.world, eid, JumpArc)) {

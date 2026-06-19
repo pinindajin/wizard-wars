@@ -32,6 +32,7 @@ import {
   InvulnerableTag,
   JumpArc,
   MoveFacing,
+  NeedsWorldCollisionResolution,
   Position,
   RespawnTimer,
   SpectatorTag,
@@ -884,6 +885,38 @@ describe("primary melee attack", () => {
       Date.now(),
     )
     expect(output.primaryMeleeAttacks).toHaveLength(0)
+  })
+
+  it("repairs and clears dirty world-collision tags for a 12-player cluster", () => {
+    const sim = createGameSimulation(Date.now())
+    const eids: number[] = []
+    for (let i = 0; i < 12; i++) {
+      const eid = sim.addPlayer(`user${i}`, `Player ${i}`, "red_wizard", i)
+      Position.x[eid] = 160 + (i % 4) * 4
+      Position.y[eid] = 160 + Math.floor(i / 4) * 4
+      eids.push(eid)
+    }
+
+    sim.tick(new Map(), Date.now())
+
+    for (const eid of eids) {
+      expect(hasComponent(sim.world, eid, NeedsWorldCollisionResolution)).toBe(false)
+      expect(
+        canOccupyWorldPosition(
+          Position.x[eid],
+          Position.y[eid],
+          PLAYER_WORLD_COLLISION_FOOTPRINT,
+          { width: ARENA_WIDTH, height: ARENA_HEIGHT },
+          ARENA_WORLD_COLLIDERS,
+        ),
+      ).toBe(true)
+    }
+
+    sim.tick(new Map(), Date.now())
+
+    for (const eid of eids) {
+      expect(hasComponent(sim.world, eid, NeedsWorldCollisionResolution)).toBe(false)
+    }
   })
 
   it("does not swing when caster has DyingTag, DeadTag, or SpectatorTag", () => {
