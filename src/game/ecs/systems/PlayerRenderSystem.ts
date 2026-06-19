@@ -445,7 +445,7 @@ export class PlayerRenderSystem {
     const renderPos = ClientRenderPos[id]
     if (!state || !renderPos) return
 
-    const ctx: LocalReplayContext = {
+    const ctx: LocalReplayContext = ack.replayContext ?? {
       isSwinging: state.animState === "primary_melee_attack",
       hasSwiftBoots: false,
       castingAbilityId: state.castingAbilityId,

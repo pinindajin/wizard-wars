@@ -217,6 +217,30 @@ export type PlayerBatchUpdatePayload = {
   readonly serverTimeMs: number
 }
 
+/** Server replay context that keeps owner reconciliation deterministic. */
+export type PlayerOwnerAckReplayContext = {
+  readonly moveState: PlayerMoveState
+  readonly terrainState: PlayerTerrainState
+  readonly castingAbilityId: string | null
+  readonly jumpZ: number
+  readonly jumpStartedInLava: boolean
+  readonly isSwinging: boolean
+  readonly hasSwiftBoots: boolean
+}
+
+/** Owner-only authoritative ACK for local rewind-and-replay. */
+export type PlayerOwnerAckPayload = {
+  readonly id: number
+  readonly playerId: string
+  readonly x: number
+  readonly y: number
+  readonly vx: number
+  readonly vy: number
+  readonly lastProcessedInputSeq: number
+  readonly serverTimeMs: number
+  readonly replayContext: PlayerOwnerAckReplayContext
+}
+
 /** Server-provided timing knobs that keep client interpolation aligned with visual cadence. */
 export type GameNetTimingPayload = {
   readonly protocolVersion: 1

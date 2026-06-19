@@ -2,6 +2,7 @@ import type {
   GameNetTimingPayload,
   GameStateSyncPayload,
   PlayerBatchUpdatePayload,
+  PlayerOwnerAckPayload,
 } from "@/shared/types"
 import { clientLogger } from "@/lib/clientLogger"
 import {
@@ -33,7 +34,10 @@ export type LocalAckSample = {
   readonly id: number
   readonly x: number
   readonly y: number
+  readonly vx?: number
+  readonly vy?: number
   readonly lastProcessedInputSeq: number
+  readonly replayContext?: PlayerOwnerAckPayload["replayContext"]
 }
 
 type NetworkSyncHooks = {
@@ -271,5 +275,41 @@ export class NetworkSyncSystem {
         }
       }
     }
+  }
+
+  /**
+   * Applies an owner-only ACK without mutating room-wide visual ECS state.
+   *
+   * @param payload - Dedicated server ACK for the local player.
+   */
+  applyOwnerAck(payload: PlayerOwnerAckPayload): void {
+    this.onServerTime?.(payload.serverTimeMs)
+    if (payload.playerId !== this.localPlayerId) return
+
+    const prev = this.lastAckByPlayer.get(payload.playerId) ?? -1
+    if (payload.lastProcessedInputSeq < prev) {
+      this.log.warn(
+        {
+          event: "net.sync.owner_ack.regressed",
+          playerId: payload.playerId,
+          previousSeq: prev,
+          seq: payload.lastProcessedInputSeq,
+        },
+        "Local owner input ack regressed",
+      )
+      return
+    }
+    if (payload.lastProcessedInputSeq === prev) return
+
+    this.lastAckByPlayer.set(payload.playerId, payload.lastProcessedInputSeq)
+    this.onLocalAck?.({
+      id: payload.id,
+      x: payload.x,
+      y: payload.y,
+      vx: payload.vx,
+      vy: payload.vy,
+      lastProcessedInputSeq: payload.lastProcessedInputSeq,
+      replayContext: payload.replayContext,
+    })
   }
 }

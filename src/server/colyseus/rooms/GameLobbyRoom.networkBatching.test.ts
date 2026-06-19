@@ -135,6 +135,148 @@ describe("GameLobbyRoom network batching", () => {
     ).toThrow("cannot build GameStateSync without an active simulation")
   })
 
+  it("unicasts dedicated owner ACKs from sparse seq-only deltas without flushing visuals", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(1_010)
+
+    const room = new GameLobbyRoom()
+    const p1 = {
+      userData: { playerId: "player-1" },
+      send: vi.fn(),
+    }
+    const p2 = {
+      userData: { playerId: "player-2" },
+      send: vi.fn(),
+    }
+    const buildPlayerOwnerAckPayload = vi.fn(
+      (id: number, lastProcessedInputSeq: number, serverTimeMs: number) => ({
+        id,
+        playerId: id === 1 ? "player-1" : "player-2",
+        x: id === 1 ? 100 : 200,
+        y: id === 1 ? 120 : 220,
+        vx: 0,
+        vy: 0,
+        lastProcessedInputSeq,
+        serverTimeMs,
+        replayContext: {
+          moveState: "idle",
+          terrainState: "land",
+          castingAbilityId: null,
+          jumpZ: 0,
+          jumpStartedInLava: false,
+          isSwinging: false,
+          hasSwiftBoots: false,
+        },
+      }),
+    )
+    Object.defineProperty(room, "clients", {
+      configurable: true,
+      value: [p1, p2],
+    })
+    Object.assign(room as object, {
+      broadcast: vi.fn(),
+      lobbyPhase: "IN_PROGRESS",
+      lastNetworkFlushAtMs: 1_000,
+      simulation: {
+        tick: vi.fn().mockReturnValue(
+          simOutput({
+            playerDeltas: [
+              { id: 1, lastProcessedInputSeq: 5 },
+              { id: 2, lastProcessedInputSeq: 6 },
+            ],
+          }),
+        ),
+        entityPlayerMap: new Map([
+          [1, "player-1"],
+          [2, "player-2"],
+        ]),
+        buildPlayerOwnerAckPayload,
+      },
+    })
+
+    ;(room as unknown as { runGameTick: () => void }).runGameTick()
+
+    expect(p1.send).toHaveBeenCalledWith(RoomEvent.PlayerOwnerAck, {
+      id: 1,
+      playerId: "player-1",
+      x: 100,
+      y: 120,
+      vx: 0,
+      vy: 0,
+      lastProcessedInputSeq: 5,
+      serverTimeMs: 1_010,
+      replayContext: {
+        moveState: "idle",
+        terrainState: "land",
+        castingAbilityId: null,
+        jumpZ: 0,
+        jumpStartedInLava: false,
+        isSwinging: false,
+        hasSwiftBoots: false,
+      },
+    })
+    expect(p2.send).toHaveBeenCalledWith(RoomEvent.PlayerOwnerAck, {
+      id: 2,
+      playerId: "player-2",
+      x: 200,
+      y: 220,
+      vx: 0,
+      vy: 0,
+      lastProcessedInputSeq: 6,
+      serverTimeMs: 1_010,
+      replayContext: {
+        moveState: "idle",
+        terrainState: "land",
+        castingAbilityId: null,
+        jumpZ: 0,
+        jumpStartedInLava: false,
+        isSwinging: false,
+        hasSwiftBoots: false,
+      },
+    })
+    expect(p1.send).not.toHaveBeenCalledWith(
+      RoomEvent.PlayerOwnerAck,
+      expect.objectContaining({ playerId: "player-2" }),
+    )
+    expect(p2.send).not.toHaveBeenCalledWith(
+      RoomEvent.PlayerOwnerAck,
+      expect.objectContaining({ playerId: "player-1" }),
+    )
+    expect((room as unknown as { broadcast: ReturnType<typeof vi.fn> }).broadcast).not.toHaveBeenCalledWith(
+      RoomEvent.PlayerBatchUpdate,
+      expect.anything(),
+    )
+  })
+
+  it("skips owner ACK deltas without an ACK cursor or sample payload", () => {
+    const room = new GameLobbyRoom()
+    const client = {
+      userData: { playerId: "player-1" },
+      send: vi.fn(),
+    }
+    Object.defineProperty(room, "clients", {
+      configurable: true,
+      value: [client],
+    })
+    Object.assign(room as object, {
+      simulation: {
+        entityPlayerMap: new Map([[1, "player-1"]]),
+        buildPlayerOwnerAckPayload: vi.fn(() => null),
+      },
+    })
+
+    ;(
+      room as unknown as {
+        sendOwnerAckDeltas: (
+          deltas: Array<{ id: number; lastProcessedInputSeq?: number }>,
+          serverTimeMs: number,
+        ) => void
+      }
+    ).sendOwnerAckDeltas([{ id: 1 }, { id: 1, lastProcessedInputSeq: 3 }], 1_000)
+
+    expect(client.send).not.toHaveBeenCalled()
+  })
+
   it("flushes pending visual batches after cadence even when later ticks have no new output", () => {
     vi.useFakeTimers()
     vi.setSystemTime(1_000)

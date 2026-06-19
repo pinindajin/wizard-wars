@@ -35,6 +35,7 @@ import {
   assignAbilityPayloadSchema,
   parseGameStateSyncPayload,
   parsePlayerDeathPayload,
+  parsePlayerOwnerAckPayload,
   parseServerPerformanceStatusPayload,
 } from "../../../shared/validators"
 import {
@@ -2323,7 +2324,7 @@ export class GameLobbyRoom extends Room {
   }
 
   /**
-   * Sends owner-only ACK deltas so reconciliation is not delayed by visual cadence.
+   * Sends owner-only ACK payloads so reconciliation is not delayed by visual cadence.
    *
    * @param playerDeltas - Player deltas from the current simulation tick.
    * @param serverTimeMs - Current server wall-clock time.
@@ -2335,30 +2336,18 @@ export class GameLobbyRoom extends Room {
     const sim = this.simulation
     if (!sim) return
     for (const delta of playerDeltas) {
-      if (
-        delta.lastProcessedInputSeq === undefined ||
-        delta.x === undefined ||
-        delta.y === undefined
-      ) {
-        continue
-      }
+      if (delta.lastProcessedInputSeq === undefined) continue
       const playerId = sim.entityPlayerMap.get(delta.id)
       if (!playerId) continue
       const client = this.findClientByUserId(playerId)
       if (!client) continue
-      client.send(RoomEvent.PlayerBatchUpdate, {
-        deltas: [
-          {
-            id: delta.id,
-            x: delta.x,
-            y: delta.y,
-            lastProcessedInputSeq: delta.lastProcessedInputSeq,
-          },
-        ],
-        removedIds: [],
-        seq: this.playerBatchSeq++,
+      const payload = sim.buildPlayerOwnerAckPayload(
+        delta.id,
+        delta.lastProcessedInputSeq,
         serverTimeMs,
-      })
+      )
+      if (!payload) continue
+      client.send(RoomEvent.PlayerOwnerAck, parsePlayerOwnerAckPayload(payload))
     }
   }
 
@@ -2490,13 +2479,15 @@ export class GameLobbyRoom extends Room {
       })
     }
 
+    if (output.playerDeltas.length > 0) {
+      this.sendOwnerAckDeltas(output.playerDeltas, serverTimeMs)
+    }
+
     if (
       this.hasPendingVisualBatches() &&
       this.shouldFlushVisualBatches(serverTimeMs)
     ) {
       this.flushPendingVisualBatches(serverTimeMs)
-    } else if (output.playerDeltas.length > 0) {
-      this.sendOwnerAckDeltas(output.playerDeltas, serverTimeMs)
     }
 
     for (const launch of output.fireballLaunches) {

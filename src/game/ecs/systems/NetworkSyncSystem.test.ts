@@ -2,7 +2,11 @@ import { describe, it, expect, beforeEach, vi } from "vitest"
 import { NetworkSyncSystem } from "./NetworkSyncSystem"
 import { ClientPosition, ClientPlayerState } from "../components"
 import { addEntity, clientEntities, hasEntity, removeEntity } from "../world"
-import type { GameStateSyncPayload, PlayerSnapshot } from "@/shared/types"
+import type {
+  GameStateSyncPayload,
+  PlayerOwnerAckPayload,
+  PlayerSnapshot,
+} from "@/shared/types"
 
 function abilityStates() {
   return {
@@ -251,3 +255,100 @@ describe("NetworkSyncSystem.applyBatchUpdate", () => {
     expect(ClientPlayerState[1]!.abilityStates.jump.cooldownEndsAtServerTimeMs).toBe(6_000)
   })
 })
+
+describe("NetworkSyncSystem.applyOwnerAck", () => {
+  beforeEach(() => {
+    clearClientEcs()
+  })
+
+  it("routes dedicated owner ACKs without mutating visual ECS position", () => {
+    const onLocalAck = vi.fn()
+    const onServerTime = vi.fn()
+    const system = new NetworkSyncSystem({ onLocalAck, onServerTime })
+    system.localPlayerId = "p1"
+    system.applyFullSync({
+      players: [baseSnapshot({ id: 1, playerId: "p1", x: 10, y: 20 })],
+      fireballs: [],
+      seq: 0,
+      serverTimeMs: 1,
+    })
+    const ack = ownerAck({ id: 1, playerId: "p1", lastProcessedInputSeq: 4 })
+
+    system.applyOwnerAck(ack)
+
+    expect(onServerTime).toHaveBeenCalledWith(ack.serverTimeMs)
+    expect(onLocalAck).toHaveBeenCalledWith({
+      id: 1,
+      x: ack.x,
+      y: ack.y,
+      vx: ack.vx,
+      vy: ack.vy,
+      lastProcessedInputSeq: ack.lastProcessedInputSeq,
+      replayContext: ack.replayContext,
+    })
+    expect(ClientPosition[1]).toEqual({ x: 10, y: 20 })
+  })
+
+  it("ignores remote and duplicate owner ACKs", () => {
+    const onLocalAck = vi.fn()
+    const system = new NetworkSyncSystem({ onLocalAck })
+    system.localPlayerId = "p1"
+    system.applyFullSync({
+      players: [baseSnapshot({ id: 1, playerId: "p1" })],
+      fireballs: [],
+      seq: 0,
+      serverTimeMs: 1,
+    })
+
+    system.applyOwnerAck(ownerAck({ id: 1, playerId: "p2", lastProcessedInputSeq: 4 }))
+    system.applyOwnerAck(ownerAck({ id: 1, playerId: "p1", lastProcessedInputSeq: 4 }))
+    system.applyOwnerAck(ownerAck({ id: 1, playerId: "p1", lastProcessedInputSeq: 4 }))
+    system.applyOwnerAck(ownerAck({ id: 1, playerId: "p1", lastProcessedInputSeq: 3 }))
+    system.applyOwnerAck(ownerAck({ id: 1, playerId: "p1", lastProcessedInputSeq: 5 }))
+
+    expect(onLocalAck.mock.calls.map(([sample]) => sample.lastProcessedInputSeq)).toEqual([
+      4,
+      5,
+    ])
+  })
+
+  it("accepts the first local owner ACK without a prior full sync cursor", () => {
+    const onLocalAck = vi.fn()
+    const system = new NetworkSyncSystem({ onLocalAck })
+    system.localPlayerId = "p1"
+
+    system.applyOwnerAck(ownerAck({ id: 1, playerId: "p1", lastProcessedInputSeq: 0 }))
+
+    expect(onLocalAck).toHaveBeenCalledWith(
+      expect.objectContaining({ lastProcessedInputSeq: 0 }),
+    )
+  })
+})
+
+function ownerAck(
+  overrides: Partial<PlayerOwnerAckPayload> & {
+    id: number
+    playerId: string
+    lastProcessedInputSeq: number
+  },
+): PlayerOwnerAckPayload {
+  return {
+    id: overrides.id,
+    playerId: overrides.playerId,
+    x: overrides.x ?? 100,
+    y: overrides.y ?? 120,
+    vx: overrides.vx ?? 10,
+    vy: overrides.vy ?? 0,
+    lastProcessedInputSeq: overrides.lastProcessedInputSeq,
+    serverTimeMs: overrides.serverTimeMs ?? 5_000,
+    replayContext: overrides.replayContext ?? {
+      moveState: "idle",
+      terrainState: "land",
+      castingAbilityId: null,
+      jumpZ: 0,
+      jumpStartedInLava: false,
+      isSwinging: false,
+      hasSwiftBoots: false,
+    },
+  }
+}

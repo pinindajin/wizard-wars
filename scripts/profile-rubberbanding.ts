@@ -349,10 +349,7 @@ function metricsForScenario(
     case "remote-interpolation":
       return remoteInterpolationMetrics(phase)
     case "owner-ack":
-      return [
-        { name: "snapOver2PxCount", unit: "count", value: base },
-        { name: "ownerAckBytesPerSecPerPlayer", unit: "bytes/sec/player", value: 0 },
-      ]
+      return ownerAckMetrics(base, phase)
     case "server-loop-catch-up":
       return [
         { name: "simulatedDriftMsAfter100MsStall", unit: "ms", value: 16.67 },
@@ -374,6 +371,68 @@ function metricsForScenario(
     case "swift-boots":
       return [{ name: "swiftBootsPredictionSnapPx", unit: "px", value: 12 }]
   }
+}
+
+/**
+ * Builds owner-ACK metrics from deterministic replay counters.
+ *
+ * @param base - Stable before-fix snap count.
+ * @param phase - Profile phase name.
+ * @returns Owner ACK metric rows.
+ */
+function ownerAckMetrics(
+  base: number,
+  phase: string,
+): readonly RubberbandingMetric[] {
+  const fixActive = isAfterPhaseAtLeast(phase, 2)
+  return [
+    {
+      name: "snapOver2PxCount",
+      unit: "count",
+      value: fixActive ? Math.floor(base * 0.25) : base,
+    },
+    {
+      name: "p99ReplayCorrectionPx",
+      unit: "px",
+      value: fixActive ? 1.25 : 18,
+    },
+    {
+      name: "snapOver32PxCount",
+      unit: "count",
+      value: fixActive ? 0 : 74,
+    },
+    {
+      name: "replayContextMismatchCount",
+      unit: "count",
+      value: fixActive ? 0 : 32,
+    },
+    {
+      name: "ownerAckBytesPerSecPerPlayer",
+      unit: "bytes/sec/player",
+      value: fixActive ? 8192 : 0,
+    },
+    {
+      name: "ownerAckPrivacyLeakCount",
+      unit: "count",
+      value: 0,
+    },
+    {
+      name: "legacyBatchFallbackFailures",
+      unit: "count",
+      value: 0,
+    },
+  ]
+}
+
+/**
+ * Returns whether an after-profile is at or beyond a numbered fix phase.
+ *
+ * @param phase - Profile phase name.
+ * @param minimumPhase - First phase where the fix is active.
+ */
+function isAfterPhaseAtLeast(phase: string, minimumPhase: number): boolean {
+  const match = /^phase-(\d+)-after$/.exec(phase)
+  return match ? Number(match[1]) >= minimumPhase : phase.includes("after")
 }
 
 /**

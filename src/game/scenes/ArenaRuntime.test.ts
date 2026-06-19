@@ -61,7 +61,17 @@ const mouseControllerMock = vi.hoisted(() => ({
 }))
 
 const networkSyncHooks = vi.hoisted(() => ({
-  current: null as { onNetTiming?: (timing: unknown) => void } | null,
+  current: null as {
+    onNetTiming?: (timing: unknown) => void
+    onServerTime?: (serverTimeMs: number) => void
+  } | null,
+}))
+
+const networkSyncMock = vi.hoisted(() => ({
+  localPlayerId: null as string | null,
+  applyFullSync: vi.fn(),
+  applyBatchUpdate: vi.fn(),
+  applyOwnerAck: vi.fn(),
 }))
 
 vi.mock("phaser", () => {
@@ -144,11 +154,7 @@ vi.mock("../ecs/systems/DebugOverlaySystem", () => ({
 vi.mock("../ecs/systems/NetworkSyncSystem", () => ({
   NetworkSyncSystem: vi.fn().mockImplementation((hooks) => {
     networkSyncHooks.current = hooks
-    return {
-      localPlayerId: null,
-      applyFullSync: vi.fn(),
-      applyBatchUpdate: vi.fn(),
-    }
+    return networkSyncMock
   }),
 }))
 
@@ -309,6 +315,7 @@ describe("ArenaRuntime lifecycle", () => {
     telegraphMock.start.mockClear()
     playerRenderMock.onPrimaryMeleeSwing.mockClear()
     networkSyncHooks.current = null
+    networkSyncMock.applyOwnerAck.mockClear()
     keyboardControllerMock.collectMoveIntent.mockReturnValue({
       up: false,
       down: false,
@@ -543,5 +550,65 @@ describe("ArenaRuntime lifecycle", () => {
     networkSyncHooks.current?.onNetTiming?.(timing)
 
     expect(playerRenderMock.applyNetTiming).toHaveBeenCalledWith(timing)
+  })
+
+  it("forwards server time from NetworkSyncSystem into player rendering", () => {
+    const { runtime } = makeRuntime()
+
+    runtime.start()
+    networkSyncHooks.current?.onServerTime?.(4_321)
+
+    expect(playerRenderMock.updateServerTimeOffset).toHaveBeenCalledWith(4_321)
+  })
+
+  it("routes dedicated owner ACK messages into NetworkSyncSystem", () => {
+    const { runtime, connection } = makeRuntime()
+    const payload = {
+      id: 1,
+      playerId: "player-1",
+      x: 10,
+      y: 20,
+      vx: 0,
+      vy: 0,
+      lastProcessedInputSeq: 7,
+      serverTimeMs: 1234,
+      replayContext: {
+        moveState: "idle",
+        terrainState: "land",
+        castingAbilityId: null,
+        jumpZ: 0,
+        jumpStartedInLava: false,
+        isSwinging: false,
+        hasSwiftBoots: false,
+      },
+    }
+
+    runtime.start()
+    connection.emit({ type: WsEvent.PlayerOwnerAck, payload })
+
+    expect(networkSyncMock.applyOwnerAck).toHaveBeenCalledWith(payload)
+  })
+
+  it("plays local damage-dealt feedback for authored damage floats", () => {
+    const { runtime, connection } = makeRuntime()
+
+    runtime.start()
+    soundPlaySpy.mockClear()
+
+    connection.emit({
+      type: WsEvent.DamageFloat,
+      payload: {
+        targetId: "enemy-player",
+        attackerUserId: "player-1",
+        amount: 4,
+        x: 10,
+        y: 20,
+      },
+    })
+
+    expect(soundPlaySpy).toHaveBeenCalledWith(SFX_KEYS.hitDeal)
+    expect(playerRenderMock.triggerHitFeedbackFlashForPlayerUserId).toHaveBeenCalledWith(
+      "player-1",
+    )
   })
 })

@@ -58,7 +58,11 @@ import {
 } from "./PlayerRenderSystem"
 import { ClientPosition, ClientPlayerState, ClientRenderPos } from "../components"
 import { clientEntities, removeEntity } from "../world"
-import type { PlayerSnapshot, PrimaryMeleeAttackPayload } from "@/shared/types"
+import type {
+  PlayerInputPayload,
+  PlayerSnapshot,
+  PrimaryMeleeAttackPayload,
+} from "@/shared/types"
 import { getAnimKey, getDirectionFromAngle } from "../../animation/LadyWizardAnimDefs"
 import { HERO_CONFIGS } from "@/shared/balance-config/heroes"
 import {
@@ -68,7 +72,10 @@ import {
   ARENA_SPAWN_POINTS,
   ARENA_WIDTH,
   ARENA_WORLD_COLLIDERS,
+  BASE_MOVE_SPEED_PX_PER_SEC,
   PLAYER_WORLD_COLLISION_FOOTPRINT,
+  SWIFT_BOOTS_SPEED_BONUS,
+  TICK_DT_SEC,
 } from "@/shared/balance-config"
 import { terrainStateAtPosition } from "@/shared/collision/terrainHazards"
 import { canOccupyWorldPosition } from "@/shared/collision/worldCollision"
@@ -132,6 +139,31 @@ function sampleBlockedSmoothingCase() {
       x: blocker.x + blocker.width + PLAYER_WORLD_COLLISION_FOOTPRINT.radiusX + 4,
       y,
     },
+  }
+}
+
+function sampleRightwardPredictionStart() {
+  const start = ARENA_SPAWN_POINTS.find((point) => canPlayerOccupy(point.x + 50, point.y))
+  if (!start) throw new Error("Expected a spawn point with rightward prediction clearance")
+  return start
+}
+
+function input(overrides: Partial<PlayerInputPayload> & { seq: number }): PlayerInputPayload {
+  return {
+    up: false,
+    down: false,
+    left: false,
+    right: false,
+    abilitySlot: null,
+    abilityTargetX: 0,
+    abilityTargetY: 0,
+    weaponPrimary: false,
+    weaponSecondary: false,
+    weaponTargetX: 0,
+    weaponTargetY: 0,
+    useQuickItemSlot: null,
+    clientSendTimeMs: 0,
+    ...overrides,
   }
 }
 
@@ -372,6 +404,47 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     })
 
     expect(corrections).toEqual(["snap"])
+  })
+
+  it("uses owner ACK replay context instead of stale client state for local replay", () => {
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    sys.localPlayerId = "p1"
+    const start = sampleRightwardPredictionStart()
+    sys.applyFullSync(sync([snap({
+      id: 1,
+      playerId: "p1",
+      x: start.x,
+      y: start.y,
+      moveState: "idle",
+      terrainState: "land",
+    })]))
+    for (let seq = 1; seq <= 10; seq++) {
+      sys.localInputHistory.append(input({ seq, right: true }))
+    }
+
+    sys.onLocalAck(1, {
+      x: start.x,
+      y: start.y,
+      lastProcessedInputSeq: 0,
+      replayContext: {
+        moveState: "idle",
+        terrainState: "land",
+        castingAbilityId: null,
+        jumpZ: 0,
+        jumpStartedInLava: false,
+        isSwinging: false,
+        hasSwiftBoots: true,
+      },
+    })
+
+    const baseStep = BASE_MOVE_SPEED_PX_PER_SEC * TICK_DT_SEC
+    const simAfter = sys._getLocalSimForTest(1)
+    expect(simAfter?.simCurrX).toBeCloseTo(
+      start.x + baseStep * (1 + SWIFT_BOOTS_SPEED_BONUS) * 10,
+      5,
+    )
+    expect(simAfter?.simCurrY).toBe(start.y)
   })
 
   it("renders remote players from the interpolation buffer after a snapshot", () => {

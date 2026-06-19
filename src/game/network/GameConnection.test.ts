@@ -146,6 +146,39 @@ describe("GameConnection send helpers + warning silence", () => {
     })
   })
 
+  it("forwards owner ACKs through the wildcard message bridge", () => {
+    const seen: unknown[] = []
+    conn.onMessage((message) => {
+      seen.push(message)
+    })
+
+    const payload = {
+      id: 1,
+      playerId: "player-1",
+      x: 10,
+      y: 20,
+      vx: 0,
+      vy: 0,
+      lastProcessedInputSeq: 4,
+      serverTimeMs: 1234,
+      replayContext: {
+        moveState: "idle",
+        terrainState: "land",
+        castingAbilityId: null,
+        jumpZ: 0,
+        jumpStartedInLava: false,
+        isSwinging: false,
+        hasSwiftBoots: false,
+      },
+    }
+    room.triggerMessage(RoomEvent.PlayerOwnerAck, payload)
+
+    expect(seen).toContainEqual({
+      type: WsEvent.PlayerOwnerAck,
+      payload,
+    })
+  })
+
   it("notifies connection health subscribers during reconnect transitions", async () => {
     const health: string[] = []
     conn.onConnectionHealthChange((next) => {

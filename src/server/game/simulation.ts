@@ -31,6 +31,7 @@ import {
   HomingOrb,
   HomingOrbTag,
   JumpArc,
+  SwingingWeapon,
   TerrainState,
   TERRAIN_KIND_TO_STATE,
 } from "./components"
@@ -76,6 +77,7 @@ import type {
   FireballSnapshot,
   AbilitySfxPayload,
   AbilityRuntimeStates,
+  PlayerOwnerAckPayload,
 } from "../../shared/types"
 
 import { inputSystem } from "./systems/inputSystem"
@@ -380,6 +382,14 @@ export type GameSimulation = {
    * `serverTimeMs` and per-player `lastProcessedInputSeq`.
    */
   buildGameStateSyncPayload: (serverTimeMs: number) => GameStateSyncPayload
+  /**
+   * Builds an owner-only authoritative ACK sample for local replay.
+   */
+  buildPlayerOwnerAckPayload: (
+    eid: number,
+    lastProcessedInputSeq: number,
+    serverTimeMs: number,
+  ) => PlayerOwnerAckPayload | null
   /**
    * Resets per-tick input ack state when a client establishes a new transport
    * (browser refresh) while the player entity still exists. Internal map may
@@ -725,6 +735,44 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     return { players, fireballs, homingOrbs, activeTelegraphs, seq: 0, serverTimeMs }
   }
 
+  /**
+   * Builds a dedicated owner ACK from current authoritative ECS state.
+   *
+   * @param eid - Player entity id to sample.
+   * @param lastProcessedInputSeq - ACK cursor that triggered this sample.
+   * @param serverTimeMs - Server wall-clock time for the ACK.
+   * @returns Owner ACK payload, or null when the entity is no longer player-owned.
+   */
+  function buildPlayerOwnerAckPayload(
+    eid: number,
+    lastProcessedInputSeq: number,
+    serverTimeMs: number,
+  ): PlayerOwnerAckPayload | null {
+    const playerId = entityPlayerMap.get(eid)
+    if (playerId === undefined) return null
+    const jumpActive = hasComponent(world, eid, JumpArc)
+    const terrainState = TERRAIN_KIND_TO_STATE[TerrainState.kind[eid]] ?? "land"
+    return {
+      id: eid,
+      playerId,
+      x: Position.x[eid],
+      y: Position.y[eid],
+      vx: Velocity.vx[eid],
+      vy: Velocity.vy[eid],
+      lastProcessedInputSeq: Math.max(0, lastProcessedInputSeq),
+      serverTimeMs,
+      replayContext: {
+        moveState: computePlayerMoveState(world, eid),
+        terrainState,
+        castingAbilityId: getCastingAbilityId(world, eid),
+        jumpZ: jumpActive ? JumpArc.z[eid] : 0,
+        jumpStartedInLava: jumpActive && JumpArc.startedInLava[eid] === 1,
+        isSwinging: hasComponent(world, eid, SwingingWeapon),
+        hasSwiftBoots: Equipment.hasSwiftBoots[eid] === 1,
+      },
+    }
+  }
+
   // ── tick ─────────────────────────────────────────────────────────────
 
   /**
@@ -903,6 +951,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     tick,
     requestHostEnd,
     buildGameStateSyncPayload,
+    buildPlayerOwnerAckPayload,
     resetClientInputStream,
   }
 }

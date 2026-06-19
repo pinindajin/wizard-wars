@@ -8,6 +8,7 @@ import { MAX_PLAYERS_PER_MATCH } from "./balance-config/lobby"
 import type {
   GameStateSyncPayload,
   PlayerDeathPayload,
+  PlayerOwnerAckPayload,
   ServerPerformanceStatusPayload,
 } from "./types"
 
@@ -148,6 +149,30 @@ export const playerSnapshotSchema = z.object({
   jumpStartedInLava: z.boolean(),
   abilityStates: abilityRuntimeStatesSchema,
   lastProcessedInputSeq: z.number().int().nonnegative(),
+})
+
+/** Replay context carried only in owner ACK messages. */
+export const playerOwnerAckReplayContextSchema = z.object({
+  moveState: playerMoveStateSchema,
+  terrainState: playerTerrainStateSchema,
+  castingAbilityId: z.string().min(1).max(64).nullable(),
+  jumpZ: z.number().finite().nonnegative(),
+  jumpStartedInLava: z.boolean(),
+  isSwinging: z.boolean(),
+  hasSwiftBoots: z.boolean(),
+})
+
+/** Owner-only ACK payload for local rewind-and-replay reconciliation. */
+export const playerOwnerAckPayloadSchema = z.object({
+  id: z.number().int().nonnegative(),
+  playerId: z.string().min(1).max(256),
+  x: z.number().finite(),
+  y: z.number().finite(),
+  vx: z.number().finite(),
+  vy: z.number().finite(),
+  lastProcessedInputSeq: z.number().int().nonnegative(),
+  serverTimeMs: z.number().finite().nonnegative(),
+  replayContext: playerOwnerAckReplayContextSchema,
 })
 
 /** Max simultaneous fireballs included in a full sync (safety cap for Zod). */
@@ -319,6 +344,18 @@ export function parseGameStateSyncPayload(
   input: Readonly<unknown> | GameStateSyncPayload,
 ): GameStateSyncPayload {
   return gameStateSyncPayloadSchema.parse(input) as GameStateSyncPayload
+}
+
+/**
+ * Parses and returns a `PlayerOwnerAckPayload` (throws if invalid).
+ *
+ * @param input - Unknown owner ACK payload.
+ * @returns Validated owner ACK payload.
+ */
+export function parsePlayerOwnerAckPayload(
+  input: Readonly<unknown> | PlayerOwnerAckPayload,
+): PlayerOwnerAckPayload {
+  return playerOwnerAckPayloadSchema.parse(input) as PlayerOwnerAckPayload
 }
 
 /**

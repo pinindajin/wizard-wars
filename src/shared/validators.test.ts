@@ -7,11 +7,13 @@ import {
   homingOrbImpactPayloadSchema,
   homingOrbLaunchPayloadSchema,
   parseGameStateSyncPayload,
+  parsePlayerOwnerAckPayload,
   parsePlayerDeathPayload,
   parseServerPerformanceStatusPayload,
 } from "@/shared/validators"
 import type {
   GameStateSyncPayload,
+  PlayerOwnerAckPayload,
   PlayerDeathPayload,
   ServerPerformanceStatusPayload,
 } from "@/shared/types"
@@ -196,6 +198,62 @@ describe("ServerPerformanceStatus protocol", () => {
       WsEvent.HomingOrbBatchUpdate,
     )
     expect(roomToWsEvent[RoomEvent.HomingOrbImpact]).toBe(WsEvent.HomingOrbImpact)
+  })
+
+  it("bridges owner ACK room events to websocket events", () => {
+    expect(RoomEvent.PlayerOwnerAck).toBe("player_owner_ack")
+    expect(WsEvent.PlayerOwnerAck).toBe("PLAYER_OWNER_ACK")
+    expect(roomToWsEvent[RoomEvent.PlayerOwnerAck]).toBe(WsEvent.PlayerOwnerAck)
+  })
+})
+
+describe("parsePlayerOwnerAckPayload", () => {
+  it("accepts a complete owner ACK replay context", () => {
+    const raw: PlayerOwnerAckPayload = {
+      id: 1,
+      playerId: "user-a",
+      x: 10,
+      y: 20,
+      vx: 100,
+      vy: 0,
+      lastProcessedInputSeq: 7,
+      serverTimeMs: 1700000000000,
+      replayContext: {
+        moveState: "casting",
+        terrainState: "lava",
+        castingAbilityId: "fireball",
+        jumpZ: 12,
+        jumpStartedInLava: true,
+        isSwinging: false,
+        hasSwiftBoots: true,
+      },
+    }
+
+    expect(parsePlayerOwnerAckPayload(raw)).toEqual(raw)
+  })
+
+  it("rejects malformed owner ACK replay context", () => {
+    expect(() =>
+      parsePlayerOwnerAckPayload({
+        id: 1,
+        playerId: "user-a",
+        x: 10,
+        y: 20,
+        vx: 0,
+        vy: 0,
+        lastProcessedInputSeq: 7,
+        serverTimeMs: 1700000000000,
+        replayContext: {
+          moveState: "teleporting",
+          terrainState: "land",
+          castingAbilityId: null,
+          jumpZ: 0,
+          jumpStartedInLava: false,
+          isSwinging: false,
+          hasSwiftBoots: false,
+        },
+      } as never),
+    ).toThrow()
   })
 })
 

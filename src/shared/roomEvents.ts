@@ -36,6 +36,7 @@ export const RoomEvent = {
   PlayerJoin: "player_join",
   PlayerLeave: "player_leave",
   PlayerBatchUpdate: "player_batch_update",
+  PlayerOwnerAck: "player_owner_ack",
   GameStateSync: "game_state_sync",
   PlayerDeath: "player_death",
   PlayerRespawn: "player_respawn",

@@ -7,6 +7,7 @@ import type {
   GameStateSyncPayload,
   MatchGoPayload,
   PlayerBatchUpdatePayload,
+  PlayerOwnerAckPayload,
   FireballLaunchPayload,
   FireballBatchUpdatePayload,
   FireballImpactPayload,
@@ -361,6 +362,9 @@ export class ArenaRuntime {
         }
         case WsEvent.PlayerBatchUpdate:
           this.networkSyncSystem.applyBatchUpdate(message.payload as PlayerBatchUpdatePayload)
+          break
+        case WsEvent.PlayerOwnerAck:
+          this.networkSyncSystem.applyOwnerAck(message.payload as PlayerOwnerAckPayload)
           break
         case WsEvent.FireballLaunch:
           this.projectileRenderSystem.spawnFireball(message.payload as FireballLaunchPayload)

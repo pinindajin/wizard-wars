@@ -30,11 +30,14 @@ import {
   Facing,
   Health,
   InvulnerableTag,
+  JumpArc,
   MoveFacing,
   Position,
   RespawnTimer,
   SpectatorTag,
   SwingingWeapon,
+  TerrainState,
+  Velocity,
 } from "@/server/game/components"
 import {
   primaryMeleeAttackIdToIndex,
@@ -408,6 +411,54 @@ describe("movement system", () => {
 })
 
 describe("buildGameStateSyncPayload", () => {
+  it("builds owner ACK payloads from current authoritative ECS state", () => {
+    const sim = createGameSimulation(Date.now())
+    const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    Position.x[eid] = 123
+    Position.y[eid] = 456
+    Velocity.vx[eid] = 12
+    Velocity.vy[eid] = -4
+    Equipment.hasSwiftBoots[eid] = 1
+    addComponent(sim.world, eid, SwingingWeapon)
+    addComponent(sim.world, eid, JumpArc)
+    JumpArc.z[eid] = 18
+    JumpArc.startedInLava[eid] = 1
+
+    expect(sim.buildPlayerOwnerAckPayload(eid, 7, 10_000)).toMatchObject({
+      id: eid,
+      playerId: "user1",
+      x: 123,
+      y: 456,
+      vx: 12,
+      vy: -4,
+      lastProcessedInputSeq: 7,
+      serverTimeMs: 10_000,
+      replayContext: {
+        moveState: "swinging",
+        terrainState: "land",
+        castingAbilityId: null,
+        jumpZ: 18,
+        jumpStartedInLava: true,
+        isSwinging: true,
+        hasSwiftBoots: true,
+      },
+    })
+    TerrainState.kind[eid] = 99
+    expect(sim.buildPlayerOwnerAckPayload(eid, 8, 10_001)?.replayContext.terrainState).toBe(
+      "land",
+    )
+    const groundedEid = sim.addPlayer("user2", "Bob", "red_wizard", 1)
+    expect(sim.buildPlayerOwnerAckPayload(groundedEid, 0, 10_002)).toMatchObject({
+      replayContext: {
+        jumpZ: 0,
+        jumpStartedInLava: false,
+        isSwinging: false,
+        hasSwiftBoots: false,
+      },
+    })
+    expect(sim.buildPlayerOwnerAckPayload(9999, -1, 10_000)).toBeNull()
+  })
+
   it("exposes ability runtime state for the player HUD", () => {
     const sim = createGameSimulation(Date.now())
     sim.addPlayer("user1", "Alice", "red_wizard", 0)

@@ -163,6 +163,32 @@ describe("rubberbanding profile report", () => {
     expect(metricValue(afterRemote, "remoteRenderDelayMs")).toBe(84)
   })
 
+  it("models the Fix 2 owner ACK replay improvement in after profiles", () => {
+    const before = buildRubberbandingProfileReport({
+      phase: "phase-2-before",
+      commit: "abc123",
+      generatedAt: "2026-06-19T00:00:00.000Z",
+    })
+    const after = buildRubberbandingProfileReport({
+      phase: "phase-2-after",
+      commit: "abc123",
+      generatedAt: "2026-06-19T00:00:00.000Z",
+    })
+
+    const beforeOwnerAck = before.scenarios.find((scenario) => scenario.scenario === "owner-ack")
+    const afterOwnerAck = after.scenarios.find((scenario) => scenario.scenario === "owner-ack")
+    expect(metricValue(afterOwnerAck, "snapOver2PxCount")).toBeLessThanOrEqual(
+      metricValue(beforeOwnerAck, "snapOver2PxCount") * 0.5,
+    )
+    expect(metricValue(afterOwnerAck, "p99ReplayCorrectionPx")).toBeLessThanOrEqual(2)
+    expect(metricValue(afterOwnerAck, "snapOver32PxCount")).toBe(0)
+    expect(metricValue(afterOwnerAck, "replayContextMismatchCount")).toBe(0)
+    expect(metricValue(afterOwnerAck, "ownerAckBytesPerSecPerPlayer")).toBeGreaterThan(0)
+    expect(metricValue(afterOwnerAck, "ownerAckBytesPerSecPerPlayer")).toBeLessThan(10 * 1024)
+    expect(metricValue(afterOwnerAck, "ownerAckPrivacyLeakCount")).toBe(0)
+    expect(metricValue(afterOwnerAck, "legacyBatchFallbackFailures")).toBe(0)
+  })
+
 })
 
 describe("rubberbanding cause provenance", () => {
