@@ -15,6 +15,7 @@ function mockScene() {
   const startFollowFns: Array<ReturnType<typeof vi.fn>> = []
   const spriteRotationFns: Array<ReturnType<typeof vi.fn>> = []
   const spriteScaleFns: Array<ReturnType<typeof vi.fn>> = []
+  const spritePositionFns: Array<ReturnType<typeof vi.fn>> = []
   return {
     spriteDestroyFns,
     emitterDestroyFns,
@@ -22,22 +23,25 @@ function mockScene() {
     startFollowFns,
     spriteRotationFns,
     spriteScaleFns,
+    spritePositionFns,
     scene: {
       add: {
         sprite: vi.fn(() => {
           const destroy = vi.fn()
           const setRotation = vi.fn()
           const setScale = vi.fn()
+          const setPosition = vi.fn()
           spriteDestroyFns.push(destroy)
           spriteRotationFns.push(setRotation)
           spriteScaleFns.push(setScale)
+          spritePositionFns.push(setPosition)
           return {
             destroy,
             setScale,
             setDepth: vi.fn(),
             play: vi.fn(),
             setRotation,
-            setPosition: vi.fn(),
+            setPosition,
           }
         }),
         particles: vi.fn(() => {
@@ -263,7 +267,7 @@ describe("ProjectileRenderSystem", () => {
     expect(scene.add.sprite).toHaveBeenCalledWith(10, 20, "homing-orb")
     expect(spriteScaleFns[0]).toHaveBeenCalledWith(0.12)
     expect(spriteRotationFns[0]).toHaveBeenCalledWith(Math.PI / 4)
-    expect(spriteRotationFns[0]).toHaveBeenLastCalledWith(Math.PI / 2)
+    expect(spriteRotationFns[0]).not.toHaveBeenLastCalledWith(Math.PI / 2)
     expect(ClientHomingOrb[90]).toMatchObject({
       x: 30,
       y: 40,
@@ -272,5 +276,240 @@ describe("ProjectileRenderSystem", () => {
       headingRad: Math.PI / 2,
       ownerId: "caster",
     })
+  })
+
+  it("preserves omitted Homing Orb fields and clears targetId only on null", () => {
+    const { scene } = mockScene()
+    const sys = new ProjectileRenderSystem(scene as never)
+
+    sys.spawnHomingOrb({
+      id: 91,
+      ownerId: "caster",
+      targetId: "target",
+      x: 10,
+      y: 20,
+      vx: 120,
+      vy: 0,
+      headingRad: 0,
+      expiresAtServerTimeMs: 15_000,
+    })
+    sys.applyHomingOrbBatchUpdate({
+      deltas: [{ id: 91, x: 15, y: 25 }],
+      removedIds: [],
+      seq: 1,
+      serverTimeMs: 1_000,
+    })
+
+    expect(ClientHomingOrb[91]).toMatchObject({
+      x: 15,
+      y: 25,
+      vx: 120,
+      vy: 0,
+      headingRad: 0,
+      targetId: "target",
+    })
+
+    sys.applyHomingOrbBatchUpdate({
+      deltas: [{ id: 91, targetId: null }],
+      removedIds: [],
+      seq: 2,
+      serverTimeMs: 1_017,
+    })
+
+    expect(ClientHomingOrb[91]?.targetId).toBeUndefined()
+
+    sys.applyHomingOrbBatchUpdate({
+      deltas: [{ id: 91, targetId: "new-target" }],
+      removedIds: [],
+      seq: 3,
+      serverTimeMs: 1_034,
+    })
+
+    expect(ClientHomingOrb[91]?.targetId).toBe("new-target")
+  })
+
+  it("buffers Homing Orb batch positions instead of snapping sprites on receipt", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(1_000)
+    const { scene, spritePositionFns } = mockScene()
+    const sys = new ProjectileRenderSystem(scene as never)
+    sys.updateServerTimeOffset(1_000)
+
+    sys.spawnHomingOrb({
+      id: 92,
+      ownerId: "caster",
+      x: 0,
+      y: 0,
+      vx: 0,
+      vy: 0,
+      headingRad: 0,
+      expiresAtServerTimeMs: 15_000,
+    })
+    sys.applyHomingOrbBatchUpdate({
+      deltas: [{ id: 92, x: 0, y: 0, vx: 0, vy: 0, headingRad: 0 }],
+      removedIds: [],
+      seq: 1,
+      serverTimeMs: 1_000,
+    })
+    vi.setSystemTime(1_100)
+    sys.applyHomingOrbBatchUpdate({
+      deltas: [{ id: 92, x: 100, y: 0, vx: 1_000, vy: 0, headingRad: 0 }],
+      removedIds: [],
+      seq: 2,
+      serverTimeMs: 1_100,
+    })
+
+    expect(spritePositionFns[0]).not.toHaveBeenCalledWith(100, 0)
+
+    spritePositionFns[0]?.mockClear()
+    vi.setSystemTime(1_134)
+    sys.update(0)
+
+    expect(spritePositionFns[0]).toHaveBeenCalledWith(50, 0)
+    vi.useRealTimers()
+  })
+
+  it("does not locally advance Homing Orbs once authoritative buffering begins", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(1_000)
+    const { scene } = mockScene()
+    const sys = new ProjectileRenderSystem(scene as never)
+    sys.updateServerTimeOffset(1_000)
+
+    sys.spawnHomingOrb({
+      id: 98,
+      ownerId: "caster",
+      x: 0,
+      y: 0,
+      vx: 60,
+      vy: 0,
+      headingRad: 0,
+      expiresAtServerTimeMs: 15_000,
+    })
+    sys.applyHomingOrbBatchUpdate({
+      deltas: [{ id: 98, x: 10, y: 0, vx: 60, vy: 0, headingRad: 0 }],
+      removedIds: [],
+      seq: 1,
+      serverTimeMs: 1_000,
+    })
+
+    sys.update(51)
+
+    expect(ClientHomingOrb[98]?.x).toBe(10)
+    vi.useRealTimers()
+  })
+
+  it("applies net timing to Homing Orb interpolation delay", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(1_000)
+    const { scene, spritePositionFns } = mockScene()
+    const sys = new ProjectileRenderSystem(scene as never)
+    sys.applyNetTiming({ netSendRateHz: 60 })
+    sys.updateServerTimeOffset(1_000)
+    sys.spawnHomingOrb({
+      id: 93,
+      ownerId: "caster",
+      x: 0,
+      y: 0,
+      vx: 0,
+      vy: 0,
+      headingRad: 0,
+      expiresAtServerTimeMs: 15_000,
+    })
+    sys.applyHomingOrbBatchUpdate({
+      deltas: [{ id: 93, x: 0, y: 0, vx: 0, vy: 0, headingRad: 0 }],
+      removedIds: [],
+      seq: 1,
+      serverTimeMs: 1_000,
+    })
+    vi.setSystemTime(1_100)
+    sys.applyHomingOrbBatchUpdate({
+      deltas: [{ id: 93, x: 100, y: 0, vx: 1_000, vy: 0, headingRad: 0 }],
+      removedIds: [],
+      seq: 2,
+      serverTimeMs: 1_100,
+    })
+
+    spritePositionFns[0]?.mockClear()
+    vi.setSystemTime(1_150)
+    sys.update(0)
+
+    expect(spritePositionFns[0]).toHaveBeenCalledWith(100, 0)
+    vi.useRealTimers()
+  })
+
+  it("advances Homing Orb launch locally until the first server batch arrives", () => {
+    const { scene, spritePositionFns, spriteRotationFns } = mockScene()
+    const sys = new ProjectileRenderSystem(scene as never)
+    sys.spawnHomingOrb({
+      id: 94,
+      ownerId: "caster",
+      x: 0,
+      y: 0,
+      vx: 60,
+      vy: 0,
+      headingRad: Math.PI / 3,
+      expiresAtServerTimeMs: 15_000,
+    })
+
+    sys.update(17)
+
+    expect(ClientHomingOrb[94]?.x).toBeCloseTo(1, 5)
+    const [renderX, renderY] = spritePositionFns[0]!.mock.calls.at(-1)!
+    expect(renderX).toBeCloseTo(0.02, 5)
+    expect(renderY).toBe(0)
+    expect(spriteRotationFns[0]).toHaveBeenLastCalledWith(Math.PI / 3)
+  })
+
+  it("full-syncs and removes Homing Orb render buffers", () => {
+    const { scene, spriteDestroyFns } = mockScene()
+    const sys = new ProjectileRenderSystem(scene as never)
+    sys.spawnHomingOrb({
+      id: 95,
+      ownerId: "caster",
+      x: 0,
+      y: 0,
+      vx: 0,
+      vy: 0,
+      headingRad: 0,
+      expiresAtServerTimeMs: 15_000,
+    })
+
+    sys.applyFullSyncHomingOrbs([
+      {
+        id: 96,
+        ownerId: "caster",
+        x: 10,
+        y: 20,
+        vx: 30,
+        vy: 40,
+        headingRad: 0.25,
+        expiresAtServerTimeMs: 15_000,
+      },
+    ], 1_000)
+    sys.applyHomingOrbBatchUpdate({ deltas: [], removedIds: [96, 999], seq: 1 })
+
+    expect(spriteDestroyFns[0]).toHaveBeenCalledTimes(1)
+    expect(spriteDestroyFns[1]).toHaveBeenCalledTimes(1)
+    expect(ClientHomingOrb[95]).toBeUndefined()
+    expect(ClientHomingOrb[96]).toBeUndefined()
+  })
+
+  it("skips Homing Orb render updates if client state is missing", () => {
+    const { scene } = mockScene()
+    const sys = new ProjectileRenderSystem(scene as never)
+    sys.spawnHomingOrb({
+      id: 97,
+      ownerId: "caster",
+      x: 0,
+      y: 0,
+      vx: 0,
+      vy: 0,
+      headingRad: 0,
+      expiresAtServerTimeMs: 15_000,
+    })
+    delete ClientHomingOrb[97]
+
+    expect(() => sys.update(17)).not.toThrow()
   })
 })

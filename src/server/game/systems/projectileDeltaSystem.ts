@@ -10,7 +10,11 @@
 import { query } from "bitecs"
 
 import { FireballTag, HomingOrb, HomingOrbTag, Position, Velocity } from "../components"
-import type { HomingOrbPrevState, SimCtx } from "../simulation"
+import type { HomingOrbDelta, HomingOrbPrevState, SimCtx } from "../simulation"
+
+type MutableHomingOrbDelta = {
+  -readonly [Key in keyof HomingOrbDelta]: HomingOrbDelta[Key]
+}
 
 /**
  * Seeds or appends a Homing Orb delta when its movement state changes.
@@ -29,22 +33,10 @@ function collectHomingOrbDelta(
   const vx = Velocity.vx[eid]
   const vy = Velocity.vy[eid]
   const headingRad = HomingOrb.headingRad[eid]
+  const targetId = ctx.homingOrbTargetPlayerMap.get(eid)
 
   if (!prev) {
-    ctx.prevHomingOrbStates.set(eid, { x, y, vx, vy, headingRad })
-    return
-  }
-
-  if (
-    x !== prev.x ||
-    y !== prev.y ||
-    vx !== prev.vx ||
-    vy !== prev.vy ||
-    headingRad !== prev.headingRad
-  ) {
-    const targetId = ctx.homingOrbTargetPlayerMap.get(eid)
-    ctx.homingOrbDeltas.push({
-      id: eid,
+    ctx.prevHomingOrbStates.set(eid, {
       x,
       y,
       vx,
@@ -52,11 +44,31 @@ function collectHomingOrbDelta(
       headingRad,
       ...(targetId !== undefined ? { targetId } : {}),
     })
+    return
+  }
+
+  const delta: MutableHomingOrbDelta = { id: eid }
+  if (x !== prev.x) delta.x = x
+  if (y !== prev.y) delta.y = y
+  if (vx !== prev.vx) delta.vx = vx
+  if (vy !== prev.vy) delta.vy = vy
+  if (headingRad !== prev.headingRad) delta.headingRad = headingRad
+  if (targetId !== prev.targetId) {
+    delta.targetId = targetId ?? null
+  }
+
+  if (Object.keys(delta).length > 1) {
+    ctx.homingOrbDeltas.push(delta)
     prev.x = x
     prev.y = y
     prev.vx = vx
     prev.vy = vy
     prev.headingRad = headingRad
+    if (targetId !== undefined) {
+      prev.targetId = targetId
+    } else {
+      delete prev.targetId
+    }
   }
 }
 

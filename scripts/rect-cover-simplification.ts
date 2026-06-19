@@ -26,7 +26,6 @@ export function simplifyRectCover(rects: readonly RectCover[]): RectCover[] {
 
   const xs = sortedUniqueEdges(valid, "x", "width")
   const ys = sortedUniqueEdges(valid, "y", "height")
-  if (xs.length < 2 || ys.length < 2) return []
 
   const xIndexByValue = edgeIndexByValue(xs)
   const yIndexByValue = edgeIndexByValue(ys)
@@ -175,9 +174,11 @@ function horizontalRunsFromOccupancy(
  * @returns Stable sorted merged rectangles.
  */
 function mergeVerticalRuns(runs: readonly RectCover[]): RectCover[] {
-  const sorted = [...runs].sort(
-    (a, b) => a.x - b.x || a.width - b.width || a.y - b.y || a.height - b.height,
-  )
+  const sorted = [...runs]
+    .sort((a, b) => a.height - b.height)
+    .sort((a, b) => a.y - b.y)
+    .sort((a, b) => a.width - b.width)
+    .sort((a, b) => a.x - b.x)
   const merged: Array<{ x: number; y: number; width: number; height: number }> = []
   for (const rect of sorted) {
     const last = merged[merged.length - 1]
@@ -187,5 +188,9 @@ function mergeVerticalRuns(runs: readonly RectCover[]): RectCover[] {
       merged.push({ ...rect })
     }
   }
-  return merged.sort((a, b) => a.y - b.y || a.x - b.x || a.width - b.width || a.height - b.height)
+  return merged
+    .sort((a, b) => a.height - b.height)
+    .sort((a, b) => a.width - b.width)
+    .sort((a, b) => a.x - b.x)
+    .sort((a, b) => a.y - b.y)
 }

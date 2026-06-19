@@ -464,9 +464,6 @@ describe("GameLobbyRoom network batching", () => {
                 id: 7,
                 x: 10,
                 y: 20,
-                vx: 1,
-                vy: 2,
-                headingRad: 0,
               },
             ],
           }),
@@ -483,13 +480,30 @@ describe("GameLobbyRoom network batching", () => {
           id: 7,
           x: 10,
           y: 20,
-          vx: 1,
-          vy: 2,
-          headingRad: 0,
         },
       ],
       removedIds: [],
       seq: 0,
+      serverTimeMs: 2_000,
+    })
+  })
+
+  it("falls back to flush time when legacy Homing Orb pending batches lack serverTimeMs", () => {
+    const room = new GameLobbyRoom()
+    const broadcast = vi.fn()
+    Object.assign(room as object, {
+      broadcast,
+      pendingHomingOrbBatches: [{ deltas: [{ id: 8, x: 1 }], removedIds: [] }],
+    })
+
+    ;(room as unknown as { flushPendingVisualBatches: (serverTimeMs: number) => void })
+      .flushPendingVisualBatches(3_000)
+
+    expect(broadcast).toHaveBeenCalledWith(RoomEvent.HomingOrbBatchUpdate, {
+      deltas: [{ id: 8, x: 1 }],
+      removedIds: [],
+      seq: 0,
+      serverTimeMs: 3_000,
     })
   })
 })

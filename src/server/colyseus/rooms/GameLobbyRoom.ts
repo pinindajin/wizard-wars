@@ -448,7 +448,7 @@ export class GameLobbyRoom extends Room {
 
   /** Pending Homing Orb visual deltas/removals awaiting the next network flush. */
   private pendingHomingOrbBatches: Array<
-    Pick<HomingOrbBatchUpdatePayload, "deltas" | "removedIds">
+    Pick<HomingOrbBatchUpdatePayload, "deltas" | "removedIds" | "serverTimeMs">
   > = []
 
   /** Monotonic sequence for player batch payloads. */
@@ -2416,6 +2416,7 @@ export class GameLobbyRoom extends Room {
         this.broadcast(RoomEvent.HomingOrbBatchUpdate, {
           ...homingOrbs,
           seq: this.homingOrbBatchSeq++,
+          serverTimeMs: homingOrbs.serverTimeMs ?? serverTimeMs,
         })
       }
     }
@@ -2534,6 +2535,7 @@ export class GameLobbyRoom extends Room {
       this.pendingHomingOrbBatches.push({
         deltas: output.homingOrbDeltas,
         removedIds: output.homingOrbRemovedIds,
+        serverTimeMs,
       })
     }
 

@@ -43,7 +43,13 @@ const THRESHOLDS_BY_SCENARIO: ReadonlyMap<string, readonly MetricThreshold[]> = 
       { metric: "worldCollisionP99Ms", relativeMaxRatio: 0.7 },
     ],
   ],
-  ["homing-orb-pressure", [{ metric: "homingOrbBurstBytes", relativeMaxRatio: 0.6 }]],
+  [
+    "homing-orb-pressure",
+    [
+      { metric: "homingOrbBurstBytes", relativeMaxRatio: 0.6 },
+      { metric: "homingOrbSnapOnBatchCount", absoluteMax: 0 },
+    ],
+  ],
   [
     "input-bandwidth",
     [

@@ -80,6 +80,7 @@ import type {
   AbilityRuntimeStates,
   PlayerOwnerAckPayload,
 } from "../../shared/types"
+import type { HomingOrbDamageableTarget } from "./homingOrbTargetCache"
 
 import { inputSystem } from "./systems/inputSystem"
 import { castingSystem } from "./systems/castingSystem"
@@ -217,6 +218,7 @@ export type HomingOrbPrevState = {
   vx: number
   vy: number
   headingRad: number
+  targetId?: string
 }
 
 /** Mutable Homing Orb delta row accumulated inside one simulation tick. */
@@ -316,6 +318,8 @@ export type SimCtx = {
   activeCombatTelegraphs: Map<string, CombatTelegraphStartPayload>
   /** Respawn invulnerability expiry tick keyed by player eid for this simulation world. */
   invulnerableExpiresAtTickByEntity: Map<number, number>
+  /** Tick-local cache of live player hitboxes used by Homing Orb systems. */
+  homingOrbDamageableTargetCache?: HomingOrbDamageableTarget[]
 
   // ── Written by playerDeltaSystem and projectileDeltaSystem ──
   playerDeltas: PlayerDelta[]

@@ -230,9 +230,11 @@ export class ArenaRuntime {
       },
       onServerTime: (serverTimeMs) => {
         this.playerRenderSystem.updateServerTimeOffset(serverTimeMs)
+        this.projectileRenderSystem?.updateServerTimeOffset?.(serverTimeMs)
       },
       onNetTiming: (timing) => {
         this.playerRenderSystem.applyNetTiming(timing)
+        this.projectileRenderSystem?.applyNetTiming?.(timing)
       },
     })
     this.projectileRenderSystem = new ProjectileRenderSystem(this.scene)
@@ -355,7 +357,10 @@ export class ArenaRuntime {
           this.networkSyncSystem.applyFullSync(payload)
           this.playerRenderSystem.applyFullSync(payload)
           this.projectileRenderSystem.applyFullSyncFireballs(payload.fireballs)
-          this.projectileRenderSystem.applyFullSyncHomingOrbs(payload.homingOrbs ?? [])
+          this.projectileRenderSystem.applyFullSyncHomingOrbs(
+            payload.homingOrbs ?? [],
+            payload.serverTimeMs,
+          )
           this.combatTelegraphRenderSystem.applyFullSync(payload.activeTelegraphs ?? [])
           this._ensureMatchLive()
           break
@@ -491,6 +496,7 @@ export class ArenaRuntime {
   private _onMatchGo(payload?: MatchGoPayload): void {
     if (payload?.timing) {
       this.playerRenderSystem.applyNetTiming(payload.timing)
+      this.projectileRenderSystem.applyNetTiming?.(payload.timing)
     }
     this._ensureMatchLive()
   }

@@ -507,7 +507,17 @@ describe("Homing Orb protocol schemas", () => {
       deltas: [{ id: 1, x: 11, y: 20, vx: 130, vy: 0, headingRad: 0.1 }],
       removedIds: [],
       seq: 2,
-    })).toMatchObject({ seq: 2 })
+      serverTimeMs: 1_700_000_000_100,
+    })).toMatchObject({ seq: 2, serverTimeMs: 1_700_000_000_100 })
+
+    expect(homingOrbBatchUpdatePayloadSchema.parse({
+      deltas: [{ id: 1, x: 12, y: 21 }, { id: 2, targetId: null }],
+      removedIds: [],
+      seq: 3,
+      serverTimeMs: 1_700_000_000_133,
+    })).toMatchObject({
+      deltas: [{ id: 1, x: 12, y: 21 }, { id: 2, targetId: null }],
+    })
 
     expect(homingOrbImpactPayloadSchema.parse({
       id: 1,
@@ -539,6 +549,14 @@ describe("Homing Orb protocol schemas", () => {
         x: 12,
         y: 20,
         reason: "miss",
+      }),
+    ).toThrow()
+
+    expect(() =>
+      homingOrbBatchUpdatePayloadSchema.parse({
+        deltas: [{ id: 1 }],
+        removedIds: [],
+        seq: 3,
       }),
     ).toThrow()
   })

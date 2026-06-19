@@ -304,15 +304,17 @@ export type HomingOrbLaunchPayload = HomingOrbSnapshot
 export type HomingOrbBatchUpdatePayload = {
   readonly deltas: readonly {
     readonly id: number
-    readonly x: number
-    readonly y: number
-    readonly vx: number
-    readonly vy: number
-    readonly headingRad: number
-    readonly targetId?: string
+    readonly x?: number
+    readonly y?: number
+    readonly vx?: number
+    readonly vy?: number
+    readonly headingRad?: number
+    readonly targetId?: string | null
   }[]
   readonly removedIds: readonly number[]
   readonly seq: number
+  /** Server simulated time for the newest movement sample in this batch. */
+  readonly serverTimeMs?: number
 }
 
 /** Server → all: Homing Orb hit or expired. */

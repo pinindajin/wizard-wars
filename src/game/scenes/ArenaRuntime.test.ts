@@ -40,6 +40,8 @@ const playerRenderMock = vi.hoisted(() => ({
 const projectileRenderMock = vi.hoisted(() => ({
   applyFullSyncFireballs: vi.fn(),
   applyFullSyncHomingOrbs: vi.fn(),
+  applyNetTiming: vi.fn(),
+  updateServerTimeOffset: vi.fn(),
   spawnFireball: vi.fn(),
   spawnHomingOrb: vi.fn(),
   applyBatchUpdate: vi.fn(),
@@ -490,6 +492,71 @@ describe("ArenaRuntime lifecycle", () => {
     expect(soundPlaySpy).toHaveBeenCalledWith(SFX_KEYS.homingOrbExpire)
   })
 
+  it("hydrates Homing Orbs from full game state sync with the snapshot server time", () => {
+    const { runtime, connection } = makeRuntime()
+    const payload = {
+      players: [],
+      fireballs: [],
+      homingOrbs: [
+        {
+          id: 12,
+          ownerId: "caster",
+          x: 10,
+          y: 20,
+          vx: 30,
+          vy: 40,
+          headingRad: 0.25,
+          expiresAtServerTimeMs: 15_000,
+        },
+      ],
+      activeTelegraphs: [],
+      seq: 0,
+      serverTimeMs: 4_000,
+    }
+
+    runtime.start()
+    connection.emit({ type: WsEvent.GameStateSync, payload })
+
+    expect(projectileRenderMock.applyFullSyncFireballs).toHaveBeenCalledWith([])
+    expect(projectileRenderMock.applyFullSyncHomingOrbs).toHaveBeenCalledWith(
+      payload.homingOrbs,
+      4_000,
+    )
+  })
+
+  it("treats omitted Homing Orbs in full game state sync as an empty snapshot", () => {
+    const { runtime, connection } = makeRuntime()
+    const payload = {
+      players: [],
+      fireballs: [],
+      activeTelegraphs: [],
+      seq: 0,
+      serverTimeMs: 4_250,
+    }
+
+    runtime.start()
+    connection.emit({ type: WsEvent.GameStateSync, payload })
+
+    expect(projectileRenderMock.applyFullSyncHomingOrbs).toHaveBeenCalledWith(
+      [],
+      4_250,
+    )
+  })
+
+  it("routes player batch updates into NetworkSyncSystem", () => {
+    const { runtime, connection } = makeRuntime()
+    const payload = {
+      players: [],
+      seq: 7,
+      serverTimeMs: 5_000,
+    }
+
+    runtime.start()
+    connection.emit({ type: WsEvent.PlayerBatchUpdate, payload })
+
+    expect(networkSyncMock.applyBatchUpdate).toHaveBeenCalledWith(payload)
+  })
+
   it("sends a fresh input sequence for each fixed sim step in one render frame", () => {
     const { runtime, connection } = makeRuntime()
     let seq = 0
@@ -533,6 +600,8 @@ describe("ArenaRuntime lifecycle", () => {
     expect(mouseControllerMock.enable).toHaveBeenCalled()
     expect(playerRenderMock.applyNetTiming).toHaveBeenCalledTimes(1)
     expect(playerRenderMock.applyNetTiming).toHaveBeenCalledWith(timing)
+    expect(projectileRenderMock.applyNetTiming).toHaveBeenCalledTimes(1)
+    expect(projectileRenderMock.applyNetTiming).toHaveBeenCalledWith(timing)
   })
 
   it("forwards full-sync net timing from NetworkSyncSystem into player rendering", () => {
@@ -550,6 +619,7 @@ describe("ArenaRuntime lifecycle", () => {
     networkSyncHooks.current?.onNetTiming?.(timing)
 
     expect(playerRenderMock.applyNetTiming).toHaveBeenCalledWith(timing)
+    expect(projectileRenderMock.applyNetTiming).toHaveBeenCalledWith(timing)
   })
 
   it("forwards server time from NetworkSyncSystem into player rendering", () => {
@@ -559,6 +629,7 @@ describe("ArenaRuntime lifecycle", () => {
     networkSyncHooks.current?.onServerTime?.(4_321)
 
     expect(playerRenderMock.updateServerTimeOffset).toHaveBeenCalledWith(4_321)
+    expect(projectileRenderMock.updateServerTimeOffset).toHaveBeenCalledWith(4_321)
   })
 
   it("routes dedicated owner ACK messages into NetworkSyncSystem", () => {

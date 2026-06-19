@@ -58,6 +58,19 @@ describe("simplifyRectCover", () => {
     expect(rectCoverContainsPoint(cover, 15, 20)).toBe(false)
     expect(rectCoverContainsPoint(cover, 10, 26)).toBe(false)
   })
+
+  it("keeps deterministic ordering for rectangles with matching y and x sort ties", () => {
+    const simplified = simplifyRectCover([
+      { x: 10, y: 0, width: 5, height: 5 },
+      { x: 0, y: 0, width: 5, height: 5 },
+      { x: 0, y: 5, width: 5, height: 5 },
+    ])
+
+    expect(simplified).toEqual([
+      { x: 0, y: 0, width: 5, height: 10 },
+      { x: 10, y: 0, width: 5, height: 5 },
+    ])
+  })
 })
 
 /**

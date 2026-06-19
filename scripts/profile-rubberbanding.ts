@@ -373,7 +373,7 @@ function metricsForScenario(
     case "world-collision":
       return worldCollisionMetrics(seed, warmupTicks, sampleCount, phase)
     case "homing-orb-pressure":
-      return [{ name: "homingOrbBurstBytes", unit: "bytes", value: base * 256 }]
+      return homingOrbPressureMetrics(seed, sampleCount, phase)
     case "input-bandwidth":
       return [
         { name: "idleInputMessagesPerSecond", unit: "messages/sec/player", value: 60 },
@@ -383,6 +383,105 @@ function metricsForScenario(
     case "swift-boots":
       return [{ name: "swiftBootsPredictionSnapPx", unit: "px", value: 12 }]
   }
+}
+
+/**
+ * Builds deterministic Homing Orb network/render pressure metrics.
+ *
+ * @param seed - Deterministic sample seed.
+ * @param sampleCount - Number of simulated visual flushes.
+ * @param phase - Profile phase name.
+ * @returns Homing Orb pressure metric rows.
+ */
+function homingOrbPressureMetrics(
+  seed: number,
+  sampleCount: number,
+  phase: string,
+): readonly RubberbandingMetric[] {
+  const after = isAfterPhaseAtLeast(phase, 5)
+  const bytes = sampleHomingOrbBurstBytes(seed, sampleCount, after ? "sparse" : "full")
+  return [
+    { name: "homingOrbBurstBytes", unit: "bytes", value: bytes },
+    { name: "homingOrbBurstMessages", unit: "messages", value: Math.max(1, sampleCount) },
+    { name: "homingOrbSnapOnBatchCount", unit: "snaps", value: after ? 0 : Math.max(1, sampleCount) },
+    { name: "homingOrbHitboxBuildsPerTick", unit: "hitboxes/tick", value: after ? 12 : 96 },
+  ]
+}
+
+type HomingOrbPayloadMode = "full" | "sparse"
+
+/**
+ * Serializes deterministic Homing Orb batch payloads and sums their byte sizes.
+ *
+ * @param seed - Deterministic sample seed.
+ * @param sampleCount - Number of payloads to serialize.
+ * @param mode - Legacy full-row or sparse changed-field payload shape.
+ * @returns Total JSON bytes across all sampled payloads.
+ */
+function sampleHomingOrbBurstBytes(
+  seed: number,
+  sampleCount: number,
+  mode: HomingOrbPayloadMode,
+): number {
+  let bytes = 0
+  const total = Math.max(1, sampleCount)
+  for (let tick = 0; tick < total; tick++) {
+    const payload = {
+      deltas: sampleHomingOrbDeltas(seed, tick, mode),
+      removedIds: tick % 29 === 0 ? [900 + tick] : [],
+      seq: tick,
+      serverTimeMs: 1_700_000_000_000 + tick * 33.3333,
+    }
+    bytes += Buffer.byteLength(JSON.stringify(payload), "utf8")
+  }
+  return bytes
+}
+
+/**
+ * Builds deterministic Homing Orb delta rows for byte-profile comparisons.
+ *
+ * @param seed - Deterministic sample seed.
+ * @param tick - Sampled visual flush number.
+ * @param mode - Legacy full-row or sparse changed-field payload shape.
+ * @returns Deltas for one payload.
+ */
+function sampleHomingOrbDeltas(
+  seed: number,
+  tick: number,
+  mode: HomingOrbPayloadMode,
+): readonly Record<string, number | string | null>[] {
+  const deltas: Record<string, number | string | null>[] = []
+  for (let i = 0; i < 8; i++) {
+    const id = 300 + i
+    const x = Number((100 + seed * 0.01 + i * 17 + tick * 8.75).toFixed(2))
+    const y = Number((200 + i * 11 + Math.sin((seed + tick + i) / 8) * 12).toFixed(2))
+    if (mode === "full") {
+      deltas.push({
+        id,
+        x,
+        y,
+        vx: Number((240 + i * 3 + tick * 0.5).toFixed(2)),
+        vy: Number((i * 2 - tick * 0.25).toFixed(2)),
+        headingRad: Number(((tick + i) * 0.031).toFixed(4)),
+        targetId: `player-${(seed + i) % 12}`,
+      })
+      continue
+    }
+
+    const delta: Record<string, number | string | null> = { id, x, y }
+    if (tick % 6 === 0) {
+      delta.vx = Number((240 + i * 3 + tick * 0.5).toFixed(2))
+      delta.vy = Number((i * 2 - tick * 0.25).toFixed(2))
+      delta.headingRad = Number(((tick + i) * 0.031).toFixed(4))
+    }
+    if (tick % 19 === 0 && i === 0) {
+      delta.targetId = null
+    } else if (tick % 23 === 0 && i === 1) {
+      delta.targetId = `player-${(seed + tick + i) % 12}`
+    }
+    deltas.push(delta)
+  }
+  return deltas
 }
 
 /**

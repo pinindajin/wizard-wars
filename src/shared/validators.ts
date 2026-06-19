@@ -209,19 +209,29 @@ export const homingOrbLaunchPayloadSchema = homingOrbSnapshotSchema
 /** Single Homing Orb movement delta row. */
 export const homingOrbDeltaSchema = z.object({
   id: z.number().int().nonnegative(),
-  x: z.number().finite(),
-  y: z.number().finite(),
-  vx: z.number().finite(),
-  vy: z.number().finite(),
-  headingRad: z.number().finite(),
-  targetId: z.string().min(1).max(256).optional(),
-})
+  x: z.number().finite().optional(),
+  y: z.number().finite().optional(),
+  vx: z.number().finite().optional(),
+  vy: z.number().finite().optional(),
+  headingRad: z.number().finite().optional(),
+  targetId: z.string().min(1).max(256).nullable().optional(),
+}).refine(
+  (delta) =>
+    delta.x !== undefined ||
+    delta.y !== undefined ||
+    delta.vx !== undefined ||
+    delta.vy !== undefined ||
+    delta.headingRad !== undefined ||
+    delta.targetId !== undefined,
+  { message: "Homing Orb delta must include at least one changed field" },
+)
 
 /** Server → clients: Homing Orb batch update payload. */
 export const homingOrbBatchUpdatePayloadSchema = z.object({
   deltas: z.array(homingOrbDeltaSchema).max(MAX_HOMING_ORBS_IN_SYNC),
   removedIds: z.array(z.number().int().nonnegative()).max(MAX_HOMING_ORBS_IN_SYNC),
   seq: z.number().int().nonnegative(),
+  serverTimeMs: z.number().finite().nonnegative().optional(),
 })
 
 /** Server → clients: Homing Orb hit or expiry impact payload. */

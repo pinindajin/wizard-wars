@@ -239,6 +239,33 @@ describe("rubberbanding profile report", () => {
     )
   })
 
+  it("models the Fix 5 Homing Orb byte and snap improvement with measured payloads", () => {
+    const before = buildRubberbandingProfileReport({
+      phase: "phase-5-before",
+      commit: "abc123",
+      seed: 42,
+      sampleCount: 120,
+      generatedAt: "2026-06-19T00:00:00.000Z",
+    })
+    const after = buildRubberbandingProfileReport({
+      phase: "phase-5-after",
+      commit: "abc123",
+      seed: 42,
+      sampleCount: 120,
+      generatedAt: "2026-06-19T00:00:00.000Z",
+    })
+
+    const beforeOrb = before.scenarios.find((scenario) => scenario.scenario === "homing-orb-pressure")
+    const afterOrb = after.scenarios.find((scenario) => scenario.scenario === "homing-orb-pressure")
+    expect(metricValue(afterOrb, "homingOrbBurstBytes")).toBeLessThanOrEqual(
+      metricValue(beforeOrb, "homingOrbBurstBytes") * 0.6,
+    )
+    expect(metricValue(afterOrb, "homingOrbSnapOnBatchCount")).toBe(0)
+    expect(metricValue(afterOrb, "homingOrbHitboxBuildsPerTick")).toBeLessThan(
+      metricValue(beforeOrb, "homingOrbHitboxBuildsPerTick"),
+    )
+  })
+
 })
 
 describe("rubberbanding cause provenance", () => {

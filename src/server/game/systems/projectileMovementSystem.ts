@@ -6,22 +6,18 @@
  * Despawn condition: the fireball centre is more than FIREBALL_DESPAWN_OVERSHOOT_PX
  * pixels outside any arena edge.
  */
-import { hasComponent, query } from "bitecs"
+import { query } from "bitecs"
 
 import {
-  DeadTag,
-  DyingTag,
   FireballTag,
   HomingOrb,
   HomingOrbTag,
-  InvulnerableTag,
   Ownership,
-  PlayerTag,
   Position,
-  SpectatorTag,
   Velocity,
 } from "../components"
 import type { DamageRequest, SimCtx } from "../simulation"
+import { getHomingOrbDamageableTargets } from "../homingOrbTargetCache"
 import {
   ARENA_WIDTH,
   ARENA_HEIGHT,
@@ -37,7 +33,6 @@ import {
   TICK_DT_SEC,
 } from "../../../shared/balance-config"
 import {
-  characterHitboxForCenter,
   circleIntersectsRect,
 } from "../../../shared/collision/characterHitbox"
 
@@ -101,15 +96,10 @@ function isValidHomingTarget(
   expectedUserId?: string,
   ownerUserId?: string,
 ): boolean {
-  const { world, entityPlayerMap } = ctx
   if (targetEid === ownerEid) return false
-  if (!hasComponent(world, targetEid, PlayerTag)) return false
-  if (hasComponent(world, targetEid, DyingTag)) return false
-  if (hasComponent(world, targetEid, DeadTag)) return false
-  if (hasComponent(world, targetEid, SpectatorTag)) return false
-  if (hasComponent(world, targetEid, InvulnerableTag)) return false
-  const userId = entityPlayerMap.get(targetEid)
-  if (userId === undefined) return false
+  const target = getHomingOrbDamageableTargets(ctx).find((candidate) => candidate.eid === targetEid)
+  if (!target) return false
+  const userId = target.userId
   if (ownerUserId !== undefined && userId === ownerUserId) return false
   return expectedUserId === undefined || userId === expectedUserId
 }
@@ -132,13 +122,14 @@ function nearestHomingTarget(
   y: number,
 ): { readonly eid: number; readonly userId: string } | null {
   let best: { eid: number; userId: string; distSq: number } | null = null
-  for (const candidate of query(ctx.world, [PlayerTag])) {
-    if (!isValidHomingTarget(ctx, ownerEid, candidate, undefined, ownerUserId)) continue
-    const dx = Position.x[candidate] - x
-    const dy = Position.y[candidate] - y
+  for (const candidate of getHomingOrbDamageableTargets(ctx)) {
+    if (candidate.eid === ownerEid) continue
+    if (ownerUserId !== undefined && candidate.userId === ownerUserId) continue
+    const dx = candidate.x - x
+    const dy = candidate.y - y
     const distSq = dx * dx + dy * dy
     if (best === null || distSq < best.distSq) {
-      best = { eid: candidate, userId: ctx.entityPlayerMap.get(candidate)!, distSq }
+      best = { eid: candidate.eid, userId: candidate.userId, distSq }
     }
   }
   return best === null ? null : { eid: best.eid, userId: best.userId }
@@ -162,19 +153,18 @@ function applyHomingOrbExpiryDamage(
   const orbX = Position.x[orbEid]
   const orbY = Position.y[orbEid]
 
-  for (const playerEid of query(ctx.world, [PlayerTag])) {
-    if (!isValidHomingTarget(ctx, ownerEid, playerEid, undefined, ownerUserId ?? undefined)) continue
-    const hitbox = characterHitboxForCenter(Position.x[playerEid], Position.y[playerEid])
-    if (!circleIntersectsRect(orbX, orbY, HOMING_ORB_HIT_RADIUS_PX, hitbox)) continue
-    const targetUserId = ctx.entityPlayerMap.get(playerEid)
+  for (const target of getHomingOrbDamageableTargets(ctx)) {
+    if (target.eid === ownerEid) continue
+    if (ownerUserId !== null && target.userId === ownerUserId) continue
+    if (!circleIntersectsRect(orbX, orbY, HOMING_ORB_HIT_RADIUS_PX, target.hitbox)) continue
     const req: DamageRequest = {
-      targetEid: playerEid,
+      targetEid: target.eid,
       damage: HOMING_ORB_EXPIRY_DAMAGE,
       killerUserId: ownerUserId,
       killerAbilityId: "homing_orb",
     }
     ctx.damageRequests.push(req)
-    if (targetUserId !== undefined) hitPlayerIds.push(targetUserId)
+    hitPlayerIds.push(target.userId)
   }
 
   return hitPlayerIds
