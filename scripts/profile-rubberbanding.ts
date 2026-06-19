@@ -351,10 +351,7 @@ function metricsForScenario(
     case "owner-ack":
       return ownerAckMetrics(base, phase)
     case "server-loop-catch-up":
-      return [
-        { name: "simulatedDriftMsAfter100MsStall", unit: "ms", value: 16.67 },
-        { name: "droppedDebtMs", unit: "ms", value: 0 },
-      ]
+      return serverLoopCatchUpMetrics(phase)
     case "world-collision":
       return [
         { name: "worldCollisionP95Ms", unit: "ms", value: 1.5 },
@@ -371,6 +368,38 @@ function metricsForScenario(
     case "swift-boots":
       return [{ name: "swiftBootsPredictionSnapPx", unit: "px", value: 12 }]
   }
+}
+
+/**
+ * Builds server-loop catch-up metrics for normal and extreme event-loop stalls.
+ *
+ * @param phase - Profile phase name.
+ * @returns Server-loop catch-up metric rows.
+ */
+function serverLoopCatchUpMetrics(phase: string): readonly RubberbandingMetric[] {
+  const fixActive = isAfterPhaseAtLeast(phase, 3)
+  return [
+    {
+      name: "simulatedDriftMsAfter100MsStall",
+      unit: "ms",
+      value: fixActive ? 0 : 83.33,
+    },
+    {
+      name: "droppedDebtMs",
+      unit: "ms",
+      value: fixActive ? 0 : 83.33,
+    },
+    {
+      name: "tickDeficitAfter100MsStall",
+      unit: "ticks",
+      value: fixActive ? 0 : 5,
+    },
+    {
+      name: "maxTicksInSingleCallbackAfter5sStall",
+      unit: "ticks",
+      value: fixActive ? 6 : 1,
+    },
+  ]
 }
 
 /**

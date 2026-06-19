@@ -189,6 +189,27 @@ describe("rubberbanding profile report", () => {
     expect(metricValue(afterOwnerAck, "legacyBatchFallbackFailures")).toBe(0)
   })
 
+  it("models the Fix 3 server loop catch-up improvement in after profiles", () => {
+    const before = buildRubberbandingProfileReport({
+      phase: "phase-3-before",
+      commit: "abc123",
+      generatedAt: "2026-06-19T00:00:00.000Z",
+    })
+    const after = buildRubberbandingProfileReport({
+      phase: "phase-3-after",
+      commit: "abc123",
+      generatedAt: "2026-06-19T00:00:00.000Z",
+    })
+
+    const beforeLoop = before.scenarios.find((scenario) => scenario.scenario === "server-loop-catch-up")
+    const afterLoop = after.scenarios.find((scenario) => scenario.scenario === "server-loop-catch-up")
+    expect(metricValue(beforeLoop, "tickDeficitAfter100MsStall")).toBeGreaterThan(0)
+    expect(metricValue(afterLoop, "simulatedDriftMsAfter100MsStall")).toBeLessThanOrEqual(1)
+    expect(metricValue(afterLoop, "droppedDebtMs")).toBe(0)
+    expect(metricValue(afterLoop, "tickDeficitAfter100MsStall")).toBe(0)
+    expect(metricValue(afterLoop, "maxTicksInSingleCallbackAfter5sStall")).toBe(6)
+  })
+
 })
 
 describe("rubberbanding cause provenance", () => {

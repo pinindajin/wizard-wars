@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { RoomEvent } from "@/shared/roomEvents"
 import type { SimOutput } from "@/server/game/simulation"
+import { createSessionEconomy } from "@/server/gameserver/sessionShop"
 
 import { GameLobbyRoom } from "./GameLobbyRoom"
 
@@ -120,6 +121,52 @@ describe("GameLobbyRoom network batching", () => {
         remoteRenderDelayMs: 84,
       },
     })
+  })
+
+  it("hydrates in-progress clients with current shop state when an economy exists", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(3_500)
+
+    const room = new GameLobbyRoom()
+    const client = {
+      userData: {
+        playerId: "player-1",
+        username: "PlayerOne",
+        heroId: "red_wizard",
+      },
+      send: vi.fn(),
+    }
+    const economy = createSessionEconomy()
+    Object.assign(room as object, {
+      lobbyPhase: "IN_PROGRESS",
+      simulation: {
+        buildGameStateSyncPayload: vi.fn((serverTimeMs: number) => ({
+          players: [],
+          fireballs: [],
+          seq: 13,
+          serverTimeMs,
+        })),
+      },
+    })
+    ;(room as unknown as { economies: Map<string, typeof economy> }).economies.set(
+      "player-1",
+      economy,
+    )
+
+    ;(
+      room as unknown as {
+        sendInProgressHydrationToClient: (target: typeof client) => void
+      }
+    ).sendInProgressHydrationToClient(client)
+
+    expect(client.send).toHaveBeenCalledWith(
+      RoomEvent.ShopState,
+      expect.objectContaining({ gold: economy.gold }),
+    )
+    expect(client.send).toHaveBeenCalledWith(
+      RoomEvent.GameStateSync,
+      expect.objectContaining({ seq: 13, serverTimeMs: 3_500 }),
+    )
   })
 
   it("rejects building GameStateSync timing without an active simulation", () => {

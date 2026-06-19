@@ -28,6 +28,14 @@ const THRESHOLDS_BY_SCENARIO: ReadonlyMap<string, readonly MetricThreshold[]> = 
     ],
   ],
   ["owner-ack", [{ metric: "snapOver2PxCount", relativeMaxRatio: 0.5 }]],
+  [
+    "server-loop-catch-up",
+    [
+      { metric: "simulatedDriftMsAfter100MsStall", absoluteMax: 1 },
+      { metric: "droppedDebtMs", absoluteMax: 0 },
+      { metric: "tickDeficitAfter100MsStall", absoluteMax: 0 },
+    ],
+  ],
   ["world-collision", [{ metric: "worldCollisionP95Ms", relativeMaxRatio: 0.7 }]],
   ["homing-orb-pressure", [{ metric: "homingOrbBurstBytes", relativeMaxRatio: 0.6 }]],
   [
@@ -44,6 +52,7 @@ const THRESHOLDS_BY_SCENARIO: ReadonlyMap<string, readonly MetricThreshold[]> = 
 const PHASE_SCENARIO_BY_NUMBER: ReadonlyMap<number, string> = new Map([
   [1, "remote-interpolation"],
   [2, "owner-ack"],
+  [3, "server-loop-catch-up"],
   [4, "world-collision"],
   [5, "homing-orb-pressure"],
   [6, "input-bandwidth"],

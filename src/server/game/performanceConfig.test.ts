@@ -12,6 +12,8 @@ describe("game performance config", () => {
     expect(resolveGamePerformanceConfig({})).toMatchObject({
       netSendRateHz: DEFAULT_NET_SEND_RATE_HZ,
       simTickRateHz: 60,
+      simAccumulatorEnabled: true,
+      simMaxCatchUpTicks: 6,
       netTiming: {
         protocolVersion: 1,
         netSendRateHz: DEFAULT_NET_SEND_RATE_HZ,
@@ -46,6 +48,45 @@ describe("game performance config", () => {
       netSendRateHz: 10,
       netSendIntervalMs: 100,
       remoteRenderDelayMs: 217,
+    })
+  })
+
+  it("parses server simulation accumulator rollback knobs", () => {
+    expect(
+      resolveGamePerformanceConfig({
+        WW_SIM_ACCUMULATOR_ENABLED: "0",
+        WW_SIM_MAX_CATCH_UP_TICKS: "3",
+      }),
+    ).toMatchObject({
+      simAccumulatorEnabled: false,
+      simMaxCatchUpTicks: 3,
+    })
+    expect(
+      resolveGamePerformanceConfig({
+        WW_SIM_ACCUMULATOR_ENABLED: "false",
+        WW_SIM_MAX_CATCH_UP_TICKS: "1000",
+      }),
+    ).toMatchObject({
+      simAccumulatorEnabled: false,
+      simMaxCatchUpTicks: 15,
+    })
+    expect(
+      resolveGamePerformanceConfig({
+        WW_SIM_ACCUMULATOR_ENABLED: "yes",
+        WW_SIM_MAX_CATCH_UP_TICKS: "0",
+      }),
+    ).toMatchObject({
+      simAccumulatorEnabled: true,
+      simMaxCatchUpTicks: 1,
+    })
+    expect(
+      resolveGamePerformanceConfig({
+        WW_SIM_ACCUMULATOR_ENABLED: "unexpected",
+        WW_SIM_MAX_CATCH_UP_TICKS: "nope",
+      }),
+    ).toMatchObject({
+      simAccumulatorEnabled: true,
+      simMaxCatchUpTicks: 6,
     })
   })
 })

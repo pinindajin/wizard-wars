@@ -90,6 +90,11 @@ describe("rubberbanding profile assertions", () => {
   it("applies every phase acceptance threshold", () => {
     const baseline = fullReport({
       "owner-ack": { snapOver2PxCount: 100 },
+      "server-loop-catch-up": {
+        simulatedDriftMsAfter100MsStall: 83.33,
+        droppedDebtMs: 83.33,
+        tickDeficitAfter100MsStall: 5,
+      },
       "world-collision": { worldCollisionP95Ms: 10 },
       "homing-orb-pressure": { homingOrbBurstBytes: 10_000 },
       "input-bandwidth": {
@@ -101,6 +106,11 @@ describe("rubberbanding profile assertions", () => {
     })
     const after = fullReport({
       "owner-ack": { snapOver2PxCount: 51 },
+      "server-loop-catch-up": {
+        simulatedDriftMsAfter100MsStall: 2,
+        droppedDebtMs: 1,
+        tickDeficitAfter100MsStall: 1,
+      },
       "world-collision": { worldCollisionP95Ms: 8 },
       "homing-orb-pressure": { homingOrbBurstBytes: 7_000 },
       "input-bandwidth": {
@@ -113,6 +123,9 @@ describe("rubberbanding profile assertions", () => {
 
     expect(assertRubberbandingProfile({ baseline, after }).failures).toEqual([
       "owner-ack snapOver2PxCount expected <= 50.0000, got 51.0000",
+      "server-loop-catch-up simulatedDriftMsAfter100MsStall expected <= 1.0000, got 2.0000",
+      "server-loop-catch-up droppedDebtMs expected <= 0.0000, got 1.0000",
+      "server-loop-catch-up tickDeficitAfter100MsStall expected <= 0.0000, got 1.0000",
       "world-collision worldCollisionP95Ms expected <= 7.0000, got 8.0000",
       "homing-orb-pressure homingOrbBurstBytes expected <= 6000.0000, got 7000.0000",
       "input-bandwidth idleInputMessagesPerSecond expected <= 6.0000, got 7.0000",
@@ -147,7 +160,33 @@ describe("rubberbanding profile assertions", () => {
     })
   })
 
-  it("skips acceptance thresholds for numbered phases that have no profile gate yet", () => {
+  it("applies the server loop catch-up threshold for phase 3 profiles", () => {
+    const baseline = fullReport({
+      "server-loop-catch-up": {
+        simulatedDriftMsAfter100MsStall: 83.33,
+        droppedDebtMs: 83.33,
+        tickDeficitAfter100MsStall: 5,
+      },
+    })
+    const after = fullReport(
+      {
+        "server-loop-catch-up": {
+          simulatedDriftMsAfter100MsStall: 83.33,
+          droppedDebtMs: 83.33,
+          tickDeficitAfter100MsStall: 5,
+        },
+      },
+      "phase-3-after",
+    )
+
+    expect(assertRubberbandingProfile({ baseline, after }).failures).toEqual([
+      "server-loop-catch-up simulatedDriftMsAfter100MsStall expected <= 1.0000, got 83.3300",
+      "server-loop-catch-up droppedDebtMs expected <= 0.0000, got 83.3300",
+      "server-loop-catch-up tickDeficitAfter100MsStall expected <= 0.0000, got 5.0000",
+    ])
+  })
+
+  it("skips thresholds for numbered phases that are intentionally ungated", () => {
     const baseline = fullReport({
       "remote-interpolation": {
         extrapolatedFrameRatio: 0.2,
@@ -161,7 +200,7 @@ describe("rubberbanding profile assertions", () => {
           p99ExtrapolationMs: 20,
         },
       },
-      "phase-3-after",
+      "phase-99-after",
     )
 
     expect(assertRubberbandingProfile({ baseline, after })).toEqual({

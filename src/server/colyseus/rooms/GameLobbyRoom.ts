@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto"
 import { performance } from "node:perf_hooks"
 
 import { verifyToken } from "../../auth"
+import { advanceFixedStepAccumulator } from "../../game/fixedStepAccumulator"
 import { createGameSimulation, type GameSimulation } from "../../game/simulation"
 import { createSessionEconomy, attemptPurchase, buildShopStatePayload } from "../../gameserver/sessionShop"
 import type { SessionEconomy } from "../../gameserver/sessionShop"
@@ -461,8 +462,11 @@ export class GameLobbyRoom extends Room {
   /** Last wall-clock time a cadence-limited network batch was flushed. */
   private lastNetworkFlushAtMs = 0
 
-  /** Expected perf-clock time for the next loop callback. */
-  private expectedNextTickAtPerfMs = 0
+  /** Residual elapsed time that has not yet crossed one fixed simulation step. */
+  private simulationAccumulatorMs = 0
+
+  /** Simulated server clock advanced by exactly `TICK_MS` per authoritative tick. */
+  private nextSimulationServerTimeMs = 0
 
   /** Start of the current server performance aggregation window. */
   private performanceWindowStartedAtPerfMs = performance.now()
@@ -899,7 +903,7 @@ export class GameLobbyRoom extends Room {
     this.scoreboardTimer?.clear()
     this.disposalGraceTimer?.clear()
     this.adminCloseTimer?.clear()
-    this.gameLoopTimer?.clear()
+    this.clearGameLoopTimer()
     this.clearInProgressPlayerCleanupTimers()
     this.clearMatchRuntimeState()
     this.clearBandwidthHooks()
@@ -1049,8 +1053,7 @@ export class GameLobbyRoom extends Room {
       this.clients.length === 0 &&
       !hasRemainingSimulationPlayers
     ) {
-      this.gameLoopTimer?.clear()
-      this.gameLoopTimer = null
+      this.clearGameLoopTimer()
       this.clearMatchRuntimeState()
       this.disposalGraceTimer?.clear()
       this.disposalGraceTimer = null
@@ -1908,17 +1911,11 @@ export class GameLobbyRoom extends Room {
       client.send(RoomEvent.ShopState, buildShopStatePayload(economy))
     }
 
-    const gameStateSync = this.buildGameStateSyncPayload(Date.now())
+    const gameStateSync = this.buildGameStateSyncPayload(nowMs)
     this.broadcast(RoomEvent.MatchGo, { timing: this.buildGameNetTimingPayload() })
     this.broadcast(RoomEvent.GameStateSync, gameStateSync)
 
-    // Start the fixed-rate game loop (see TICK_MS; 60 Hz by default).
-    activeGameLoopRoomIds.add(this.roomId)
-    this.resetNetworkBatchingState(Date.now())
-    this.resetPerformanceWindow(performance.now())
-    this.gameLoopTimer = nativeSetInterval(() => {
-      this.runGameTick()
-    }, TICK_MS)
+    this.startGameLoop(nowMs)
 
     logger.info(
       {
@@ -1946,8 +1943,7 @@ export class GameLobbyRoom extends Room {
     endReason: LobbyScoreboardPayload["endReason"],
     entries: ScoreboardEntry[],
   ): void {
-    this.gameLoopTimer?.clear()
-    this.gameLoopTimer = null
+    this.clearGameLoopTimer()
     this.clearMatchRuntimeState()
 
     this.lobbyPhase = "SCOREBOARD"
@@ -2223,8 +2219,7 @@ export class GameLobbyRoom extends Room {
     this.scoreboardTimer = null
     this.disposalGraceTimer?.clear()
     this.disposalGraceTimer = null
-    this.gameLoopTimer?.clear()
-    this.gameLoopTimer = null
+    this.clearGameLoopTimer()
     this.clearMatchRuntimeState()
     this.clientReadySet.clear()
     this.returnedToLobbySet.clear()
@@ -2240,6 +2235,46 @@ export class GameLobbyRoom extends Room {
     this.pendingPlayerDeltaBatches = []
     this.pendingFireballBatches = []
     this.pendingHomingOrbBatches = []
+  }
+
+  /**
+   * Starts the Colyseus simulation interval used for in-progress game ticks.
+   *
+   * @param serverTimeMs - Wall-clock time used to initialize simulated tick time.
+   */
+  private startGameLoop(serverTimeMs: number): void {
+    this.clearGameLoopTimer()
+    activeGameLoopRoomIds.add(this.roomId)
+    this.resetNetworkBatchingState(serverTimeMs)
+    this.resetPerformanceWindow(performance.now())
+    this.resetSimulationLoopState(serverTimeMs)
+    this.setSimulationInterval((deltaMs) => {
+      this.runGameLoop(deltaMs)
+    }, TICK_MS)
+    this.gameLoopTimer = {
+      clear: () => this.setSimulationInterval(),
+    }
+  }
+
+  /**
+   * Clears the active simulation interval and residual accumulator state.
+   */
+  private clearGameLoopTimer(): void {
+    this.gameLoopTimer?.clear()
+    this.gameLoopTimer = null
+    this.simulationAccumulatorMs = 0
+    this.nextSimulationServerTimeMs = 0
+    activeGameLoopRoomIds.delete(this.roomId)
+  }
+
+  /**
+   * Resets the simulated server clock used by the fixed-step loop.
+   *
+   * @param serverTimeMs - Wall-clock timestamp for the current game-start boundary.
+   */
+  private resetSimulationLoopState(serverTimeMs: number): void {
+    this.simulationAccumulatorMs = 0
+    this.nextSimulationServerTimeMs = serverTimeMs
   }
 
   // ---------------------------------------------------------------------------
@@ -2275,26 +2310,17 @@ export class GameLobbyRoom extends Room {
     this.performanceSimDurationMs = 0
     this.performanceBroadcastDurationMs = 0
     this.performanceEventLoopLagMs = 0
-    this.expectedNextTickAtPerfMs = nowPerfMs + TICK_MS
   }
 
   /**
-   * Records event-loop lateness for the current tick.
+   * Records event-loop lateness for one Colyseus simulation callback.
    *
-   * @param nowPerfMs - Current performance-clock time.
+   * @param elapsedMs - Elapsed milliseconds reported by Colyseus.
    */
-  private recordLoopTiming(nowPerfMs: number): void {
-    if (this.expectedNextTickAtPerfMs <= 0) {
-      this.expectedNextTickAtPerfMs = nowPerfMs + TICK_MS
-      return
-    }
-    const lagMs = Math.max(0, nowPerfMs - this.expectedNextTickAtPerfMs)
+  private recordLoopTiming(elapsedMs: number): void {
+    if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) return
+    const lagMs = Math.max(0, elapsedMs - TICK_MS)
     this.performanceEventLoopLagMs = Math.max(this.performanceEventLoopLagMs, lagMs)
-    if (lagMs > TICK_MS) {
-      this.performanceDroppedDebtMs += lagMs
-      this.performanceCatchUpCallbacks += Math.floor(lagMs / TICK_MS)
-    }
-    this.expectedNextTickAtPerfMs = nowPerfMs + TICK_MS
   }
 
   /**
@@ -2444,20 +2470,50 @@ export class GameLobbyRoom extends Room {
   }
 
   /**
+   * Runs all fixed simulation ticks represented by one Colyseus loop callback.
+   *
+   * @param elapsedMs - Elapsed milliseconds reported by `setSimulationInterval`.
+   */
+  private runGameLoop(elapsedMs: number): void {
+    if (!this.simulation || this.lobbyPhase !== "IN_PROGRESS") return
+    this.recordLoopTiming(elapsedMs)
+
+    if (!this.performanceConfig.simAccumulatorEnabled) {
+      this.runGameTick(Date.now())
+      return
+    }
+
+    const advance = advanceFixedStepAccumulator({
+      accumulatorMs: this.simulationAccumulatorMs,
+      elapsedMs,
+      stepMs: TICK_MS,
+      maxCatchUpSteps: this.performanceConfig.simMaxCatchUpTicks,
+    })
+    this.simulationAccumulatorMs = advance.accumulatorMs
+    this.performanceDroppedDebtMs += advance.droppedDebtMs
+    if (advance.steps > 1) {
+      this.performanceCatchUpCallbacks += advance.steps - 1
+    }
+
+    for (let step = 0; step < advance.steps; step++) {
+      this.nextSimulationServerTimeMs += TICK_MS
+      const shouldContinue = this.runGameTick(this.nextSimulationServerTimeMs)
+      if (!shouldContinue) return
+    }
+  }
+
+  /**
    * Runs one game simulation tick, broadcasts deltas and events to all clients.
    * Called at `TICK_MS` intervals during `IN_PROGRESS` phase.
    *
    * Per-player input queues are mutated in-place by `simulation.tick`, which
    * pops exactly one queued input per player per tick.
    */
-  private runGameTick(): void {
+  private runGameTick(serverTimeMs = Date.now()): boolean {
     if (!this.simulation || this.lobbyPhase !== "IN_PROGRESS") {
-      return
+      return false
     }
 
-    const tickStartedAtPerfMs = performance.now()
-    this.recordLoopTiming(tickStartedAtPerfMs)
-    const serverTimeMs = Date.now()
     const simStartedAtPerfMs = performance.now()
     const output = this.simulation.tick(this.inputQueue, serverTimeMs)
     this.performanceSimDurationMs += performance.now() - simStartedAtPerfMs
@@ -2535,9 +2591,12 @@ export class GameLobbyRoom extends Room {
 
     if (output.matchEnded) {
       this.transitionToScoreboard(output.matchEnded.reason, output.matchEnded.entries)
+      this.performanceBroadcastDurationMs += performance.now() - broadcastStartedAtPerfMs
+      return false
     }
     this.performanceBroadcastDurationMs += performance.now() - broadcastStartedAtPerfMs
     this.maybeBroadcastServerPerformanceStatus(serverTimeMs)
+    return this.simulation !== null && this.lobbyPhase === "IN_PROGRESS"
   }
 
   /**
