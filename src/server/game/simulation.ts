@@ -200,6 +200,7 @@ export type PlayerPrevState = {
   invulnerable: boolean
   jumpZ: number
   jumpStartedInLava: boolean
+  hasSwiftBoots: boolean
   terrainState: PlayerTerrainState
   abilityStates: AbilityRuntimeStates
   lastProcessedInputSeq: number
@@ -579,6 +580,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       jumpZ: 0,
       jumpStartedInLava: false,
       terrainState: "land",
+      hasSwiftBoots: false,
       abilityStates: abilityRuntimeStatesForPlayer(eid, currentTick),
       lastProcessedInputSeq: 0,
     })
@@ -669,6 +671,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       const jumpZ = hasComponent(world, eid, JumpArc) ? JumpArc.z[eid] : 0
       const jumpStartedInLava =
         hasComponent(world, eid, JumpArc) && JumpArc.startedInLava[eid] === 1
+      const hasSwiftBoots = Equipment.hasSwiftBoots[eid] === 1
       const terrainState = TERRAIN_KIND_TO_STATE[TerrainState.kind[eid]] ?? "land"
       const abilityStates = abilityRuntimeStatesForPlayer(eid, currentTick)
       const lastProcessedInputSeq = lastProcessedSeqForNetworkPayload(
@@ -695,6 +698,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
         invulnerable,
         jumpZ,
         jumpStartedInLava,
+        hasSwiftBoots,
         terrainState,
         abilityStates,
         lastProcessedInputSeq,

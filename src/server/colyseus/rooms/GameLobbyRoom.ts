@@ -1460,6 +1460,18 @@ export class GameLobbyRoom extends Room {
     this.syncAbilitySlotsToSimulation(pd.playerId, economy)
 
     client.send(RoomEvent.ShopState, buildShopStatePayload(economy))
+    this.sendImmediateGameStateSyncToClient(client)
+  }
+
+  /**
+   * Sends the current full simulation snapshot to one client after an
+   * out-of-band state change such as an equipment purchase.
+   *
+   * @param client - Client that needs immediate authoritative hydration.
+   */
+  private sendImmediateGameStateSyncToClient(client: Client): void {
+    if (this.lobbyPhase !== "IN_PROGRESS" || !this.simulation) return
+    client.send(RoomEvent.GameStateSync, this.buildGameStateSyncPayload(Date.now()))
   }
 
   /**

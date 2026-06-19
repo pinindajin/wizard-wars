@@ -1,8 +1,9 @@
-import { addComponent, hasComponent } from "bitecs"
+import { addComponent, addEntity, createWorld, hasComponent } from "bitecs"
 import { describe, it, expect } from "vitest"
 import {
   HELD_INPUT_STALE_TICKS,
   createGameSimulation,
+  type SimCtx,
 } from "@/server/game/simulation"
 import {
   ARENA_CENTER_X,
@@ -31,8 +32,10 @@ import {
   Health,
   InvulnerableTag,
   JumpArc,
+  Lives,
   MoveFacing,
   NeedsWorldCollisionResolution,
+  PlayerTag,
   Position,
   RespawnTimer,
   SpectatorTag,
@@ -46,6 +49,7 @@ import {
 } from "@/shared/balance-config/equipment"
 import { getPrimaryAttackAnimationConfigByAttackId } from "@/shared/balance-config/animationConfig"
 import { JUMP_CHARGE_RECHARGE_MS, JUMP_MAX_CHARGES, TICK_MS } from "@/shared/balance-config"
+import { playerDeltaSystem } from "@/server/game/systems/playerDeltaSystem"
 import type { PlayerInputPayload } from "@/shared/types"
 
 let nextSeq = 1
@@ -460,6 +464,17 @@ describe("buildGameStateSyncPayload", () => {
     expect(sim.buildPlayerOwnerAckPayload(9999, -1, 10_000)).toBeNull()
   })
 
+  it("includes Swift Boots equipment state in full sync snapshots", () => {
+    const sim = createGameSimulation(Date.now())
+    const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
+
+    expect(sim.buildGameStateSyncPayload(10_000).players[0]?.hasSwiftBoots).toBe(false)
+
+    Equipment.hasSwiftBoots[eid] = 1
+
+    expect(sim.buildGameStateSyncPayload(10_001).players[0]?.hasSwiftBoots).toBe(true)
+  })
+
   it("exposes ability runtime state for the player HUD", () => {
     const sim = createGameSimulation(Date.now())
     sim.addPlayer("user1", "Alice", "red_wizard", 0)
@@ -498,6 +513,95 @@ describe("buildGameStateSyncPayload", () => {
     const output2 = sim.tick(new Map(), now + TICK_MS)
     const delta2 = output2.playerDeltas.find((d) => d.id === eid)
     expect(delta2?.abilityStates).toBeUndefined()
+  })
+
+  it("emits Swift Boots equipment deltas when the movement modifier changes", () => {
+    const sim = createGameSimulation(Date.now())
+    const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
+
+    Equipment.hasSwiftBoots[eid] = 1
+
+    const output = sim.tick(new Map(), 10_000)
+    const delta = output.playerDeltas.find((d) => d.id === eid)
+
+    expect(delta?.hasSwiftBoots).toBe(true)
+  })
+
+  it("includes Swift Boots equipment state in first player deltas", () => {
+    const world = createWorld()
+    const eid = addEntity(world)
+    addComponent(world, eid, PlayerTag)
+    addComponent(world, eid, Position)
+    addComponent(world, eid, Velocity)
+    addComponent(world, eid, Facing)
+    addComponent(world, eid, MoveFacing)
+    addComponent(world, eid, Health)
+    addComponent(world, eid, Lives)
+    addComponent(world, eid, TerrainState)
+    Position.x[eid] = 10
+    Position.y[eid] = 20
+    Health.current[eid] = 100
+    Lives.count[eid] = 3
+    AbilityRuntime.jumpCharges[eid] = JUMP_MAX_CHARGES
+    Equipment.hasSwiftBoots[eid] = 1
+    const ctx = {
+      world,
+      currentTick: 1,
+      serverTimeMs: 10_000,
+      playerEntityMap: new Map([["user1", eid]]),
+      entityPlayerMap: new Map([[eid, "user1"]]),
+      playerUsernameMap: new Map(),
+      entityUsernameMap: new Map(),
+      playerHeroIdMap: new Map(),
+      fireballOwnerMap: new Map(),
+      fireballCreatedAtTickMap: new Map(),
+      homingOrbOwnerMap: new Map(),
+      homingOrbTargetPlayerMap: new Map(),
+      homingOrbCastTargetPlayerMap: new Map(),
+      inputMap: new Map(),
+      lastProcessedInputSeqByPlayer: new Map([["user1", 12]]),
+      commandBuffer: {} as never,
+      matchStartedAtMs: 0,
+      damageRequests: [],
+      deathEvents: [],
+      pendingLightningBolts: [],
+      playerDeaths: [],
+      playerRespawns: [],
+      fireballLaunches: [],
+      fireballImpacts: [],
+      fireballRemovedIds: [],
+      homingOrbLaunches: [],
+      homingOrbImpacts: [],
+      homingOrbRemovedIds: [],
+      lightningBolts: [],
+      primaryMeleeAttacks: [],
+      combatTelegraphStarts: [],
+      combatTelegraphEnds: [],
+      damageFloats: [],
+      goldUpdates: [],
+      abilitySfxEvents: [],
+      matchEnded: null,
+      hostEndSignal: false,
+      prevPlayerStates: new Map(),
+      prevFireballStates: new Map(),
+      prevHomingOrbStates: new Map(),
+      killStats: new Map(),
+      activeMeleeAttacks: new Map(),
+      activeCombatTelegraphs: new Map(),
+      invulnerableExpiresAtTickByEntity: new Map(),
+      playerDeltas: [],
+      fireballDeltas: [],
+      homingOrbDeltas: [],
+    } as SimCtx
+
+    playerDeltaSystem(ctx)
+
+    expect(ctx.playerDeltas[0]).toMatchObject({
+      id: eid,
+      hasSwiftBoots: true,
+      lastProcessedInputSeq: 12,
+    })
+    expect(ctx.prevPlayerStates.get(eid)).toMatchObject({ hasSwiftBoots: true })
   })
 
   it("restores jump charges and clears recharge state on respawn", () => {

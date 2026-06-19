@@ -300,6 +300,32 @@ describe("rubberbanding profile report", () => {
     expect(metricValue(afterInput, "oldServerFallbackFailureCount")).toBe(0)
   })
 
+  it("models the Fix 7 Swift Boots prediction and no-pullback improvement", () => {
+    const before = buildRubberbandingProfileReport({
+      phase: "phase-7-before",
+      commit: "abc123",
+      seed: 42,
+      sampleCount: 120,
+      generatedAt: "2026-06-19T00:00:00.000Z",
+    })
+    const after = buildRubberbandingProfileReport({
+      phase: "phase-7-after",
+      commit: "abc123",
+      seed: 42,
+      sampleCount: 120,
+      generatedAt: "2026-06-19T00:00:00.000Z",
+    })
+
+    const beforeSwift = before.scenarios.find((scenario) => scenario.scenario === "swift-boots")
+    const afterSwift = after.scenarios.find((scenario) => scenario.scenario === "swift-boots")
+    expect(metricValue(beforeSwift, "swiftBootsPredictionSnapPx")).toBeGreaterThan(0)
+    expect(metricValue(afterSwift, "swiftBootsPredictionSnapPx")).toBe(0)
+    expect(metricValue(afterSwift, "swiftBootsPullbackFrameCount")).toBe(0)
+    expect(metricValue(afterSwift, "swiftBootsSmoothCorrectionCount")).toBe(0)
+    expect(metricValue(afterSwift, "swiftBootsSnapCorrectionCount")).toBe(0)
+    expect(metricValue(afterSwift, "p99SwiftBootsPredictionErrorPx")).toBe(0)
+  })
+
 })
 
 describe("rubberbanding cause provenance", () => {

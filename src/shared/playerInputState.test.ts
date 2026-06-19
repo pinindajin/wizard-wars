@@ -56,6 +56,21 @@ describe("player input state codec", () => {
     })
   })
 
+  it("encodes every held button bit", () => {
+    expect(
+      encodePlayerInputState(
+        fullInput({
+          up: true,
+          down: true,
+          left: true,
+          right: true,
+          weaponPrimary: true,
+          weaponSecondary: true,
+        }),
+      ).buttons,
+    ).toBe(PLAYER_INPUT_BUTTONS_MAX)
+  })
+
   it("decodes compact state payloads into canonical full input payloads", () => {
     const state: PlayerInputStatePayload = {
       protocolVersion: 1,

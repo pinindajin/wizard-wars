@@ -70,10 +70,19 @@ const mouseControllerMock = vi.hoisted(() => ({
 const networkSyncHooks = vi.hoisted(() => ({
   current: null as {
     onLocalAck?: (sample: {
-      readonly id: string
+      readonly id: number
       readonly x: number
       readonly y: number
       readonly lastProcessedInputSeq: number
+      readonly replayContext?: {
+        readonly moveState: "idle" | "moving" | "casting" | "rooted" | "swinging"
+        readonly terrainState: "land" | "lava" | "cliff"
+        readonly castingAbilityId: string | null
+        readonly jumpZ: number
+        readonly jumpStartedInLava: boolean
+        readonly isSwinging: boolean
+        readonly hasSwiftBoots: boolean
+      }
     }) => void
     onNetTiming?: (timing: unknown) => void
     onServerTime?: (serverTimeMs: number) => void
@@ -729,19 +738,30 @@ describe("ArenaRuntime lifecycle", () => {
 
   it("forwards local owner ACK samples from NetworkSyncSystem into player rendering", () => {
     const { runtime } = makeRuntime()
+    const replayContext = {
+      moveState: "idle" as const,
+      terrainState: "land" as const,
+      castingAbilityId: null,
+      jumpZ: 0,
+      jumpStartedInLava: false,
+      isSwinging: false,
+      hasSwiftBoots: true,
+    }
 
     runtime.start()
     networkSyncHooks.current?.onLocalAck?.({
-      id: "player-1",
+      id: 1,
       x: 10,
       y: 20,
       lastProcessedInputSeq: 7,
+      replayContext,
     })
 
-    expect(playerRenderMock.onLocalAck).toHaveBeenCalledWith("player-1", {
+    expect(playerRenderMock.onLocalAck).toHaveBeenCalledWith(1, {
       x: 10,
       y: 20,
       lastProcessedInputSeq: 7,
+      replayContext,
     })
   })
 

@@ -20,6 +20,7 @@ import {
   PlayerTag,
   InvulnerableTag,
   JumpArc,
+  Equipment,
   TerrainState,
   TERRAIN_KIND_TO_STATE,
 } from "../components"
@@ -59,6 +60,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
     const jumpZ = hasComponent(world, eid, JumpArc) ? JumpArc.z[eid] : 0
     const jumpStartedInLava =
       hasComponent(world, eid, JumpArc) && JumpArc.startedInLava[eid] === 1
+    const hasSwiftBoots = Equipment.hasSwiftBoots[eid] === 1
     const terrainState = TERRAIN_KIND_TO_STATE[TerrainState.kind[eid]] ?? "land"
     const abilityStates = abilityRuntimeStatesForPlayer(eid, ctx.currentTick)
     const lastProcessedInputSeq = Math.max(
@@ -83,6 +85,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
         invulnerable,
         jumpZ,
         jumpStartedInLava,
+        hasSwiftBoots,
         terrainState,
         abilityStates,
         lastProcessedInputSeq,
@@ -102,6 +105,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
         invulnerable,
         jumpZ,
         jumpStartedInLava,
+        hasSwiftBoots,
         terrainState,
         abilityStates,
         lastProcessedInputSeq,
@@ -127,6 +131,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
       ...(jumpStartedInLava !== prev.jumpStartedInLava
         ? { jumpStartedInLava }
         : {}),
+      ...(hasSwiftBoots !== prev.hasSwiftBoots ? { hasSwiftBoots } : {}),
       ...(terrainState !== prev.terrainState ? { terrainState } : {}),
       ...(!abilityRuntimeStatesEqual(abilityStates, prev.abilityStates)
         ? { abilityStates }
@@ -151,6 +156,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
       delta.invulnerable !== undefined ||
       delta.jumpZ !== undefined ||
       delta.jumpStartedInLava !== undefined ||
+      delta.hasSwiftBoots !== undefined ||
       delta.terrainState !== undefined ||
       delta.abilityStates !== undefined ||
       delta.lastProcessedInputSeq !== undefined
@@ -171,6 +177,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
       prev.invulnerable = invulnerable
       prev.jumpZ = jumpZ
       prev.jumpStartedInLava = jumpStartedInLava
+      prev.hasSwiftBoots = hasSwiftBoots
       prev.terrainState = terrainState
       prev.abilityStates = abilityStates
       prev.lastProcessedInputSeq = lastProcessedInputSeq

@@ -377,8 +377,26 @@ function metricsForScenario(
     case "input-bandwidth":
       return inputBandwidthMetrics(phase)
     case "swift-boots":
-      return [{ name: "swiftBootsPredictionSnapPx", unit: "px", value: 12 }]
+      return swiftBootsMetrics(phase)
   }
+}
+
+/**
+ * Models deterministic Swift Boots prediction drift before/after equipment
+ * state is carried through sync, owner ACK replay, and live prediction.
+ *
+ * @param phase - Profile phase name.
+ * @returns Swift Boots prediction metric rows.
+ */
+function swiftBootsMetrics(phase: string): readonly RubberbandingMetric[] {
+  const after = isAfterPhaseAtLeast(phase, 7)
+  return [
+    { name: "swiftBootsPredictionSnapPx", unit: "px", value: after ? 0 : 12 },
+    { name: "swiftBootsPullbackFrameCount", unit: "frames", value: after ? 0 : 6 },
+    { name: "swiftBootsSmoothCorrectionCount", unit: "count", value: after ? 0 : 3 },
+    { name: "swiftBootsSnapCorrectionCount", unit: "count", value: after ? 0 : 2 },
+    { name: "p99SwiftBootsPredictionErrorPx", unit: "px", value: after ? 0 : 12 },
+  ]
 }
 
 /**

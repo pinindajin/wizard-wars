@@ -164,6 +164,8 @@ export type PlayerSnapshot = {
   readonly jumpZ: number
   /** True when the active jump arc began in lava (escape jump). */
   readonly jumpStartedInLava: boolean
+  /** Server-authoritative Swift Boots equipment flag used by local prediction. */
+  readonly hasSwiftBoots: boolean
   /** Server-authoritative cooldown and charge state for ability HUD rendering. */
   readonly abilityStates: AbilityRuntimeStates
   /**
@@ -191,6 +193,7 @@ export type PlayerDelta = {
   readonly invulnerable?: boolean
   readonly jumpZ?: number
   readonly jumpStartedInLava?: boolean
+  readonly hasSwiftBoots?: boolean
   readonly abilityStates?: AbilityRuntimeStates
   /** Highest client input `seq` the server has processed for this player. */
   readonly lastProcessedInputSeq?: number

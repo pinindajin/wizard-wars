@@ -215,6 +215,84 @@ describe("GameLobbyRoom network batching", () => {
     )
   })
 
+  it("sends immediate GameStateSync with Swift Boots state after purchase", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(3_600)
+
+    const room = new GameLobbyRoom()
+    const client = {
+      userData: {
+        playerId: "player-1",
+        username: "PlayerOne",
+        heroId: "red_wizard",
+      },
+      send: vi.fn(),
+    }
+    const simulation = createGameSimulation(3_500)
+    simulation.addPlayer("player-1", "PlayerOne", "red_wizard", 0)
+    const economy = createSessionEconomy()
+    Object.assign(room as object, {
+      lobbyPhase: "IN_PROGRESS",
+      simulation,
+    })
+    ;(room as unknown as { economies: Map<string, typeof economy> }).economies.set(
+      "player-1",
+      economy,
+    )
+
+    ;(
+      room as unknown as {
+        handleShopPurchase: (target: typeof client, payload: unknown) => void
+      }
+    ).handleShopPurchase(client, { itemId: "swift_boots" })
+
+    expect(client.send).toHaveBeenCalledWith(
+      RoomEvent.ShopState,
+      expect.objectContaining({ augmentItemIds: ["swift_boots"] }),
+    )
+    expect(client.send).toHaveBeenCalledWith(
+      RoomEvent.GameStateSync,
+      expect.objectContaining({
+        players: [
+          expect.objectContaining({
+            playerId: "player-1",
+            hasSwiftBoots: true,
+          }),
+        ],
+        serverTimeMs: 3_600,
+      }),
+    )
+  })
+
+  it("skips immediate GameStateSync outside an active simulation", () => {
+    const room = new GameLobbyRoom()
+    const client = { send: vi.fn() }
+    Object.assign(room as object, {
+      lobbyPhase: "LOBBY",
+      simulation: {
+        buildGameStateSyncPayload: vi.fn(),
+      },
+    })
+
+    ;(
+      room as unknown as {
+        sendImmediateGameStateSyncToClient: (target: typeof client) => void
+      }
+    ).sendImmediateGameStateSyncToClient(client)
+
+    Object.assign(room as object, {
+      lobbyPhase: "IN_PROGRESS",
+      simulation: null,
+    })
+    ;(
+      room as unknown as {
+        sendImmediateGameStateSyncToClient: (target: typeof client) => void
+      }
+    ).sendImmediateGameStateSyncToClient(client)
+
+    expect(client.send).not.toHaveBeenCalled()
+  })
+
   it("handles request_resync by sending lobby and current GameStateSync payloads", () => {
     vi.useFakeTimers()
     vi.setSystemTime(3_750)
@@ -258,6 +336,31 @@ describe("GameLobbyRoom network batching", () => {
         input: expect.objectContaining({ preferredTransport: "compact" }),
       }),
     )
+  })
+
+  it("does not hydrate clients before the match is in progress", () => {
+    const room = new GameLobbyRoom()
+    const client = {
+      userData: { playerId: "player-1" },
+      send: vi.fn(),
+    }
+    Object.assign(room as object, {
+      lobbyPhase: "LOBBY",
+      simulation: {
+        buildGameStateSyncPayload: vi.fn(),
+      },
+    })
+
+    ;(
+      room as unknown as {
+        sendInProgressHydrationToClient: (
+          target: typeof client,
+          opts?: { readonly includeLobbyState?: boolean },
+        ) => void
+      }
+    ).sendInProgressHydrationToClient(client, { includeLobbyState: true })
+
+    expect(client.send).not.toHaveBeenCalled()
   })
 
   it("rejects building GameStateSync timing without an active simulation", () => {
@@ -526,6 +629,50 @@ describe("GameLobbyRoom network batching", () => {
       removedIds: [42],
       seq: 0,
     })
+  })
+
+  it("broadcasts damage floats and unicasts gold updates from tick output", () => {
+    const room = new GameLobbyRoom()
+    const broadcast = vi.fn()
+    const client = {
+      userData: { playerId: "player-1" },
+      send: vi.fn(),
+    }
+    const damageFloat = {
+      targetId: "player-2",
+      attackerUserId: "player-1",
+      amount: 8,
+      x: 100,
+      y: 120,
+    }
+    Object.defineProperty(room, "clients", {
+      configurable: true,
+      value: [client],
+    })
+    Object.assign(room as object, {
+      broadcast,
+      lobbyPhase: "IN_PROGRESS",
+      simulation: {
+        tick: vi.fn().mockReturnValue(
+          simOutput({
+            damageFloats: [damageFloat],
+            goldUpdates: [
+              { userId: "player-1", gold: 25 },
+              { userId: "missing-player", gold: 50 },
+            ],
+          }),
+        ),
+        entityPlayerMap: new Map(),
+      },
+    })
+
+    ;(room as unknown as { runGameTick: () => void }).runGameTick()
+
+    expect(broadcast).toHaveBeenCalledWith(RoomEvent.DamageFloat, damageFloat)
+    expect(client.send).toHaveBeenCalledWith(RoomEvent.GoldBalance, { gold: 25 })
+    expect(
+      client.send.mock.calls.filter(([event]) => event === RoomEvent.GoldBalance),
+    ).toHaveLength(1)
   })
 
   it("queues Homing Orb visual batches from tick output", () => {

@@ -129,6 +129,7 @@ export class NetworkSyncSystem {
         invulnerable: snap.invulnerable,
         jumpZ: snap.jumpZ,
         jumpStartedInLava: snap.jumpStartedInLava,
+        hasSwiftBoots: snap.hasSwiftBoots,
         abilityStates: snap.abilityStates,
       }
       this.lastAckByPlayer.set(snap.playerId, snap.lastProcessedInputSeq)
@@ -198,6 +199,9 @@ export class NetworkSyncSystem {
         if (delta.jumpZ !== undefined) state.jumpZ = delta.jumpZ
         if (delta.jumpStartedInLava !== undefined) {
           state.jumpStartedInLava = delta.jumpStartedInLava
+        }
+        if (delta.hasSwiftBoots !== undefined) {
+          state.hasSwiftBoots = delta.hasSwiftBoots
         }
         if (delta.abilityStates !== undefined) state.abilityStates = delta.abilityStates
       }

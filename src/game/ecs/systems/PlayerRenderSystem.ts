@@ -20,6 +20,7 @@ import {
   HIT_FEEDBACK_FLASH_MS,
   PLAYER_WORLD_COLLISION_FOOTPRINT,
   SWING_MOVE_SPEED_MULTIPLIER,
+  SWIFT_BOOTS_SPEED_BONUS,
   JUMP_SPRITE_Y_PIXELS_PER_SIM_Z,
 } from "@/shared/balance-config/combat"
 import type {
@@ -313,6 +314,7 @@ export class PlayerRenderSystem {
         invulnerable: snap.invulnerable,
         jumpZ: snap.jumpZ,
         jumpStartedInLava: snap.jumpStartedInLava,
+        hasSwiftBoots: snap.hasSwiftBoots,
         abilityStates: snap.abilityStates,
       }
       this.onAuthoritativePosition(snap.id, snap.x, snap.y, "full_sync")
@@ -447,7 +449,7 @@ export class PlayerRenderSystem {
 
     const ctx: LocalReplayContext = ack.replayContext ?? {
       isSwinging: state.animState === "primary_melee_attack",
-      hasSwiftBoots: false,
+      hasSwiftBoots: state.hasSwiftBoots,
       castingAbilityId: state.castingAbilityId,
       jumpZ: state.jumpZ ?? 0,
       jumpStartedInLava: state.jumpStartedInLava ?? false,
@@ -921,6 +923,10 @@ export class PlayerRenderSystem {
         state.animState === "primary_melee_attack"
           ? SWING_MOVE_SPEED_MULTIPLIER
           : 1
+      const swiftBootsMult =
+        state.animState === "primary_melee_attack" || !state.hasSwiftBoots
+          ? 1
+          : 1 + SWIFT_BOOTS_SPEED_BONUS
       const colliderSet = terrainColliderSetForPlayerState(state.jumpZ ?? 0, state.terrainState, {
         jumpStartedInLava: state.jumpStartedInLava ?? false,
       })
@@ -937,7 +943,7 @@ export class PlayerRenderSystem {
           dy,
           BASE_MOVE_SPEED_PX_PER_SEC,
           TICK_DT_SEC,
-          castMoveMult * swingMult,
+          castMoveMult * swingMult * swiftBootsMult,
         )
         const moved = moveWithinWorldIndexed(
           entry.simCurrX,

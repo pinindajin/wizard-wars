@@ -230,6 +230,7 @@ function snap(over: Partial<PlayerSnapshot> & Pick<PlayerSnapshot, "id" | "playe
     invulnerable: over.invulnerable ?? false,
     jumpZ: over.jumpZ ?? 0,
     jumpStartedInLava: over.jumpStartedInLava ?? false,
+    hasSwiftBoots: over.hasSwiftBoots ?? false,
     abilityStates: over.abilityStates ?? abilityStates(),
     lastProcessedInputSeq: over.lastProcessedInputSeq ?? 0,
   }
@@ -535,6 +536,13 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     expect(ClientRenderPos[1].x).toBeCloseTo(50, 5)
   })
 
+  it("keeps the legacy batch-received compatibility hook as a no-op", () => {
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+
+    expect(() => sys.markBatchReceived()).not.toThrow()
+  })
+
   it("snaps the local player to the replayed target on large ack errors", () => {
     const { scene, group } = mockSceneAndGroup()
     const sys = new PlayerRenderSystem(scene as never, group as never)
@@ -618,6 +626,29 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     // 3 sim steps × (BASE_MOVE_SPEED_PX_PER_SEC × TICK_DT_SEC) of
     // forward motion = 3 × 3.333… ≈ 10 px up (y decreases).
     expect(after?.simCurrY).toBeCloseTo(OPEN_TEST_POINT.y - 10, 5)
+  })
+
+  it("uses Swift Boots speed for live local fixed-step prediction after full sync", () => {
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    sys.localPlayerId = "p1"
+    sys.applyFullSync(sync([snap({
+      id: 1,
+      playerId: "p1",
+      x: OPEN_TEST_POINT.x,
+      y: OPEN_TEST_POINT.y,
+      hasSwiftBoots: true,
+    })]))
+
+    sys.update(17, { up: false, down: false, left: false, right: true })
+
+    const after = sys._getLocalSimForTest(1)
+    expect(after?.simCurrX).toBeCloseTo(
+      OPEN_TEST_POINT.x +
+        BASE_MOVE_SPEED_PX_PER_SEC * TICK_DT_SEC * (1 + SWIFT_BOOTS_SPEED_BONUS),
+      5,
+    )
+    expect(after?.simCurrY).toBeCloseTo(OPEN_TEST_POINT.y, 5)
   })
 
   it("bounds sim catch-up after a long hitch (no spiral of death)", () => {
@@ -772,6 +803,24 @@ describe("PlayerRenderSystem smoothing + render interp", () => {
     // below startSimY. With the old absolute from→to rail this would
     // have slid backward toward zero even under held W.
     expect(after?.simCurrY).toBeLessThan(startSimY)
+  })
+
+  it("ignores local ACKs when required ECS state is absent", () => {
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    sys.localPlayerId = "p1"
+    sys.applyFullSync(sync([snap({ id: 1, playerId: "p1", x: 10, y: 20 })]))
+
+    delete ClientPlayerState[1]
+    expect(() =>
+      sys.onLocalAck(1, { x: 10, y: 20, lastProcessedInputSeq: 0 }),
+    ).not.toThrow()
+
+    sys.applyFullSync(sync([snap({ id: 1, playerId: "p1", x: 10, y: 20 })]))
+    delete ClientRenderPos[1]
+    expect(() =>
+      sys.onLocalAck(1, { x: 10, y: 20, lastProcessedInputSeq: 0 }),
+    ).not.toThrow()
   })
 
   it("does not pull the render backward after release when prediction matches the ack (cause B + C)", () => {

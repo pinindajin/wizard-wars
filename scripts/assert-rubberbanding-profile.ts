@@ -65,7 +65,16 @@ const THRESHOLDS_BY_SCENARIO: ReadonlyMap<string, readonly MetricThreshold[]> = 
       { metric: "oldServerFallbackFailureCount", absoluteMax: 0 },
     ],
   ],
-  ["swift-boots", [{ metric: "swiftBootsPredictionSnapPx", absoluteMax: 0 }]],
+  [
+    "swift-boots",
+    [
+      { metric: "swiftBootsPredictionSnapPx", absoluteMax: 0 },
+      { metric: "swiftBootsPullbackFrameCount", absoluteMax: 0 },
+      { metric: "swiftBootsSmoothCorrectionCount", absoluteMax: 0 },
+      { metric: "swiftBootsSnapCorrectionCount", absoluteMax: 0 },
+      { metric: "p99SwiftBootsPredictionErrorPx", absoluteMax: 0 },
+    ],
+  ],
 ])
 
 const PHASE_SCENARIO_BY_NUMBER: ReadonlyMap<number, string> = new Map([

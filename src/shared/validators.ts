@@ -161,6 +161,7 @@ export const playerSnapshotSchema = z.object({
   invulnerable: z.boolean(),
   jumpZ: z.number().finite().nonnegative(),
   jumpStartedInLava: z.boolean(),
+  hasSwiftBoots: z.boolean().default(false),
   abilityStates: abilityRuntimeStatesSchema,
   lastProcessedInputSeq: z.number().int().nonnegative(),
 })

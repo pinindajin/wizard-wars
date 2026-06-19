@@ -85,6 +85,7 @@ function addPlayer(
     jumpStartedInLava: false,
     abilityStates: abilityStates(),
     ...overrides,
+    hasSwiftBoots: overrides.hasSwiftBoots ?? false,
   }
 }
 

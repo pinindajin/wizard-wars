@@ -4,6 +4,7 @@ import {
   chatMessagePayloadSchema,
   playerInputPayloadSchema,
   playerInputStatePayloadSchema,
+  playerSnapshotSchema,
   homingOrbBatchUpdatePayloadSchema,
   homingOrbImpactPayloadSchema,
   homingOrbLaunchPayloadSchema,
@@ -182,6 +183,42 @@ describe("playerInputStatePayloadSchema", () => {
   })
 })
 
+describe("playerSnapshotSchema", () => {
+  it("accepts Swift Boots equipment state in snapshots and defaults old payloads to false", () => {
+    const snapshot = {
+      id: 1,
+      playerId: "user-a",
+      username: "Alice",
+      x: 10,
+      y: 20,
+      vx: 0,
+      vy: 0,
+      facingAngle: 0,
+      moveFacingAngle: 0,
+      health: 100,
+      maxHealth: 100,
+      lives: 3,
+      heroId: "red_wizard",
+      animState: "idle",
+      moveState: "idle",
+      terrainState: "land",
+      castingAbilityId: null,
+      invulnerable: false,
+      jumpZ: 0,
+      jumpStartedInLava: false,
+      abilityStates: validAbilityStates(),
+      lastProcessedInputSeq: 0,
+    } as const
+
+    expect(playerSnapshotSchema.parse({ ...snapshot, hasSwiftBoots: true }))
+      .toMatchObject({ hasSwiftBoots: true })
+    expect(playerSnapshotSchema.parse(snapshot)).toMatchObject({
+      hasSwiftBoots: false,
+    })
+  })
+
+})
+
 describe("ServerPerformanceStatus protocol", () => {
   const validStatus: ServerPerformanceStatusPayload = {
     serverTimeMs: 1_700_000_000_000,
@@ -324,6 +361,7 @@ describe("parseGameStateSyncPayload", () => {
           invulnerable: false,
           jumpZ: 0,
           jumpStartedInLava: false,
+          hasSwiftBoots: false,
           abilityStates: validAbilityStates(),
           lastProcessedInputSeq: 0,
         },

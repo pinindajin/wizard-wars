@@ -112,7 +112,13 @@ describe("rubberbanding profile assertions", () => {
         legacyClientFailureCount: 0,
         oldServerFallbackFailureCount: 0,
       },
-      "swift-boots": { swiftBootsPredictionSnapPx: 12 },
+      "swift-boots": {
+        swiftBootsPredictionSnapPx: 12,
+        swiftBootsPullbackFrameCount: 4,
+        swiftBootsSmoothCorrectionCount: 3,
+        swiftBootsSnapCorrectionCount: 2,
+        p99SwiftBootsPredictionErrorPx: 12,
+      },
     })
     const after = fullReport({
       "owner-ack": { snapOver2PxCount: 51 },
@@ -138,7 +144,13 @@ describe("rubberbanding profile assertions", () => {
         legacyClientFailureCount: 1,
         oldServerFallbackFailureCount: 1,
       },
-      "swift-boots": { swiftBootsPredictionSnapPx: 1 },
+      "swift-boots": {
+        swiftBootsPredictionSnapPx: 1,
+        swiftBootsPullbackFrameCount: 1,
+        swiftBootsSmoothCorrectionCount: 1,
+        swiftBootsSnapCorrectionCount: 1,
+        p99SwiftBootsPredictionErrorPx: 1,
+      },
     })
 
     expect(assertRubberbandingProfile({ baseline, after }).failures).toEqual([
@@ -161,6 +173,10 @@ describe("rubberbanding profile assertions", () => {
       "input-bandwidth legacyClientFailureCount expected <= 0.0000, got 1.0000",
       "input-bandwidth oldServerFallbackFailureCount expected <= 0.0000, got 1.0000",
       "swift-boots swiftBootsPredictionSnapPx expected <= 0.0000, got 1.0000",
+      "swift-boots swiftBootsPullbackFrameCount expected <= 0.0000, got 1.0000",
+      "swift-boots swiftBootsSmoothCorrectionCount expected <= 0.0000, got 1.0000",
+      "swift-boots swiftBootsSnapCorrectionCount expected <= 0.0000, got 1.0000",
+      "swift-boots p99SwiftBootsPredictionErrorPx expected <= 0.0000, got 1.0000",
     ])
   })
 

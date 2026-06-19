@@ -230,6 +230,7 @@ export class ArenaRuntime {
           x: sample.x,
           y: sample.y,
           lastProcessedInputSeq: sample.lastProcessedInputSeq,
+          replayContext: sample.replayContext,
         })
       },
       onServerTime: (serverTimeMs) => {
