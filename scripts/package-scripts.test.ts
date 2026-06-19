@@ -41,7 +41,7 @@ describe("package.json dev scripts", () => {
     const pkg = readRootPackageJson()
 
     expect(pkg.scripts?.["test:rubberbanding:coverage"]).toBe(
-      "vitest run --config vitest.rubberbanding-coverage.config.ts --coverage",
+      "vitest run --config vitest.rubberbanding-coverage.config.ts --coverage && bun scripts/assert-rubberbanding-coverage.ts",
     )
   })
 })

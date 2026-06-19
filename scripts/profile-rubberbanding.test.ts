@@ -141,6 +141,28 @@ describe("rubberbanding profile report", () => {
     expect(report.seed).toBe(7)
   })
 
+  it("models the Fix 1 remote interpolation timing improvement in after profiles", () => {
+    const before = buildRubberbandingProfileReport({
+      phase: "phase-1-before",
+      commit: "abc123",
+      generatedAt: "2026-06-19T00:00:00.000Z",
+    })
+    const after = buildRubberbandingProfileReport({
+      phase: "phase-1-after",
+      commit: "abc123",
+      generatedAt: "2026-06-19T00:00:00.000Z",
+    })
+
+    const beforeRemote = before.scenarios.find((scenario) => scenario.scenario === "remote-interpolation")
+    const afterRemote = after.scenarios.find((scenario) => scenario.scenario === "remote-interpolation")
+    expect(metricValue(afterRemote, "extrapolatedFrameRatio")).toBeLessThanOrEqual(
+      metricValue(beforeRemote, "extrapolatedFrameRatio") * 0.1,
+    )
+    expect(metricValue(afterRemote, "p99ExtrapolationMs")).toBeLessThanOrEqual(8)
+    expect(metricValue(afterRemote, "netSendIntervalMs")).toBeCloseTo(1000 / 30, 5)
+    expect(metricValue(afterRemote, "remoteRenderDelayMs")).toBe(84)
+  })
+
 })
 
 describe("rubberbanding cause provenance", () => {
@@ -167,6 +189,15 @@ describe("rubberbanding cause provenance", () => {
     ).toBe("pre-existing")
   })
 })
+
+function metricValue(
+  scenario: { readonly metrics: readonly { readonly name: string; readonly value: number }[] } | undefined,
+  name: string,
+): number {
+  const value = scenario?.metrics.find((metric) => metric.name === name)?.value
+  if (value === undefined) throw new Error(`missing metric ${name}`)
+  return value
+}
 
 describe("rubberbanding profile CLI", () => {
   it("parses explicit profile arguments", () => {

@@ -5,11 +5,11 @@ import { HERO_CONFIGS } from "@/shared/balance-config/heroes"
 import { ABILITY_CONFIGS } from "@/shared/balance-config/abilities"
 import {
   PREDICTION_SNAP_THRESHOLD_PX,
-  REMOTE_RENDER_DELAY_MS,
   REPLAY_SMOOTHING_MS,
   TELEPORT_THRESHOLD_PX,
   TICK_DT_SEC,
   TICK_MS,
+  resolveGameNetTiming,
 } from "@/shared/balance-config/rendering"
 import {
   ARENA_HEIGHT,
@@ -24,6 +24,7 @@ import {
 } from "@/shared/balance-config/combat"
 import type {
   GameStateSyncPayload,
+  GameNetTimingPayload,
   PlayerAnimState,
   PlayerDeathPayload,
   PlayerRespawnPayload,
@@ -221,7 +222,7 @@ interface PlayerRenderEntry {
  * The local player uses prediction (extrapolate from the latest authoritative
  * state using held WASD + speed multipliers) plus rewind-and-replay
  * reconciliation via {@link reconcileLocal}. Remote players use an
- * interpolation-buffer render path sampled at `now - REMOTE_RENDER_DELAY_MS`
+ * interpolation-buffer render path sampled at `now - remoteRenderDelayMs`
  * with velocity-aware extrapolation when the buffer underflows.
  */
 export class PlayerRenderSystem {
@@ -250,6 +251,9 @@ export class PlayerRenderSystem {
    */
   private serverTimeOffsetMs = 0
 
+  /** Current remote interpolation delay derived from server visual-send timing. */
+  private remoteRenderDelayMs = resolveGameNetTiming().remoteRenderDelayMs
+
   /**
    * Accumulated real-time debt waiting to be drained into `TICK_MS` sim
    * steps. Grows by frame `delta` each `update()` and is consumed in
@@ -273,6 +277,7 @@ export class PlayerRenderSystem {
    * @param payload - Full game state snapshot from the server.
    */
   applyFullSync(payload: GameStateSyncPayload): void {
+    this.applyNetTiming(payload.timing)
     this.updateServerTimeOffset(payload.serverTimeMs)
     const keep = new Set(payload.players.map((p) => p.id))
     for (const id of [...this.entries.keys()]) {
@@ -334,6 +339,15 @@ export class PlayerRenderSystem {
    */
   markBatchReceived(): void {
     // Intentional no-op — left for call-site compatibility.
+  }
+
+  /**
+   * Applies server-provided net timing for dynamic remote interpolation.
+   *
+   * @param timing - Optional timing payload from `match_go` or `game_state_sync`.
+   */
+  applyNetTiming(timing?: Partial<GameNetTimingPayload> | null): void {
+    this.remoteRenderDelayMs = resolveGameNetTiming(timing).remoteRenderDelayMs
   }
 
   /**
@@ -850,7 +864,7 @@ export class PlayerRenderSystem {
    * then runs a single **render step** that interpolates each local
    * entity between `simPrev` and `simCurr` using the residual
    * accumulator as `alpha`. Remote players are sampled from the
-   * interpolation buffer at `now - REMOTE_RENDER_DELAY_MS`.
+   * interpolation buffer at `now - remoteRenderDelayMs`.
    *
    * Arena threads an `onSimStep` callback through here so input send +
    * history append happen exactly **once per committed sim tick**,
@@ -995,7 +1009,7 @@ export class PlayerRenderSystem {
   ): void {
     const nowLocal = Date.now()
     const nowServer = nowLocal + this.serverTimeOffsetMs
-    const renderTimeServer = nowServer - REMOTE_RENDER_DELAY_MS
+    const renderTimeServer = nowServer - this.remoteRenderDelayMs
 
     for (const [id, entry] of this.entries) {
       const state = ClientPlayerState[id]

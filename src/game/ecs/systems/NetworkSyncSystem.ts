@@ -1,4 +1,8 @@
-import type { GameStateSyncPayload, PlayerBatchUpdatePayload } from "@/shared/types"
+import type {
+  GameNetTimingPayload,
+  GameStateSyncPayload,
+  PlayerBatchUpdatePayload,
+} from "@/shared/types"
 import { clientLogger } from "@/lib/clientLogger"
 import {
   ClientPosition,
@@ -44,6 +48,8 @@ type NetworkSyncHooks = {
    * wall-clock time so the client can maintain a clock offset.
    */
   readonly onServerTime?: (serverTimeMs: number) => void
+  /** Called when a full sync carries net timing for remote interpolation. */
+  readonly onNetTiming?: (timing: GameNetTimingPayload | undefined) => void
 }
 
 /**
@@ -57,6 +63,7 @@ export class NetworkSyncSystem {
   private readonly onRemoteSnapshot?: NetworkSyncHooks["onRemoteSnapshot"]
   private readonly onLocalAck?: NetworkSyncHooks["onLocalAck"]
   private readonly onServerTime?: NetworkSyncHooks["onServerTime"]
+  private readonly onNetTiming?: NetworkSyncHooks["onNetTiming"]
   private readonly log = clientLogger.child({ area: "netcode" })
 
   /** Set by Arena once the local playerId is known; used to route acks. */
@@ -74,6 +81,7 @@ export class NetworkSyncSystem {
     this.onRemoteSnapshot = hooks.onRemoteSnapshot
     this.onLocalAck = hooks.onLocalAck
     this.onServerTime = hooks.onServerTime
+    this.onNetTiming = hooks.onNetTiming
   }
 
   /**
@@ -84,6 +92,7 @@ export class NetworkSyncSystem {
    */
   applyFullSync(payload: GameStateSyncPayload): void {
     this.onServerTime?.(payload.serverTimeMs)
+    this.onNetTiming?.(payload.timing)
     const keep = new Set(payload.players.map((p) => p.id))
     let removedCount = 0
     for (const id of [...clientEntities]) {

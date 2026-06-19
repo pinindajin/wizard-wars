@@ -408,11 +408,58 @@ describe("PlayerRenderSystem.applyFullSync", () => {
       moveFacingAngle: 0,
     })
 
-    vi.setSystemTime(new Date(now + 83))
+    // Default net timing assumes 30 Hz visual batches, so the render path
+    // samples about 84 ms behind estimated server time.
+    vi.setSystemTime(new Date(now + 134))
     sys.update(0, { up: false, down: false, left: false, right: false })
 
     expect(ClientRenderPos[1].x).toBeGreaterThan(0)
     expect(ClientRenderPos[1].x).toBeLessThan(100)
+  })
+
+  it("uses full-sync net timing to choose the remote interpolation sample time", () => {
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    sys.localPlayerId = "local-player"
+
+    const now = Date.now()
+    sys.applyFullSync({
+      players: [snap({ id: 1, playerId: "remote", x: 0, y: 0 })],
+      fireballs: [],
+      seq: 0,
+      serverTimeMs: now,
+      timing: {
+        protocolVersion: 1,
+        tickRateHz: 60,
+        tickMs: 1000 / 60,
+        netSendRateHz: 60,
+        netSendIntervalMs: 1000 / 60,
+        remoteRenderDelayMs: 50,
+      },
+    })
+    sys.onRemoteSnapshot(1, {
+      serverTimeMs: now,
+      x: 0,
+      y: 0,
+      vx: 0,
+      vy: 0,
+      facingAngle: 0,
+      moveFacingAngle: 0,
+    })
+    sys.onRemoteSnapshot(1, {
+      serverTimeMs: now + 100,
+      x: 100,
+      y: 0,
+      vx: 0,
+      vy: 0,
+      facingAngle: 0,
+      moveFacingAngle: 0,
+    })
+
+    vi.setSystemTime(new Date(now + 100))
+    sys.update(0, { up: false, down: false, left: false, right: false })
+
+    expect(ClientRenderPos[1].x).toBeCloseTo(50, 5)
   })
 
   it("snaps the local player to the replayed target on large ack errors", () => {

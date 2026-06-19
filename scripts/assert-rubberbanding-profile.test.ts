@@ -122,13 +122,66 @@ describe("rubberbanding profile assertions", () => {
     ])
   })
 
+  it("applies only the active fix threshold for numbered phase profiles", () => {
+    const baseline = fullReport({
+      "remote-interpolation": {
+        extrapolatedFrameRatio: 0.2,
+        p99ExtrapolationMs: 20,
+      },
+      "owner-ack": { snapOver2PxCount: 100 },
+    })
+    const after = fullReport(
+      {
+        "remote-interpolation": {
+          extrapolatedFrameRatio: 0.01,
+          p99ExtrapolationMs: 4,
+        },
+        "owner-ack": { snapOver2PxCount: 100 },
+      },
+      "phase-1-after",
+    )
+
+    expect(assertRubberbandingProfile({ baseline, after })).toEqual({
+      ok: true,
+      failures: [],
+    })
+  })
+
+  it("skips acceptance thresholds for numbered phases that have no profile gate yet", () => {
+    const baseline = fullReport({
+      "remote-interpolation": {
+        extrapolatedFrameRatio: 0.2,
+        p99ExtrapolationMs: 20,
+      },
+    })
+    const after = fullReport(
+      {
+        "remote-interpolation": {
+          extrapolatedFrameRatio: 0.2,
+          p99ExtrapolationMs: 20,
+        },
+      },
+      "phase-3-after",
+    )
+
+    expect(assertRubberbandingProfile({ baseline, after })).toEqual({
+      ok: true,
+      failures: [],
+    })
+  })
+
   it("ignores thresholds whose metric rows are missing from otherwise matching scenarios", () => {
     const baseline = report({ metrics: [] })
     const after = report({ metrics: [] })
 
     expect(assertRubberbandingProfile({ baseline, after })).toEqual({
-      ok: true,
-      failures: [],
+      ok: false,
+      failures: [
+        "remote-interpolation missing baseline metric: extrapolatedFrameRatio",
+        "remote-interpolation missing after metric: extrapolatedFrameRatio",
+        "remote-interpolation missing baseline metric: p99ExtrapolationMs",
+        "remote-interpolation missing after metric: p99ExtrapolationMs",
+      ],
     })
   })
 })
@@ -230,11 +283,12 @@ describe("rubberbanding assertion CLI", () => {
 
 function fullReport(
   metricValues: Record<string, Record<string, number>>,
+  phase = "phase-test",
 ): RubberbandingProfileReport {
   return {
     schemaVersion: 1,
     generatedAt: "2026-06-19T00:00:00.000Z",
-    phase: "phase-test",
+    phase,
     commit: "abc123",
     seed: 42,
     warmupTicks: 10,

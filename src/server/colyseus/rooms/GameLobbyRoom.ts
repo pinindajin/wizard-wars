@@ -15,6 +15,8 @@ import type {
   AuthUser,
   FireballBatchUpdatePayload,
   HomingOrbBatchUpdatePayload,
+  GameNetTimingPayload,
+  GameStateSyncPayload,
   LobbyPhase,
   LobbyPlayer,
   LobbyStatePayload,
@@ -1722,11 +1724,34 @@ export class GameLobbyRoom extends Room {
       client.send(RoomEvent.ShopState, buildShopStatePayload(economy))
     }
     if (this.simulation) {
-      const gameStateSync = parseGameStateSyncPayload(
-        this.simulation.buildGameStateSyncPayload(Date.now()),
-      )
+      const gameStateSync = this.buildGameStateSyncPayload(Date.now())
       client.send(RoomEvent.GameStateSync, gameStateSync)
     }
+  }
+
+  /**
+   * Returns the room's current net timing contract for client interpolation.
+   *
+   * @returns Net timing derived from runtime performance config.
+   */
+  private buildGameNetTimingPayload(): GameNetTimingPayload {
+    return this.performanceConfig.netTiming
+  }
+
+  /**
+   * Builds a full game-state sync payload with room-owned network timing attached.
+   *
+   * @param serverTimeMs - Server wall-clock time for the snapshot.
+   * @returns Validated sync payload for match start or resync.
+   */
+  private buildGameStateSyncPayload(serverTimeMs: number): GameStateSyncPayload {
+    if (!this.simulation) {
+      throw new Error("cannot build GameStateSync without an active simulation")
+    }
+    return parseGameStateSyncPayload({
+      ...this.simulation.buildGameStateSyncPayload(serverTimeMs),
+      timing: this.buildGameNetTimingPayload(),
+    })
   }
 
   // ---------------------------------------------------------------------------
@@ -1882,10 +1907,8 @@ export class GameLobbyRoom extends Room {
       client.send(RoomEvent.ShopState, buildShopStatePayload(economy))
     }
 
-    const gameStateSync = parseGameStateSyncPayload(
-      this.simulation.buildGameStateSyncPayload(Date.now()),
-    )
-    this.broadcast(RoomEvent.MatchGo, {})
+    const gameStateSync = this.buildGameStateSyncPayload(Date.now())
+    this.broadcast(RoomEvent.MatchGo, { timing: this.buildGameNetTimingPayload() })
     this.broadcast(RoomEvent.GameStateSync, gameStateSync)
 
     // Start the fixed-rate game loop (see TICK_MS; 60 Hz by default).

@@ -19,6 +19,18 @@ export type RubberbandingCoverageScopeValidation = {
 }
 
 /**
+ * Merges changed-file lists from committed, staged, and unstaged git diffs.
+ *
+ * @param fileLists - Multiple git diff outputs as repository-relative paths.
+ * @returns Sorted unique changed file paths.
+ */
+export function mergeRubberbandingChangedFiles(
+  fileLists: readonly (readonly string[])[],
+): readonly string[] {
+  return [...new Set(fileLists.flat())].sort()
+}
+
+/**
  * Resolves production TypeScript files that must be included in the rubberbanding coverage gate.
  *
  * @param options - Changed repository paths from a git diff or test fixture.

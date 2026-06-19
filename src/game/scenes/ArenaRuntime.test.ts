@@ -22,6 +22,7 @@ const playerRenderMock = vi.hoisted(() => ({
   onAuthoritativePosition: vi.fn(),
   onRemoteSnapshot: vi.fn(),
   onLocalAck: vi.fn(),
+  applyNetTiming: vi.fn(),
   updateServerTimeOffset: vi.fn(),
   applyFullSync: vi.fn(),
   onPrimaryMeleeSwing: vi.fn(),
@@ -57,6 +58,10 @@ const keyboardControllerMock = vi.hoisted(() => ({
 const mouseControllerMock = vi.hoisted(() => ({
   enable: vi.fn(),
   collectInput: vi.fn(),
+}))
+
+const networkSyncHooks = vi.hoisted(() => ({
+  current: null as { onNetTiming?: (timing: unknown) => void } | null,
 }))
 
 vi.mock("phaser", () => {
@@ -137,11 +142,14 @@ vi.mock("../ecs/systems/DebugOverlaySystem", () => ({
 }))
 
 vi.mock("../ecs/systems/NetworkSyncSystem", () => ({
-  NetworkSyncSystem: vi.fn().mockImplementation(() => ({
-    localPlayerId: null,
-    applyFullSync: vi.fn(),
-    applyBatchUpdate: vi.fn(),
-  })),
+  NetworkSyncSystem: vi.fn().mockImplementation((hooks) => {
+    networkSyncHooks.current = hooks
+    return {
+      localPlayerId: null,
+      applyFullSync: vi.fn(),
+      applyBatchUpdate: vi.fn(),
+    }
+  }),
 }))
 
 vi.mock("../input/KeyboardController", () => ({
@@ -300,6 +308,7 @@ describe("ArenaRuntime lifecycle", () => {
     vi.clearAllMocks()
     telegraphMock.start.mockClear()
     playerRenderMock.onPrimaryMeleeSwing.mockClear()
+    networkSyncHooks.current = null
     keyboardControllerMock.collectMoveIntent.mockReturnValue({
       up: false,
       down: false,
@@ -496,5 +505,43 @@ describe("ArenaRuntime lifecycle", () => {
       2,
     ])
     expect(keyboardControllerMock.collectMoveIntent).toHaveBeenCalled()
+  })
+
+  it("applies optional MatchGo net timing while preserving empty payload compatibility", () => {
+    const { runtime, connection } = makeRuntime()
+    const timing = {
+      protocolVersion: 1,
+      tickRateHz: 60,
+      tickMs: 1000 / 60,
+      netSendRateHz: 30,
+      netSendIntervalMs: 1000 / 30,
+      remoteRenderDelayMs: 84,
+    }
+
+    runtime.start()
+    connection.emit({ type: WsEvent.MatchGo, payload: {} })
+    connection.emit({ type: WsEvent.MatchGo, payload: { timing } })
+
+    expect(keyboardControllerMock.enable).toHaveBeenCalled()
+    expect(mouseControllerMock.enable).toHaveBeenCalled()
+    expect(playerRenderMock.applyNetTiming).toHaveBeenCalledTimes(1)
+    expect(playerRenderMock.applyNetTiming).toHaveBeenCalledWith(timing)
+  })
+
+  it("forwards full-sync net timing from NetworkSyncSystem into player rendering", () => {
+    const { runtime } = makeRuntime()
+    const timing = {
+      protocolVersion: 1,
+      tickRateHz: 60,
+      tickMs: 1000 / 60,
+      netSendRateHz: 60,
+      netSendIntervalMs: 1000 / 60,
+      remoteRenderDelayMs: 50,
+    }
+
+    runtime.start()
+    networkSyncHooks.current?.onNetTiming?.(timing)
+
+    expect(playerRenderMock.applyNetTiming).toHaveBeenCalledWith(timing)
   })
 })

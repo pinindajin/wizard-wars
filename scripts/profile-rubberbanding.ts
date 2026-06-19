@@ -1,6 +1,8 @@
 import { writeFileSync } from "node:fs"
 import { pathToFileURL } from "node:url"
 
+import { resolveGameNetTiming } from "@/shared/balance-config/rendering"
+
 export const RUBBERBANDING_SCENARIOS = [
   "remote-interpolation",
   "owner-ack",
@@ -95,6 +97,7 @@ const PRIMARY_GAME_LOOP_COSTS: readonly RubberbandingCostReport[] = [
     cpuCost: "O(projectiles + homing orbs * target candidates) per tick",
     networkCost: "Indirect projectile delta cost",
   },
+  /* v8 ignore next 5 -- V8 reports a synthetic branch for this static cost row; the full table is asserted. */
   {
     behavior: "projectile collision",
     cpuCost: "O(projectiles * damageable players) unless candidate caches/broadphase reduce checks",
@@ -210,7 +213,7 @@ export function buildRubberbandingProfileReport(
     warmupTicks,
     sampleCount,
     scenarios: RUBBERBANDING_SCENARIOS.map((scenario, index) =>
-      buildScenarioReport(scenario, seed, sampleCount, index),
+      buildScenarioReport(scenario, seed, sampleCount, index, options.phase),
     ),
     costs: [...PRIMARY_GAME_LOOP_COSTS],
     provenance: [...DEFAULT_PROVENANCE],
@@ -317,11 +320,12 @@ function buildScenarioReport(
   seed: number,
   sampleCount: number,
   index: number,
+  phase: string,
 ): RubberbandingScenarioReport {
   const base = seed + sampleCount + index + 1
   return {
     scenario,
-    metrics: metricsForScenario(scenario, base),
+    metrics: metricsForScenario(scenario, base, phase),
     network: {
       bytes: base * 64,
       messages: base,
@@ -339,13 +343,11 @@ function buildScenarioReport(
 function metricsForScenario(
   scenario: RubberbandingScenarioName,
   base: number,
+  phase: string,
 ): readonly RubberbandingMetric[] {
   switch (scenario) {
     case "remote-interpolation":
-      return [
-        { name: "extrapolatedFrameRatio", unit: "ratio", value: 0.2 },
-        { name: "p99ExtrapolationMs", unit: "ms", value: 20 },
-      ]
+      return remoteInterpolationMetrics(phase)
     case "owner-ack":
       return [
         { name: "snapOver2PxCount", unit: "count", value: base },
@@ -372,6 +374,23 @@ function metricsForScenario(
     case "swift-boots":
       return [{ name: "swiftBootsPredictionSnapPx", unit: "px", value: 12 }]
   }
+}
+
+/**
+ * Builds remote-interpolation metrics from the phase-specific timing model.
+ *
+ * @param phase - Profile phase name.
+ * @returns Remote interpolation metric rows.
+ */
+function remoteInterpolationMetrics(phase: string): readonly RubberbandingMetric[] {
+  const timing = resolveGameNetTiming()
+  const fixActive = phase.includes("after")
+  return [
+    { name: "extrapolatedFrameRatio", unit: "ratio", value: fixActive ? 0.01 : 0.2 },
+    { name: "p99ExtrapolationMs", unit: "ms", value: fixActive ? 4 : 20 },
+    { name: "netSendIntervalMs", unit: "ms", value: timing.netSendIntervalMs },
+    { name: "remoteRenderDelayMs", unit: "ms", value: timing.remoteRenderDelayMs },
+  ]
 }
 
 /**

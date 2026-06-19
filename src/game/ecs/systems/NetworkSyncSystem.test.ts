@@ -136,6 +136,29 @@ describe("NetworkSyncSystem.applyFullSync (payload from GameStateSync)", () => {
     expect(clientEntities.has(0)).toBe(true)
     expect(ClientPlayerState[0]!.playerId).toBe("u0")
   })
+
+  it("emits optional net timing from GameStateSync payloads", () => {
+    const onNetTiming = vi.fn()
+    const timing = {
+      protocolVersion: 1 as const,
+      tickRateHz: 60,
+      tickMs: 1000 / 60,
+      netSendRateHz: 30,
+      netSendIntervalMs: 1000 / 30,
+      remoteRenderDelayMs: 84,
+    }
+    const systemWithTiming = new NetworkSyncSystem({ onNetTiming })
+
+    systemWithTiming.applyFullSync({
+      players: [baseSnapshot({ id: 0, playerId: "u0" })],
+      fireballs: [],
+      seq: 0,
+      serverTimeMs: 42,
+      timing,
+    })
+
+    expect(onNetTiming).toHaveBeenCalledWith(timing)
+  })
 })
 
 describe("NetworkSyncSystem.applyBatchUpdate", () => {

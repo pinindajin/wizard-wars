@@ -41,6 +41,15 @@ const THRESHOLDS_BY_SCENARIO: ReadonlyMap<string, readonly MetricThreshold[]> = 
   ["swift-boots", [{ metric: "swiftBootsPredictionSnapPx", absoluteMax: 0 }]],
 ])
 
+const PHASE_SCENARIO_BY_NUMBER: ReadonlyMap<number, string> = new Map([
+  [1, "remote-interpolation"],
+  [2, "owner-ack"],
+  [4, "world-collision"],
+  [5, "homing-orb-pressure"],
+  [6, "input-bandwidth"],
+  [7, "swift-boots"],
+])
+
 /**
  * Compares a rubberbanding after-profile against its baseline profile.
  *
@@ -65,7 +74,7 @@ export function assertRubberbandingProfile(
     if (!baselineScenarios.has(scenario)) failures.push(`missing baseline scenario: ${scenario}`)
   }
 
-  for (const [scenarioName, thresholds] of THRESHOLDS_BY_SCENARIO) {
+  for (const [scenarioName, thresholds] of thresholdsForPhase(options.after.phase)) {
     const baseline = baselineScenarios.get(scenarioName)
     const after = afterScenarios.get(scenarioName)
     if (!baseline || !after) continue
@@ -76,6 +85,32 @@ export function assertRubberbandingProfile(
     ok: failures.length === 0,
     failures,
   }
+}
+
+/**
+ * Selects assertion thresholds for a numbered phase profile.
+ *
+ * @param phase - After-profile phase name.
+ * @returns Scenario thresholds relevant to the phase, or all thresholds for unnumbered profiles.
+ */
+function thresholdsForPhase(phase: string): ReadonlyMap<string, readonly MetricThreshold[]> {
+  const phaseNumber = profilePhaseNumber(phase)
+  if (phaseNumber === null) return THRESHOLDS_BY_SCENARIO
+  const scenario = PHASE_SCENARIO_BY_NUMBER.get(phaseNumber)
+  if (scenario === undefined) return new Map()
+  const thresholds = THRESHOLDS_BY_SCENARIO.get(scenario)!
+  return new Map([[scenario, thresholds]])
+}
+
+/**
+ * Extracts a numeric phase identifier from profile names such as `phase-1-after`.
+ *
+ * @param phase - Profile phase string.
+ * @returns Phase number, or null when the profile is not phase-numbered.
+ */
+function profilePhaseNumber(phase: string): number | null {
+  const match = /^phase-(\d+)-/.exec(phase)
+  return match ? Number(match[1]) : null
 }
 
 /**
@@ -151,6 +186,12 @@ function assertScenarioThresholds(
   for (const threshold of thresholds) {
     const baselineValue = baseline.get(threshold.metric)
     const afterValue = after.get(threshold.metric)
+    if (baselineValue === undefined) {
+      failures.push(`${scenario} missing baseline metric: ${threshold.metric}`)
+    }
+    if (afterValue === undefined) {
+      failures.push(`${scenario} missing after metric: ${threshold.metric}`)
+    }
     if (baselineValue === undefined || afterValue === undefined) continue
     const expected = expectedMax(baselineValue, threshold)
     if (afterValue > expected) {

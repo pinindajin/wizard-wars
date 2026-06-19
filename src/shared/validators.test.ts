@@ -237,6 +237,45 @@ describe("parseGameStateSyncPayload", () => {
     expect(parsed).toEqual(raw)
   })
 
+  it("accepts optional net timing in GameStateSync payloads", () => {
+    const raw: GameStateSyncPayload = {
+      players: [],
+      fireballs: [],
+      homingOrbs: [],
+      seq: 0,
+      serverTimeMs: 1700000000000,
+      timing: {
+        protocolVersion: 1,
+        tickRateHz: 60,
+        tickMs: 1000 / 60,
+        netSendRateHz: 30,
+        netSendIntervalMs: 1000 / 30,
+        remoteRenderDelayMs: 84,
+      },
+    }
+
+    expect(parseGameStateSyncPayload(raw)).toEqual(raw)
+  })
+
+  it("rejects malformed net timing in GameStateSync payloads", () => {
+    expect(() =>
+      parseGameStateSyncPayload({
+        players: [],
+        fireballs: [],
+        seq: 0,
+        serverTimeMs: 1700000000000,
+        timing: {
+          protocolVersion: 1,
+          tickRateHz: 60,
+          tickMs: 1000 / 60,
+          netSendRateHz: 30,
+          netSendIntervalMs: Number.NaN,
+          remoteRenderDelayMs: 84,
+        },
+      } as never),
+    ).toThrow()
+  })
+
   it("accepts fireballs in sync payload", () => {
     const raw: GameStateSyncPayload = {
       players: [],

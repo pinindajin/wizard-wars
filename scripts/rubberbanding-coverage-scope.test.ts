@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  mergeRubberbandingChangedFiles,
   resolveRubberbandingCoverageInclude,
   validateRubberbandingCoverageScope,
 } from "./rubberbanding-coverage-scope"
@@ -20,6 +21,20 @@ describe("rubberbanding coverage scope", () => {
 
     expect(include).toEqual([
       "scripts/profile-rubberbanding.ts",
+      "src/shared/types.ts",
+    ])
+  })
+
+  it("merges committed, staged, and unstaged changed file lists deterministically", () => {
+    expect(
+      mergeRubberbandingChangedFiles([
+        ["src/shared/types.ts", "scripts/profile-rubberbanding.ts"],
+        ["src/shared/types.ts", "src/game/scenes/ArenaRuntime.ts"],
+        ["scripts/profile-rubberbanding.ts"],
+      ]),
+    ).toEqual([
+      "scripts/profile-rubberbanding.ts",
+      "src/game/scenes/ArenaRuntime.ts",
       "src/shared/types.ts",
     ])
   })

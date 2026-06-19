@@ -1,6 +1,11 @@
-import { TICK_RATE_HZ } from "@/shared/balance-config/rendering"
+import {
+  DEFAULT_VISUAL_NET_SEND_RATE_HZ,
+  TICK_RATE_HZ,
+  resolveGameNetTiming,
+} from "@/shared/balance-config/rendering"
+import type { GameNetTimingPayload } from "@/shared/types"
 
-export const DEFAULT_NET_SEND_RATE_HZ = 30
+export const DEFAULT_NET_SEND_RATE_HZ = DEFAULT_VISUAL_NET_SEND_RATE_HZ
 export const MIN_NET_SEND_RATE_HZ = 10
 export const MAX_NET_SEND_RATE_HZ = 60
 export const PERFORMANCE_STATUS_WINDOW_MS = 1_000
@@ -9,6 +14,7 @@ export type GamePerformanceConfig = {
   readonly simTickRateHz: number
   readonly netSendRateHz: number
   readonly netSendIntervalMs: number
+  readonly netTiming: GameNetTimingPayload
 }
 
 /**
@@ -54,5 +60,9 @@ export function resolveGamePerformanceConfig(
     simTickRateHz: TICK_RATE_HZ,
     netSendRateHz,
     netSendIntervalMs: 1_000 / netSendRateHz,
+    netTiming: resolveGameNetTiming({
+      netSendRateHz,
+      netSendIntervalMs: 1_000 / netSendRateHz,
+    }),
   }
 }

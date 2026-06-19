@@ -217,6 +217,16 @@ export type PlayerBatchUpdatePayload = {
   readonly serverTimeMs: number
 }
 
+/** Server-provided timing knobs that keep client interpolation aligned with visual cadence. */
+export type GameNetTimingPayload = {
+  readonly protocolVersion: 1
+  readonly tickRateHz: number
+  readonly tickMs: number
+  readonly netSendRateHz: number
+  readonly netSendIntervalMs: number
+  readonly remoteRenderDelayMs: number
+}
+
 /** Full game state sync for late-joiners or reconnects. */
 export type GameStateSyncPayload = {
   readonly players: readonly PlayerSnapshot[]
@@ -229,6 +239,8 @@ export type GameStateSyncPayload = {
   readonly seq: number
   /** Server wall-clock time (ms) when the snapshot was built. */
   readonly serverTimeMs: number
+  /** Optional net timing for dynamic remote interpolation. Missing means client fallback. */
+  readonly timing?: GameNetTimingPayload
 }
 
 /** A fireball projectile snapshot. */
@@ -577,7 +589,10 @@ export type MatchCountdownStartPayload = {
 }
 
 /** Server → all: countdown over, start playing. */
-export type MatchGoPayload = Record<string, never>
+export type MatchGoPayload = {
+  /** Optional net timing; `{}` remains valid for legacy compatibility. */
+  readonly timing?: GameNetTimingPayload
+}
 
 /** Unified message shape for transport normalization. */
 export type AnyWsMessage = {

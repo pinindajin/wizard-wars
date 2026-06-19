@@ -238,6 +238,16 @@ export const combatTelegraphStartPayloadSchema = z.object({
   endsAtServerTimeMs: z.number().finite().nonnegative(),
 })
 
+/** Net timing sent with match start/full sync to drive remote interpolation. */
+export const gameNetTimingPayloadSchema = z.object({
+  protocolVersion: z.literal(1),
+  tickRateHz: z.number().finite().positive(),
+  tickMs: z.number().finite().positive(),
+  netSendRateHz: z.number().finite().positive(),
+  netSendIntervalMs: z.number().finite().positive(),
+  remoteRenderDelayMs: z.number().finite().positive(),
+})
+
 /** Full `game_state_sync` payload (server + client). */
 export const gameStateSyncPayloadSchema = z.object({
   players: z.array(playerSnapshotSchema).max(MAX_PLAYERS_PER_MATCH),
@@ -246,6 +256,7 @@ export const gameStateSyncPayloadSchema = z.object({
   activeTelegraphs: z.array(combatTelegraphStartPayloadSchema).max(64).optional(),
   seq: z.number().int().nonnegative(),
   serverTimeMs: z.number().finite().nonnegative(),
+  timing: gameNetTimingPayloadSchema.optional(),
 })
 
 /** Server → clients: player eliminated (validated before broadcast). */

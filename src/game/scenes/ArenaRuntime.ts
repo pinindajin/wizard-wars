@@ -5,6 +5,7 @@ import { WsEvent } from "@/shared/events"
 import { ARENA_CAMERA_FOLLOW_ZOOM } from "@/shared/balance-config/rendering"
 import type {
   GameStateSyncPayload,
+  MatchGoPayload,
   PlayerBatchUpdatePayload,
   FireballLaunchPayload,
   FireballBatchUpdatePayload,
@@ -229,6 +230,9 @@ export class ArenaRuntime {
       onServerTime: (serverTimeMs) => {
         this.playerRenderSystem.updateServerTimeOffset(serverTimeMs)
       },
+      onNetTiming: (timing) => {
+        this.playerRenderSystem.applyNetTiming(timing)
+      },
     })
     this.projectileRenderSystem = new ProjectileRenderSystem(this.scene)
     this.lightningBoltRenderSystem = new LightningBoltRenderSystem(this.scene)
@@ -447,7 +451,7 @@ export class ArenaRuntime {
           break
         }
         case WsEvent.MatchGo:
-          this._onMatchGo()
+          this._onMatchGo(message.payload as MatchGoPayload)
           break
       }
     })
@@ -480,7 +484,10 @@ export class ArenaRuntime {
   /**
    * Called when the server signals the match has started (MatchGo).
    */
-  private _onMatchGo(): void {
+  private _onMatchGo(payload?: MatchGoPayload): void {
+    if (payload?.timing) {
+      this.playerRenderSystem.applyNetTiming(payload.timing)
+    }
     this._ensureMatchLive()
   }
 

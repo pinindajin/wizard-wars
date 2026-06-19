@@ -1,3 +1,5 @@
+import type { GameNetTimingPayload } from "@/shared/types"
+
 /** Server simulation tick rate in Hz. */
 export const TICK_RATE_HZ = 60
 /** Duration of one simulation tick in seconds. */
@@ -32,11 +34,83 @@ export const REPLAY_SMOOTHING_MS = 80
  */
 export const REMOTE_RENDER_DELAY_MS = 33
 
+/** Default server visual message cadence when no timing payload is available. */
+export const DEFAULT_VISUAL_NET_SEND_RATE_HZ = 30
+/** Minimum dynamic remote render delay, roughly three fixed sim ticks. */
+export const REMOTE_RENDER_DELAY_MIN_MS = Math.ceil(3 * TICK_MS)
+/** Maximum dynamic remote render delay before remote actors feel too stale. */
+export const REMOTE_RENDER_DELAY_MAX_MS = 250
+
 /**
  * Maximum velocity-based extrapolation beyond the newest snapshot in the
  * remote interpolation buffer (used when the buffer underflows).
  */
 export const REMOTE_EXTRAPOLATION_CAP_MS = 120
+
+/**
+ * Computes the dynamic remote interpolation delay from the visual send interval.
+ *
+ * @param netSendIntervalMs - Server visual-message interval in milliseconds.
+ * @returns Clamped render delay in milliseconds.
+ */
+export function resolveRemoteRenderDelayMs(netSendIntervalMs: number): number {
+  const fallbackIntervalMs = 1000 / DEFAULT_VISUAL_NET_SEND_RATE_HZ
+  const safeIntervalMs = isPositiveFiniteNumber(netSendIntervalMs)
+    ? netSendIntervalMs
+    : fallbackIntervalMs
+  const delayMs = Math.ceil(2 * safeIntervalMs + TICK_MS)
+  return clamp(delayMs, REMOTE_RENDER_DELAY_MIN_MS, REMOTE_RENDER_DELAY_MAX_MS)
+}
+
+/**
+ * Normalizes optional server net timing into a complete interpolation contract.
+ *
+ * @param timing - Partial or missing server timing payload.
+ * @returns Complete timing payload with a recomputed remote render delay.
+ */
+export function resolveGameNetTiming(
+  timing?: Partial<GameNetTimingPayload> | null,
+): GameNetTimingPayload {
+  const providedIntervalMs = isPositiveFiniteNumber(timing?.netSendIntervalMs)
+    ? timing.netSendIntervalMs
+    : null
+  const providedRateHz = isPositiveFiniteNumber(timing?.netSendRateHz)
+    ? timing.netSendRateHz
+    : null
+  const netSendIntervalMs =
+    providedIntervalMs ?? 1000 / (providedRateHz ?? DEFAULT_VISUAL_NET_SEND_RATE_HZ)
+  const netSendRateHz = providedRateHz ?? 1000 / netSendIntervalMs
+  return {
+    protocolVersion: 1,
+    tickRateHz: TICK_RATE_HZ,
+    tickMs: TICK_MS,
+    netSendRateHz,
+    netSendIntervalMs,
+    remoteRenderDelayMs: resolveRemoteRenderDelayMs(netSendIntervalMs),
+  }
+}
+
+/**
+ * Checks whether a value is a positive finite number.
+ *
+ * @param value - Number candidate.
+ * @returns True when the value can safely drive timing math.
+ */
+function isPositiveFiniteNumber(value: number | undefined): value is number {
+  return value !== undefined && Number.isFinite(value) && value > 0
+}
+
+/**
+ * Clamps a number to an inclusive range.
+ *
+ * @param value - Candidate value.
+ * @param min - Inclusive lower bound.
+ * @param max - Inclusive upper bound.
+ * @returns Value inside the provided range.
+ */
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value))
+}
 
 /** Base tile size in pixels (also used for all asset sprites). */
 export const BASE_TILE_SIZE_PX = 64
