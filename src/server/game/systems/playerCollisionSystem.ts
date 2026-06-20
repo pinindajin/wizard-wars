@@ -4,7 +4,7 @@
  *
  * Only live (non-dying, non-dead, non-spectator) players participate.
  */
-import { query, hasComponent } from "bitecs"
+import { query, hasComponent, addComponent } from "bitecs"
 
 import {
   Position,
@@ -15,6 +15,7 @@ import {
   JumpArc,
   TerrainState,
   TERRAIN_KIND_TO_STATE,
+  NeedsWorldCollisionResolution,
 } from "../components"
 import type { SimCtx } from "../simulation"
 import { PLAYER_RADIUS_PX } from "../../../shared/balance-config"
@@ -85,6 +86,12 @@ export function playerCollisionSystem(ctx: SimCtx): void {
       if (!canKeepCollisionDisplacement(world, b)) {
         Position.x[b] = bx
         Position.y[b] = by
+      }
+      if (Position.x[a] !== ax || Position.y[a] !== ay) {
+        addComponent(world, a, NeedsWorldCollisionResolution)
+      }
+      if (Position.x[b] !== bx || Position.y[b] !== by) {
+        addComponent(world, b, NeedsWorldCollisionResolution)
       }
     }
   }

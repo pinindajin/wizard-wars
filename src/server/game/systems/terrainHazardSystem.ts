@@ -1,4 +1,4 @@
-import { hasComponent, query } from "bitecs"
+import { addComponent, hasComponent, query } from "bitecs"
 
 import {
   DeadTag,
@@ -11,6 +11,7 @@ import {
   TerrainState,
   Velocity,
   TERRAIN_KIND,
+  NeedsWorldCollisionResolution,
 } from "../components"
 import type { SimCtx } from "../simulation"
 import {
@@ -81,6 +82,7 @@ export function terrainHazardSystem(ctx: SimCtx): void {
     const ny = (dy / dist) * applied
     Position.x[eid] += nx
     Position.y[eid] += ny
+    addComponent(world, eid, NeedsWorldCollisionResolution)
     Velocity.vx[eid] = nx / TICK_DT_SEC
     Velocity.vy[eid] = ny / TICK_DT_SEC
 

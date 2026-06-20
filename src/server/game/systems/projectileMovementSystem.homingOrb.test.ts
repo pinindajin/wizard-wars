@@ -184,6 +184,57 @@ describe("projectileMovementSystem homing orbs", () => {
     expect(ctx.homingOrbTargetPlayerMap.get(orb)).toBe("nearest")
   })
 
+  it("retargeting skips non-owner entities with the owner user id", () => {
+    const world = createWorld()
+    const owner = addPlayer(world, 0, 0)
+    const deadTarget = addPlayer(world, 300, 100)
+    const duplicateOwnerUser = addPlayer(world, 120, 100)
+    const nearestEnemy = addPlayer(world, 130, 100)
+    addComponent(world, deadTarget, DeadTag)
+    const orb = addOrb(world, owner, deadTarget, 0, 120)
+    const ctx = emptyCtx({
+      world,
+      entityPlayerMap: new Map([
+        [owner, "caster"],
+        [deadTarget, "dead"],
+        [duplicateOwnerUser, "caster"],
+        [nearestEnemy, "nearest"],
+      ]),
+      homingOrbOwnerMap: new Map([[orb, "caster"]]),
+      homingOrbTargetPlayerMap: new Map([[orb, "dead"]]),
+    })
+
+    projectileMovementSystem(ctx)
+
+    expect(HomingOrb.targetEid[orb]).toBe(nearestEnemy)
+    expect(ctx.homingOrbTargetPlayerMap.get(orb)).toBe("nearest")
+  })
+
+  it("retargets to the nearest valid player when owner user id is missing", () => {
+    const world = createWorld()
+    const owner = addPlayer(world, 0, 0)
+    const deadTarget = addPlayer(world, 300, 100)
+    const nearest = addPlayer(world, 130, 100)
+    const farther = addPlayer(world, 220, 100)
+    addComponent(world, deadTarget, DeadTag)
+    const orb = addOrb(world, owner, deadTarget, 0, 120)
+    const ctx = emptyCtx({
+      world,
+      entityPlayerMap: new Map([
+        [owner, "caster"],
+        [deadTarget, "dead"],
+        [nearest, "nearest"],
+        [farther, "farther"],
+      ]),
+      homingOrbTargetPlayerMap: new Map([[orb, "dead"]]),
+    })
+
+    projectileMovementSystem(ctx)
+
+    expect(HomingOrb.targetEid[orb]).toBe(nearest)
+    expect(ctx.homingOrbTargetPlayerMap.get(orb)).toBe("nearest")
+  })
+
   it("expires in place and deals half damage to valid enemies in radius", () => {
     const world = createWorld()
     const owner = addPlayer(world, 0, 0)
@@ -221,5 +272,114 @@ describe("projectileMovementSystem homing orbs", () => {
     })
     expect(ctx.homingOrbRemovedIds).toEqual([orb])
     expect(hasComponent(world, orb, HomingOrbTag)).toBe(false)
+  })
+
+  it("expiry damage can hit targets when owner user id is missing", () => {
+    const world = createWorld()
+    const owner = addPlayer(world, 0, 0)
+    const target = addPlayer(world, 100, 100)
+    const orb = addOrb(world, owner, target, 0, 120, 20)
+    Position.x[orb] = 100
+    Position.y[orb] = 55
+    const commandBuffer = createCommandBuffer()
+    const ctx = emptyCtx({
+      world,
+      commandBuffer,
+      currentTick: 20,
+      entityPlayerMap: new Map([
+        [owner, "caster"],
+        [target, "target"],
+      ]),
+      homingOrbTargetPlayerMap: new Map([[orb, "target"]]),
+    })
+
+    projectileMovementSystem(ctx)
+    commandBuffer.execute(world)
+
+    expect(ctx.damageRequests).toContainEqual({
+      targetEid: target,
+      damage: HOMING_ORB_EXPIRY_DAMAGE,
+      killerUserId: null,
+      killerAbilityId: "homing_orb",
+    })
+    expect(ctx.homingOrbImpacts[0]).toMatchObject({
+      id: orb,
+      reason: "expired",
+      hitPlayerIds: ["target"],
+      damage: HOMING_ORB_EXPIRY_DAMAGE,
+    })
+    expect(hasComponent(world, orb, HomingOrbTag)).toBe(false)
+  })
+
+  it("expiry damage skips non-owner entities with the owner user id", () => {
+    const world = createWorld()
+    const owner = addPlayer(world, 0, 0)
+    const duplicateOwnerUser = addPlayer(world, 100, 100)
+    const target = addPlayer(world, 112, 100)
+    const orb = addOrb(world, owner, target, 0, 120, 20)
+    Position.x[orb] = 100
+    Position.y[orb] = 55
+    const commandBuffer = createCommandBuffer()
+    const ctx = emptyCtx({
+      world,
+      commandBuffer,
+      currentTick: 20,
+      entityPlayerMap: new Map([
+        [owner, "caster"],
+        [duplicateOwnerUser, "caster"],
+        [target, "target"],
+      ]),
+      homingOrbOwnerMap: new Map([[orb, "caster"]]),
+      homingOrbTargetPlayerMap: new Map([[orb, "target"]]),
+    })
+
+    projectileMovementSystem(ctx)
+    commandBuffer.execute(world)
+
+    expect(ctx.damageRequests).toEqual([
+      {
+        targetEid: target,
+        damage: HOMING_ORB_EXPIRY_DAMAGE,
+        killerUserId: "caster",
+        killerAbilityId: "homing_orb",
+      },
+    ])
+    expect(ctx.damageRequests).not.toContainEqual(
+      expect.objectContaining({ targetEid: duplicateOwnerUser }),
+    )
+    expect(ctx.homingOrbImpacts[0]?.hitPlayerIds).toEqual(["target"])
+  })
+
+  it("expiry damage skips the owner and misses enemies outside the radius", () => {
+    const world = createWorld()
+    const owner = addPlayer(world, 100, 100)
+    const farTarget = addPlayer(world, 400, 400)
+    const orb = addOrb(world, owner, owner, 0, 120, 20)
+    Position.x[orb] = 100
+    Position.y[orb] = 55
+    const commandBuffer = createCommandBuffer()
+    const ctx = emptyCtx({
+      world,
+      commandBuffer,
+      currentTick: 20,
+      entityPlayerMap: new Map([
+        [owner, "caster"],
+        [farTarget, "target"],
+      ]),
+      homingOrbOwnerMap: new Map([[orb, "caster"]]),
+      homingOrbTargetPlayerMap: new Map([[orb, "caster"]]),
+    })
+
+    projectileMovementSystem(ctx)
+    commandBuffer.execute(world)
+
+    expect(ctx.damageRequests).toEqual([])
+    expect(ctx.homingOrbImpacts[0]).toMatchObject({
+      id: orb,
+      reason: "expired",
+      hitPlayerIds: [],
+      damage: HOMING_ORB_EXPIRY_DAMAGE,
+    })
+    expect(ctx.homingOrbRemovedIds).toEqual([orb])
   })
 })

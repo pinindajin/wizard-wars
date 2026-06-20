@@ -106,6 +106,7 @@ function addHomingOrb(
   x: number,
   y: number,
   targetEid: number,
+  ownerEid = -1,
 ): number {
   const eid = addEntity(world)
   addComponent(world, eid, HomingOrbTag)
@@ -117,6 +118,7 @@ function addHomingOrb(
   Position.y[eid] = y
   Velocity.vx[eid] = 120
   Velocity.vy[eid] = 0
+  Ownership.ownerEid[eid] = ownerEid
   HomingOrb.targetEid[eid] = targetEid
   HomingOrb.headingRad[eid] = 0
   HomingOrb.speedPxPerSec[eid] = 120
@@ -294,7 +296,7 @@ describe("projectileCollisionSystem", () => {
     const world = createWorld()
     const owner = addPlayer(world, 0, 0)
     const target = addPlayer(world, 100, 100)
-    const orb = addHomingOrb(world, 100, 55, target)
+    const orb = addHomingOrb(world, 100, 55, target, owner)
     const commandBuffer = createCommandBuffer()
     const ctx = emptyCtx({
       world,
@@ -326,5 +328,67 @@ describe("projectileCollisionSystem", () => {
     })
     expect(ctx.homingOrbRemovedIds).toEqual([orb])
     expect(hasComponent(world, orb, HomingOrbTag)).toBe(false)
+  })
+
+  it("homing orb direct hit can damage enemies when owner user id is missing", () => {
+    const world = createWorld()
+    const owner = addPlayer(world, 0, 0)
+    const target = addPlayer(world, 100, 100)
+    const orb = addHomingOrb(world, 100, 55, target, owner)
+    const commandBuffer = createCommandBuffer()
+    const ctx = emptyCtx({
+      world,
+      commandBuffer,
+      entityPlayerMap: new Map([
+        [owner, "caster"],
+        [target, "target"],
+      ]),
+      homingOrbTargetPlayerMap: new Map([[orb, "target"]]),
+    })
+
+    projectileCollisionSystem(ctx)
+    commandBuffer.execute(world)
+
+    expect(ctx.damageRequests).toEqual([
+      {
+        targetEid: target,
+        damage: HOMING_ORB_DAMAGE,
+        killerUserId: null,
+        killerAbilityId: "homing_orb",
+      },
+    ])
+    expect(ctx.homingOrbImpacts[0]).toMatchObject({
+      id: orb,
+      reason: "hit",
+      targetId: "target",
+      damage: HOMING_ORB_DAMAGE,
+    })
+    expect(hasComponent(world, orb, HomingOrbTag)).toBe(false)
+  })
+
+  it("homing orb direct hit ignores its owner and keeps flying on misses", () => {
+    const world = createWorld()
+    const owner = addPlayer(world, 100, 100)
+    const farTarget = addPlayer(world, 400, 400)
+    const orb = addHomingOrb(world, 100, 55, owner, owner)
+    const commandBuffer = createCommandBuffer()
+    const ctx = emptyCtx({
+      world,
+      commandBuffer,
+      entityPlayerMap: new Map([
+        [owner, "caster"],
+        [farTarget, "target"],
+      ]),
+      homingOrbOwnerMap: new Map([[orb, "caster"]]),
+      homingOrbTargetPlayerMap: new Map([[orb, "caster"]]),
+    })
+
+    projectileCollisionSystem(ctx)
+    commandBuffer.execute(world)
+
+    expect(ctx.damageRequests).toEqual([])
+    expect(ctx.homingOrbImpacts).toEqual([])
+    expect(ctx.homingOrbRemovedIds).toEqual([])
+    expect(hasComponent(world, orb, HomingOrbTag)).toBe(true)
   })
 })

@@ -1,4 +1,9 @@
-import type { GameStateSyncPayload, PlayerBatchUpdatePayload } from "@/shared/types"
+import type {
+  GameNetTimingPayload,
+  GameStateSyncPayload,
+  PlayerBatchUpdatePayload,
+  PlayerOwnerAckPayload,
+} from "@/shared/types"
 import { clientLogger } from "@/lib/clientLogger"
 import {
   ClientPosition,
@@ -29,7 +34,10 @@ export type LocalAckSample = {
   readonly id: number
   readonly x: number
   readonly y: number
+  readonly vx?: number
+  readonly vy?: number
   readonly lastProcessedInputSeq: number
+  readonly replayContext?: PlayerOwnerAckPayload["replayContext"]
 }
 
 type NetworkSyncHooks = {
@@ -44,6 +52,8 @@ type NetworkSyncHooks = {
    * wall-clock time so the client can maintain a clock offset.
    */
   readonly onServerTime?: (serverTimeMs: number) => void
+  /** Called when a full sync carries net timing for remote interpolation. */
+  readonly onNetTiming?: (timing: GameNetTimingPayload | undefined) => void
 }
 
 /**
@@ -57,6 +67,7 @@ export class NetworkSyncSystem {
   private readonly onRemoteSnapshot?: NetworkSyncHooks["onRemoteSnapshot"]
   private readonly onLocalAck?: NetworkSyncHooks["onLocalAck"]
   private readonly onServerTime?: NetworkSyncHooks["onServerTime"]
+  private readonly onNetTiming?: NetworkSyncHooks["onNetTiming"]
   private readonly log = clientLogger.child({ area: "netcode" })
 
   /** Set by Arena once the local playerId is known; used to route acks. */
@@ -74,6 +85,7 @@ export class NetworkSyncSystem {
     this.onRemoteSnapshot = hooks.onRemoteSnapshot
     this.onLocalAck = hooks.onLocalAck
     this.onServerTime = hooks.onServerTime
+    this.onNetTiming = hooks.onNetTiming
   }
 
   /**
@@ -84,6 +96,7 @@ export class NetworkSyncSystem {
    */
   applyFullSync(payload: GameStateSyncPayload): void {
     this.onServerTime?.(payload.serverTimeMs)
+    this.onNetTiming?.(payload.timing)
     const keep = new Set(payload.players.map((p) => p.id))
     let removedCount = 0
     for (const id of [...clientEntities]) {
@@ -116,6 +129,7 @@ export class NetworkSyncSystem {
         invulnerable: snap.invulnerable,
         jumpZ: snap.jumpZ,
         jumpStartedInLava: snap.jumpStartedInLava,
+        hasSwiftBoots: snap.hasSwiftBoots,
         abilityStates: snap.abilityStates,
       }
       this.lastAckByPlayer.set(snap.playerId, snap.lastProcessedInputSeq)
@@ -185,6 +199,9 @@ export class NetworkSyncSystem {
         if (delta.jumpZ !== undefined) state.jumpZ = delta.jumpZ
         if (delta.jumpStartedInLava !== undefined) {
           state.jumpStartedInLava = delta.jumpStartedInLava
+        }
+        if (delta.hasSwiftBoots !== undefined) {
+          state.hasSwiftBoots = delta.hasSwiftBoots
         }
         if (delta.abilityStates !== undefined) state.abilityStates = delta.abilityStates
       }
@@ -262,5 +279,41 @@ export class NetworkSyncSystem {
         }
       }
     }
+  }
+
+  /**
+   * Applies an owner-only ACK without mutating room-wide visual ECS state.
+   *
+   * @param payload - Dedicated server ACK for the local player.
+   */
+  applyOwnerAck(payload: PlayerOwnerAckPayload): void {
+    this.onServerTime?.(payload.serverTimeMs)
+    if (payload.playerId !== this.localPlayerId) return
+
+    const prev = this.lastAckByPlayer.get(payload.playerId) ?? -1
+    if (payload.lastProcessedInputSeq < prev) {
+      this.log.warn(
+        {
+          event: "net.sync.owner_ack.regressed",
+          playerId: payload.playerId,
+          previousSeq: prev,
+          seq: payload.lastProcessedInputSeq,
+        },
+        "Local owner input ack regressed",
+      )
+      return
+    }
+    if (payload.lastProcessedInputSeq === prev) return
+
+    this.lastAckByPlayer.set(payload.playerId, payload.lastProcessedInputSeq)
+    this.onLocalAck?.({
+      id: payload.id,
+      x: payload.x,
+      y: payload.y,
+      vx: payload.vx,
+      vy: payload.vy,
+      lastProcessedInputSeq: payload.lastProcessedInputSeq,
+      replayContext: payload.replayContext,
+    })
   }
 }

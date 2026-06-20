@@ -50,7 +50,10 @@ export type LocalReplayContext = {
 export type LocalAckState = {
   readonly x: number
   readonly y: number
+  readonly vx?: number
+  readonly vy?: number
   readonly lastProcessedInputSeq: number
+  readonly replayContext?: LocalReplayContext
 }
 
 /** Result of `reconcile`. */

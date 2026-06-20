@@ -33,6 +33,7 @@ export const WsEvent = {
   PlayerJoin: "PLAYER_JOIN",
   PlayerLeave: "PLAYER_LEAVE",
   PlayerBatchUpdate: "PLAYER_BATCH_UPDATE",
+  PlayerOwnerAck: "PLAYER_OWNER_ACK",
   GameStateSync: "GAME_STATE_SYNC",
   PlayerDeath: "PLAYER_DEATH",
   PlayerRespawn: "PLAYER_RESPAWN",
@@ -60,6 +61,7 @@ export const WsEvent = {
 
   // Input
   PlayerInput: "PLAYER_INPUT",
+  PlayerInputState: "PLAYER_INPUT_STATE",
 
   // Damage display
   DamageFloat: "DAMAGE_FLOAT",

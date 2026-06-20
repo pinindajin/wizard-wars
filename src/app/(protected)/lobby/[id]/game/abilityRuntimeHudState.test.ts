@@ -48,6 +48,7 @@ function syncPayload(states: AbilityRuntimeStates): GameStateSyncPayload {
         invulnerable: false,
         jumpZ: 0,
         jumpStartedInLava: false,
+        hasSwiftBoots: false,
         abilityStates: states,
         lastProcessedInputSeq: 0,
       },

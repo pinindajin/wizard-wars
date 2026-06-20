@@ -25,12 +25,14 @@ import {
   PlayerInput,
   PlayerTag,
   InvulnerableTag,
+  NeedsWorldCollisionResolution,
   HERO_INDEX,
   ABILITY_INDEX,
   FireballTag,
   HomingOrb,
   HomingOrbTag,
   JumpArc,
+  SwingingWeapon,
   TerrainState,
   TERRAIN_KIND_TO_STATE,
 } from "./components"
@@ -76,7 +78,9 @@ import type {
   FireballSnapshot,
   AbilitySfxPayload,
   AbilityRuntimeStates,
+  PlayerOwnerAckPayload,
 } from "../../shared/types"
+import type { HomingOrbDamageableTarget } from "./homingOrbTargetCache"
 
 import { inputSystem } from "./systems/inputSystem"
 import { castingSystem } from "./systems/castingSystem"
@@ -196,6 +200,7 @@ export type PlayerPrevState = {
   invulnerable: boolean
   jumpZ: number
   jumpStartedInLava: boolean
+  hasSwiftBoots: boolean
   terrainState: PlayerTerrainState
   abilityStates: AbilityRuntimeStates
   lastProcessedInputSeq: number
@@ -214,6 +219,7 @@ export type HomingOrbPrevState = {
   vx: number
   vy: number
   headingRad: number
+  targetId?: string
 }
 
 /** Mutable Homing Orb delta row accumulated inside one simulation tick. */
@@ -313,6 +319,8 @@ export type SimCtx = {
   activeCombatTelegraphs: Map<string, CombatTelegraphStartPayload>
   /** Respawn invulnerability expiry tick keyed by player eid for this simulation world. */
   invulnerableExpiresAtTickByEntity: Map<number, number>
+  /** Tick-local cache of live player hitboxes used by Homing Orb systems. */
+  homingOrbDamageableTargetCache?: HomingOrbDamageableTarget[]
 
   // ── Written by playerDeltaSystem and projectileDeltaSystem ──
   playerDeltas: PlayerDelta[]
@@ -380,6 +388,14 @@ export type GameSimulation = {
    * `serverTimeMs` and per-player `lastProcessedInputSeq`.
    */
   buildGameStateSyncPayload: (serverTimeMs: number) => GameStateSyncPayload
+  /**
+   * Builds an owner-only authoritative ACK sample for local replay.
+   */
+  buildPlayerOwnerAckPayload: (
+    eid: number,
+    lastProcessedInputSeq: number,
+    serverTimeMs: number,
+  ) => PlayerOwnerAckPayload | null
   /**
    * Resets per-tick input ack state when a client establishes a new transport
    * (browser refresh) while the player entity still exists. Internal map may
@@ -466,6 +482,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     addComponent(world, eid, QuickItemSlots)
     addComponent(world, eid, PlayerInput)
     addComponent(world, eid, TerrainState)
+    addComponent(world, eid, NeedsWorldCollisionResolution)
 
     Position.x[eid] = spawn.x
     Position.y[eid] = spawn.y
@@ -563,6 +580,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       jumpZ: 0,
       jumpStartedInLava: false,
       terrainState: "land",
+      hasSwiftBoots: false,
       abilityStates: abilityRuntimeStatesForPlayer(eid, currentTick),
       lastProcessedInputSeq: 0,
     })
@@ -653,6 +671,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       const jumpZ = hasComponent(world, eid, JumpArc) ? JumpArc.z[eid] : 0
       const jumpStartedInLava =
         hasComponent(world, eid, JumpArc) && JumpArc.startedInLava[eid] === 1
+      const hasSwiftBoots = Equipment.hasSwiftBoots[eid] === 1
       const terrainState = TERRAIN_KIND_TO_STATE[TerrainState.kind[eid]] ?? "land"
       const abilityStates = abilityRuntimeStatesForPlayer(eid, currentTick)
       const lastProcessedInputSeq = lastProcessedSeqForNetworkPayload(
@@ -679,6 +698,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
         invulnerable,
         jumpZ,
         jumpStartedInLava,
+        hasSwiftBoots,
         terrainState,
         abilityStates,
         lastProcessedInputSeq,
@@ -723,6 +743,44 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     )
 
     return { players, fireballs, homingOrbs, activeTelegraphs, seq: 0, serverTimeMs }
+  }
+
+  /**
+   * Builds a dedicated owner ACK from current authoritative ECS state.
+   *
+   * @param eid - Player entity id to sample.
+   * @param lastProcessedInputSeq - ACK cursor that triggered this sample.
+   * @param serverTimeMs - Server wall-clock time for the ACK.
+   * @returns Owner ACK payload, or null when the entity is no longer player-owned.
+   */
+  function buildPlayerOwnerAckPayload(
+    eid: number,
+    lastProcessedInputSeq: number,
+    serverTimeMs: number,
+  ): PlayerOwnerAckPayload | null {
+    const playerId = entityPlayerMap.get(eid)
+    if (playerId === undefined) return null
+    const jumpActive = hasComponent(world, eid, JumpArc)
+    const terrainState = TERRAIN_KIND_TO_STATE[TerrainState.kind[eid]] ?? "land"
+    return {
+      id: eid,
+      playerId,
+      x: Position.x[eid],
+      y: Position.y[eid],
+      vx: Velocity.vx[eid],
+      vy: Velocity.vy[eid],
+      lastProcessedInputSeq: Math.max(0, lastProcessedInputSeq),
+      serverTimeMs,
+      replayContext: {
+        moveState: computePlayerMoveState(world, eid),
+        terrainState,
+        castingAbilityId: getCastingAbilityId(world, eid),
+        jumpZ: jumpActive ? JumpArc.z[eid] : 0,
+        jumpStartedInLava: jumpActive && JumpArc.startedInLava[eid] === 1,
+        isSwinging: hasComponent(world, eid, SwingingWeapon),
+        hasSwiftBoots: Equipment.hasSwiftBoots[eid] === 1,
+      },
+    }
   }
 
   // ── tick ─────────────────────────────────────────────────────────────
@@ -862,6 +920,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     economySystem(ctx)
     matchEndSystem(ctx)
     commandBuffer.execute(world)
+    worldCollisionSystem(ctx)
     playerDeltaSystem(ctx)
     projectileDeltaSystem(ctx)
 
@@ -903,6 +962,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     tick,
     requestHostEnd,
     buildGameStateSyncPayload,
+    buildPlayerOwnerAckPayload,
     resetClientInputStream,
   }
 }

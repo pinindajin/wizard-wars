@@ -2,7 +2,7 @@
  * jumpPhysicsSystem — integrates vertical jump height each tick after horizontal motion,
  * resolves landing against walkability (pit deaths), and clears `JumpArc` when grounded.
  */
-import { query, hasComponent, removeComponent } from "bitecs"
+import { query, hasComponent, removeComponent, addComponent } from "bitecs"
 
 import {
   JumpArc,
@@ -16,6 +16,7 @@ import {
   InvulnerableTag,
   TerrainState,
   TERRAIN_KIND,
+  NeedsWorldCollisionResolution,
 } from "../components"
 import type { SimCtx } from "../simulation"
 import {
@@ -97,6 +98,7 @@ export function jumpPhysicsSystem(ctx: SimCtx): void {
     if (landing) {
       Position.x[eid] = landing.x
       Position.y[eid] = landing.y
+      addComponent(world, eid, NeedsWorldCollisionResolution)
       TerrainState.kind[eid] = TERRAIN_KIND.land
       TerrainState.lavaDamageCarry[eid] = 0
       continue

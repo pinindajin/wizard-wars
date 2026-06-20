@@ -1,12 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import { WW_GAME_CONNECTION_REGISTRY_KEY, WW_LOCAL_PLAYER_ID_REGISTRY_KEY } from "../constants"
+import {
+  WW_ACTIVE_LOCAL_INPUT_CALLBACK_REGISTRY_KEY,
+  WW_GAME_CONNECTION_REGISTRY_KEY,
+  WW_LOCAL_PLAYER_ID_REGISTRY_KEY,
+} from "../constants"
 import { ArenaRuntime } from "./ArenaRuntime"
 import { WsEvent } from "@/shared/events"
 import type { AnyWsMessage, MessageHandler } from "@/shared/types"
 import { SFX_KEYS } from "@/shared/balance-config/audio"
 
 const soundPlaySpy = vi.hoisted(() => vi.fn())
+const activeLocalInputSpy = vi.hoisted(() => vi.fn())
 
 const telegraphMock = vi.hoisted(() => ({
   applyFullSync: vi.fn(),
@@ -22,6 +27,7 @@ const playerRenderMock = vi.hoisted(() => ({
   onAuthoritativePosition: vi.fn(),
   onRemoteSnapshot: vi.fn(),
   onLocalAck: vi.fn(),
+  applyNetTiming: vi.fn(),
   updateServerTimeOffset: vi.fn(),
   applyFullSync: vi.fn(),
   onPrimaryMeleeSwing: vi.fn(),
@@ -39,6 +45,8 @@ const playerRenderMock = vi.hoisted(() => ({
 const projectileRenderMock = vi.hoisted(() => ({
   applyFullSyncFireballs: vi.fn(),
   applyFullSyncHomingOrbs: vi.fn(),
+  applyNetTiming: vi.fn(),
+  updateServerTimeOffset: vi.fn(),
   spawnFireball: vi.fn(),
   spawnHomingOrb: vi.fn(),
   applyBatchUpdate: vi.fn(),
@@ -57,6 +65,35 @@ const keyboardControllerMock = vi.hoisted(() => ({
 const mouseControllerMock = vi.hoisted(() => ({
   enable: vi.fn(),
   collectInput: vi.fn(),
+}))
+
+const networkSyncHooks = vi.hoisted(() => ({
+  current: null as {
+    onLocalAck?: (sample: {
+      readonly id: number
+      readonly x: number
+      readonly y: number
+      readonly lastProcessedInputSeq: number
+      readonly replayContext?: {
+        readonly moveState: "idle" | "moving" | "casting" | "rooted" | "swinging"
+        readonly terrainState: "land" | "lava" | "cliff"
+        readonly castingAbilityId: string | null
+        readonly jumpZ: number
+        readonly jumpStartedInLava: boolean
+        readonly isSwinging: boolean
+        readonly hasSwiftBoots: boolean
+      }
+    }) => void
+    onNetTiming?: (timing: unknown) => void
+    onServerTime?: (serverTimeMs: number) => void
+  } | null,
+}))
+
+const networkSyncMock = vi.hoisted(() => ({
+  localPlayerId: null as string | null,
+  applyFullSync: vi.fn(),
+  applyBatchUpdate: vi.fn(),
+  applyOwnerAck: vi.fn(),
 }))
 
 vi.mock("phaser", () => {
@@ -137,11 +174,10 @@ vi.mock("../ecs/systems/DebugOverlaySystem", () => ({
 }))
 
 vi.mock("../ecs/systems/NetworkSyncSystem", () => ({
-  NetworkSyncSystem: vi.fn().mockImplementation(() => ({
-    localPlayerId: null,
-    applyFullSync: vi.fn(),
-    applyBatchUpdate: vi.fn(),
-  })),
+  NetworkSyncSystem: vi.fn().mockImplementation((hooks) => {
+    networkSyncHooks.current = hooks
+    return networkSyncMock
+  }),
 }))
 
 vi.mock("../input/KeyboardController", () => ({
@@ -214,6 +250,7 @@ function makeConnection() {
     sendRequestResync: vi.fn(),
     nextSeq: vi.fn(() => 1),
     sendPlayerInput: vi.fn(),
+    sendPlayerInputState: vi.fn(),
   }
 }
 
@@ -278,6 +315,9 @@ function makeScene(connection: ReturnType<typeof makeConnection>) {
         get: vi.fn((key: string) => {
           if (key === WW_GAME_CONNECTION_REGISTRY_KEY) return connection
           if (key === WW_LOCAL_PLAYER_ID_REGISTRY_KEY) return "player-1"
+          if (key === WW_ACTIVE_LOCAL_INPUT_CALLBACK_REGISTRY_KEY) {
+            return activeLocalInputSpy
+          }
           return undefined
         }),
       },
@@ -298,8 +338,11 @@ function makeRuntime(connection = makeConnection()) {
 describe("ArenaRuntime lifecycle", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    activeLocalInputSpy.mockClear()
     telegraphMock.start.mockClear()
     playerRenderMock.onPrimaryMeleeSwing.mockClear()
+    networkSyncHooks.current = null
+    networkSyncMock.applyOwnerAck.mockClear()
     keyboardControllerMock.collectMoveIntent.mockReturnValue({
       up: false,
       down: false,
@@ -474,6 +517,71 @@ describe("ArenaRuntime lifecycle", () => {
     expect(soundPlaySpy).toHaveBeenCalledWith(SFX_KEYS.homingOrbExpire)
   })
 
+  it("hydrates Homing Orbs from full game state sync with the snapshot server time", () => {
+    const { runtime, connection } = makeRuntime()
+    const payload = {
+      players: [],
+      fireballs: [],
+      homingOrbs: [
+        {
+          id: 12,
+          ownerId: "caster",
+          x: 10,
+          y: 20,
+          vx: 30,
+          vy: 40,
+          headingRad: 0.25,
+          expiresAtServerTimeMs: 15_000,
+        },
+      ],
+      activeTelegraphs: [],
+      seq: 0,
+      serverTimeMs: 4_000,
+    }
+
+    runtime.start()
+    connection.emit({ type: WsEvent.GameStateSync, payload })
+
+    expect(projectileRenderMock.applyFullSyncFireballs).toHaveBeenCalledWith([])
+    expect(projectileRenderMock.applyFullSyncHomingOrbs).toHaveBeenCalledWith(
+      payload.homingOrbs,
+      4_000,
+    )
+  })
+
+  it("treats omitted Homing Orbs in full game state sync as an empty snapshot", () => {
+    const { runtime, connection } = makeRuntime()
+    const payload = {
+      players: [],
+      fireballs: [],
+      activeTelegraphs: [],
+      seq: 0,
+      serverTimeMs: 4_250,
+    }
+
+    runtime.start()
+    connection.emit({ type: WsEvent.GameStateSync, payload })
+
+    expect(projectileRenderMock.applyFullSyncHomingOrbs).toHaveBeenCalledWith(
+      [],
+      4_250,
+    )
+  })
+
+  it("routes player batch updates into NetworkSyncSystem", () => {
+    const { runtime, connection } = makeRuntime()
+    const payload = {
+      players: [],
+      seq: 7,
+      serverTimeMs: 5_000,
+    }
+
+    runtime.start()
+    connection.emit({ type: WsEvent.PlayerBatchUpdate, payload })
+
+    expect(networkSyncMock.applyBatchUpdate).toHaveBeenCalledWith(payload)
+  })
+
   it("sends a fresh input sequence for each fixed sim step in one render frame", () => {
     const { runtime, connection } = makeRuntime()
     let seq = 0
@@ -495,6 +603,216 @@ describe("ArenaRuntime lifecycle", () => {
       1,
       2,
     ])
+    expect(connection.sendPlayerInputState).not.toHaveBeenCalled()
     expect(keyboardControllerMock.collectMoveIntent).toHaveBeenCalled()
+  })
+
+  it("records every local tick but sends compact state only when the server advertises it", () => {
+    const { runtime, connection } = makeRuntime()
+    let seq = 0
+    connection.nextSeq.mockImplementation(() => seq++)
+    playerRenderMock.update.mockImplementation(
+      (_delta: number, _intent: unknown, onSimStep?: () => void) => {
+        onSimStep?.()
+        onSimStep?.()
+        onSimStep?.()
+      },
+    )
+
+    runtime.start()
+    connection.emit({
+      type: WsEvent.MatchGo,
+      payload: {
+        input: {
+          protocolVersion: 1,
+          preferredTransport: "compact",
+          activeHeartbeatMs: 100,
+          idleHeartbeatMs: 1_000,
+        },
+      },
+    })
+    runtime.update(0, 51)
+
+    expect(
+      playerRenderMock.localInputHistory.append.mock.calls.map(([input]) => input.seq),
+    ).toEqual([0, 1, 2])
+    expect(connection.sendPlayerInput).not.toHaveBeenCalled()
+    expect(
+      connection.sendPlayerInputState.mock.calls.map(([payload]) => payload.seq),
+    ).toEqual([0])
+  })
+
+  it("continues reporting active local input even when compact wire sends are suppressed", () => {
+    const { runtime, connection } = makeRuntime()
+    let seq = 0
+    connection.nextSeq.mockImplementation(() => seq++)
+    keyboardControllerMock.collectInput.mockImplementation((nextSeq: number) => ({
+      up: false,
+      down: false,
+      left: false,
+      right: true,
+      abilitySlot: null,
+      abilityTargetX: 0,
+      abilityTargetY: 0,
+      useQuickItemSlot: null,
+      seq: nextSeq,
+    }))
+    playerRenderMock.update.mockImplementation(
+      (_delta: number, _intent: unknown, onSimStep?: () => void) => {
+        onSimStep?.()
+        onSimStep?.()
+        onSimStep?.()
+      },
+    )
+
+    runtime.start()
+    connection.emit({
+      type: WsEvent.MatchGo,
+      payload: {
+        input: {
+          protocolVersion: 1,
+          preferredTransport: "compact",
+          activeHeartbeatMs: 100,
+          idleHeartbeatMs: 1_000,
+        },
+      },
+    })
+    runtime.update(0, 51)
+
+    expect(activeLocalInputSpy).toHaveBeenCalledTimes(3)
+    expect(
+      connection.sendPlayerInputState.mock.calls.map(([payload]) => payload.seq),
+    ).toEqual([0])
+  })
+
+  it("applies optional MatchGo net timing while preserving empty payload compatibility", () => {
+    const { runtime, connection } = makeRuntime()
+    const timing = {
+      protocolVersion: 1,
+      tickRateHz: 60,
+      tickMs: 1000 / 60,
+      netSendRateHz: 30,
+      netSendIntervalMs: 1000 / 30,
+      remoteRenderDelayMs: 84,
+    }
+
+    runtime.start()
+    connection.emit({ type: WsEvent.MatchGo, payload: {} })
+    connection.emit({ type: WsEvent.MatchGo, payload: { timing } })
+
+    expect(keyboardControllerMock.enable).toHaveBeenCalled()
+    expect(mouseControllerMock.enable).toHaveBeenCalled()
+    expect(playerRenderMock.applyNetTiming).toHaveBeenCalledTimes(1)
+    expect(playerRenderMock.applyNetTiming).toHaveBeenCalledWith(timing)
+    expect(projectileRenderMock.applyNetTiming).toHaveBeenCalledTimes(1)
+    expect(projectileRenderMock.applyNetTiming).toHaveBeenCalledWith(timing)
+  })
+
+  it("forwards full-sync net timing from NetworkSyncSystem into player rendering", () => {
+    const { runtime } = makeRuntime()
+    const timing = {
+      protocolVersion: 1,
+      tickRateHz: 60,
+      tickMs: 1000 / 60,
+      netSendRateHz: 60,
+      netSendIntervalMs: 1000 / 60,
+      remoteRenderDelayMs: 50,
+    }
+
+    runtime.start()
+    networkSyncHooks.current?.onNetTiming?.(timing)
+
+    expect(playerRenderMock.applyNetTiming).toHaveBeenCalledWith(timing)
+    expect(projectileRenderMock.applyNetTiming).toHaveBeenCalledWith(timing)
+  })
+
+  it("forwards server time from NetworkSyncSystem into player rendering", () => {
+    const { runtime } = makeRuntime()
+
+    runtime.start()
+    networkSyncHooks.current?.onServerTime?.(4_321)
+
+    expect(playerRenderMock.updateServerTimeOffset).toHaveBeenCalledWith(4_321)
+    expect(projectileRenderMock.updateServerTimeOffset).toHaveBeenCalledWith(4_321)
+  })
+
+  it("forwards local owner ACK samples from NetworkSyncSystem into player rendering", () => {
+    const { runtime } = makeRuntime()
+    const replayContext = {
+      moveState: "idle" as const,
+      terrainState: "land" as const,
+      castingAbilityId: null,
+      jumpZ: 0,
+      jumpStartedInLava: false,
+      isSwinging: false,
+      hasSwiftBoots: true,
+    }
+
+    runtime.start()
+    networkSyncHooks.current?.onLocalAck?.({
+      id: 1,
+      x: 10,
+      y: 20,
+      lastProcessedInputSeq: 7,
+      replayContext,
+    })
+
+    expect(playerRenderMock.onLocalAck).toHaveBeenCalledWith(1, {
+      x: 10,
+      y: 20,
+      lastProcessedInputSeq: 7,
+      replayContext,
+    })
+  })
+
+  it("routes dedicated owner ACK messages into NetworkSyncSystem", () => {
+    const { runtime, connection } = makeRuntime()
+    const payload = {
+      id: 1,
+      playerId: "player-1",
+      x: 10,
+      y: 20,
+      vx: 0,
+      vy: 0,
+      lastProcessedInputSeq: 7,
+      serverTimeMs: 1234,
+      replayContext: {
+        moveState: "idle",
+        terrainState: "land",
+        castingAbilityId: null,
+        jumpZ: 0,
+        jumpStartedInLava: false,
+        isSwinging: false,
+        hasSwiftBoots: false,
+      },
+    }
+
+    runtime.start()
+    connection.emit({ type: WsEvent.PlayerOwnerAck, payload })
+
+    expect(networkSyncMock.applyOwnerAck).toHaveBeenCalledWith(payload)
+  })
+
+  it("plays local damage-dealt feedback for authored damage floats", () => {
+    const { runtime, connection } = makeRuntime()
+
+    runtime.start()
+    soundPlaySpy.mockClear()
+
+    connection.emit({
+      type: WsEvent.DamageFloat,
+      payload: {
+        targetId: "enemy-player",
+        attackerUserId: "player-1",
+        amount: 4,
+        x: 10,
+        y: 20,
+      },
+    })
+
+    expect(soundPlaySpy).toHaveBeenCalledWith(SFX_KEYS.hitDeal)
+    expect(playerRenderMock.triggerHitFeedbackFlashForPlayerUserId).toHaveBeenCalledWith(
+      "player-1",
+    )
   })
 })

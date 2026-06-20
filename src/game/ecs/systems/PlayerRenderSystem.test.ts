@@ -58,7 +58,11 @@ import {
 } from "./PlayerRenderSystem"
 import { ClientPosition, ClientPlayerState, ClientRenderPos } from "../components"
 import { clientEntities, removeEntity } from "../world"
-import type { PlayerSnapshot, PrimaryMeleeAttackPayload } from "@/shared/types"
+import type {
+  PlayerInputPayload,
+  PlayerSnapshot,
+  PrimaryMeleeAttackPayload,
+} from "@/shared/types"
 import { getAnimKey, getDirectionFromAngle } from "../../animation/LadyWizardAnimDefs"
 import { HERO_CONFIGS } from "@/shared/balance-config/heroes"
 import {
@@ -68,7 +72,10 @@ import {
   ARENA_SPAWN_POINTS,
   ARENA_WIDTH,
   ARENA_WORLD_COLLIDERS,
+  BASE_MOVE_SPEED_PX_PER_SEC,
   PLAYER_WORLD_COLLISION_FOOTPRINT,
+  SWIFT_BOOTS_SPEED_BONUS,
+  TICK_DT_SEC,
 } from "@/shared/balance-config"
 import { terrainStateAtPosition } from "@/shared/collision/terrainHazards"
 import { canOccupyWorldPosition } from "@/shared/collision/worldCollision"
@@ -135,6 +142,31 @@ function sampleBlockedSmoothingCase() {
   }
 }
 
+function sampleRightwardPredictionStart() {
+  const start = ARENA_SPAWN_POINTS.find((point) => canPlayerOccupy(point.x + 50, point.y))
+  if (!start) throw new Error("Expected a spawn point with rightward prediction clearance")
+  return start
+}
+
+function input(overrides: Partial<PlayerInputPayload> & { seq: number }): PlayerInputPayload {
+  return {
+    up: false,
+    down: false,
+    left: false,
+    right: false,
+    abilitySlot: null,
+    abilityTargetX: 0,
+    abilityTargetY: 0,
+    weaponPrimary: false,
+    weaponSecondary: false,
+    weaponTargetX: 0,
+    weaponTargetY: 0,
+    useQuickItemSlot: null,
+    clientSendTimeMs: 0,
+    ...overrides,
+  }
+}
+
 function sampleLavaRect() {
   for (const rect of [...ARENA_LAVA_COLLIDERS].sort((a, b) => a.y - b.y || a.x - b.x)) {
     for (let y = Math.max(100, rect.y); y < Math.min(rect.y + rect.height, ARENA_HEIGHT - 20); y++) {
@@ -198,6 +230,7 @@ function snap(over: Partial<PlayerSnapshot> & Pick<PlayerSnapshot, "id" | "playe
     invulnerable: over.invulnerable ?? false,
     jumpZ: over.jumpZ ?? 0,
     jumpStartedInLava: over.jumpStartedInLava ?? false,
+    hasSwiftBoots: over.hasSwiftBoots ?? false,
     abilityStates: over.abilityStates ?? abilityStates(),
     lastProcessedInputSeq: over.lastProcessedInputSeq ?? 0,
   }
@@ -374,6 +407,47 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     expect(corrections).toEqual(["snap"])
   })
 
+  it("uses owner ACK replay context instead of stale client state for local replay", () => {
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    sys.localPlayerId = "p1"
+    const start = sampleRightwardPredictionStart()
+    sys.applyFullSync(sync([snap({
+      id: 1,
+      playerId: "p1",
+      x: start.x,
+      y: start.y,
+      moveState: "idle",
+      terrainState: "land",
+    })]))
+    for (let seq = 1; seq <= 10; seq++) {
+      sys.localInputHistory.append(input({ seq, right: true }))
+    }
+
+    sys.onLocalAck(1, {
+      x: start.x,
+      y: start.y,
+      lastProcessedInputSeq: 0,
+      replayContext: {
+        moveState: "idle",
+        terrainState: "land",
+        castingAbilityId: null,
+        jumpZ: 0,
+        jumpStartedInLava: false,
+        isSwinging: false,
+        hasSwiftBoots: true,
+      },
+    })
+
+    const baseStep = BASE_MOVE_SPEED_PX_PER_SEC * TICK_DT_SEC
+    const simAfter = sys._getLocalSimForTest(1)
+    expect(simAfter?.simCurrX).toBeCloseTo(
+      start.x + baseStep * (1 + SWIFT_BOOTS_SPEED_BONUS) * 10,
+      5,
+    )
+    expect(simAfter?.simCurrY).toBe(start.y)
+  })
+
   it("renders remote players from the interpolation buffer after a snapshot", () => {
     const { scene, group } = mockSceneAndGroup()
     const sys = new PlayerRenderSystem(scene as never, group as never)
@@ -408,11 +482,65 @@ describe("PlayerRenderSystem.applyFullSync", () => {
       moveFacingAngle: 0,
     })
 
-    vi.setSystemTime(new Date(now + 83))
+    // Default net timing assumes 30 Hz visual batches, so the render path
+    // samples about 84 ms behind estimated server time.
+    vi.setSystemTime(new Date(now + 134))
     sys.update(0, { up: false, down: false, left: false, right: false })
 
     expect(ClientRenderPos[1].x).toBeGreaterThan(0)
     expect(ClientRenderPos[1].x).toBeLessThan(100)
+  })
+
+  it("uses full-sync net timing to choose the remote interpolation sample time", () => {
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    sys.localPlayerId = "local-player"
+
+    const now = Date.now()
+    sys.applyFullSync({
+      players: [snap({ id: 1, playerId: "remote", x: 0, y: 0 })],
+      fireballs: [],
+      seq: 0,
+      serverTimeMs: now,
+      timing: {
+        protocolVersion: 1,
+        tickRateHz: 60,
+        tickMs: 1000 / 60,
+        netSendRateHz: 60,
+        netSendIntervalMs: 1000 / 60,
+        remoteRenderDelayMs: 50,
+      },
+    })
+    sys.onRemoteSnapshot(1, {
+      serverTimeMs: now,
+      x: 0,
+      y: 0,
+      vx: 0,
+      vy: 0,
+      facingAngle: 0,
+      moveFacingAngle: 0,
+    })
+    sys.onRemoteSnapshot(1, {
+      serverTimeMs: now + 100,
+      x: 100,
+      y: 0,
+      vx: 0,
+      vy: 0,
+      facingAngle: 0,
+      moveFacingAngle: 0,
+    })
+
+    vi.setSystemTime(new Date(now + 100))
+    sys.update(0, { up: false, down: false, left: false, right: false })
+
+    expect(ClientRenderPos[1].x).toBeCloseTo(50, 5)
+  })
+
+  it("keeps the legacy batch-received compatibility hook as a no-op", () => {
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+
+    expect(() => sys.markBatchReceived()).not.toThrow()
   })
 
   it("snaps the local player to the replayed target on large ack errors", () => {
@@ -498,6 +626,29 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     // 3 sim steps × (BASE_MOVE_SPEED_PX_PER_SEC × TICK_DT_SEC) of
     // forward motion = 3 × 3.333… ≈ 10 px up (y decreases).
     expect(after?.simCurrY).toBeCloseTo(OPEN_TEST_POINT.y - 10, 5)
+  })
+
+  it("uses Swift Boots speed for live local fixed-step prediction after full sync", () => {
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    sys.localPlayerId = "p1"
+    sys.applyFullSync(sync([snap({
+      id: 1,
+      playerId: "p1",
+      x: OPEN_TEST_POINT.x,
+      y: OPEN_TEST_POINT.y,
+      hasSwiftBoots: true,
+    })]))
+
+    sys.update(17, { up: false, down: false, left: false, right: true })
+
+    const after = sys._getLocalSimForTest(1)
+    expect(after?.simCurrX).toBeCloseTo(
+      OPEN_TEST_POINT.x +
+        BASE_MOVE_SPEED_PX_PER_SEC * TICK_DT_SEC * (1 + SWIFT_BOOTS_SPEED_BONUS),
+      5,
+    )
+    expect(after?.simCurrY).toBeCloseTo(OPEN_TEST_POINT.y, 5)
   })
 
   it("bounds sim catch-up after a long hitch (no spiral of death)", () => {
@@ -652,6 +803,24 @@ describe("PlayerRenderSystem smoothing + render interp", () => {
     // below startSimY. With the old absolute from→to rail this would
     // have slid backward toward zero even under held W.
     expect(after?.simCurrY).toBeLessThan(startSimY)
+  })
+
+  it("ignores local ACKs when required ECS state is absent", () => {
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    sys.localPlayerId = "p1"
+    sys.applyFullSync(sync([snap({ id: 1, playerId: "p1", x: 10, y: 20 })]))
+
+    delete ClientPlayerState[1]
+    expect(() =>
+      sys.onLocalAck(1, { x: 10, y: 20, lastProcessedInputSeq: 0 }),
+    ).not.toThrow()
+
+    sys.applyFullSync(sync([snap({ id: 1, playerId: "p1", x: 10, y: 20 })]))
+    delete ClientRenderPos[1]
+    expect(() =>
+      sys.onLocalAck(1, { x: 10, y: 20, lastProcessedInputSeq: 0 }),
+    ).not.toThrow()
   })
 
   it("does not pull the render backward after release when prediction matches the ack (cause B + C)", () => {

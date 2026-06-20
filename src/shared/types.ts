@@ -164,6 +164,8 @@ export type PlayerSnapshot = {
   readonly jumpZ: number
   /** True when the active jump arc began in lava (escape jump). */
   readonly jumpStartedInLava: boolean
+  /** Server-authoritative Swift Boots equipment flag used by local prediction. */
+  readonly hasSwiftBoots: boolean
   /** Server-authoritative cooldown and charge state for ability HUD rendering. */
   readonly abilityStates: AbilityRuntimeStates
   /**
@@ -191,6 +193,7 @@ export type PlayerDelta = {
   readonly invulnerable?: boolean
   readonly jumpZ?: number
   readonly jumpStartedInLava?: boolean
+  readonly hasSwiftBoots?: boolean
   readonly abilityStates?: AbilityRuntimeStates
   /** Highest client input `seq` the server has processed for this player. */
   readonly lastProcessedInputSeq?: number
@@ -217,6 +220,48 @@ export type PlayerBatchUpdatePayload = {
   readonly serverTimeMs: number
 }
 
+/** Server replay context that keeps owner reconciliation deterministic. */
+export type PlayerOwnerAckReplayContext = {
+  readonly moveState: PlayerMoveState
+  readonly terrainState: PlayerTerrainState
+  readonly castingAbilityId: string | null
+  readonly jumpZ: number
+  readonly jumpStartedInLava: boolean
+  readonly isSwinging: boolean
+  readonly hasSwiftBoots: boolean
+}
+
+/** Owner-only authoritative ACK for local rewind-and-replay. */
+export type PlayerOwnerAckPayload = {
+  readonly id: number
+  readonly playerId: string
+  readonly x: number
+  readonly y: number
+  readonly vx: number
+  readonly vy: number
+  readonly lastProcessedInputSeq: number
+  readonly serverTimeMs: number
+  readonly replayContext: PlayerOwnerAckReplayContext
+}
+
+/** Server-provided timing knobs that keep client interpolation aligned with visual cadence. */
+export type GameNetTimingPayload = {
+  readonly protocolVersion: 1
+  readonly tickRateHz: number
+  readonly tickMs: number
+  readonly netSendRateHz: number
+  readonly netSendIntervalMs: number
+  readonly remoteRenderDelayMs: number
+}
+
+/** Server-advertised input transport preference for additive rollout. */
+export type GameInputProtocolPayload = {
+  readonly protocolVersion: 1
+  readonly preferredTransport: "legacy" | "compact"
+  readonly activeHeartbeatMs: number
+  readonly idleHeartbeatMs: number
+}
+
 /** Full game state sync for late-joiners or reconnects. */
 export type GameStateSyncPayload = {
   readonly players: readonly PlayerSnapshot[]
@@ -229,6 +274,10 @@ export type GameStateSyncPayload = {
   readonly seq: number
   /** Server wall-clock time (ms) when the snapshot was built. */
   readonly serverTimeMs: number
+  /** Optional net timing for dynamic remote interpolation. Missing means client fallback. */
+  readonly timing?: GameNetTimingPayload
+  /** Optional input transport capability. Missing means legacy full input. */
+  readonly input?: GameInputProtocolPayload
 }
 
 /** A fireball projectile snapshot. */
@@ -268,15 +317,17 @@ export type HomingOrbLaunchPayload = HomingOrbSnapshot
 export type HomingOrbBatchUpdatePayload = {
   readonly deltas: readonly {
     readonly id: number
-    readonly x: number
-    readonly y: number
-    readonly vx: number
-    readonly vy: number
-    readonly headingRad: number
-    readonly targetId?: string
+    readonly x?: number
+    readonly y?: number
+    readonly vx?: number
+    readonly vy?: number
+    readonly headingRad?: number
+    readonly targetId?: string | null
   }[]
   readonly removedIds: readonly number[]
   readonly seq: number
+  /** Server simulated time for the newest movement sample in this batch. */
+  readonly serverTimeMs?: number
 }
 
 /** Server → all: Homing Orb hit or expired. */
@@ -510,6 +561,18 @@ export type PlayerInputPayload = {
   readonly clientSendTimeMs: number
 }
 
+/** Client → server: compact current input state for state-change transport. */
+export type PlayerInputStatePayload = {
+  readonly protocolVersion: 1
+  readonly seq: number
+  readonly clientSendTimeMs: number
+  readonly buttons: number
+  readonly targetX: number
+  readonly targetY: number
+  readonly abilitySlot?: number
+  readonly useQuickItemSlot?: number
+}
+
 /** Server → all: damage number floats. */
 export type DamageFloatPayload = {
   readonly targetId: string
@@ -577,7 +640,12 @@ export type MatchCountdownStartPayload = {
 }
 
 /** Server → all: countdown over, start playing. */
-export type MatchGoPayload = Record<string, never>
+export type MatchGoPayload = {
+  /** Optional net timing; `{}` remains valid for legacy compatibility. */
+  readonly timing?: GameNetTimingPayload
+  /** Optional input transport capability. Missing means legacy full input. */
+  readonly input?: GameInputProtocolPayload
+}
 
 /** Unified message shape for transport normalization. */
 export type AnyWsMessage = {

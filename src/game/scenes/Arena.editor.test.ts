@@ -6,6 +6,12 @@ import { describe, expect, it } from "vitest"
 
 import { buildArenaTilemapFromScene } from "../../../scripts/export-arena-tilemap"
 import { ARENA_HEIGHT, ARENA_WIDTH } from "@/shared/balance-config/arena"
+import { ARENA_NON_WALKABLE_COLLIDERS } from "@/shared/balance-config/arena"
+import {
+  rectCoverArea,
+  rectCoverContainsPoint,
+  type RectCover,
+} from "../../../scripts/rect-cover-simplification"
 
 const TEST_DIR = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(TEST_DIR, "../../..")
@@ -99,6 +105,20 @@ describe("Arena Phaser Editor scene", () => {
       expect(rect.y + rect.height).toBeLessThanOrEqual(ARENA_HEIGHT)
       expect(rect.visible).toBe(true)
     }
+  })
+
+  it("keeps generated non-walkable colliders as an exact simplified cover of editor rectangles", () => {
+    const tilemap = readJson<{ readonly layers: readonly TiledLayer[] }>("public/assets/tilemaps/arena.json")
+    const editorRects = objectLayer(tilemap, "NonWalkableAreas").map(({ x, y, width, height }) => ({
+      x,
+      y,
+      width,
+      height,
+    }))
+
+    expect(ARENA_NON_WALKABLE_COLLIDERS.length).toBeLessThan(editorRects.length)
+    expect(rectCoverArea(ARENA_NON_WALKABLE_COLLIDERS)).toBe(rectCoverArea(editorRects))
+    assertExactCoverParity(editorRects, ARENA_NON_WALKABLE_COLLIDERS)
   })
 
   it("exports unique object ids and mutually exclusive semantic region rectangles", () => {
@@ -213,3 +233,49 @@ describe("Arena Phaser Editor scene", () => {
     }
   })
 })
+
+/**
+ * Checks exact half-open coverage over all cells induced by both covers' edges.
+ *
+ * @param original - Editor rectangle cover.
+ * @param simplified - Generated simplified rectangle cover.
+ */
+function assertExactCoverParity(
+  original: readonly RectCover[],
+  simplified: readonly RectCover[],
+): void {
+  const xs = uniqueEdges(original, simplified, "x", "width")
+  const ys = uniqueEdges(original, simplified, "y", "height")
+  for (let yi = 0; yi < ys.length - 1; yi++) {
+    for (let xi = 0; xi < xs.length - 1; xi++) {
+      const x = (xs[xi]! + xs[xi + 1]!) / 2
+      const y = (ys[yi]! + ys[yi + 1]!) / 2
+      expect(rectCoverContainsPoint(simplified, x, y)).toBe(
+        rectCoverContainsPoint(original, x, y),
+      )
+    }
+  }
+}
+
+/**
+ * Collects sorted unique rectangle edges for one axis.
+ *
+ * @param left - First cover.
+ * @param right - Second cover.
+ * @param originKey - Rectangle origin key.
+ * @param sizeKey - Rectangle size key.
+ * @returns Sorted unique edge coordinates.
+ */
+function uniqueEdges(
+  left: readonly RectCover[],
+  right: readonly RectCover[],
+  originKey: "x" | "y",
+  sizeKey: "width" | "height",
+): number[] {
+  const values = new Set<number>()
+  for (const rect of [...left, ...right]) {
+    values.add(rect[originKey])
+    values.add(rect[originKey] + rect[sizeKey])
+  }
+  return [...values].sort((a, b) => a - b)
+}

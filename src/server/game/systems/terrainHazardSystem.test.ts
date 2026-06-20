@@ -14,6 +14,7 @@ import {
   Health,
   JumpArc,
   MoveFacing,
+  NeedsWorldCollisionResolution,
   PlayerTag,
   Position,
   Radius,
@@ -116,6 +117,21 @@ describe("terrain hazards", () => {
     expect(ctx.damageRequests).toHaveLength(0)
   })
 
+  it("marks successful land landings for world collision repair", () => {
+    const spawn = ARENA_SPAWN_POINTS[0]!
+    const world = createWorld()
+    const eid = addPlayerAt(world, spawn.x, spawn.y)
+    addComponent(world, eid, JumpArc)
+    JumpArc.z[eid] = 1
+    JumpArc.vz[eid] = -1000
+
+    jumpPhysicsSystem(emptyCtx({ world }))
+
+    expect(hasComponent(world, eid, JumpArc)).toBe(false)
+    expect(TerrainState.kind[eid]).toBe(TERRAIN_KIND.land)
+    expect(hasComponent(world, eid, NeedsWorldCollisionResolution)).toBe(true)
+  })
+
   it("applies configured lava damage over one second", () => {
     const lava = ARENA_LAVA_COLLIDERS[0]!
     const world = createWorld()
@@ -158,6 +174,7 @@ describe("terrain hazards", () => {
 
     expect(TerrainState.kind[eid]).toBe(TERRAIN_KIND.cliff)
     expect(Math.hypot(Position.x[eid] - x0, Position.y[eid] - y0)).toBeGreaterThan(0)
+    expect(hasComponent(world, eid, NeedsWorldCollisionResolution)).toBe(true)
     expect(ctx.damageRequests).toHaveLength(0)
   })
 })
