@@ -51,6 +51,43 @@ describe("PlayerInputStateScheduler", () => {
     expect(sent).toEqual([0, 6, 12])
   })
 
+  it("sends idle weapon target changes on the aim heartbeat instead of the idle heartbeat", () => {
+    const scheduler = new PlayerInputStateScheduler()
+
+    expect(scheduler.maybeBuildState(input(0), 0)?.seq).toBe(0)
+    expect(
+      scheduler.maybeBuildState(input(1, { weaponTargetX: 160 }), 50),
+    ).toBeNull()
+
+    const aim = scheduler.maybeBuildState(input(2, { weaponTargetX: 160 }), 100)
+
+    expect(aim).toMatchObject({
+      seq: 2,
+      targetX: 160,
+      targetY: 200,
+      buttons: 0,
+    })
+
+    expect(
+      scheduler.maybeBuildState(
+        input(3, { weaponTargetX: 160, weaponTargetY: 260 }),
+        150,
+      ),
+    ).toBeNull()
+
+    const verticalAim = scheduler.maybeBuildState(
+      input(4, { weaponTargetX: 160, weaponTargetY: 260 }),
+      200,
+    )
+
+    expect(verticalAim).toMatchObject({
+      seq: 4,
+      targetX: 160,
+      targetY: 260,
+      buttons: 0,
+    })
+  })
+
   it("sends held-button releases immediately", () => {
     const scheduler = new PlayerInputStateScheduler()
 

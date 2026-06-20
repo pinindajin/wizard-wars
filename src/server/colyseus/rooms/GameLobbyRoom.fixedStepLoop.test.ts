@@ -141,6 +141,35 @@ describe("GameLobbyRoom fixed-step loop", () => {
     expect(room.performanceCatchUpCallbacks).toBe(2)
   })
 
+  it("anchors capped catch-up ticks after dropped debt so emitted server times stay current", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(41_000)
+
+    const room = loopRoom({ simMaxCatchUpTicks: 3 })
+    const times: number[] = []
+    const tick = vi.fn((_queue: Map<string, PlayerInputPayload[]>, serverTimeMs: number) => {
+      times.push(serverTimeMs)
+      return simOutput()
+    })
+    Object.assign(room, {
+      lobbyPhase: "IN_PROGRESS",
+      simulation: {
+        tick,
+        entityPlayerMap: new Map(),
+      },
+    })
+
+    room.resetSimulationLoopState(41_000)
+    room.runGameLoop(TICK_MS * 10)
+    room.runGameLoop(TICK_MS)
+
+    expect(times).toHaveLength(4)
+    expect(times[0]).toBeCloseTo(41_000 + TICK_MS * 8, 6)
+    expect(times[1]).toBeCloseTo(41_000 + TICK_MS * 9, 6)
+    expect(times[2]).toBeCloseTo(41_000 + TICK_MS * 10, 6)
+    expect(times[3]).toBeCloseTo(41_000 + TICK_MS * 11, 6)
+  })
+
   it("stops catch-up immediately when a tick ends the match", () => {
     vi.useFakeTimers()
     vi.setSystemTime(50_100)

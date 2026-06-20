@@ -18,6 +18,7 @@ const DEFAULT_IDLE_HEARTBEAT_MS = 1_000
  */
 export class PlayerInputStateScheduler {
   private lastButtons: number | null = null
+  private lastWeaponTarget: { readonly x: number; readonly y: number } | null = null
   private lastSentAtMs: number | null = null
   private activeHeartbeatMs: number
   private idleHeartbeatMs: number
@@ -42,6 +43,7 @@ export class PlayerInputStateScheduler {
    */
   reset(): void {
     this.lastButtons = null
+    this.lastWeaponTarget = null
     this.lastSentAtMs = null
   }
 
@@ -59,7 +61,12 @@ export class PlayerInputStateScheduler {
     const buttons = playerInputButtonsFromPayload(input)
     const edge = input.abilitySlot !== null || input.useQuickItemSlot !== null
     const active = buttons !== 0 || edge
-    const heartbeatMs = active ? this.activeHeartbeatMs : this.idleHeartbeatMs
+    const aimChanged =
+      this.lastWeaponTarget === null ||
+      input.weaponTargetX !== this.lastWeaponTarget.x ||
+      input.weaponTargetY !== this.lastWeaponTarget.y
+    const heartbeatMs =
+      active || aimChanged ? this.activeHeartbeatMs : this.idleHeartbeatMs
     const changed = this.lastButtons === null || buttons !== this.lastButtons
     const due =
       this.lastSentAtMs === null ||
@@ -68,6 +75,7 @@ export class PlayerInputStateScheduler {
     if (!changed && !edge && !due) return null
 
     this.lastButtons = buttons
+    this.lastWeaponTarget = { x: input.weaponTargetX, y: input.weaponTargetY }
     this.lastSentAtMs = nowMs
     return encodePlayerInputState(input)
   }

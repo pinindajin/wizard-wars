@@ -2574,6 +2574,7 @@ export class GameLobbyRoom extends Room {
     })
     this.simulationAccumulatorMs = advance.accumulatorMs
     this.performanceDroppedDebtMs += advance.droppedDebtMs
+    this.nextSimulationServerTimeMs += advance.droppedDebtMs
     if (advance.steps > 1) {
       this.performanceCatchUpCallbacks += advance.steps - 1
     }
