@@ -23,6 +23,7 @@ import { canOccupyWorldPosition } from "@/shared/collision/worldCollision"
 import {
   AbilityRuntime,
   Cooldown,
+  Casting,
   DeadTag,
   DyingTag,
   Equipment,
@@ -602,6 +603,112 @@ describe("buildGameStateSyncPayload", () => {
       lastProcessedInputSeq: 12,
     })
     expect(ctx.prevPlayerStates.get(eid)).toMatchObject({ hasSwiftBoots: true })
+  })
+
+  it("repeats aim facing when an unchanged angle enters an aim-driven cast animation", () => {
+    const world = createWorld()
+    const eid = addEntity(world)
+    addComponent(world, eid, PlayerTag)
+    addComponent(world, eid, Position)
+    addComponent(world, eid, Velocity)
+    addComponent(world, eid, Facing)
+    addComponent(world, eid, MoveFacing)
+    addComponent(world, eid, Health)
+    addComponent(world, eid, Lives)
+    addComponent(world, eid, TerrainState)
+    addComponent(world, eid, Casting)
+    Position.x[eid] = 10
+    Position.y[eid] = 20
+    Health.current[eid] = 100
+    Lives.count[eid] = 3
+    Facing.angle[eid] = -Math.PI * 0.75
+    const aimFacing = Facing.angle[eid]
+    MoveFacing.angle[eid] = 0
+    Casting.abilityIndex[eid] = ABILITY_INDEX.fireball
+    AbilityRuntime.jumpCharges[eid] = JUMP_MAX_CHARGES
+
+    const ctx = {
+      world,
+      currentTick: 1,
+      serverTimeMs: 10_000,
+      playerEntityMap: new Map([["user1", eid]]),
+      entityPlayerMap: new Map([[eid, "user1"]]),
+      playerUsernameMap: new Map(),
+      entityUsernameMap: new Map(),
+      playerHeroIdMap: new Map(),
+      fireballOwnerMap: new Map(),
+      fireballCreatedAtTickMap: new Map(),
+      homingOrbOwnerMap: new Map(),
+      homingOrbTargetPlayerMap: new Map(),
+      homingOrbCastTargetPlayerMap: new Map(),
+      inputMap: new Map(),
+      lastProcessedInputSeqByPlayer: new Map([["user1", 12]]),
+      commandBuffer: {} as never,
+      matchStartedAtMs: 0,
+      damageRequests: [],
+      deathEvents: [],
+      pendingLightningBolts: [],
+      playerDeaths: [],
+      playerRespawns: [],
+      fireballLaunches: [],
+      fireballImpacts: [],
+      fireballRemovedIds: [],
+      homingOrbLaunches: [],
+      homingOrbImpacts: [],
+      homingOrbRemovedIds: [],
+      lightningBolts: [],
+      primaryMeleeAttacks: [],
+      combatTelegraphStarts: [],
+      combatTelegraphEnds: [],
+      damageFloats: [],
+      goldUpdates: [],
+      abilitySfxEvents: [],
+      matchEnded: null,
+      hostEndSignal: false,
+      prevPlayerStates: new Map([
+        [
+          eid,
+          {
+            x: 10,
+            y: 20,
+            vx: 0,
+            vy: 0,
+            facingAngle: aimFacing,
+            moveFacingAngle: 0,
+            health: 100,
+            lives: 3,
+            animState: "idle",
+            moveState: "idle",
+            castingAbilityId: null,
+            invulnerable: false,
+            jumpZ: 0,
+            jumpStartedInLava: false,
+            hasSwiftBoots: false,
+            terrainState: "land",
+            abilityStates: {},
+            lastProcessedInputSeq: 12,
+          },
+        ],
+      ]),
+      prevFireballStates: new Map(),
+      prevHomingOrbStates: new Map(),
+      killStats: new Map(),
+      activeMeleeAttacks: new Map(),
+      activeCombatTelegraphs: new Map(),
+      invulnerableExpiresAtTickByEntity: new Map(),
+      playerDeltas: [],
+      fireballDeltas: [],
+      homingOrbDeltas: [],
+    } as SimCtx
+
+    playerDeltaSystem(ctx)
+
+    expect(ctx.playerDeltas[0]).toMatchObject({
+      id: eid,
+      animState: "light_cast",
+      castingAbilityId: "fireball",
+    })
+    expect(ctx.playerDeltas[0]?.facingAngle).toBeCloseTo(aimFacing, 5)
   })
 
   it("restores jump charges and clears recharge state on respawn", () => {
