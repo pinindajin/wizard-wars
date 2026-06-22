@@ -61,11 +61,12 @@ describe("asset pack URLs are absolute", () => {
     }
   })
 
-  it("arena pack declares the core gameplay files (native map + hero sheet + projectile assets)", () => {
+  it("arena pack declares runtime gameplay files without loading the editor tilemap", () => {
     const files = (arenaPack as { arena: { files: PackFile[] } }).arena.files
     const urls = collectUrls(files)
     expect(urls).toContain("/assets/maps/arena-base.png")
-    expect(urls).toContain("/assets/tilemaps/arena.json")
+    expect(files.some((file) => file.type === "tilemapTiledJSON")).toBe(false)
+    expect(urls).not.toContain("/assets/tilemaps/arena.json")
     expect(urls).toContain(
       "/assets/sprites/heroes/lady-wizard/sheets/lady-wizard-megasheet.png",
     )

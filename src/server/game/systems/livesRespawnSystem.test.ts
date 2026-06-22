@@ -13,6 +13,7 @@ import {
   Health,
   InvulnerableTag,
   MoveFacing,
+  NeedsWorldCollisionResolution,
   PlayerTag,
   Position,
   RespawnTimer,
@@ -72,6 +73,7 @@ describe("livesRespawnSystem invulnerability expiry", () => {
 
     expect(hasComponent(world, eid, DeadTag)).toBe(false)
     expect(hasComponent(world, eid, InvulnerableTag)).toBe(true)
+    expect(hasComponent(world, eid, NeedsWorldCollisionResolution)).toBe(true)
     expect(expiries.get(eid)).toBe(7 + INVULNERABLE_TICKS)
     expect(ctx.playerRespawns).toHaveLength(1)
   })

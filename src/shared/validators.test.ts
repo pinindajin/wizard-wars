@@ -3,15 +3,20 @@ import {
   signupUsernameSchema,
   chatMessagePayloadSchema,
   playerInputPayloadSchema,
+  playerInputStatePayloadSchema,
+  playerSnapshotSchema,
   homingOrbBatchUpdatePayloadSchema,
   homingOrbImpactPayloadSchema,
   homingOrbLaunchPayloadSchema,
   parseGameStateSyncPayload,
+  parsePlayerInputStatePayload,
+  parsePlayerOwnerAckPayload,
   parsePlayerDeathPayload,
   parseServerPerformanceStatusPayload,
 } from "@/shared/validators"
 import type {
   GameStateSyncPayload,
+  PlayerOwnerAckPayload,
   PlayerDeathPayload,
   ServerPerformanceStatusPayload,
 } from "@/shared/types"
@@ -144,6 +149,76 @@ describe("playerInputPayloadSchema", () => {
   })
 })
 
+describe("playerInputStatePayloadSchema", () => {
+  const validCompactInput = {
+    protocolVersion: 1,
+    seq: 42,
+    clientSendTimeMs: 1700000000000,
+    buttons: 63,
+    targetX: 100,
+    targetY: 200,
+    abilitySlot: 0,
+    useQuickItemSlot: 0,
+  } as const
+
+  it("accepts compact input state payloads", () => {
+    expect(playerInputStatePayloadSchema.safeParse(validCompactInput).success).toBe(true)
+  })
+
+  it("parses compact input state payloads through the shared wrapper", () => {
+    expect(parsePlayerInputStatePayload(validCompactInput)).toEqual(validCompactInput)
+  })
+
+  it("rejects out-of-range compact input buttons", () => {
+    expect(
+      playerInputStatePayloadSchema.safeParse({
+        protocolVersion: 1,
+        seq: 42,
+        clientSendTimeMs: 1700000000000,
+        buttons: 64,
+        targetX: 100,
+        targetY: 200,
+      }).success,
+    ).toBe(false)
+  })
+})
+
+describe("playerSnapshotSchema", () => {
+  it("accepts Swift Boots equipment state in snapshots and defaults old payloads to false", () => {
+    const snapshot = {
+      id: 1,
+      playerId: "user-a",
+      username: "Alice",
+      x: 10,
+      y: 20,
+      vx: 0,
+      vy: 0,
+      facingAngle: 0,
+      moveFacingAngle: 0,
+      health: 100,
+      maxHealth: 100,
+      lives: 3,
+      heroId: "red_wizard",
+      animState: "idle",
+      moveState: "idle",
+      terrainState: "land",
+      castingAbilityId: null,
+      invulnerable: false,
+      jumpZ: 0,
+      jumpStartedInLava: false,
+      abilityStates: validAbilityStates(),
+      lastProcessedInputSeq: 0,
+    } as const
+
+    expect(playerSnapshotSchema.parse({ ...snapshot, hasSwiftBoots: true }))
+      .toMatchObject({ hasSwiftBoots: true })
+    expect(playerSnapshotSchema.parse(snapshot)).toMatchObject({
+      hasSwiftBoots: false,
+    })
+  })
+
+})
+
 describe("ServerPerformanceStatus protocol", () => {
   const validStatus: ServerPerformanceStatusPayload = {
     serverTimeMs: 1_700_000_000_000,
@@ -197,6 +272,68 @@ describe("ServerPerformanceStatus protocol", () => {
     )
     expect(roomToWsEvent[RoomEvent.HomingOrbImpact]).toBe(WsEvent.HomingOrbImpact)
   })
+
+  it("bridges owner ACK room events to websocket events", () => {
+    expect(RoomEvent.PlayerOwnerAck).toBe("player_owner_ack")
+    expect(WsEvent.PlayerOwnerAck).toBe("PLAYER_OWNER_ACK")
+    expect(roomToWsEvent[RoomEvent.PlayerOwnerAck]).toBe(WsEvent.PlayerOwnerAck)
+  })
+
+  it("bridges compact player input state room events to websocket events", () => {
+    expect(RoomEvent.PlayerInputState).toBe("player_input_state")
+    expect(WsEvent.PlayerInputState).toBe("PLAYER_INPUT_STATE")
+    expect(roomToWsEvent[RoomEvent.PlayerInputState]).toBe(WsEvent.PlayerInputState)
+  })
+})
+
+describe("parsePlayerOwnerAckPayload", () => {
+  it("accepts a complete owner ACK replay context", () => {
+    const raw: PlayerOwnerAckPayload = {
+      id: 1,
+      playerId: "user-a",
+      x: 10,
+      y: 20,
+      vx: 100,
+      vy: 0,
+      lastProcessedInputSeq: 7,
+      serverTimeMs: 1700000000000,
+      replayContext: {
+        moveState: "casting",
+        terrainState: "lava",
+        castingAbilityId: "fireball",
+        jumpZ: 12,
+        jumpStartedInLava: true,
+        isSwinging: false,
+        hasSwiftBoots: true,
+      },
+    }
+
+    expect(parsePlayerOwnerAckPayload(raw)).toEqual(raw)
+  })
+
+  it("rejects malformed owner ACK replay context", () => {
+    expect(() =>
+      parsePlayerOwnerAckPayload({
+        id: 1,
+        playerId: "user-a",
+        x: 10,
+        y: 20,
+        vx: 0,
+        vy: 0,
+        lastProcessedInputSeq: 7,
+        serverTimeMs: 1700000000000,
+        replayContext: {
+          moveState: "teleporting",
+          terrainState: "land",
+          castingAbilityId: null,
+          jumpZ: 0,
+          jumpStartedInLava: false,
+          isSwinging: false,
+          hasSwiftBoots: false,
+        },
+      } as never),
+    ).toThrow()
+  })
 })
 
 describe("parseGameStateSyncPayload", () => {
@@ -224,6 +361,7 @@ describe("parseGameStateSyncPayload", () => {
           invulnerable: false,
           jumpZ: 0,
           jumpStartedInLava: false,
+          hasSwiftBoots: false,
           abilityStates: validAbilityStates(),
           lastProcessedInputSeq: 0,
         },
@@ -235,6 +373,80 @@ describe("parseGameStateSyncPayload", () => {
     }
     const parsed = parseGameStateSyncPayload(raw)
     expect(parsed).toEqual(raw)
+  })
+
+  it("accepts optional net timing in GameStateSync payloads", () => {
+    const raw: GameStateSyncPayload = {
+      players: [],
+      fireballs: [],
+      homingOrbs: [],
+      seq: 0,
+      serverTimeMs: 1700000000000,
+      timing: {
+        protocolVersion: 1,
+        tickRateHz: 60,
+        tickMs: 1000 / 60,
+        netSendRateHz: 30,
+        netSendIntervalMs: 1000 / 30,
+        remoteRenderDelayMs: 84,
+      },
+    }
+
+    expect(parseGameStateSyncPayload(raw)).toEqual(raw)
+  })
+
+  it("accepts optional compact input protocol in GameStateSync payloads", () => {
+    const raw: GameStateSyncPayload = {
+      players: [],
+      fireballs: [],
+      homingOrbs: [],
+      seq: 0,
+      serverTimeMs: 1700000000000,
+      input: {
+        protocolVersion: 1,
+        preferredTransport: "compact",
+        activeHeartbeatMs: 100,
+        idleHeartbeatMs: 1_000,
+      },
+    }
+
+    expect(parseGameStateSyncPayload(raw)).toEqual(raw)
+  })
+
+  it("rejects malformed compact input protocol in GameStateSync payloads", () => {
+    expect(() =>
+      parseGameStateSyncPayload({
+        players: [],
+        fireballs: [],
+        seq: 0,
+        serverTimeMs: 1700000000000,
+        input: {
+          protocolVersion: 1,
+          preferredTransport: "compact",
+          activeHeartbeatMs: 0,
+          idleHeartbeatMs: 1_000,
+        },
+      } as never),
+    ).toThrow()
+  })
+
+  it("rejects malformed net timing in GameStateSync payloads", () => {
+    expect(() =>
+      parseGameStateSyncPayload({
+        players: [],
+        fireballs: [],
+        seq: 0,
+        serverTimeMs: 1700000000000,
+        timing: {
+          protocolVersion: 1,
+          tickRateHz: 60,
+          tickMs: 1000 / 60,
+          netSendRateHz: 30,
+          netSendIntervalMs: Number.NaN,
+          remoteRenderDelayMs: 84,
+        },
+      } as never),
+    ).toThrow()
   })
 
   it("accepts fireballs in sync payload", () => {
@@ -410,7 +622,17 @@ describe("Homing Orb protocol schemas", () => {
       deltas: [{ id: 1, x: 11, y: 20, vx: 130, vy: 0, headingRad: 0.1 }],
       removedIds: [],
       seq: 2,
-    })).toMatchObject({ seq: 2 })
+      serverTimeMs: 1_700_000_000_100,
+    })).toMatchObject({ seq: 2, serverTimeMs: 1_700_000_000_100 })
+
+    expect(homingOrbBatchUpdatePayloadSchema.parse({
+      deltas: [{ id: 1, x: 12, y: 21 }, { id: 2, targetId: null }],
+      removedIds: [],
+      seq: 3,
+      serverTimeMs: 1_700_000_000_133,
+    })).toMatchObject({
+      deltas: [{ id: 1, x: 12, y: 21 }, { id: 2, targetId: null }],
+    })
 
     expect(homingOrbImpactPayloadSchema.parse({
       id: 1,
@@ -442,6 +664,14 @@ describe("Homing Orb protocol schemas", () => {
         x: 12,
         y: 20,
         reason: "miss",
+      }),
+    ).toThrow()
+
+    expect(() =>
+      homingOrbBatchUpdatePayloadSchema.parse({
+        deltas: [{ id: 1 }],
+        removedIds: [],
+        seq: 3,
       }),
     ).toThrow()
   })

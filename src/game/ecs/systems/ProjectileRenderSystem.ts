@@ -4,15 +4,18 @@ import type {
   FireballLaunchPayload,
   FireballBatchUpdatePayload,
   FireballSnapshot,
+  GameNetTimingPayload,
   HomingOrbBatchUpdatePayload,
   HomingOrbLaunchPayload,
   HomingOrbSnapshot,
 } from "@/shared/types"
 import {
+  resolveGameNetTiming,
   TICK_DT_SEC,
   TICK_MS,
 } from "@/shared/balance-config/rendering"
 import { ClientFireball, ClientHomingOrb } from "../components"
+import { RemoteInterpolationBuffer } from "./RemoteInterpolationBuffer"
 import {
   FIREBALL_FLY_ANIM,
   FIREBALL_FLY_TEXTURE,
@@ -84,13 +87,39 @@ export class ProjectileRenderSystem {
   private scene: Phaser.Scene
   private entries: Map<number, FireballRenderEntry> = new Map()
   private homingOrbEntries: Map<number, HomingOrbRenderEntry> = new Map()
+  private readonly homingOrbBuffer = new RemoteInterpolationBuffer()
   private simAccumulatorMs = 0
+  private serverTimeOffsetMs = 0
+  private remoteRenderDelayMs = resolveGameNetTiming().remoteRenderDelayMs
 
   /**
    * @param scene - The Arena scene instance.
    */
   constructor(scene: Phaser.Scene) {
     this.scene = scene
+  }
+
+  /**
+   * Applies server-provided net timing for Homing Orb interpolation.
+   *
+   * @param timing - Optional timing payload from `match_go` or `game_state_sync`.
+   */
+  applyNetTiming(timing?: Partial<GameNetTimingPayload> | null): void {
+    this.remoteRenderDelayMs = resolveGameNetTiming(timing).remoteRenderDelayMs
+  }
+
+  /**
+   * Updates the server-time-to-local-time offset from an authoritative payload.
+   *
+   * @param serverTimeMs - Server simulated or wall-clock time from a room message.
+   */
+  updateServerTimeOffset(serverTimeMs: number): void {
+    const sample = serverTimeMs - Date.now()
+    if (this.serverTimeOffsetMs === 0) {
+      this.serverTimeOffsetMs = sample
+    } else {
+      this.serverTimeOffsetMs = this.serverTimeOffsetMs * 0.8 + sample * 0.2
+    }
   }
 
   /**
@@ -218,12 +247,24 @@ export class ProjectileRenderSystem {
    *
    * @param homingOrbs - Authoritative Homing Orb rows from the server.
    */
-  applyFullSyncHomingOrbs(homingOrbs: readonly HomingOrbSnapshot[]): void {
+  applyFullSyncHomingOrbs(
+    homingOrbs: readonly HomingOrbSnapshot[],
+    serverTimeMs = this.estimatedServerTimeMs(),
+  ): void {
     for (const id of [...this.homingOrbEntries.keys()]) {
       this.destroyHomingOrb(id)
     }
     for (const s of homingOrbs) {
       this.spawnHomingOrb(s)
+      this.homingOrbBuffer.push(s.id, {
+        serverTimeMs,
+        x: s.x,
+        y: s.y,
+        vx: s.vx,
+        vy: s.vy,
+        facingAngle: s.headingRad,
+        moveFacingAngle: s.headingRad,
+      })
     }
   }
 
@@ -262,24 +303,45 @@ export class ProjectileRenderSystem {
    * @param payload - HomingOrbBatchUpdate event data from the server.
    */
   applyHomingOrbBatchUpdate(payload: HomingOrbBatchUpdatePayload): void {
+    if (payload.serverTimeMs !== undefined) {
+      this.updateServerTimeOffset(payload.serverTimeMs)
+    }
     for (const delta of payload.deltas) {
       const orb = ClientHomingOrb[delta.id]
       if (orb) {
-        orb.x = delta.x
-        orb.y = delta.y
-        orb.vx = delta.vx
-        orb.vy = delta.vy
-        orb.headingRad = delta.headingRad
-        if (delta.targetId !== undefined) orb.targetId = delta.targetId
+        if (delta.x !== undefined) orb.x = delta.x
+        if (delta.y !== undefined) orb.y = delta.y
+        if (delta.vx !== undefined) orb.vx = delta.vx
+        if (delta.vy !== undefined) orb.vy = delta.vy
+        if (delta.headingRad !== undefined) orb.headingRad = delta.headingRad
+        if (delta.targetId === null) {
+          delete orb.targetId
+        } else if (delta.targetId !== undefined) {
+          orb.targetId = delta.targetId
+        }
       }
       const entry = this.homingOrbEntries.get(delta.id)
-      if (entry) {
-        entry.simPrevX = delta.x
-        entry.simPrevY = delta.y
-        entry.simCurrX = delta.x
-        entry.simCurrY = delta.y
-        entry.sprite.setPosition(delta.x, delta.y)
-        entry.sprite.setRotation(delta.headingRad)
+      const next = ClientHomingOrb[delta.id]
+      if (
+        entry &&
+        next &&
+        (delta.x !== undefined ||
+          delta.y !== undefined ||
+          delta.vx !== undefined ||
+          delta.vy !== undefined ||
+          delta.headingRad !== undefined)
+      ) {
+        entry.simCurrX = next.x
+        entry.simCurrY = next.y
+        this.homingOrbBuffer.push(delta.id, {
+          serverTimeMs: payload.serverTimeMs ?? this.estimatedServerTimeMs(),
+          x: next.x,
+          y: next.y,
+          vx: next.vx,
+          vy: next.vy,
+          facingAngle: next.headingRad,
+          moveFacingAngle: next.headingRad,
+        })
       }
     }
     for (const removedId of payload.removedIds) {
@@ -318,6 +380,7 @@ export class ProjectileRenderSystem {
       entry.sprite.destroy()
       this.homingOrbEntries.delete(id)
     }
+    this.homingOrbBuffer.remove(id)
     delete ClientHomingOrb[id]
   }
 
@@ -362,6 +425,7 @@ export class ProjectileRenderSystem {
     for (const [id, entry] of this.homingOrbEntries) {
       const orb = ClientHomingOrb[id]
       if (!orb) continue
+      if (this.homingOrbBuffer.has(id)) continue
       entry.simPrevX = entry.simCurrX
       entry.simPrevY = entry.simCurrY
       entry.simCurrX += orb.vx * TICK_DT_SEC
@@ -380,14 +444,31 @@ export class ProjectileRenderSystem {
       entry.sprite.setPosition(x, y)
     }
     for (const [id, entry] of this.homingOrbEntries) {
-      const x =
+      const buffered = this.homingOrbBuffer.sampleAt(
+        id,
+        this.estimatedServerTimeMs() - this.remoteRenderDelayMs,
+      )
+      const x = buffered?.x ??
         entry.simPrevX + (entry.simCurrX - entry.simPrevX) * alpha
-      const y =
+      const y = buffered?.y ??
         entry.simPrevY + (entry.simCurrY - entry.simPrevY) * alpha
       entry.sprite.setPosition(x, y)
       const orb = ClientHomingOrb[id]
-      if (orb) entry.sprite.setRotation(orb.headingRad)
+      if (buffered) {
+        entry.sprite.setRotation(buffered.facingAngle)
+      } else if (orb) {
+        entry.sprite.setRotation(orb.headingRad)
+      }
     }
+  }
+
+  /**
+   * Estimates current server time from the latest authoritative projectile batch.
+   *
+   * @returns Local wall time adjusted by server offset.
+   */
+  private estimatedServerTimeMs(): number {
+    return Date.now() + this.serverTimeOffsetMs
   }
 
   /** Destroys all active fireball sprites and emitters. Call on scene shutdown. */
@@ -398,6 +479,7 @@ export class ProjectileRenderSystem {
     for (const [id] of this.homingOrbEntries) {
       this.destroyHomingOrb(id)
     }
+    this.homingOrbBuffer.clear()
   }
 
   /**

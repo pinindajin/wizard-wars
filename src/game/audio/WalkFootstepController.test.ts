@@ -43,6 +43,7 @@ const baseState: LocalPlayerRow = {
   invulnerable: false,
   jumpZ: 0,
   jumpStartedInLava: false,
+  hasSwiftBoots: false,
   abilityStates: abilityStates(),
 }
 

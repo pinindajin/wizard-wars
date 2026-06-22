@@ -146,6 +146,39 @@ describe("GameConnection send helpers + warning silence", () => {
     })
   })
 
+  it("forwards owner ACKs through the wildcard message bridge", () => {
+    const seen: unknown[] = []
+    conn.onMessage((message) => {
+      seen.push(message)
+    })
+
+    const payload = {
+      id: 1,
+      playerId: "player-1",
+      x: 10,
+      y: 20,
+      vx: 0,
+      vy: 0,
+      lastProcessedInputSeq: 4,
+      serverTimeMs: 1234,
+      replayContext: {
+        moveState: "idle",
+        terrainState: "land",
+        castingAbilityId: null,
+        jumpZ: 0,
+        jumpStartedInLava: false,
+        isSwinging: false,
+        hasSwiftBoots: false,
+      },
+    }
+    room.triggerMessage(RoomEvent.PlayerOwnerAck, payload)
+
+    expect(seen).toContainEqual({
+      type: WsEvent.PlayerOwnerAck,
+      payload,
+    })
+  })
+
   it("notifies connection health subscribers during reconnect transitions", async () => {
     const health: string[] = []
     conn.onConnectionHealthChange((next) => {
@@ -201,6 +234,24 @@ describe("GameConnection send helpers + warning silence", () => {
     expect(room.sent).toContainEqual({
       type: RoomEvent.ShopPurchase,
       payload: { itemId: "lightning_bolt" },
+    })
+  })
+
+  it("sendPlayerInputState sends compact input on the additive room event", () => {
+    const payload = {
+      protocolVersion: 1,
+      seq: 4,
+      clientSendTimeMs: 1_000,
+      buttons: 1,
+      targetX: 10,
+      targetY: 20,
+    } as const
+
+    conn.sendPlayerInputState(payload)
+
+    expect(room.sent).toContainEqual({
+      type: RoomEvent.PlayerInputState,
+      payload,
     })
   })
 

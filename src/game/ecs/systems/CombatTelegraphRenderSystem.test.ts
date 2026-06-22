@@ -115,6 +115,7 @@ function wireCaster(casterId: string, x: number, y: number): void {
     invulnerable: false,
     jumpZ: 0,
     jumpStartedInLava: false,
+    hasSwiftBoots: false,
     abilityStates: abilityStates(),
   }
   ClientRenderPos[1] = { x, y }

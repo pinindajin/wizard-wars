@@ -39,6 +39,8 @@ export const ClientPlayerState: Record<
     jumpZ: number
     /** True when current jump arc began in lava (server); used for airborne collider replay. */
     jumpStartedInLava: boolean
+    /** Server-authoritative Swift Boots equipment flag used by local prediction. */
+    hasSwiftBoots: boolean
     /** Server-authoritative cooldown and charge state for ability HUD rendering. */
     abilityStates: AbilityRuntimeStates
   }

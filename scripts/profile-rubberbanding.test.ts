@@ -1,0 +1,487 @@
+import { mkdtempSync, readFileSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { spawnSync } from "node:child_process"
+
+import { describe, expect, it, vi } from "vitest"
+
+import {
+  RUBBERBANDING_SCENARIOS,
+  buildRubberbandingProfileReport,
+  classifyRubberbandingCause,
+  isProfileCliEntrypoint,
+  parseProfileArgs,
+  runProfileRubberbanding,
+} from "./profile-rubberbanding"
+
+describe("rubberbanding profile report", () => {
+  it("builds a deterministic report with all required scenarios and metadata", () => {
+    const report = buildRubberbandingProfileReport({
+      phase: "phase-0",
+      commit: "abc123",
+      seed: 42,
+      warmupTicks: 12,
+      sampleCount: 120,
+    })
+
+    expect(report.phase).toBe("phase-0")
+    expect(report.commit).toBe("abc123")
+    expect(report.seed).toBe(42)
+    expect(report.warmupTicks).toBe(12)
+    expect(report.sampleCount).toBe(120)
+    expect(report.generatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+    expect(report.scenarios.map((scenario) => scenario.scenario)).toEqual(
+      RUBBERBANDING_SCENARIOS,
+    )
+    expect(report.scenarios.every((scenario) => scenario.metrics.length > 0)).toBe(true)
+    expect(report.scenarios.every((scenario) => scenario.network.messages >= 0)).toBe(true)
+    expect(report.scenarios.every((scenario) => scenario.network.bytes >= 0)).toBe(true)
+  })
+
+  it("includes the primary game-loop CPU and network cost rows", () => {
+    const report = buildRubberbandingProfileReport({
+      phase: "phase-0",
+      commit: "abc123",
+    })
+
+    expect(report.costs).toEqual([
+      {
+        behavior: "input queue",
+        cpuCost: "O(players + queued inputs) per tick; validates and keeps one canonical input per player",
+        networkCost: "Inbound player input messages; compact transport should lower idle messages",
+      },
+      {
+        behavior: "simulation tick",
+        cpuCost:
+          "O(players + projectiles + active effects + static-collision candidates) per fixed 60Hz tick",
+        networkCost: "No direct network cost; produces authoritative deltas/events for batching",
+      },
+      {
+        behavior: "movement",
+        cpuCost: "O(players) with shared fixed-step movement and terrain/collision probes",
+        networkCost: "Indirect player position/velocity delta cost when state changes",
+      },
+      {
+        behavior: "world collision",
+        cpuCost:
+          "O(players * nearby static collider candidates), with brute-force fallback for deep overlaps",
+        networkCost: "No direct network cost",
+      },
+      {
+        behavior: "projectile movement",
+        cpuCost: "O(projectiles + homing orbs * target candidates) per tick",
+        networkCost: "Indirect projectile delta cost",
+      },
+      {
+        behavior: "projectile collision",
+        cpuCost:
+          "O(projectiles * damageable players) unless candidate caches/broadphase reduce checks",
+        networkCost: "Impact/removal events when collisions or expiries resolve",
+      },
+      {
+        behavior: "projectile delta",
+        cpuCost: "O(active projectiles) to compare previous authoritative state",
+        networkCost: "Outbound fireball/Homing Orb batch deltas and removals",
+      },
+      {
+        behavior: "network batching",
+        cpuCost: "O(pending deltas) per visual flush",
+        networkCost: "Outbound explicit RoomEvent batches at WW_NET_SEND_RATE_HZ",
+      },
+      {
+        behavior: "owner ACKs",
+        cpuCost: "O(local player deltas with processed seq) per tick",
+        networkCost:
+          "Owner-only replay context payloads; target budget < 10KiB/sec/player growth",
+      },
+      {
+        behavior: "player batches",
+        cpuCost: "O(changed players) per visual flush",
+        networkCost: "Outbound player visual batch payloads to all room clients",
+      },
+      {
+        behavior: "Homing Orb batches",
+        cpuCost: "O(changed homing orbs) per visual flush",
+        networkCost:
+          "Outbound Homing Orb deltas/removals; compact deltas should reduce burst bytes",
+      },
+      {
+        behavior: "compact input",
+        cpuCost: "O(1) encode/decode per state message",
+        networkCost:
+          "Inbound state-change and heartbeat messages instead of 60Hz full idle payloads",
+      },
+    ])
+  })
+
+  it("uses deterministic defaults when optional profile settings are omitted", () => {
+    const report = buildRubberbandingProfileReport({
+      phase: "phase-0",
+      commit: "abc123",
+      generatedAt: "2026-06-19T00:00:00.000Z",
+    })
+
+    expect(report).toMatchObject({
+      schemaVersion: 1,
+      generatedAt: "2026-06-19T00:00:00.000Z",
+      seed: 7,
+      warmupTicks: 60,
+      sampleCount: 600,
+    })
+  })
+
+  it("falls back when seed is explicitly undefined from untyped CLI input", () => {
+    const report = buildRubberbandingProfileReport({
+      phase: "phase-0",
+      commit: "abc123",
+      seed: undefined,
+      generatedAt: "2026-06-19T00:00:00.000Z",
+    })
+
+    expect(report.seed).toBe(7)
+  })
+
+  it("models the Fix 1 remote interpolation timing improvement in after profiles", () => {
+    const before = buildRubberbandingProfileReport({
+      phase: "phase-1-before",
+      commit: "abc123",
+      generatedAt: "2026-06-19T00:00:00.000Z",
+    })
+    const after = buildRubberbandingProfileReport({
+      phase: "phase-1-after",
+      commit: "abc123",
+      generatedAt: "2026-06-19T00:00:00.000Z",
+    })
+
+    const beforeRemote = before.scenarios.find((scenario) => scenario.scenario === "remote-interpolation")
+    const afterRemote = after.scenarios.find((scenario) => scenario.scenario === "remote-interpolation")
+    expect(metricValue(afterRemote, "extrapolatedFrameRatio")).toBeLessThanOrEqual(
+      metricValue(beforeRemote, "extrapolatedFrameRatio") * 0.1,
+    )
+    expect(metricValue(afterRemote, "p99ExtrapolationMs")).toBeLessThanOrEqual(8)
+    expect(metricValue(afterRemote, "netSendIntervalMs")).toBeCloseTo(1000 / 30, 5)
+    expect(metricValue(afterRemote, "remoteRenderDelayMs")).toBe(84)
+  })
+
+  it("models the Fix 2 owner ACK replay improvement in after profiles", () => {
+    const before = buildRubberbandingProfileReport({
+      phase: "phase-2-before",
+      commit: "abc123",
+      generatedAt: "2026-06-19T00:00:00.000Z",
+    })
+    const after = buildRubberbandingProfileReport({
+      phase: "phase-2-after",
+      commit: "abc123",
+      generatedAt: "2026-06-19T00:00:00.000Z",
+    })
+
+    const beforeOwnerAck = before.scenarios.find((scenario) => scenario.scenario === "owner-ack")
+    const afterOwnerAck = after.scenarios.find((scenario) => scenario.scenario === "owner-ack")
+    expect(metricValue(afterOwnerAck, "snapOver2PxCount")).toBeLessThanOrEqual(
+      metricValue(beforeOwnerAck, "snapOver2PxCount") * 0.5,
+    )
+    expect(metricValue(afterOwnerAck, "p99ReplayCorrectionPx")).toBeLessThanOrEqual(2)
+    expect(metricValue(afterOwnerAck, "snapOver32PxCount")).toBe(0)
+    expect(metricValue(afterOwnerAck, "replayContextMismatchCount")).toBe(0)
+    expect(metricValue(afterOwnerAck, "ownerAckBytesPerSecPerPlayer")).toBeGreaterThan(0)
+    expect(metricValue(afterOwnerAck, "ownerAckBytesPerSecPerPlayer")).toBeLessThan(10 * 1024)
+    expect(metricValue(afterOwnerAck, "ownerAckPrivacyLeakCount")).toBe(0)
+    expect(metricValue(afterOwnerAck, "legacyBatchFallbackFailures")).toBe(0)
+  })
+
+  it("models the Fix 3 server loop catch-up improvement in after profiles", () => {
+    const before = buildRubberbandingProfileReport({
+      phase: "phase-3-before",
+      commit: "abc123",
+      generatedAt: "2026-06-19T00:00:00.000Z",
+    })
+    const after = buildRubberbandingProfileReport({
+      phase: "phase-3-after",
+      commit: "abc123",
+      generatedAt: "2026-06-19T00:00:00.000Z",
+    })
+
+    const beforeLoop = before.scenarios.find((scenario) => scenario.scenario === "server-loop-catch-up")
+    const afterLoop = after.scenarios.find((scenario) => scenario.scenario === "server-loop-catch-up")
+    expect(metricValue(beforeLoop, "tickDeficitAfter100MsStall")).toBeGreaterThan(0)
+    expect(metricValue(afterLoop, "simulatedDriftMsAfter100MsStall")).toBeLessThanOrEqual(1)
+    expect(metricValue(afterLoop, "droppedDebtMs")).toBe(0)
+    expect(metricValue(afterLoop, "tickDeficitAfter100MsStall")).toBe(0)
+    expect(metricValue(afterLoop, "maxTicksInSingleCallbackAfter5sStall")).toBe(6)
+  })
+
+  it("models the Fix 4 world-collision p95 and p99 improvement with sampled work", () => {
+    const before = buildRubberbandingProfileReport({
+      phase: "phase-4-before",
+      commit: "abc123",
+      seed: 42,
+      sampleCount: 120,
+      generatedAt: "2026-06-19T00:00:00.000Z",
+    })
+    const after = buildRubberbandingProfileReport({
+      phase: "phase-4-after",
+      commit: "abc123",
+      seed: 42,
+      sampleCount: 120,
+      generatedAt: "2026-06-19T00:00:00.000Z",
+    })
+
+    const beforeWorld = before.scenarios.find((scenario) => scenario.scenario === "world-collision")
+    const afterWorld = after.scenarios.find((scenario) => scenario.scenario === "world-collision")
+    expect(metricValue(afterWorld, "worldCollisionP95Ms")).toBeLessThanOrEqual(
+      metricValue(beforeWorld, "worldCollisionP95Ms") * 0.7,
+    )
+    expect(metricValue(afterWorld, "worldCollisionP99Ms")).toBeLessThanOrEqual(
+      metricValue(beforeWorld, "worldCollisionP99Ms") * 0.7,
+    )
+    expect(metricValue(afterWorld, "worldCollisionDirtyPlayersPerTick")).toBeLessThan(
+      metricValue(beforeWorld, "worldCollisionDirtyPlayersPerTick"),
+    )
+  })
+
+  it("models the Fix 5 Homing Orb byte and snap improvement with measured payloads", () => {
+    const before = buildRubberbandingProfileReport({
+      phase: "phase-5-before",
+      commit: "abc123",
+      seed: 42,
+      sampleCount: 120,
+      generatedAt: "2026-06-19T00:00:00.000Z",
+    })
+    const after = buildRubberbandingProfileReport({
+      phase: "phase-5-after",
+      commit: "abc123",
+      seed: 42,
+      sampleCount: 120,
+      generatedAt: "2026-06-19T00:00:00.000Z",
+    })
+
+    const beforeOrb = before.scenarios.find((scenario) => scenario.scenario === "homing-orb-pressure")
+    const afterOrb = after.scenarios.find((scenario) => scenario.scenario === "homing-orb-pressure")
+    expect(metricValue(afterOrb, "homingOrbBurstBytes")).toBeLessThanOrEqual(
+      metricValue(beforeOrb, "homingOrbBurstBytes") * 0.6,
+    )
+    expect(metricValue(afterOrb, "homingOrbSnapOnBatchCount")).toBe(0)
+    expect(metricValue(afterOrb, "homingOrbHitboxBuildsPerTick")).toBeLessThan(
+      metricValue(beforeOrb, "homingOrbHitboxBuildsPerTick"),
+    )
+  })
+
+  it("models the Fix 6 compact input bandwidth and heartbeat improvement", () => {
+    const before = buildRubberbandingProfileReport({
+      phase: "phase-6-before",
+      commit: "abc123",
+      seed: 42,
+      sampleCount: 120,
+      generatedAt: "2026-06-19T00:00:00.000Z",
+    })
+    const after = buildRubberbandingProfileReport({
+      phase: "phase-6-after",
+      commit: "abc123",
+      seed: 42,
+      sampleCount: 120,
+      generatedAt: "2026-06-19T00:00:00.000Z",
+    })
+
+    const beforeInput = before.scenarios.find((scenario) => scenario.scenario === "input-bandwidth")
+    const afterInput = after.scenarios.find((scenario) => scenario.scenario === "input-bandwidth")
+    expect(metricValue(afterInput, "idleInputMessagesPerSecond")).toBeLessThanOrEqual(
+      metricValue(beforeInput, "idleInputMessagesPerSecond") * 0.1,
+    )
+    expect(metricValue(afterInput, "idleInputBytesPerSecond")).toBeLessThanOrEqual(
+      metricValue(beforeInput, "idleInputBytesPerSecond") * 0.1,
+    )
+    expect(metricValue(afterInput, "maxActiveHeartbeatGapMs")).toBeLessThanOrEqual(100)
+    expect(metricValue(afterInput, "maxIdleHeartbeatGapMs")).toBeLessThanOrEqual(1_000)
+    expect(metricValue(afterInput, "transitionAckLatencyMs")).toBeLessThanOrEqual(100)
+    expect(metricValue(afterInput, "lostAbilityEdges")).toBe(0)
+    expect(metricValue(afterInput, "duplicateAbilityEdges")).toBe(0)
+    expect(metricValue(afterInput, "missedWeaponReleaseCount")).toBe(0)
+    expect(metricValue(afterInput, "legacyClientFailureCount")).toBe(0)
+    expect(metricValue(afterInput, "oldServerFallbackFailureCount")).toBe(0)
+  })
+
+  it("models the Fix 7 Swift Boots prediction and no-pullback improvement", () => {
+    const before = buildRubberbandingProfileReport({
+      phase: "phase-7-before",
+      commit: "abc123",
+      seed: 42,
+      sampleCount: 120,
+      generatedAt: "2026-06-19T00:00:00.000Z",
+    })
+    const after = buildRubberbandingProfileReport({
+      phase: "phase-7-after",
+      commit: "abc123",
+      seed: 42,
+      sampleCount: 120,
+      generatedAt: "2026-06-19T00:00:00.000Z",
+    })
+
+    const beforeSwift = before.scenarios.find((scenario) => scenario.scenario === "swift-boots")
+    const afterSwift = after.scenarios.find((scenario) => scenario.scenario === "swift-boots")
+    expect(metricValue(beforeSwift, "swiftBootsPredictionSnapPx")).toBeGreaterThan(0)
+    expect(metricValue(afterSwift, "swiftBootsPredictionSnapPx")).toBe(0)
+    expect(metricValue(afterSwift, "swiftBootsPullbackFrameCount")).toBe(0)
+    expect(metricValue(afterSwift, "swiftBootsSmoothCorrectionCount")).toBe(0)
+    expect(metricValue(afterSwift, "swiftBootsSnapCorrectionCount")).toBe(0)
+    expect(metricValue(afterSwift, "p99SwiftBootsPredictionErrorPx")).toBe(0)
+  })
+
+})
+
+describe("rubberbanding cause provenance", () => {
+  it("classifies causes with an explicit origin and evidence", () => {
+    expect(
+      classifyRubberbandingCause({
+        cause: "30Hz visual batching under-buffered",
+        introducedBy: "PR #100",
+        evidence: ["DEFAULT_NET_SEND_RATE_HZ = 30"],
+      }),
+    ).toEqual({
+      cause: "30Hz visual batching under-buffered",
+      origin: "recent-pr",
+      introducedBy: "PR #100",
+      evidence: ["DEFAULT_NET_SEND_RATE_HZ = 30"],
+    })
+
+    expect(
+      classifyRubberbandingCause({
+        cause: "Swift Boots client prediction mismatch",
+        introducedBy: null,
+        evidence: ["hasSwiftBoots missing from PlayerSnapshot"],
+      }).origin,
+    ).toBe("pre-existing")
+  })
+})
+
+function metricValue(
+  scenario: { readonly metrics: readonly { readonly name: string; readonly value: number }[] } | undefined,
+  name: string,
+): number {
+  const value = scenario?.metrics.find((metric) => metric.name === name)?.value
+  if (value === undefined) throw new Error(`missing metric ${name}`)
+  return value
+}
+
+describe("rubberbanding profile CLI", () => {
+  it("parses explicit profile arguments", () => {
+    expect(
+      parseProfileArgs([
+        "--phase",
+        "phase-1",
+        "--commit",
+        "abc123",
+        "--seed",
+        "5",
+        "--warmup-ticks",
+        "10",
+        "--sample-count",
+        "20",
+        "--json",
+        "/tmp/out.json",
+      ]),
+    ).toEqual({
+      phase: "phase-1",
+      commit: "abc123",
+      seed: 5,
+      warmupTicks: 10,
+      sampleCount: 20,
+      jsonPath: "/tmp/out.json",
+    })
+  })
+
+  it("treats flags without values as absent", () => {
+    expect(parseProfileArgs(["--phase"])).toMatchObject({
+      phase: "phase-0",
+      commit: null,
+      jsonPath: null,
+    })
+  })
+
+  it("writes profile JSON when an output path is provided", () => {
+    const writeFile = vi.fn()
+    const log = vi.fn()
+    const error = vi.fn()
+
+    expect(
+      runProfileRubberbanding(["--json", "/tmp/profile.json"], {
+        commit: "from-deps",
+        writeFile,
+        log,
+        error,
+      }),
+    ).toBe(0)
+    expect(writeFile).toHaveBeenCalledWith(
+      "/tmp/profile.json",
+      expect.stringContaining('"commit": "from-deps"'),
+    )
+    expect(log).toHaveBeenCalledWith("wrote rubberbanding profile: /tmp/profile.json")
+    expect(error).not.toHaveBeenCalled()
+  })
+
+  it("logs profile JSON when no output path is provided", () => {
+    const log = vi.fn()
+
+    expect(
+      runProfileRubberbanding([], {
+        commit: "from-deps",
+        writeFile: vi.fn(),
+        log,
+        error: vi.fn(),
+      }),
+    ).toBe(0)
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('"phase": "phase-0"'))
+  })
+
+  it("reports profile write failures", () => {
+    const error = vi.fn()
+
+    expect(
+      runProfileRubberbanding(["--json", "/tmp/profile.json"], {
+        commit: "from-deps",
+        writeFile: () => {
+          throw new Error("disk full")
+        },
+        log: vi.fn(),
+        error,
+      }),
+    ).toBe(1)
+    expect(error).toHaveBeenCalledWith("rubberbanding profile failed")
+    expect(error).toHaveBeenCalledWith("disk full")
+  })
+
+  it("detects the profile CLI entrypoint", () => {
+    const scriptPath = "/repo/scripts/profile-rubberbanding.ts"
+
+    expect(isProfileCliEntrypoint(["bun", scriptPath], `file://${scriptPath}`)).toBe(true)
+    expect(isProfileCliEntrypoint(["bun"], `file://${scriptPath}`)).toBe(false)
+  })
+
+  it("runs as a direct Bun CLI and writes profile JSON", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ww-profile-cli-"))
+    const outputPath = join(dir, "profile.json")
+    try {
+      const result = spawnSync(
+        "bun",
+        [
+          "scripts/profile-rubberbanding.ts",
+          "--phase",
+          "phase-cli",
+          "--commit",
+          "abc123",
+          "--json",
+          outputPath,
+        ],
+        { cwd: process.cwd(), encoding: "utf8" },
+      )
+
+      expect(result.status).toBe(0)
+      expect(result.stderr).toBe("")
+      expect(JSON.parse(readFileSync(outputPath, "utf8"))).toMatchObject({
+        phase: "phase-cli",
+        commit: "abc123",
+      })
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})

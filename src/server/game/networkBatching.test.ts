@@ -72,4 +72,25 @@ describe("server network batching", () => {
       removedIds: [9],
     })
   })
+
+  it("preserves sparse Homing Orb fields and explicit target clears while merging", () => {
+    const merged = mergeHomingOrbBatch([
+      {
+        deltas: [{ id: 12, x: 1, y: 2, targetId: "target-a" }],
+        removedIds: [],
+        serverTimeMs: 1_000,
+      },
+      {
+        deltas: [{ id: 12, vx: 3, vy: 4, headingRad: 0.5, targetId: null }],
+        removedIds: [],
+        serverTimeMs: 1_017,
+      },
+    ])
+
+    expect(merged).toEqual({
+      deltas: [{ id: 12, x: 1, y: 2, targetId: null, vx: 3, vy: 4, headingRad: 0.5 }],
+      removedIds: [],
+      serverTimeMs: 1_017,
+    })
+  })
 })

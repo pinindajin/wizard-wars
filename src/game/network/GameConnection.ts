@@ -6,6 +6,7 @@ import { RoomEvent, roomToWsEvent } from "@/shared/roomEvents"
 import { CLOSE_CODE_ADMIN_CLOSED } from "@/shared/constants"
 import type {
   PlayerInputPayload,
+  PlayerInputStatePayload,
   ClientSceneReadyPayload,
   AnyWsMessage,
   MessageHandler,
@@ -255,6 +256,10 @@ export class GameConnection {
 
   sendPlayerInput(input: PlayerInputPayload): void {
     this.send(RoomEvent.PlayerInput, input, { sampleEvery: 60, seq: input.seq })
+  }
+
+  sendPlayerInputState(input: PlayerInputStatePayload): void {
+    this.send(RoomEvent.PlayerInputState, input, { sampleEvery: 60, seq: input.seq })
   }
 
   // ─── Send Helpers (Shop / Inventory) ──────────────────────────────────────

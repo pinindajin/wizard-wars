@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync, copyFileSync } from "node:fs"
 import { basename, dirname, relative, resolve } from "node:path"
-import { fileURLToPath } from "node:url"
+import { fileURLToPath, pathToFileURL } from "node:url"
 
 import sharp from "sharp"
 
@@ -2245,11 +2245,25 @@ function writeSceneAndRuntimeSources(props: readonly PropDef[]): void {
   )
 }
 
-function assetEntries(props: readonly PropDef[], absolute: boolean): Record<string, unknown>[] {
+/**
+ * Builds arena asset-pack entries for runtime or Phaser Editor packs.
+ *
+ * @param props - Arena prop definitions with stable sprite ids.
+ * @param absolute - Whether URLs should be absolute web paths.
+ * @param includeTilemap - Whether to include the editor tilemap JSON entry.
+ * @returns Phaser asset-pack file entries.
+ */
+export function assetEntries(
+  props: readonly { readonly id: string }[],
+  absolute: boolean,
+  includeTilemap = !absolute,
+): Record<string, unknown>[] {
   const prefix = absolute ? "/assets" : "assets"
   return [
     { type: "image", key: "arena-base", url: `${prefix}/maps/arena-base.png` },
-    { type: "tilemapTiledJSON", key: "arena", url: `${prefix}/tilemaps/arena.json` },
+    ...(includeTilemap
+      ? [{ type: "tilemapTiledJSON", key: "arena", url: `${prefix}/tilemaps/arena.json` }]
+      : []),
     ...props.map((prop) => ({
       type: "image",
       key: `arena-prop-${prop.id}`,
@@ -2333,4 +2347,22 @@ async function main(): Promise<void> {
   console.log(`Built native arena assets from ${basename(SOURCE_BASE)} with ${props.length} prop sprites.`)
 }
 
-void main()
+/**
+ * Detects direct CLI execution in Bun/tsx without running during test imports.
+ *
+ * @param argv - Process arguments.
+ * @param metaUrl - Current module URL.
+ * @returns True when this module is the invoked script.
+ */
+export function isBuildNativeArenaMapCliEntrypoint(
+  argv: readonly string[],
+  metaUrl: string,
+): boolean {
+  const scriptPath = argv[1]
+  return Boolean(scriptPath && pathToFileURL(scriptPath).href === metaUrl)
+}
+
+/* v8 ignore next 3 */
+if (isBuildNativeArenaMapCliEntrypoint(process.argv, import.meta.url)) {
+  void main()
+}

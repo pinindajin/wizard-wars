@@ -5,7 +5,10 @@ import { WsEvent } from "@/shared/events"
 import { ARENA_CAMERA_FOLLOW_ZOOM } from "@/shared/balance-config/rendering"
 import type {
   GameStateSyncPayload,
+  GameInputProtocolPayload,
+  MatchGoPayload,
   PlayerBatchUpdatePayload,
+  PlayerOwnerAckPayload,
   FireballLaunchPayload,
   FireballBatchUpdatePayload,
   FireballImpactPayload,
@@ -38,6 +41,7 @@ import { CombatTelegraphRenderSystem } from "../ecs/systems/CombatTelegraphRende
 import { DamageFloatersSystem } from "../ecs/systems/DamageFloatersSystem"
 import { DebugOverlaySystem } from "../ecs/systems/DebugOverlaySystem"
 import { NetworkSyncSystem } from "../ecs/systems/NetworkSyncSystem"
+import { PlayerInputStateScheduler } from "../network/PlayerInputStateScheduler"
 import { KeyboardController } from "../input/KeyboardController"
 import { MouseController } from "../input/MouseController"
 import { registerLadyWizardAnims } from "../animation/LadyWizardAnimDefs"
@@ -144,6 +148,8 @@ export class ArenaRuntime {
   private walkFootstep!: WalkFootstepController
   private readonly log = clientLogger.child({ area: "netcode" })
   private activeLocalInputHandler?: () => void
+  private inputTransport: "legacy" | "compact" = "legacy"
+  private compactInputScheduler = new PlayerInputStateScheduler()
 
   /** Whether the match has started (MatchGo received). */
   private matchStarted = false
@@ -224,10 +230,16 @@ export class ArenaRuntime {
           x: sample.x,
           y: sample.y,
           lastProcessedInputSeq: sample.lastProcessedInputSeq,
+          replayContext: sample.replayContext,
         })
       },
       onServerTime: (serverTimeMs) => {
         this.playerRenderSystem.updateServerTimeOffset(serverTimeMs)
+        this.projectileRenderSystem?.updateServerTimeOffset?.(serverTimeMs)
+      },
+      onNetTiming: (timing) => {
+        this.playerRenderSystem.applyNetTiming(timing)
+        this.projectileRenderSystem?.applyNetTiming?.(timing)
       },
     })
     this.projectileRenderSystem = new ProjectileRenderSystem(this.scene)
@@ -347,16 +359,23 @@ export class ArenaRuntime {
       switch (message.type) {
         case WsEvent.GameStateSync: {
           const payload = message.payload as GameStateSyncPayload
+          this._applyInputProtocol(payload.input)
           this.networkSyncSystem.applyFullSync(payload)
           this.playerRenderSystem.applyFullSync(payload)
           this.projectileRenderSystem.applyFullSyncFireballs(payload.fireballs)
-          this.projectileRenderSystem.applyFullSyncHomingOrbs(payload.homingOrbs ?? [])
+          this.projectileRenderSystem.applyFullSyncHomingOrbs(
+            payload.homingOrbs ?? [],
+            payload.serverTimeMs,
+          )
           this.combatTelegraphRenderSystem.applyFullSync(payload.activeTelegraphs ?? [])
           this._ensureMatchLive()
           break
         }
         case WsEvent.PlayerBatchUpdate:
           this.networkSyncSystem.applyBatchUpdate(message.payload as PlayerBatchUpdatePayload)
+          break
+        case WsEvent.PlayerOwnerAck:
+          this.networkSyncSystem.applyOwnerAck(message.payload as PlayerOwnerAckPayload)
           break
         case WsEvent.FireballLaunch:
           this.projectileRenderSystem.spawnFireball(message.payload as FireballLaunchPayload)
@@ -447,7 +466,7 @@ export class ArenaRuntime {
           break
         }
         case WsEvent.MatchGo:
-          this._onMatchGo()
+          this._onMatchGo(message.payload as MatchGoPayload)
           break
       }
     })
@@ -480,7 +499,12 @@ export class ArenaRuntime {
   /**
    * Called when the server signals the match has started (MatchGo).
    */
-  private _onMatchGo(): void {
+  private _onMatchGo(payload?: MatchGoPayload): void {
+    this._applyInputProtocol(payload?.input)
+    if (payload?.timing) {
+      this.playerRenderSystem.applyNetTiming(payload.timing)
+      this.projectileRenderSystem.applyNetTiming?.(payload.timing)
+    }
     this._ensureMatchLive()
   }
 
@@ -548,7 +572,15 @@ export class ArenaRuntime {
         ...stampClientSendTime(),
       }
       this.playerRenderSystem.localInputHistory.append(fullInput)
-      this.connection.sendPlayerInput(fullInput)
+      if (this.inputTransport === "compact") {
+        const state = this.compactInputScheduler.maybeBuildState(
+          fullInput,
+          fullInput.clientSendTimeMs,
+        )
+        if (state) this.connection.sendPlayerInputState(state)
+      } else {
+        this.connection.sendPlayerInput(fullInput)
+      }
       if (isActiveLocalInput(fullInput)) {
         this.activeLocalInputHandler?.()
       }
@@ -567,6 +599,21 @@ export class ArenaRuntime {
       this.scene.cameras.main.centerOn(local.x, local.y)
     }
     this.minimapController.update()
+  }
+
+  /**
+   * Applies server-advertised input transport settings, defaulting to legacy
+   * when old servers omit the capability payload.
+   *
+   * @param protocol - Optional input protocol from `MatchGo` or `GameStateSync`.
+   */
+  private _applyInputProtocol(protocol?: GameInputProtocolPayload): void {
+    this.inputTransport =
+      protocol?.preferredTransport === "compact" ? "compact" : "legacy"
+    this.compactInputScheduler = new PlayerInputStateScheduler({
+      activeHeartbeatMs: protocol?.activeHeartbeatMs,
+      idleHeartbeatMs: protocol?.idleHeartbeatMs,
+    })
   }
 
   /**

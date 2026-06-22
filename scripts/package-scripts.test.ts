@@ -36,4 +36,12 @@ describe("package.json dev scripts", () => {
     expect(hybrid).toBe("bun ./scripts/dev-with-docker.ts")
     expect(stack).toBe("bun ./scripts/dev-with-docker.ts")
   })
+
+  it("has a dedicated 100% rubberbanding changed-code coverage gate", () => {
+    const pkg = readRootPackageJson()
+
+    expect(pkg.scripts?.["test:rubberbanding:coverage"]).toBe(
+      "vitest run --config vitest.rubberbanding-coverage.config.ts --coverage && bun scripts/assert-rubberbanding-coverage.ts",
+    )
+  })
 })

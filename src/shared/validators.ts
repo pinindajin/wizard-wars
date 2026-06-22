@@ -7,9 +7,12 @@ import {
 import { MAX_PLAYERS_PER_MATCH } from "./balance-config/lobby"
 import type {
   GameStateSyncPayload,
+  PlayerInputStatePayload,
   PlayerDeathPayload,
+  PlayerOwnerAckPayload,
   ServerPerformanceStatusPayload,
 } from "./types"
+import { PLAYER_INPUT_BUTTONS_MAX } from "./playerInputState"
 
 /** Username: alphanumeric + underscore, 3-20 chars, must be trimmed before comparison. */
 const USERNAME_REGEX = /^[a-zA-Z0-9_]+$/
@@ -58,6 +61,18 @@ export const playerInputPayloadSchema = z.object({
   useQuickItemSlot: z.number().int().min(0).max(QUICK_ITEM_SLOT_COUNT - 1).nullable(),
   seq: z.number().int().nonnegative(),
   clientSendTimeMs: z.number().finite().nonnegative(),
+})
+
+/** Schema for compact player input state. */
+export const playerInputStatePayloadSchema = z.object({
+  protocolVersion: z.literal(1),
+  seq: z.number().int().nonnegative(),
+  clientSendTimeMs: z.number().finite().nonnegative(),
+  buttons: z.number().int().min(0).max(PLAYER_INPUT_BUTTONS_MAX),
+  targetX: z.number().finite(),
+  targetY: z.number().finite(),
+  abilitySlot: z.number().int().min(0).max(ABILITY_BAR_SLOT_COUNT - 1).optional(),
+  useQuickItemSlot: z.number().int().min(0).max(QUICK_ITEM_SLOT_COUNT - 1).optional(),
 })
 
 /** Schema for shop purchase. */
@@ -146,8 +161,33 @@ export const playerSnapshotSchema = z.object({
   invulnerable: z.boolean(),
   jumpZ: z.number().finite().nonnegative(),
   jumpStartedInLava: z.boolean(),
+  hasSwiftBoots: z.boolean().default(false),
   abilityStates: abilityRuntimeStatesSchema,
   lastProcessedInputSeq: z.number().int().nonnegative(),
+})
+
+/** Replay context carried only in owner ACK messages. */
+export const playerOwnerAckReplayContextSchema = z.object({
+  moveState: playerMoveStateSchema,
+  terrainState: playerTerrainStateSchema,
+  castingAbilityId: z.string().min(1).max(64).nullable(),
+  jumpZ: z.number().finite().nonnegative(),
+  jumpStartedInLava: z.boolean(),
+  isSwinging: z.boolean(),
+  hasSwiftBoots: z.boolean(),
+})
+
+/** Owner-only ACK payload for local rewind-and-replay reconciliation. */
+export const playerOwnerAckPayloadSchema = z.object({
+  id: z.number().int().nonnegative(),
+  playerId: z.string().min(1).max(256),
+  x: z.number().finite(),
+  y: z.number().finite(),
+  vx: z.number().finite(),
+  vy: z.number().finite(),
+  lastProcessedInputSeq: z.number().int().nonnegative(),
+  serverTimeMs: z.number().finite().nonnegative(),
+  replayContext: playerOwnerAckReplayContextSchema,
 })
 
 /** Max simultaneous fireballs included in a full sync (safety cap for Zod). */
@@ -184,19 +224,29 @@ export const homingOrbLaunchPayloadSchema = homingOrbSnapshotSchema
 /** Single Homing Orb movement delta row. */
 export const homingOrbDeltaSchema = z.object({
   id: z.number().int().nonnegative(),
-  x: z.number().finite(),
-  y: z.number().finite(),
-  vx: z.number().finite(),
-  vy: z.number().finite(),
-  headingRad: z.number().finite(),
-  targetId: z.string().min(1).max(256).optional(),
-})
+  x: z.number().finite().optional(),
+  y: z.number().finite().optional(),
+  vx: z.number().finite().optional(),
+  vy: z.number().finite().optional(),
+  headingRad: z.number().finite().optional(),
+  targetId: z.string().min(1).max(256).nullable().optional(),
+}).refine(
+  (delta) =>
+    delta.x !== undefined ||
+    delta.y !== undefined ||
+    delta.vx !== undefined ||
+    delta.vy !== undefined ||
+    delta.headingRad !== undefined ||
+    delta.targetId !== undefined,
+  { message: "Homing Orb delta must include at least one changed field" },
+)
 
 /** Server → clients: Homing Orb batch update payload. */
 export const homingOrbBatchUpdatePayloadSchema = z.object({
   deltas: z.array(homingOrbDeltaSchema).max(MAX_HOMING_ORBS_IN_SYNC),
   removedIds: z.array(z.number().int().nonnegative()).max(MAX_HOMING_ORBS_IN_SYNC),
   seq: z.number().int().nonnegative(),
+  serverTimeMs: z.number().finite().nonnegative().optional(),
 })
 
 /** Server → clients: Homing Orb hit or expiry impact payload. */
@@ -238,6 +288,24 @@ export const combatTelegraphStartPayloadSchema = z.object({
   endsAtServerTimeMs: z.number().finite().nonnegative(),
 })
 
+/** Net timing sent with match start/full sync to drive remote interpolation. */
+export const gameNetTimingPayloadSchema = z.object({
+  protocolVersion: z.literal(1),
+  tickRateHz: z.number().finite().positive(),
+  tickMs: z.number().finite().positive(),
+  netSendRateHz: z.number().finite().positive(),
+  netSendIntervalMs: z.number().finite().positive(),
+  remoteRenderDelayMs: z.number().finite().positive(),
+})
+
+/** Input protocol advertised with match start/full sync. */
+export const gameInputProtocolPayloadSchema = z.object({
+  protocolVersion: z.literal(1),
+  preferredTransport: z.enum(["legacy", "compact"]),
+  activeHeartbeatMs: z.number().finite().positive(),
+  idleHeartbeatMs: z.number().finite().positive(),
+})
+
 /** Full `game_state_sync` payload (server + client). */
 export const gameStateSyncPayloadSchema = z.object({
   players: z.array(playerSnapshotSchema).max(MAX_PLAYERS_PER_MATCH),
@@ -246,6 +314,8 @@ export const gameStateSyncPayloadSchema = z.object({
   activeTelegraphs: z.array(combatTelegraphStartPayloadSchema).max(64).optional(),
   seq: z.number().int().nonnegative(),
   serverTimeMs: z.number().finite().nonnegative(),
+  timing: gameNetTimingPayloadSchema.optional(),
+  input: gameInputProtocolPayloadSchema.optional(),
 })
 
 /** Server → clients: player eliminated (validated before broadcast). */
@@ -308,6 +378,30 @@ export function parseGameStateSyncPayload(
   input: Readonly<unknown> | GameStateSyncPayload,
 ): GameStateSyncPayload {
   return gameStateSyncPayloadSchema.parse(input) as GameStateSyncPayload
+}
+
+/**
+ * Parses and returns a `PlayerOwnerAckPayload` (throws if invalid).
+ *
+ * @param input - Unknown owner ACK payload.
+ * @returns Validated owner ACK payload.
+ */
+export function parsePlayerOwnerAckPayload(
+  input: Readonly<unknown> | PlayerOwnerAckPayload,
+): PlayerOwnerAckPayload {
+  return playerOwnerAckPayloadSchema.parse(input) as PlayerOwnerAckPayload
+}
+
+/**
+ * Parses and returns a compact `PlayerInputStatePayload`.
+ *
+ * @param input - Unknown compact input state payload.
+ * @returns Validated compact input state payload.
+ */
+export function parsePlayerInputStatePayload(
+  input: Readonly<unknown> | PlayerInputStatePayload,
+): PlayerInputStatePayload {
+  return playerInputStatePayloadSchema.parse(input) as PlayerInputStatePayload
 }
 
 /**

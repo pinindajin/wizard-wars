@@ -56,11 +56,13 @@ export function mergeFireballBatch(
  * @returns Merged Homing Orb batch.
  */
 export function mergeHomingOrbBatch(
-  batches: readonly Pick<HomingOrbBatchUpdatePayload, "deltas" | "removedIds">[],
-): Pick<HomingOrbBatchUpdatePayload, "deltas" | "removedIds"> {
+  batches: readonly Pick<HomingOrbBatchUpdatePayload, "deltas" | "removedIds" | "serverTimeMs">[],
+): Pick<HomingOrbBatchUpdatePayload, "deltas" | "removedIds" | "serverTimeMs"> {
   const deltas = new Map<number, HomingOrbBatchUpdatePayload["deltas"][number]>()
   const removedIds = new Set<number>()
+  let serverTimeMs: number | undefined
   for (const batch of batches) {
+    if (batch.serverTimeMs !== undefined) serverTimeMs = batch.serverTimeMs
     for (const delta of batch.deltas) {
       removedIds.delete(delta.id)
       deltas.set(delta.id, { ...(deltas.get(delta.id) ?? { id: delta.id }), ...delta })
@@ -73,5 +75,6 @@ export function mergeHomingOrbBatch(
   return {
     deltas: [...deltas.values()],
     removedIds: [...removedIds.values()],
+    ...(serverTimeMs !== undefined ? { serverTimeMs } : {}),
   }
 }

@@ -1,9 +1,10 @@
-import { hasComponent, removeComponent } from "bitecs"
+import { addComponent, hasComponent, removeComponent } from "bitecs"
 import { Room, type Client } from "colyseus"
 import { randomUUID } from "node:crypto"
 import { performance } from "node:perf_hooks"
 
 import { verifyToken } from "../../auth"
+import { advanceFixedStepAccumulator } from "../../game/fixedStepAccumulator"
 import { createGameSimulation, type GameSimulation } from "../../game/simulation"
 import { createSessionEconomy, attemptPurchase, buildShopStatePayload } from "../../gameserver/sessionShop"
 import type { SessionEconomy } from "../../gameserver/sessionShop"
@@ -15,6 +16,9 @@ import type {
   AuthUser,
   FireballBatchUpdatePayload,
   HomingOrbBatchUpdatePayload,
+  GameInputProtocolPayload,
+  GameNetTimingPayload,
+  GameStateSyncPayload,
   LobbyPhase,
   LobbyPlayer,
   LobbyStatePayload,
@@ -22,6 +26,7 @@ import type {
   LobbyHostTransferPayload,
   LobbyScoreboardPayload,
   PlayerDelta,
+  PlayerInputPayload,
   ServerPerformanceStatusPayload,
   ScoreboardEntry,
 } from "../../../shared/types"
@@ -29,12 +34,15 @@ import {
   lobbyChatPayloadSchema,
   heroSelectPayloadSchema,
   playerInputPayloadSchema,
+  playerInputStatePayloadSchema,
   shopPurchasePayloadSchema,
   assignAbilityPayloadSchema,
   parseGameStateSyncPayload,
   parsePlayerDeathPayload,
+  parsePlayerOwnerAckPayload,
   parseServerPerformanceStatusPayload,
 } from "../../../shared/validators"
+import { decodePlayerInputState } from "../../../shared/playerInputState"
 import {
   MAX_PLAYERS_PER_MATCH,
   MIN_PLAYERS_PER_MATCH,
@@ -54,6 +62,7 @@ import {
   Equipment,
   ABILITY_INDEX,
   JumpArc,
+  NeedsWorldCollisionResolution,
   Position,
   TerrainState,
   TERRAIN_KIND,
@@ -425,10 +434,7 @@ export class GameLobbyRoom extends Room {
    * per player per tick (see `simulation.tick` semantics). Capped per
    * {@link INPUT_QUEUE_CAP_PER_PLAYER} to bound memory if a client floods.
    */
-  private readonly inputQueue = new Map<
-    string,
-    import("../../../shared/types").PlayerInputPayload[]
-  >()
+  private readonly inputQueue = new Map<string, PlayerInputPayload[]>()
 
   /** Runtime knobs for network cadence and performance reporting. */
   private readonly performanceConfig = resolveGamePerformanceConfig()
@@ -443,7 +449,7 @@ export class GameLobbyRoom extends Room {
 
   /** Pending Homing Orb visual deltas/removals awaiting the next network flush. */
   private pendingHomingOrbBatches: Array<
-    Pick<HomingOrbBatchUpdatePayload, "deltas" | "removedIds">
+    Pick<HomingOrbBatchUpdatePayload, "deltas" | "removedIds" | "serverTimeMs">
   > = []
 
   /** Monotonic sequence for player batch payloads. */
@@ -458,8 +464,11 @@ export class GameLobbyRoom extends Room {
   /** Last wall-clock time a cadence-limited network batch was flushed. */
   private lastNetworkFlushAtMs = 0
 
-  /** Expected perf-clock time for the next loop callback. */
-  private expectedNextTickAtPerfMs = 0
+  /** Residual elapsed time that has not yet crossed one fixed simulation step. */
+  private simulationAccumulatorMs = 0
+
+  /** Simulated server clock advanced by exactly `TICK_MS` per authoritative tick. */
+  private nextSimulationServerTimeMs = 0
 
   /** Start of the current server performance aggregation window. */
   private performanceWindowStartedAtPerfMs = performance.now()
@@ -896,7 +905,7 @@ export class GameLobbyRoom extends Room {
     this.scoreboardTimer?.clear()
     this.disposalGraceTimer?.clear()
     this.adminCloseTimer?.clear()
-    this.gameLoopTimer?.clear()
+    this.clearGameLoopTimer()
     this.clearInProgressPlayerCleanupTimers()
     this.clearMatchRuntimeState()
     this.clearBandwidthHooks()
@@ -1046,8 +1055,7 @@ export class GameLobbyRoom extends Room {
       this.clients.length === 0 &&
       !hasRemainingSimulationPlayers
     ) {
-      this.gameLoopTimer?.clear()
-      this.gameLoopTimer = null
+      this.clearGameLoopTimer()
       this.clearMatchRuntimeState()
       this.disposalGraceTimer?.clear()
       this.disposalGraceTimer = null
@@ -1216,6 +1224,11 @@ export class GameLobbyRoom extends Room {
       this.handlePlayerInput(client, payload)
     })
 
+    this.onMessage(RoomEvent.PlayerInputState, (client: Client, payload: unknown) => {
+      if (this.isAdminClosing) return
+      this.handlePlayerInputState(client, payload)
+    })
+
     this.onMessage(RoomEvent.ShopPurchase, (client: Client, payload: unknown) => {
       if (this.isAdminClosing) return
       this.handleShopPurchase(client, payload)
@@ -1249,44 +1262,59 @@ export class GameLobbyRoom extends Room {
    * @param payload - Raw inbound payload; validated with playerInputPayloadSchema.
    */
   private handlePlayerInput(client: Client, payload: unknown): void {
+    const pd = client.userData as PlayerData | undefined
     if (this.lobbyPhase !== "IN_PROGRESS" || !this.simulation) {
-      const pd = client.userData as PlayerData | undefined
-      logger.debug(
-        {
-          event: "room.player_input.rejected",
-          area: "netcode",
-          side: "server",
-          roomId: this.roomId,
-          playerId: pd?.playerId,
-          sessionId: client.sessionId,
-          phase: this.lobbyPhase,
-          reason: "wrong_phase",
-        },
-        "[GameLobbyRoom] player input rejected",
-      )
+      this.logRejectedPlayerInput(client, pd, "wrong_phase")
       return
     }
-    const pd = client.userData as PlayerData
     const result = playerInputPayloadSchema.safeParse(payload)
     if (!result.success) {
-      logger.debug(
-        {
-          event: "room.player_input.rejected",
-          area: "netcode",
-          side: "server",
-          roomId: this.roomId,
-          playerId: pd.playerId,
-          sessionId: client.sessionId,
-          phase: this.lobbyPhase,
-          reason: "invalid_payload",
-        },
-        "[GameLobbyRoom] player input rejected",
-      )
+      this.logRejectedPlayerInput(client, pd, "invalid_payload")
       return
     }
 
+    this.enqueueCanonicalPlayerInput(client, pd as PlayerData, result.data)
+  }
+
+  /**
+   * Decodes compact input state and enqueues it as canonical full player input.
+   *
+   * @param client - The sending client.
+   * @param payload - Raw inbound compact state payload.
+   */
+  private handlePlayerInputState(client: Client, payload: unknown): void {
+    const pd = client.userData as PlayerData | undefined
+    if (this.lobbyPhase !== "IN_PROGRESS" || !this.simulation) {
+      this.logRejectedPlayerInput(client, pd, "wrong_phase")
+      return
+    }
+    const result = playerInputStatePayloadSchema.safeParse(payload)
+    if (!result.success) {
+      this.logRejectedPlayerInput(client, pd, "invalid_payload")
+      return
+    }
+
+    this.enqueueCanonicalPlayerInput(
+      client,
+      pd as PlayerData,
+      decodePlayerInputState(result.data),
+    )
+  }
+
+  /**
+   * Enqueues canonical full input after either legacy validation or compact decode.
+   *
+   * @param client - Sending client.
+   * @param pd - Player data attached to the client.
+   * @param input - Canonical input payload to queue.
+   */
+  private enqueueCanonicalPlayerInput(
+    client: Client,
+    pd: PlayerData,
+    input: PlayerInputPayload,
+  ): void {
     const highest = this.highestAcceptedSeqByPlayer.get(pd.playerId) ?? -1
-    if (result.data.seq <= highest) {
+    if (input.seq <= highest) {
       logger.debug(
         {
           event: "room.player_input.dropped_duplicate",
@@ -1296,7 +1324,7 @@ export class GameLobbyRoom extends Room {
           playerId: pd.playerId,
           sessionId: client.sessionId,
           phase: this.lobbyPhase,
-          seq: result.data.seq,
+          seq: input.seq,
           highest,
           reason: "stale_or_duplicate_seq",
         },
@@ -1310,8 +1338,8 @@ export class GameLobbyRoom extends Room {
       queue = []
       this.inputQueue.set(pd.playerId, queue)
     }
-    queue.push(result.data)
-    this.highestAcceptedSeqByPlayer.set(pd.playerId, result.data.seq)
+    queue.push(input)
+    this.highestAcceptedSeqByPlayer.set(pd.playerId, input.seq)
 
     // Cap queue: drop from the front if it grows unbounded.
     while (queue.length > INPUT_QUEUE_CAP_PER_PLAYER) {
@@ -1326,13 +1354,40 @@ export class GameLobbyRoom extends Room {
           playerId: pd.playerId,
           sessionId: client.sessionId,
           phase: this.lobbyPhase,
-          seq: result.data.seq,
+          seq: input.seq,
           queueLength: queue.length,
           reason: "input_queue_cap",
         },
         "[GameLobbyRoom] player input queue capped",
       )
     }
+  }
+
+  /**
+   * Logs an inbound input rejection without duplicating legacy/compact branches.
+   *
+   * @param client - Sending client.
+   * @param pd - Optional player data attached to the client.
+   * @param reason - Rejection reason.
+   */
+  private logRejectedPlayerInput(
+    client: Client,
+    pd: PlayerData | undefined,
+    reason: "wrong_phase" | "invalid_payload",
+  ): void {
+    logger.debug(
+      {
+        event: "room.player_input.rejected",
+        area: "netcode",
+        side: "server",
+        roomId: this.roomId,
+        playerId: pd?.playerId,
+        sessionId: client.sessionId,
+        phase: this.lobbyPhase,
+        reason,
+      },
+      "[GameLobbyRoom] player input rejected",
+    )
   }
 
   /**
@@ -1358,6 +1413,7 @@ export class GameLobbyRoom extends Room {
 
     Position.x[eid] = x
     Position.y[eid] = y
+    addComponent(this.simulation.world, eid, NeedsWorldCollisionResolution)
     Velocity.vx[eid] = 0
     Velocity.vy[eid] = 0
     if (hasComponent(this.simulation.world, eid, JumpArc)) {
@@ -1404,6 +1460,18 @@ export class GameLobbyRoom extends Room {
     this.syncAbilitySlotsToSimulation(pd.playerId, economy)
 
     client.send(RoomEvent.ShopState, buildShopStatePayload(economy))
+    this.sendImmediateGameStateSyncToClient(client)
+  }
+
+  /**
+   * Sends the current full simulation snapshot to one client after an
+   * out-of-band state change such as an equipment purchase.
+   *
+   * @param client - Client that needs immediate authoritative hydration.
+   */
+  private sendImmediateGameStateSyncToClient(client: Client): void {
+    if (this.lobbyPhase !== "IN_PROGRESS" || !this.simulation) return
+    client.send(RoomEvent.GameStateSync, this.buildGameStateSyncPayload(Date.now()))
   }
 
   /**
@@ -1722,11 +1790,51 @@ export class GameLobbyRoom extends Room {
       client.send(RoomEvent.ShopState, buildShopStatePayload(economy))
     }
     if (this.simulation) {
-      const gameStateSync = parseGameStateSyncPayload(
-        this.simulation.buildGameStateSyncPayload(Date.now()),
-      )
+      const gameStateSync = this.buildGameStateSyncPayload(Date.now())
       client.send(RoomEvent.GameStateSync, gameStateSync)
     }
+  }
+
+  /**
+   * Returns the room's current net timing contract for client interpolation.
+   *
+   * @returns Net timing derived from runtime performance config.
+   */
+  private buildGameNetTimingPayload(): GameNetTimingPayload {
+    return this.performanceConfig.netTiming
+  }
+
+  /**
+   * Returns the room's preferred input transport while keeping both inbound
+   * handlers available during rollout.
+   *
+   * @returns Input protocol capability for match start and full sync.
+   */
+  private buildGameInputProtocolPayload(): GameInputProtocolPayload {
+    const configured = process.env.WW_INPUT_PROTOCOL
+    return {
+      protocolVersion: 1,
+      preferredTransport: configured === "legacy" ? "legacy" : "compact",
+      activeHeartbeatMs: 100,
+      idleHeartbeatMs: 1_000,
+    }
+  }
+
+  /**
+   * Builds a full game-state sync payload with room-owned network timing attached.
+   *
+   * @param serverTimeMs - Server wall-clock time for the snapshot.
+   * @returns Validated sync payload for match start or resync.
+   */
+  private buildGameStateSyncPayload(serverTimeMs: number): GameStateSyncPayload {
+    if (!this.simulation) {
+      throw new Error("cannot build GameStateSync without an active simulation")
+    }
+    return parseGameStateSyncPayload({
+      ...this.simulation.buildGameStateSyncPayload(serverTimeMs),
+      timing: this.buildGameNetTimingPayload(),
+      input: this.buildGameInputProtocolPayload(),
+    })
   }
 
   // ---------------------------------------------------------------------------
@@ -1882,19 +1990,14 @@ export class GameLobbyRoom extends Room {
       client.send(RoomEvent.ShopState, buildShopStatePayload(economy))
     }
 
-    const gameStateSync = parseGameStateSyncPayload(
-      this.simulation.buildGameStateSyncPayload(Date.now()),
-    )
-    this.broadcast(RoomEvent.MatchGo, {})
+    const gameStateSync = this.buildGameStateSyncPayload(nowMs)
+    this.broadcast(RoomEvent.MatchGo, {
+      timing: this.buildGameNetTimingPayload(),
+      input: this.buildGameInputProtocolPayload(),
+    })
     this.broadcast(RoomEvent.GameStateSync, gameStateSync)
 
-    // Start the fixed-rate game loop (see TICK_MS; 60 Hz by default).
-    activeGameLoopRoomIds.add(this.roomId)
-    this.resetNetworkBatchingState(Date.now())
-    this.resetPerformanceWindow(performance.now())
-    this.gameLoopTimer = nativeSetInterval(() => {
-      this.runGameTick()
-    }, TICK_MS)
+    this.startGameLoop(nowMs)
 
     logger.info(
       {
@@ -1922,8 +2025,7 @@ export class GameLobbyRoom extends Room {
     endReason: LobbyScoreboardPayload["endReason"],
     entries: ScoreboardEntry[],
   ): void {
-    this.gameLoopTimer?.clear()
-    this.gameLoopTimer = null
+    this.clearGameLoopTimer()
     this.clearMatchRuntimeState()
 
     this.lobbyPhase = "SCOREBOARD"
@@ -2199,8 +2301,7 @@ export class GameLobbyRoom extends Room {
     this.scoreboardTimer = null
     this.disposalGraceTimer?.clear()
     this.disposalGraceTimer = null
-    this.gameLoopTimer?.clear()
-    this.gameLoopTimer = null
+    this.clearGameLoopTimer()
     this.clearMatchRuntimeState()
     this.clientReadySet.clear()
     this.returnedToLobbySet.clear()
@@ -2216,6 +2317,46 @@ export class GameLobbyRoom extends Room {
     this.pendingPlayerDeltaBatches = []
     this.pendingFireballBatches = []
     this.pendingHomingOrbBatches = []
+  }
+
+  /**
+   * Starts the Colyseus simulation interval used for in-progress game ticks.
+   *
+   * @param serverTimeMs - Wall-clock time used to initialize simulated tick time.
+   */
+  private startGameLoop(serverTimeMs: number): void {
+    this.clearGameLoopTimer()
+    activeGameLoopRoomIds.add(this.roomId)
+    this.resetNetworkBatchingState(serverTimeMs)
+    this.resetPerformanceWindow(performance.now())
+    this.resetSimulationLoopState(serverTimeMs)
+    this.setSimulationInterval((deltaMs) => {
+      this.runGameLoop(deltaMs)
+    }, TICK_MS)
+    this.gameLoopTimer = {
+      clear: () => this.setSimulationInterval(),
+    }
+  }
+
+  /**
+   * Clears the active simulation interval and residual accumulator state.
+   */
+  private clearGameLoopTimer(): void {
+    this.gameLoopTimer?.clear()
+    this.gameLoopTimer = null
+    this.simulationAccumulatorMs = 0
+    this.nextSimulationServerTimeMs = 0
+    activeGameLoopRoomIds.delete(this.roomId)
+  }
+
+  /**
+   * Resets the simulated server clock used by the fixed-step loop.
+   *
+   * @param serverTimeMs - Wall-clock timestamp for the current game-start boundary.
+   */
+  private resetSimulationLoopState(serverTimeMs: number): void {
+    this.simulationAccumulatorMs = 0
+    this.nextSimulationServerTimeMs = serverTimeMs
   }
 
   // ---------------------------------------------------------------------------
@@ -2251,26 +2392,17 @@ export class GameLobbyRoom extends Room {
     this.performanceSimDurationMs = 0
     this.performanceBroadcastDurationMs = 0
     this.performanceEventLoopLagMs = 0
-    this.expectedNextTickAtPerfMs = nowPerfMs + TICK_MS
   }
 
   /**
-   * Records event-loop lateness for the current tick.
+   * Records event-loop lateness for one Colyseus simulation callback.
    *
-   * @param nowPerfMs - Current performance-clock time.
+   * @param elapsedMs - Elapsed milliseconds reported by Colyseus.
    */
-  private recordLoopTiming(nowPerfMs: number): void {
-    if (this.expectedNextTickAtPerfMs <= 0) {
-      this.expectedNextTickAtPerfMs = nowPerfMs + TICK_MS
-      return
-    }
-    const lagMs = Math.max(0, nowPerfMs - this.expectedNextTickAtPerfMs)
+  private recordLoopTiming(elapsedMs: number): void {
+    if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) return
+    const lagMs = Math.max(0, elapsedMs - TICK_MS)
     this.performanceEventLoopLagMs = Math.max(this.performanceEventLoopLagMs, lagMs)
-    if (lagMs > TICK_MS) {
-      this.performanceDroppedDebtMs += lagMs
-      this.performanceCatchUpCallbacks += Math.floor(lagMs / TICK_MS)
-    }
-    this.expectedNextTickAtPerfMs = nowPerfMs + TICK_MS
   }
 
   /**
@@ -2300,7 +2432,7 @@ export class GameLobbyRoom extends Room {
   }
 
   /**
-   * Sends owner-only ACK deltas so reconciliation is not delayed by visual cadence.
+   * Sends owner-only ACK payloads so reconciliation is not delayed by visual cadence.
    *
    * @param playerDeltas - Player deltas from the current simulation tick.
    * @param serverTimeMs - Current server wall-clock time.
@@ -2312,30 +2444,18 @@ export class GameLobbyRoom extends Room {
     const sim = this.simulation
     if (!sim) return
     for (const delta of playerDeltas) {
-      if (
-        delta.lastProcessedInputSeq === undefined ||
-        delta.x === undefined ||
-        delta.y === undefined
-      ) {
-        continue
-      }
+      if (delta.lastProcessedInputSeq === undefined) continue
       const playerId = sim.entityPlayerMap.get(delta.id)
       if (!playerId) continue
       const client = this.findClientByUserId(playerId)
       if (!client) continue
-      client.send(RoomEvent.PlayerBatchUpdate, {
-        deltas: [
-          {
-            id: delta.id,
-            x: delta.x,
-            y: delta.y,
-            lastProcessedInputSeq: delta.lastProcessedInputSeq,
-          },
-        ],
-        removedIds: [],
-        seq: this.playerBatchSeq++,
+      const payload = sim.buildPlayerOwnerAckPayload(
+        delta.id,
+        delta.lastProcessedInputSeq,
         serverTimeMs,
-      })
+      )
+      if (!payload) continue
+      client.send(RoomEvent.PlayerOwnerAck, parsePlayerOwnerAckPayload(payload))
     }
   }
 
@@ -2376,6 +2496,7 @@ export class GameLobbyRoom extends Room {
         this.broadcast(RoomEvent.HomingOrbBatchUpdate, {
           ...homingOrbs,
           seq: this.homingOrbBatchSeq++,
+          serverTimeMs: homingOrbs.serverTimeMs ?? serverTimeMs,
         })
       }
     }
@@ -2432,20 +2553,51 @@ export class GameLobbyRoom extends Room {
   }
 
   /**
+   * Runs all fixed simulation ticks represented by one Colyseus loop callback.
+   *
+   * @param elapsedMs - Elapsed milliseconds reported by `setSimulationInterval`.
+   */
+  private runGameLoop(elapsedMs: number): void {
+    if (!this.simulation || this.lobbyPhase !== "IN_PROGRESS") return
+    this.recordLoopTiming(elapsedMs)
+
+    if (!this.performanceConfig.simAccumulatorEnabled) {
+      this.runGameTick(Date.now())
+      return
+    }
+
+    const advance = advanceFixedStepAccumulator({
+      accumulatorMs: this.simulationAccumulatorMs,
+      elapsedMs,
+      stepMs: TICK_MS,
+      maxCatchUpSteps: this.performanceConfig.simMaxCatchUpTicks,
+    })
+    this.simulationAccumulatorMs = advance.accumulatorMs
+    this.performanceDroppedDebtMs += advance.droppedDebtMs
+    this.nextSimulationServerTimeMs += advance.droppedDebtMs
+    if (advance.steps > 1) {
+      this.performanceCatchUpCallbacks += advance.steps - 1
+    }
+
+    for (let step = 0; step < advance.steps; step++) {
+      this.nextSimulationServerTimeMs += TICK_MS
+      const shouldContinue = this.runGameTick(this.nextSimulationServerTimeMs)
+      if (!shouldContinue) return
+    }
+  }
+
+  /**
    * Runs one game simulation tick, broadcasts deltas and events to all clients.
    * Called at `TICK_MS` intervals during `IN_PROGRESS` phase.
    *
    * Per-player input queues are mutated in-place by `simulation.tick`, which
    * pops exactly one queued input per player per tick.
    */
-  private runGameTick(): void {
+  private runGameTick(serverTimeMs = Date.now()): boolean {
     if (!this.simulation || this.lobbyPhase !== "IN_PROGRESS") {
-      return
+      return false
     }
 
-    const tickStartedAtPerfMs = performance.now()
-    this.recordLoopTiming(tickStartedAtPerfMs)
-    const serverTimeMs = Date.now()
     const simStartedAtPerfMs = performance.now()
     const output = this.simulation.tick(this.inputQueue, serverTimeMs)
     this.performanceSimDurationMs += performance.now() - simStartedAtPerfMs
@@ -2464,7 +2616,12 @@ export class GameLobbyRoom extends Room {
       this.pendingHomingOrbBatches.push({
         deltas: output.homingOrbDeltas,
         removedIds: output.homingOrbRemovedIds,
+        serverTimeMs,
       })
+    }
+
+    if (output.playerDeltas.length > 0) {
+      this.sendOwnerAckDeltas(output.playerDeltas, serverTimeMs)
     }
 
     if (
@@ -2472,8 +2629,6 @@ export class GameLobbyRoom extends Room {
       this.shouldFlushVisualBatches(serverTimeMs)
     ) {
       this.flushPendingVisualBatches(serverTimeMs)
-    } else if (output.playerDeltas.length > 0) {
-      this.sendOwnerAckDeltas(output.playerDeltas, serverTimeMs)
     }
 
     for (const launch of output.fireballLaunches) {
@@ -2521,9 +2676,12 @@ export class GameLobbyRoom extends Room {
 
     if (output.matchEnded) {
       this.transitionToScoreboard(output.matchEnded.reason, output.matchEnded.entries)
+      this.performanceBroadcastDurationMs += performance.now() - broadcastStartedAtPerfMs
+      return false
     }
     this.performanceBroadcastDurationMs += performance.now() - broadcastStartedAtPerfMs
     this.maybeBroadcastServerPerformanceStatus(serverTimeMs)
+    return this.simulation !== null && this.lobbyPhase === "IN_PROGRESS"
   }
 
   /**

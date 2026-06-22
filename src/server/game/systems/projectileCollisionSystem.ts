@@ -21,6 +21,10 @@ import {
 } from "../components"
 import type { SimCtx, DamageRequest } from "../simulation"
 import {
+  getHomingOrbDamageableTargets,
+  type HomingOrbDamageableTarget,
+} from "../homingOrbTargetCache"
+import {
   FIREBALL_BLOCKED_BY_PROPS,
   FIREBALL_DAMAGE,
   FIREBALL_HIT_RADIUS_PX,
@@ -61,19 +65,12 @@ function isWithinOwnerSelfDamageGrace(
  * @returns True when the target is a live, vulnerable enemy.
  */
 function isValidHomingOrbHitTarget(
-  ctx: SimCtx,
   ownerEid: number,
   ownerUserId: string | null,
-  targetEid: number,
+  target: HomingOrbDamageableTarget,
 ): boolean {
-  if (targetEid === ownerEid) return false
-  if (hasComponent(ctx.world, targetEid, DyingTag)) return false
-  if (hasComponent(ctx.world, targetEid, DeadTag)) return false
-  if (hasComponent(ctx.world, targetEid, SpectatorTag)) return false
-  if (hasComponent(ctx.world, targetEid, InvulnerableTag)) return false
-  const targetUserId = ctx.entityPlayerMap.get(targetEid)
-  if (targetUserId === undefined) return false
-  return ownerUserId === null || targetUserId !== ownerUserId
+  if (target.eid === ownerEid) return false
+  return ownerUserId === null || target.userId !== ownerUserId
 }
 
 /**
@@ -195,15 +192,14 @@ export function projectileCollisionSystem(ctx: SimCtx): void {
     const ownerEid = Ownership.ownerEid[orbEid]
     const ownerUserId = homingOrbOwnerMap.get(orbEid) ?? null
 
-    for (const playerEid of query(world, [PlayerTag])) {
-      if (!isValidHomingOrbHitTarget(ctx, ownerEid, ownerUserId, playerEid)) continue
+    for (const target of getHomingOrbDamageableTargets(ctx)) {
+      if (!isValidHomingOrbHitTarget(ownerEid, ownerUserId, target)) continue
 
-      const targetUserId = entityPlayerMap.get(playerEid)
-      const hitbox = characterHitboxForCenter(Position.x[playerEid], Position.y[playerEid])
-      if (!circleIntersectsRect(orbX, orbY, HOMING_ORB_HIT_RADIUS_PX, hitbox)) continue
+      const targetUserId = target.userId
+      if (!circleIntersectsRect(orbX, orbY, HOMING_ORB_HIT_RADIUS_PX, target.hitbox)) continue
 
       const req: DamageRequest = {
-        targetEid: playerEid,
+        targetEid: target.eid,
         damage: HOMING_ORB_DAMAGE,
         killerUserId: ownerUserId,
         killerAbilityId: "homing_orb",

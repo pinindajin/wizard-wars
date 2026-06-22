@@ -1,4 +1,4 @@
-import { addComponent, addEntity, createWorld } from "bitecs"
+import { addComponent, addEntity, createWorld, hasComponent } from "bitecs"
 import { describe, expect, it } from "vitest"
 
 import {
@@ -7,6 +7,7 @@ import {
   Radius,
   TerrainState,
   TERRAIN_KIND,
+  NeedsWorldCollisionResolution,
 } from "../components"
 import type { SimCtx } from "../simulation"
 import { playerCollisionSystem } from "./playerCollisionSystem"
@@ -38,6 +39,28 @@ function sampleVerticalLavaToCliffEdge(): {
 }
 
 describe("playerCollisionSystem", () => {
+  it("marks both displaced players for world collision repair", () => {
+    const world = createWorld()
+    const a = addTestPlayer(world, ARENA_WIDTH / 2, ARENA_HEIGHT / 2)
+    const b = addTestPlayer(world, ARENA_WIDTH / 2 + PLAYER_RADIUS_PX, ARENA_HEIGHT / 2)
+
+    playerCollisionSystem({ world } as SimCtx)
+
+    expect(hasComponent(world, a, NeedsWorldCollisionResolution)).toBe(true)
+    expect(hasComponent(world, b, NeedsWorldCollisionResolution)).toBe(true)
+  })
+
+  it("does not mark separated players dirty", () => {
+    const world = createWorld()
+    const a = addTestPlayer(world, ARENA_WIDTH / 2, ARENA_HEIGHT / 2)
+    const b = addTestPlayer(world, ARENA_WIDTH / 2 + PLAYER_RADIUS_PX * 4, ARENA_HEIGHT / 2)
+
+    playerCollisionSystem({ world } as SimCtx)
+
+    expect(hasComponent(world, a, NeedsWorldCollisionResolution)).toBe(false)
+    expect(hasComponent(world, b, NeedsWorldCollisionResolution)).toBe(false)
+  })
+
   it("keeps grounded lava players from being shoved off lava", () => {
     const world = createWorld()
     const pusher = addEntity(world)
@@ -70,3 +93,20 @@ describe("playerCollisionSystem", () => {
     expect(TerrainState.kind[lavaPlayer]).toBe(TERRAIN_KIND.lava)
   })
 })
+
+function addTestPlayer(
+  world: ReturnType<typeof createWorld>,
+  x: number,
+  y: number,
+): number {
+  const eid = addEntity(world)
+  addComponent(world, eid, PlayerTag)
+  addComponent(world, eid, Position)
+  addComponent(world, eid, Radius)
+  addComponent(world, eid, TerrainState)
+  Radius.r[eid] = PLAYER_RADIUS_PX
+  Position.x[eid] = x
+  Position.y[eid] = y
+  TerrainState.kind[eid] = TERRAIN_KIND.land
+  return eid
+}

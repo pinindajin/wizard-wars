@@ -2,7 +2,11 @@ import { describe, it, expect, beforeEach, vi } from "vitest"
 import { NetworkSyncSystem } from "./NetworkSyncSystem"
 import { ClientPosition, ClientPlayerState } from "../components"
 import { addEntity, clientEntities, hasEntity, removeEntity } from "../world"
-import type { GameStateSyncPayload, PlayerSnapshot } from "@/shared/types"
+import type {
+  GameStateSyncPayload,
+  PlayerOwnerAckPayload,
+  PlayerSnapshot,
+} from "@/shared/types"
 
 function abilityStates() {
   return {
@@ -47,6 +51,7 @@ function baseSnapshot(over: Partial<PlayerSnapshot> & { id: number; playerId: st
     invulnerable: over.invulnerable ?? false,
     jumpZ: over.jumpZ ?? 0,
     jumpStartedInLava: over.jumpStartedInLava ?? false,
+    hasSwiftBoots: over.hasSwiftBoots ?? false,
     abilityStates: over.abilityStates ?? abilityStates(),
     lastProcessedInputSeq: over.lastProcessedInputSeq ?? 0,
   }
@@ -109,6 +114,7 @@ describe("NetworkSyncSystem.applyFullSync (r5 despawn)", () => {
       invulnerable: false,
       jumpZ: 0,
       jumpStartedInLava: false,
+      hasSwiftBoots: false,
       abilityStates: abilityStates(),
     }
     const snap = baseSnapshot({ id: 3, playerId: "only" })
@@ -135,6 +141,51 @@ describe("NetworkSyncSystem.applyFullSync (payload from GameStateSync)", () => {
     system.applyFullSync(payload)
     expect(clientEntities.has(0)).toBe(true)
     expect(ClientPlayerState[0]!.playerId).toBe("u0")
+  })
+
+  it("hydrates Swift Boots equipment state from full sync and player deltas", () => {
+    const system = new NetworkSyncSystem()
+    const payload: GameStateSyncPayload = {
+      players: [baseSnapshot({ id: 1, playerId: "p1", hasSwiftBoots: true })],
+      fireballs: [],
+      seq: 0,
+      serverTimeMs: 1_000,
+    }
+
+    system.applyFullSync(payload)
+    expect(ClientPlayerState[1]?.hasSwiftBoots).toBe(true)
+
+    system.applyBatchUpdate({
+      deltas: [{ id: 1, hasSwiftBoots: false }],
+      removedIds: [],
+      seq: 1,
+      serverTimeMs: 1_017,
+    })
+
+    expect(ClientPlayerState[1]?.hasSwiftBoots).toBe(false)
+  })
+
+  it("emits optional net timing from GameStateSync payloads", () => {
+    const onNetTiming = vi.fn()
+    const timing = {
+      protocolVersion: 1 as const,
+      tickRateHz: 60,
+      tickMs: 1000 / 60,
+      netSendRateHz: 30,
+      netSendIntervalMs: 1000 / 30,
+      remoteRenderDelayMs: 84,
+    }
+    const systemWithTiming = new NetworkSyncSystem({ onNetTiming })
+
+    systemWithTiming.applyFullSync({
+      players: [baseSnapshot({ id: 0, playerId: "u0" })],
+      fireballs: [],
+      seq: 0,
+      serverTimeMs: 42,
+      timing,
+    })
+
+    expect(onNetTiming).toHaveBeenCalledWith(timing)
   })
 })
 
@@ -227,4 +278,127 @@ describe("NetworkSyncSystem.applyBatchUpdate", () => {
     expect(ClientPlayerState[1]!.abilityStates.jump.charges).toBe(0)
     expect(ClientPlayerState[1]!.abilityStates.jump.cooldownEndsAtServerTimeMs).toBe(6_000)
   })
+
+  it("keeps legacy visual batch ACK fallback for the local player", () => {
+    const onLocalAck = vi.fn()
+    const system = new NetworkSyncSystem({ onLocalAck })
+    system.localPlayerId = "p1"
+    system.applyFullSync({
+      players: [baseSnapshot({ id: 1, playerId: "p1", x: 10, y: 20 })],
+      fireballs: [],
+      seq: 0,
+      serverTimeMs: 1,
+    })
+
+    system.applyBatchUpdate({
+      deltas: [{ id: 1, x: 15, y: 25, lastProcessedInputSeq: 3 }],
+      removedIds: [],
+      seq: 1,
+      serverTimeMs: 2,
+    })
+
+    expect(onLocalAck).toHaveBeenCalledWith({
+      id: 1,
+      x: 15,
+      y: 25,
+      lastProcessedInputSeq: 3,
+    })
+  })
 })
+
+describe("NetworkSyncSystem.applyOwnerAck", () => {
+  beforeEach(() => {
+    clearClientEcs()
+  })
+
+  it("routes dedicated owner ACKs without mutating visual ECS position", () => {
+    const onLocalAck = vi.fn()
+    const onServerTime = vi.fn()
+    const system = new NetworkSyncSystem({ onLocalAck, onServerTime })
+    system.localPlayerId = "p1"
+    system.applyFullSync({
+      players: [baseSnapshot({ id: 1, playerId: "p1", x: 10, y: 20 })],
+      fireballs: [],
+      seq: 0,
+      serverTimeMs: 1,
+    })
+    const ack = ownerAck({ id: 1, playerId: "p1", lastProcessedInputSeq: 4 })
+
+    system.applyOwnerAck(ack)
+
+    expect(onServerTime).toHaveBeenCalledWith(ack.serverTimeMs)
+    expect(onLocalAck).toHaveBeenCalledWith({
+      id: 1,
+      x: ack.x,
+      y: ack.y,
+      vx: ack.vx,
+      vy: ack.vy,
+      lastProcessedInputSeq: ack.lastProcessedInputSeq,
+      replayContext: ack.replayContext,
+    })
+    expect(ClientPosition[1]).toEqual({ x: 10, y: 20 })
+  })
+
+  it("ignores remote and duplicate owner ACKs", () => {
+    const onLocalAck = vi.fn()
+    const system = new NetworkSyncSystem({ onLocalAck })
+    system.localPlayerId = "p1"
+    system.applyFullSync({
+      players: [baseSnapshot({ id: 1, playerId: "p1" })],
+      fireballs: [],
+      seq: 0,
+      serverTimeMs: 1,
+    })
+
+    system.applyOwnerAck(ownerAck({ id: 1, playerId: "p2", lastProcessedInputSeq: 4 }))
+    system.applyOwnerAck(ownerAck({ id: 1, playerId: "p1", lastProcessedInputSeq: 4 }))
+    system.applyOwnerAck(ownerAck({ id: 1, playerId: "p1", lastProcessedInputSeq: 4 }))
+    system.applyOwnerAck(ownerAck({ id: 1, playerId: "p1", lastProcessedInputSeq: 3 }))
+    system.applyOwnerAck(ownerAck({ id: 1, playerId: "p1", lastProcessedInputSeq: 5 }))
+
+    expect(onLocalAck.mock.calls.map(([sample]) => sample.lastProcessedInputSeq)).toEqual([
+      4,
+      5,
+    ])
+  })
+
+  it("accepts the first local owner ACK without a prior full sync cursor", () => {
+    const onLocalAck = vi.fn()
+    const system = new NetworkSyncSystem({ onLocalAck })
+    system.localPlayerId = "p1"
+
+    system.applyOwnerAck(ownerAck({ id: 1, playerId: "p1", lastProcessedInputSeq: 0 }))
+
+    expect(onLocalAck).toHaveBeenCalledWith(
+      expect.objectContaining({ lastProcessedInputSeq: 0 }),
+    )
+  })
+})
+
+function ownerAck(
+  overrides: Partial<PlayerOwnerAckPayload> & {
+    id: number
+    playerId: string
+    lastProcessedInputSeq: number
+  },
+): PlayerOwnerAckPayload {
+  return {
+    id: overrides.id,
+    playerId: overrides.playerId,
+    x: overrides.x ?? 100,
+    y: overrides.y ?? 120,
+    vx: overrides.vx ?? 10,
+    vy: overrides.vy ?? 0,
+    lastProcessedInputSeq: overrides.lastProcessedInputSeq,
+    serverTimeMs: overrides.serverTimeMs ?? 5_000,
+    replayContext: overrides.replayContext ?? {
+      moveState: "idle",
+      terrainState: "land",
+      castingAbilityId: null,
+      jumpZ: 0,
+      jumpStartedInLava: false,
+      isSwinging: false,
+      hasSwiftBoots: false,
+    },
+  }
+}
