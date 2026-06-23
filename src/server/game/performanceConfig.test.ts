@@ -13,7 +13,7 @@ describe("game performance config", () => {
       netSendRateHz: DEFAULT_NET_SEND_RATE_HZ,
       simTickRateHz: 60,
       simAccumulatorEnabled: true,
-      simMaxCatchUpTicks: 6,
+      simMaxCatchUpTicks: 4,
       netTiming: {
         protocolVersion: 1,
         netSendRateHz: DEFAULT_NET_SEND_RATE_HZ,
@@ -86,7 +86,7 @@ describe("game performance config", () => {
       }),
     ).toMatchObject({
       simAccumulatorEnabled: true,
-      simMaxCatchUpTicks: 6,
+      simMaxCatchUpTicks: 4,
     })
   })
 })

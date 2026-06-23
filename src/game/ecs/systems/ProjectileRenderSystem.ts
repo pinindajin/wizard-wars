@@ -87,6 +87,7 @@ export class ProjectileRenderSystem {
   private scene: Phaser.Scene
   private entries: Map<number, FireballRenderEntry> = new Map()
   private homingOrbEntries: Map<number, HomingOrbRenderEntry> = new Map()
+  private readonly fireballBuffer = new RemoteInterpolationBuffer()
   private readonly homingOrbBuffer = new RemoteInterpolationBuffer()
   private simAccumulatorMs = 0
   private serverTimeOffsetMs = 0
@@ -226,7 +227,10 @@ export class ProjectileRenderSystem {
    *
    * @param fireballs - Authoritative fireball rows from the server.
    */
-  applyFullSyncFireballs(fireballs: readonly FireballSnapshot[]): void {
+  applyFullSyncFireballs(
+    fireballs: readonly FireballSnapshot[],
+    serverTimeMs = this.estimatedServerTimeMs(),
+  ): void {
     for (const id of [...this.entries.keys()]) {
       this.destroyFireball(id)
     }
@@ -238,6 +242,16 @@ export class ProjectileRenderSystem {
         y: s.y,
         vx: s.vx,
         vy: s.vy,
+      })
+      const headingRad = Math.atan2(s.vy, s.vx)
+      this.fireballBuffer.push(s.id, {
+        serverTimeMs,
+        x: s.x,
+        y: s.y,
+        vx: s.vx,
+        vy: s.vy,
+        facingAngle: headingRad,
+        moveFacingAngle: headingRad,
       })
     }
   }
@@ -269,14 +283,16 @@ export class ProjectileRenderSystem {
   }
 
   /**
-   * Applies a batch position update for all active fireballs. Each
-   * authoritative position collapses both `simPrev` and `simCurr` for
-   * that fireball onto the server value so the next render step does
-   * not interpolate *through* the correction.
+   * Applies a batch position update for all active fireballs. Authoritative
+   * positions are buffered by server time so delayed batches render smoothly
+   * instead of snapping the sprite when the message is received.
    *
    * @param payload - FireballBatchUpdate event data from the server.
    */
   applyBatchUpdate(payload: FireballBatchUpdatePayload): void {
+    if (payload.serverTimeMs !== undefined) {
+      this.updateServerTimeOffset(payload.serverTimeMs)
+    }
     for (const delta of payload.deltas) {
       const fb = ClientFireball[delta.id]
       if (fb) {
@@ -289,7 +305,17 @@ export class ProjectileRenderSystem {
         entry.simPrevY = delta.y
         entry.simCurrX = delta.x
         entry.simCurrY = delta.y
-        entry.sprite.setPosition(delta.x, delta.y)
+        const next = ClientFireball[delta.id]
+        const headingRad = next ? Math.atan2(next.vy, next.vx) : 0
+        this.fireballBuffer.push(delta.id, {
+          serverTimeMs: payload.serverTimeMs ?? this.estimatedServerTimeMs(),
+          x: delta.x,
+          y: delta.y,
+          vx: next?.vx ?? 0,
+          vy: next?.vy ?? 0,
+          facingAngle: headingRad,
+          moveFacingAngle: headingRad,
+        })
       }
     }
     for (const removedId of payload.removedIds) {
@@ -366,6 +392,7 @@ export class ProjectileRenderSystem {
       entry.sprite.destroy()
       this.entries.delete(id)
     }
+    this.fireballBuffer.remove(id)
     delete ClientFireball[id]
   }
 
@@ -412,6 +439,7 @@ export class ProjectileRenderSystem {
     for (const [id, entry] of this.entries) {
       const fb = ClientFireball[id]
       if (!fb) continue
+      if (this.fireballBuffer.has(id)) continue
       entry.simPrevX = entry.simCurrX
       entry.simPrevY = entry.simCurrY
       entry.simCurrX += fb.vx * TICK_DT_SEC
@@ -436,12 +464,19 @@ export class ProjectileRenderSystem {
   }
 
   private _renderStep(alpha: number): void {
-    for (const [, entry] of this.entries) {
-      const x =
+    for (const [id, entry] of this.entries) {
+      const buffered = this.fireballBuffer.sampleAt(
+        id,
+        this.estimatedServerTimeMs() - this.remoteRenderDelayMs,
+      )
+      const x = buffered?.x ??
         entry.simPrevX + (entry.simCurrX - entry.simPrevX) * alpha
-      const y =
+      const y = buffered?.y ??
         entry.simPrevY + (entry.simCurrY - entry.simPrevY) * alpha
       entry.sprite.setPosition(x, y)
+      if (buffered) {
+        entry.sprite.setRotation(buffered.facingAngle)
+      }
     }
     for (const [id, entry] of this.homingOrbEntries) {
       const buffered = this.homingOrbBuffer.sampleAt(

@@ -44,4 +44,12 @@ describe("package.json dev scripts", () => {
       "vitest run --config vitest.rubberbanding-coverage.config.ts --coverage && bun scripts/assert-rubberbanding-coverage.ts",
     )
   })
+
+  it("keeps perf-load checks on an explicit opt-in script", () => {
+    const pkg = readRootPackageJson()
+
+    expect(pkg.scripts?.["test:perf-load"]).toBe(
+      "vitest run --config vitest.perf-load.config.ts",
+    )
+  })
 })

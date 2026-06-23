@@ -29,11 +29,13 @@ export function mergePlayerBatch(
  * @returns Merged fireball batch.
  */
 export function mergeFireballBatch(
-  batches: readonly Pick<FireballBatchUpdatePayload, "deltas" | "removedIds">[],
-): Pick<FireballBatchUpdatePayload, "deltas" | "removedIds"> {
+  batches: readonly Pick<FireballBatchUpdatePayload, "deltas" | "removedIds" | "serverTimeMs">[],
+): Pick<FireballBatchUpdatePayload, "deltas" | "removedIds" | "serverTimeMs"> {
   const deltas = new Map<number, { id: number; x: number; y: number }>()
   const removedIds = new Set<number>()
+  let serverTimeMs: number | undefined
   for (const batch of batches) {
+    if (batch.serverTimeMs !== undefined) serverTimeMs = batch.serverTimeMs
     for (const delta of batch.deltas) {
       removedIds.delete(delta.id)
       deltas.set(delta.id, delta)
@@ -46,6 +48,7 @@ export function mergeFireballBatch(
   return {
     deltas: [...deltas.values()],
     removedIds: [...removedIds.values()],
+    ...(serverTimeMs !== undefined ? { serverTimeMs } : {}),
   }
 }
 

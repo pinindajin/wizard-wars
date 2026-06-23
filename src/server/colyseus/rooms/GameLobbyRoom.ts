@@ -444,7 +444,7 @@ export class GameLobbyRoom extends Room {
 
   /** Pending fireball visual deltas/removals awaiting the next network flush. */
   private pendingFireballBatches: Array<
-    Pick<FireballBatchUpdatePayload, "deltas" | "removedIds">
+    Pick<FireballBatchUpdatePayload, "deltas" | "removedIds" | "serverTimeMs">
   > = []
 
   /** Pending Homing Orb visual deltas/removals awaiting the next network flush. */
@@ -2485,6 +2485,7 @@ export class GameLobbyRoom extends Room {
         this.broadcast(RoomEvent.FireballBatchUpdate, {
           ...fireballs,
           seq: this.fireballBatchSeq++,
+          serverTimeMs: fireballs.serverTimeMs ?? serverTimeMs,
         })
       }
     }
@@ -2610,6 +2611,7 @@ export class GameLobbyRoom extends Room {
       this.pendingFireballBatches.push({
         deltas: output.fireballDeltas,
         removedIds: output.fireballRemovedIds,
+        serverTimeMs,
       })
     }
     if (output.homingOrbDeltas.length > 0 || output.homingOrbRemovedIds.length > 0) {
