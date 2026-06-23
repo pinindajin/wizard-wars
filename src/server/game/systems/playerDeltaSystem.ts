@@ -28,6 +28,7 @@ import { computePlayerAnimState, getCastingAbilityId } from "../playerAnimState"
 import { computePlayerMoveState } from "../playerMoveState"
 import type { SimCtx } from "../simulation"
 import type { PlayerDelta } from "../../../shared/types"
+import { animUsesMouseAim } from "../../../shared/playerAnimAim"
 import {
   abilityRuntimeStatesEqual,
   abilityRuntimeStatesForPlayer,
@@ -113,17 +114,23 @@ export function playerDeltaSystem(ctx: SimCtx): void {
       continue
     }
 
+    const animStateChanged = animState !== prev.animState
+    const shouldRepeatAimFacing =
+      animStateChanged && animUsesMouseAim(animState)
+
     const delta: PlayerDelta = {
       id: eid,
       ...(x !== prev.x ? { x } : {}),
       ...(y !== prev.y ? { y } : {}),
       ...(vx !== prev.vx ? { vx } : {}),
       ...(vy !== prev.vy ? { vy } : {}),
-      ...(facingAngle !== prev.facingAngle ? { facingAngle } : {}),
+      ...(facingAngle !== prev.facingAngle || shouldRepeatAimFacing
+        ? { facingAngle }
+        : {}),
       ...(moveFacingAngle !== prev.moveFacingAngle ? { moveFacingAngle } : {}),
       ...(health !== prev.health ? { health } : {}),
       ...(lives !== prev.lives ? { lives } : {}),
-      ...(animState !== prev.animState ? { animState } : {}),
+      ...(animStateChanged ? { animState } : {}),
       ...(moveState !== prev.moveState ? { moveState } : {}),
       ...(castingAbilityId !== prev.castingAbilityId ? { castingAbilityId } : {}),
       ...(invulnerable !== prev.invulnerable ? { invulnerable } : {}),
