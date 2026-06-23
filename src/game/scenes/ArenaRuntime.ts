@@ -362,7 +362,10 @@ export class ArenaRuntime {
           this._applyInputProtocol(payload.input)
           this.networkSyncSystem.applyFullSync(payload)
           this.playerRenderSystem.applyFullSync(payload)
-          this.projectileRenderSystem.applyFullSyncFireballs(payload.fireballs)
+          this.projectileRenderSystem.applyFullSyncFireballs(
+            payload.fireballs,
+            payload.serverTimeMs,
+          )
           this.projectileRenderSystem.applyFullSyncHomingOrbs(
             payload.homingOrbs ?? [],
             payload.serverTimeMs,

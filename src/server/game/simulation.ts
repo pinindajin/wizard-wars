@@ -231,6 +231,61 @@ export type FreshestWeaponAim = {
   weaponTargetY: number
 }
 
+type CoalescedHeldInput = {
+  readonly input: PlayerInputPayload
+  readonly heldThroughSeq: number
+}
+
+/**
+ * Returns true when two queued inputs describe the same held intent and can be
+ * represented by one payload plus virtual one-sequence-per-tick ACK advancement.
+ *
+ * Edge-triggered actions are excluded so casts and quick items are never
+ * replayed from a coalesced held input.
+ */
+function canCoalesceHeldInput(
+  first: PlayerInputPayload,
+  second: PlayerInputPayload,
+): boolean {
+  if (
+    first.abilitySlot !== null ||
+    second.abilitySlot !== null ||
+    first.useQuickItemSlot !== null ||
+    second.useQuickItemSlot !== null
+  ) {
+    return false
+  }
+  return (
+    first.up === second.up &&
+    first.down === second.down &&
+    first.left === second.left &&
+    first.right === second.right &&
+    first.weaponPrimary === second.weaponPrimary &&
+    first.weaponSecondary === second.weaponSecondary &&
+    first.weaponTargetX === second.weaponTargetX &&
+    first.weaponTargetY === second.weaponTargetY &&
+    first.abilityTargetX === second.abilityTargetX &&
+    first.abilityTargetY === second.abilityTargetY
+  )
+}
+
+/**
+ * Builds the held-input payload used for virtual ACK ticks.
+ */
+function heldInputForVirtualAck(
+  input: PlayerInputPayload,
+  seq: number,
+  serverTimeMs: number,
+): PlayerInputPayload {
+  return {
+    ...input,
+    abilitySlot: null,
+    useQuickItemSlot: null,
+    seq,
+    clientSendTimeMs: serverTimeMs,
+  }
+}
+
 // ─── SimCtx ───────────────────────────────────────────────────────────────
 
 /**
@@ -432,6 +487,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
   const killStats = new Map<string, KillStats>()
   const lastProcessedInputSeqByPlayer = new Map<string, number>()
   const lastInputTickByPlayer = new Map<string, number>()
+  const coalescedHeldInputByPlayer = new Map<string, CoalescedHeldInput>()
   const activeMeleeAttacks = new Map<number, ActiveMeleeAttack>()
   const activeCombatTelegraphs = new Map<string, CombatTelegraphStartPayload>()
   const invulnerableExpiresAtTickByEntity = new Map<number, number>()
@@ -611,6 +667,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     prevPlayerStates.delete(eid)
     lastProcessedInputSeqByPlayer.delete(userId)
     lastInputTickByPlayer.delete(userId)
+    coalescedHeldInputByPlayer.delete(userId)
     activeMeleeAttacks.delete(eid)
     homingOrbCastTargetPlayerMap.delete(eid)
     invulnerableExpiresAtTickByEntity.delete(eid)
@@ -637,6 +694,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
   function resetClientInputStream(userId: string): void {
     lastProcessedInputSeqByPlayer.set(userId, -1)
     lastInputTickByPlayer.set(userId, currentTick)
+    coalescedHeldInputByPlayer.delete(userId)
   }
 
   // ── buildGameStateSyncPayload ───────────────────────────────────────
@@ -808,23 +866,66 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     const freshestWeaponAimByPlayer = new Map<string, FreshestWeaponAim>()
     for (const [userId, queue] of perPlayerInputs) {
       const lastSeq = lastProcessedInputSeqByPlayer.get(userId) ?? 0
+      const coalescedHeld = coalescedHeldInputByPlayer.get(userId)
+      const staleThroughSeq = Math.max(
+        lastSeq,
+        coalescedHeld?.heldThroughSeq ?? lastSeq,
+      )
       // Drop already-processed inputs at the head of the queue.
-      while (queue.length > 0 && queue[0].seq <= lastSeq) {
+      while (queue.length > 0 && queue[0].seq <= staleThroughSeq) {
         queue.shift()
       }
+
       const freshest = queue[queue.length - 1]
+      const next = queue[0]
+
+      if (coalescedHeld && coalescedHeld.heldThroughSeq > lastSeq) {
+        // Fresh casts/items/changed intent should not wait behind a virtual held-input backlog.
+        if (next !== undefined && !canCoalesceHeldInput(coalescedHeld.input, next)) {
+          coalescedHeldInputByPlayer.delete(userId)
+        } else {
+          const virtualSeq = lastSeq + 1
+          const input = heldInputForVirtualAck(
+            coalescedHeld.input,
+            virtualSeq,
+            serverTimeMs,
+          )
+          inputMap.set(userId, input)
+          const freshestAim = freshest ?? input
+          freshestWeaponAimByPlayer.set(userId, {
+            weaponTargetX: freshestAim.weaponTargetX,
+            weaponTargetY: freshestAim.weaponTargetY,
+          })
+          lastProcessedInputSeqByPlayer.set(userId, virtualSeq)
+          lastInputTickByPlayer.set(userId, currentTick)
+          if (virtualSeq >= coalescedHeld.heldThroughSeq) {
+            coalescedHeldInputByPlayer.delete(userId)
+          }
+          continue
+        }
+      }
+
       if (freshest !== undefined) {
         freshestWeaponAimByPlayer.set(userId, {
           weaponTargetX: freshest.weaponTargetX,
           weaponTargetY: freshest.weaponTargetY,
         })
       }
-      const next = queue[0]
       if (next !== undefined) {
         inputMap.set(userId, next)
         queue.shift()
         lastProcessedInputSeqByPlayer.set(userId, next.seq)
         lastInputTickByPlayer.set(userId, currentTick)
+        let heldThroughSeq = next.seq
+        while (queue.length > 0 && canCoalesceHeldInput(next, queue[0]!)) {
+          heldThroughSeq = Math.max(heldThroughSeq, queue.shift()!.seq)
+        }
+        if (heldThroughSeq > next.seq) {
+          coalescedHeldInputByPlayer.set(userId, {
+            input: heldInputForVirtualAck(next, next.seq, serverTimeMs),
+            heldThroughSeq,
+          })
+        }
       }
     }
 

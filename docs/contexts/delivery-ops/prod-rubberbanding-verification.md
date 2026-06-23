@@ -11,6 +11,10 @@ Record production evidence for the Wizard Wars solo rubber-banding/high-CPU inve
 - The room reports server loop degradation through `server_performance_status` using loop debt, catch-up callbacks, input queue drops, event-loop lag, broadcast cost, CPU, memory, active rooms, and client count.
 - Visual player/fireball deltas are cadence-limited by `WW_NET_SEND_RATE_HZ` while owner ACKs and critical discrete events remain immediate.
 - Held movement inputs expire after 250ms without accepted input, and empty in-progress rooms clean up after reconnect grace.
+- The server coalesces repeated held inputs while advancing ACKs one sequence per tick, matching Seas of Aleryn's transition-preserving queue pressure reduction without skipping client replay history.
+- The default fixed-step catch-up budget is `4` ticks to reduce long catch-up bursts under host stalls; `WW_SIM_MAX_CATCH_UP_TICKS` remains the rollback knob.
+- Fireball movement batches now carry `serverTimeMs`, and the client buffers Fireball positions like Homing Orbs instead of snapping sprites on batch receipt.
+- `bun run test:perf-load` runs an opt-in local 8-client Colyseus load gate and writes JSON reports under `test-results/perf-load/`.
 
 ## Required Production Snapshot
 
@@ -28,6 +32,26 @@ Record production evidence for the Wizard Wars solo rubber-banding/high-CPU inve
 | `cpu.stat` throttling | TBD | Capture `nr_throttled` and `throttled_usec` deltas during solo movement. |
 | Active rooms | TBD | Compare room count to expected live games; stale rooms should not accumulate. |
 | Connected clients | TBD | Compare app metrics/logs to expected browser sessions. |
+
+## Snapshot Helper
+
+Run this from the repo to capture public Git/HTTP evidence:
+
+```sh
+bun run ops:capture-prod-rubberbanding
+```
+
+To include Docker image, resource limits, stats, and cgroup throttling from the Dokploy host, provide SSH access and the target container name:
+
+```sh
+WW_PROD_SSH_HOST=user@host WW_PROD_CONTAINER=container-name bun run ops:capture-prod-rubberbanding
+```
+
+The helper writes a Markdown snapshot to `test-results/prod-rubberbanding/`.
+
+## 2026-06-23 Live Solo Evidence
+
+Public browser playtest against `https://wizard-wars.pinindajin.online` entered a solo match and observed `29/29` degraded `server_performance_status` payloads over roughly 30 seconds. The degradation reason was `event_loop_lag`; the last payload reported about `46ms` event-loop lag, about `11ms` broadcast time, `8` catch-up callbacks, `1` active room, and `1` connected client. This strongly suggests the deployed host/image still needs the required Dokploy/container snapshot before attributing live symptoms to current `main`.
 
 ## Log Evidence To Capture
 

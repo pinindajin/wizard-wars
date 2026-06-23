@@ -628,6 +628,26 @@ describe("GameLobbyRoom network batching", () => {
       deltas: [],
       removedIds: [42],
       seq: 0,
+      serverTimeMs: 1_000,
+    })
+  })
+
+  it("falls back to flush time when legacy Fireball pending batches lack serverTimeMs", () => {
+    const room = new GameLobbyRoom()
+    const broadcast = vi.fn()
+    Object.assign(room as object, {
+      broadcast,
+      pendingFireballBatches: [{ deltas: [{ id: 43, x: 1, y: 2 }], removedIds: [] }],
+    })
+
+    ;(room as unknown as { flushPendingVisualBatches: (serverTimeMs: number) => void })
+      .flushPendingVisualBatches(3_000)
+
+    expect(broadcast).toHaveBeenCalledWith(RoomEvent.FireballBatchUpdate, {
+      deltas: [{ id: 43, x: 1, y: 2 }],
+      removedIds: [],
+      seq: 0,
+      serverTimeMs: 3_000,
     })
   })
 

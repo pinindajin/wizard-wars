@@ -250,6 +250,103 @@ describe("movement system", () => {
     expect(acks).toEqual([100, 101, 102])
   })
 
+  it("coalesces repeated held inputs while advancing ACKs one sequence per tick", () => {
+    const sim = createGameSimulation(Date.now())
+    sim.addPlayer("user1", "Alice", "red_wizard", 0)
+
+    const queues = new Map<string, PlayerInputPayload[]>()
+    queues.set("user1", [
+      { ...emptyInput({ up: true }), seq: 200 },
+      { ...emptyInput({ up: true }), seq: 201 },
+      { ...emptyInput({ up: true }), seq: 202 },
+      { ...emptyInput({ up: true }), seq: 203 },
+    ])
+
+    const out1 = sim.tick(queues, Date.now())
+    expect(queues.get("user1")).toHaveLength(0)
+
+    const out2 = sim.tick(queues, Date.now() + 17)
+    const out3 = sim.tick(queues, Date.now() + 34)
+    const out4 = sim.tick(queues, Date.now() + 51)
+
+    const acks = [out1, out2, out3, out4].map((o) =>
+      o.playerDeltas.find((d) => d.id === sim.playerEntityMap.get("user1"))
+        ?.lastProcessedInputSeq,
+    )
+    expect(acks).toEqual([200, 201, 202, 203])
+  })
+
+  it.each([
+    [
+      "ability on first input",
+      { up: true, abilitySlot: 0, abilityTargetX: 200, abilityTargetY: 200, seq: 300 },
+      { up: true, seq: 301 },
+    ],
+    [
+      "ability on second input",
+      { up: true, seq: 310 },
+      { up: true, abilitySlot: 0, abilityTargetX: 200, abilityTargetY: 200, seq: 311 },
+    ],
+    [
+      "quick item on first input",
+      { up: true, useQuickItemSlot: 0, seq: 320 },
+      { up: true, seq: 321 },
+    ],
+    [
+      "quick item on second input",
+      { up: true, seq: 330 },
+      { up: true, useQuickItemSlot: 0, seq: 331 },
+    ],
+  ])("does not coalesce edge-triggered inputs: %s", (_label, first, second) => {
+    const sim = createGameSimulation(Date.now())
+    sim.addPlayer("user1", "Alice", "red_wizard", 0)
+
+    const queue = [
+      { ...emptyInput(first), seq: first.seq },
+      { ...emptyInput(second), seq: second.seq },
+    ]
+    const out1 = sim.tick(new Map([["user1", queue]]), Date.now())
+    const out2 = sim.tick(new Map([["user1", queue]]), Date.now() + 17)
+    const acks = [out1, out2].map((o) =>
+      o.playerDeltas.find((d) => d.id === sim.playerEntityMap.get("user1"))
+        ?.lastProcessedInputSeq,
+    )
+
+    expect(acks).toEqual([first.seq, second.seq])
+  })
+
+  it("interrupts coalesced held inputs when a fresh edge action arrives", () => {
+    const sim = createGameSimulation(Date.now())
+    sim.addPlayer("user1", "Alice", "red_wizard", 0)
+
+    const queue: PlayerInputPayload[] = [
+      { ...emptyInput({ up: true }), seq: 400 },
+      { ...emptyInput({ up: true }), seq: 401 },
+      { ...emptyInput({ up: true }), seq: 402 },
+      { ...emptyInput({ up: true }), seq: 403 },
+    ]
+
+    const out1 = sim.tick(new Map([["user1", queue]]), Date.now())
+    expect(queue).toHaveLength(0)
+    queue.push(
+      emptyInput({
+        up: true,
+        abilitySlot: 0,
+        abilityTargetX: 200,
+        abilityTargetY: 200,
+        seq: 404,
+      }),
+    )
+
+    const out2 = sim.tick(new Map([["user1", queue]]), Date.now() + 17)
+    const acks = [out1, out2].map((o) =>
+      o.playerDeltas.find((d) => d.id === sim.playerEntityMap.get("user1"))
+        ?.lastProcessedInputSeq,
+    )
+
+    expect(acks).toEqual([400, 404])
+  })
+
   it("drops queued inputs whose seq <= lastProcessedInputSeq", () => {
     const sim = createGameSimulation(Date.now())
     sim.addPlayer("user1", "Alice", "red_wizard", 0)

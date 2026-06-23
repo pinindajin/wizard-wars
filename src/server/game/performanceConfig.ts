@@ -8,7 +8,7 @@ import type { GameNetTimingPayload } from "@/shared/types"
 export const DEFAULT_NET_SEND_RATE_HZ = DEFAULT_VISUAL_NET_SEND_RATE_HZ
 export const MIN_NET_SEND_RATE_HZ = 10
 export const MAX_NET_SEND_RATE_HZ = 60
-export const DEFAULT_SIM_MAX_CATCH_UP_TICKS = 6
+export const DEFAULT_SIM_MAX_CATCH_UP_TICKS = 4
 export const MIN_SIM_MAX_CATCH_UP_TICKS = 1
 export const MAX_SIM_MAX_CATCH_UP_TICKS = 15
 export const PERFORMANCE_STATUS_WINDOW_MS = 1_000

@@ -59,7 +59,7 @@ describe("performance indicator helpers", () => {
       catchUpCallbacks: 2,
       inputQueueDrops: 1,
       simDurationMs: 4,
-      broadcastDurationMs: 20,
+      broadcastDurationMs: 75,
       eventLoopLagMs: 25,
       processCpuPercent: 95,
       heapUsedBytes: 1024,
@@ -81,5 +81,27 @@ describe("performance indicator helpers", () => {
     expect(serverPerformanceStatusKey(overloaded)).toBe(
       "dropped_debt|catch_up|input_queue_drops|event_loop_lag|broadcast_slow",
     )
+  })
+
+  it("does not flag normal 8-client aggregate broadcast cost without loop debt", () => {
+    expect(
+      classifyServerPerformance({
+        windowMs: 1_000,
+        droppedDebtMs: 0,
+        catchUpCallbacks: 0,
+        inputQueueDrops: 0,
+        simDurationMs: 40,
+        broadcastDurationMs: 30,
+        eventLoopLagMs: 2,
+        processCpuPercent: 20,
+        heapUsedBytes: 1024,
+        rssBytes: 2048,
+        activeRooms: 1,
+        connectedClients: 8,
+      }),
+    ).toEqual({
+      degraded: false,
+      reasons: [],
+    })
   })
 })

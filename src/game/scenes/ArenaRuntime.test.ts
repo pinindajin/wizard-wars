@@ -517,7 +517,7 @@ describe("ArenaRuntime lifecycle", () => {
     expect(soundPlaySpy).toHaveBeenCalledWith(SFX_KEYS.homingOrbExpire)
   })
 
-  it("hydrates Homing Orbs from full game state sync with the snapshot server time", () => {
+  it("hydrates projectiles from full game state sync with the snapshot server time", () => {
     const { runtime, connection } = makeRuntime()
     const payload = {
       players: [],
@@ -542,7 +542,10 @@ describe("ArenaRuntime lifecycle", () => {
     runtime.start()
     connection.emit({ type: WsEvent.GameStateSync, payload })
 
-    expect(projectileRenderMock.applyFullSyncFireballs).toHaveBeenCalledWith([])
+    expect(projectileRenderMock.applyFullSyncFireballs).toHaveBeenCalledWith(
+      [],
+      4_000,
+    )
     expect(projectileRenderMock.applyFullSyncHomingOrbs).toHaveBeenCalledWith(
       payload.homingOrbs,
       4_000,

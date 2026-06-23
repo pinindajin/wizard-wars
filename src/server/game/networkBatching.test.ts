@@ -51,6 +51,27 @@ describe("server network batching", () => {
     })
   })
 
+  it("preserves the newest fireball server time while merging movement batches", () => {
+    const merged = mergeFireballBatch([
+      {
+        deltas: [{ id: 9, x: 1, y: 2 }],
+        removedIds: [],
+        serverTimeMs: 1_000,
+      },
+      {
+        deltas: [{ id: 9, x: 3, y: 4 }],
+        removedIds: [],
+        serverTimeMs: 1_017,
+      },
+    ])
+
+    expect(merged).toEqual({
+      deltas: [{ id: 9, x: 3, y: 4 }],
+      removedIds: [],
+      serverTimeMs: 1_017,
+    })
+  })
+
   it("merges homing orb deltas and lets removals win per id", () => {
     const merged = mergeHomingOrbBatch([
       {

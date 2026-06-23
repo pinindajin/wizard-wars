@@ -234,6 +234,102 @@ describe("ProjectileRenderSystem", () => {
     expect(ClientFireball[42]?.x).toBeCloseTo(30, 5)
   })
 
+  it("buffers fireball batch positions instead of snapping sprites on receipt", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(1_000)
+    const { scene, spritePositionFns } = mockScene()
+    const sys = new ProjectileRenderSystem(scene as never)
+    sys.updateServerTimeOffset(1_000)
+
+    sys.spawnFireball({
+      id: 43,
+      ownerId: "caster",
+      x: 0,
+      y: 0,
+      vx: 0,
+      vy: 0,
+    })
+    sys.applyBatchUpdate({
+      deltas: [{ id: 43, x: 0, y: 0 }],
+      removedIds: [],
+      seq: 1,
+      serverTimeMs: 1_000,
+    } as never)
+    vi.setSystemTime(1_100)
+    sys.applyBatchUpdate({
+      deltas: [{ id: 43, x: 100, y: 0 }],
+      removedIds: [],
+      seq: 2,
+      serverTimeMs: 1_100,
+    } as never)
+
+    expect(spritePositionFns[0]).not.toHaveBeenCalledWith(100, 0)
+
+    spritePositionFns[0]?.mockClear()
+    vi.setSystemTime(1_134)
+    sys.update(0)
+
+    expect(spritePositionFns[0]).toHaveBeenCalledWith(50, 0)
+    vi.useRealTimers()
+  })
+
+  it("buffers legacy fireball batches even if client fireball state is missing", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(2_000)
+    const { scene, spritePositionFns, spriteRotationFns } = mockScene()
+    const sys = new ProjectileRenderSystem(scene as never)
+
+    sys.spawnFireball({
+      id: 44,
+      ownerId: "caster",
+      x: 0,
+      y: 0,
+      vx: 100,
+      vy: 0,
+    })
+    delete ClientFireball[44]
+    spritePositionFns[0]?.mockClear()
+    spriteRotationFns[0]?.mockClear()
+
+    sys.applyBatchUpdate({
+      deltas: [{ id: 44, x: 25, y: 35 }],
+      removedIds: [],
+      seq: 1,
+    } as never)
+
+    expect(spritePositionFns[0]).not.toHaveBeenCalled()
+
+    sys.update(0)
+
+    expect(spritePositionFns[0]).toHaveBeenCalledWith(25, 35)
+    expect(spriteRotationFns[0]).toHaveBeenCalledWith(0)
+    vi.useRealTimers()
+  })
+
+  it("does not locally advance fireballs once authoritative buffering begins", () => {
+    const { scene } = mockScene()
+    const sys = new ProjectileRenderSystem(scene as never)
+
+    sys.spawnFireball({
+      id: 45,
+      ownerId: "caster",
+      x: 0,
+      y: 0,
+      vx: 60,
+      vy: 0,
+    })
+    sys.applyBatchUpdate({
+      deltas: [{ id: 45, x: 10, y: 0 }],
+      removedIds: [],
+      seq: 1,
+      serverTimeMs: 1_000,
+    } as never)
+
+    sys.update(51)
+
+    expect(ClientFireball[45]?.x).toBe(10)
+  })
+
   it("spawns homing orb sprites at 60% fireball scale and rotates from authoritative heading", () => {
     const { scene, spriteRotationFns, spriteScaleFns } = mockScene()
     const sys = new ProjectileRenderSystem(scene as never)

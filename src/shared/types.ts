@@ -295,6 +295,8 @@ export type FireballBatchUpdatePayload = {
   readonly deltas: readonly { id: number; x: number; y: number }[]
   readonly removedIds: readonly number[]
   readonly seq: number
+  /** Server simulated time for the newest movement sample in this batch. */
+  readonly serverTimeMs?: number
 }
 
 /** A Homing Orb projectile snapshot for reconnect/full sync. */
