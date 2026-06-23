@@ -282,6 +282,58 @@ async function waitForProcessedInput(page: Page, seq: number): Promise<void> {
 }
 
 /**
+ * Sends an input repeatedly, matching the live client's active-input heartbeat.
+ *
+ * The E2E hooks bypass ArenaRuntime's compact scheduler, so one raw input would
+ * otherwise rely on the server's stale-input grace and can expire mid-jump on CI.
+ *
+ * @param page - Playwright page hosting the live game.
+ * @param input - Held movement or action fields to resend.
+ * @param done - Completion predicate checked after each authoritative ACK.
+ * @param timeout - Max wait in milliseconds.
+ * @returns Latest state satisfying the predicate.
+ */
+async function sendHeldInputUntil(
+  page: Page,
+  input: PlayerInputOverrides,
+  done: (state: AuthoritativePlayerState) => boolean,
+  timeout = 8_000,
+): Promise<AuthoritativePlayerState> {
+  const deadline = Date.now() + timeout
+  let lastState: AuthoritativePlayerState | null = null
+  while (Date.now() < deadline) {
+    const seq = await sendPlayerInput(page, input)
+    await waitForProcessedInput(page, seq)
+    lastState = await readAuthoritativeState(page)
+    if (lastState && done(lastState)) return lastState
+    await page.waitForTimeout(75)
+  }
+  throw new Error(
+    `Timed out waiting for held input condition; lastState=${JSON.stringify(lastState)}`,
+  )
+}
+
+/**
+ * Holds movement for a fixed duration using the same heartbeat helper.
+ *
+ * @param page - Playwright page hosting the live game.
+ * @param input - Held movement fields to resend.
+ * @param durationMs - Hold duration.
+ */
+async function sendHeldInputFor(
+  page: Page,
+  input: PlayerInputOverrides,
+  durationMs: number,
+): Promise<void> {
+  const deadline = Date.now() + durationMs
+  while (Date.now() < deadline) {
+    const seq = await sendPlayerInput(page, input)
+    await waitForProcessedInput(page, seq)
+    await page.waitForTimeout(75)
+  }
+}
+
+/**
  * Uses the E2E-only room hook to place the local player at a deterministic point.
  *
  * @param page - Playwright page hosting the live game.
@@ -380,9 +432,7 @@ test("lava edge blocks WASD exit and Jump escapes to land", async ({ page }) => 
   )
   await waitForTerrain(page, "lava")
 
-  const moveRightSeq = await sendPlayerInput(page, LAVA_ESCAPE_SAMPLE.input)
-  await waitForProcessedInput(page, moveRightSeq)
-  await page.waitForTimeout(900)
+  await sendHeldInputFor(page, LAVA_ESCAPE_SAMPLE.input, 900)
   const stopRightSeq = await sendPlayerInput(page, { right: false })
   await waitForProcessedInput(page, stopRightSeq)
 
@@ -422,7 +472,15 @@ test("lava edge blocks WASD exit and Jump escapes to land", async ({ page }) => 
     )
     .toBe(true)
 
-  await sendPlayerInput(page, { right: false })
-  const afterJump = await waitForTerrain(page, "land")
+  const afterJump = await sendHeldInputUntil(
+    page,
+    LAVA_ESCAPE_SAMPLE.input,
+    (state) =>
+      state.terrainState === "land" &&
+      state.jumpZ <= 0 &&
+      isPastLandThreshold(state, LAVA_ESCAPE_SAMPLE),
+  )
+  const stopJumpSeq = await sendPlayerInput(page, { right: false })
+  await waitForProcessedInput(page, stopJumpSeq)
   expect(isPastLandThreshold(afterJump, LAVA_ESCAPE_SAMPLE)).toBe(true)
 })
