@@ -8,7 +8,7 @@ Record production evidence for the Wizard Wars solo rubber-banding/high-CPU inve
 
 - Client catch-up prediction sends a fresh full input with a unique sequence number for every committed fixed simulation step.
 - React HUD state ignores position-only and ACK-only player batches; Phaser still receives authoritative batches directly.
-- The room reports server loop degradation through `server_performance_status` using loop debt, catch-up callbacks, input queue drops, event-loop lag, room tick time, simulation time, visual flush enqueue cost, owner ACK enqueue cost, immediate broadcast enqueue cost, process event-loop delay/utilization when supported, CPU, memory, active rooms, and client count.
+- The room reports server loop degradation through `server_performance_status` using loop debt, catch-up callbacks, input queue drops, event-loop lag, room tick time, simulation time, visual flush enqueue cost, owner ACK enqueue cost, immediate broadcast enqueue cost, process event-loop delay/utilization when supported, CPU, memory, active rooms, and client count. Bun currently treats event-loop utilization as unavailable instead of publishing zeroed readings.
 - Visual player/fireball deltas are cadence-limited by `WW_NET_SEND_RATE_HZ` while owner ACKs and critical discrete events remain immediate.
 - Held movement inputs expire after 250ms without accepted input, and empty in-progress rooms clean up after reconnect grace.
 - The server coalesces repeated held inputs while advancing ACKs one sequence per tick, matching Seas of Aleryn's transition-preserving queue pressure reduction without skipping client replay history.

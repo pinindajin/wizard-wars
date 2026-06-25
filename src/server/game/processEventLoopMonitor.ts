@@ -20,6 +20,7 @@ type GcObserver = {
 export type ProcessEventLoopMonitorOptions = {
   readonly resolutionMs: number
   readonly gcMetricsEnabled: boolean
+  readonly sampleIntervalMs?: number
 }
 
 export type ProcessEventLoopMonitorSnapshot = {
@@ -31,7 +32,7 @@ export type ProcessEventLoopMonitorSnapshot = {
 }
 
 export type ProcessEventLoopMonitor = {
-  snapshotAndReset: () => ProcessEventLoopMonitorSnapshot
+  snapshot: (nowPerfMs?: number) => ProcessEventLoopMonitorSnapshot
   dispose: () => void
 }
 
@@ -49,9 +50,15 @@ export type ProcessEventLoopMonitorDeps = {
         }) => void,
       ) => GcObserver)
     | undefined
+  readonly nowPerfMs: () => number
+}
+
+export type ProcessEventLoopMonitorRuntime = {
+  readonly isBun: boolean
 }
 
 const NS_PER_MS = 1_000_000
+const DEFAULT_SAMPLE_INTERVAL_MS = 1_000
 
 let singleton:
   | {
@@ -69,9 +76,10 @@ let singleton:
  */
 export function createProcessEventLoopMonitor(
   options: ProcessEventLoopMonitorOptions,
-  deps: ProcessEventLoopMonitorDeps = defaultDeps(),
+  deps: ProcessEventLoopMonitorDeps = createDefaultProcessEventLoopMonitorDeps(),
 ): ProcessEventLoopMonitor {
   const unavailableReasons: string[] = []
+  const sampleIntervalMs = options.sampleIntervalMs ?? DEFAULT_SAMPLE_INTERVAL_MS
   const histogram = deps.createDelayHistogram?.({
     resolution: options.resolutionMs,
   })
@@ -82,6 +90,8 @@ export function createProcessEventLoopMonitor(
   }
 
   let previousUtilization = deps.nowEventLoopUtilization?.()
+  let sampledAtPerfMs = Number.NEGATIVE_INFINITY
+  let lastSnapshot: ProcessEventLoopMonitorSnapshot | null = null
   if (!deps.nowEventLoopUtilization) {
     unavailableReasons.push("event_loop_utilization_unavailable")
   }
@@ -102,7 +112,25 @@ export function createProcessEventLoopMonitor(
   }
 
   return {
-    snapshotAndReset(): ProcessEventLoopMonitorSnapshot {
+    snapshot(nowPerfMs = deps.nowPerfMs()): ProcessEventLoopMonitorSnapshot {
+      if (
+        lastSnapshot &&
+        nowPerfMs - sampledAtPerfMs < sampleIntervalMs
+      ) {
+        return lastSnapshot
+      }
+      const utilizationSample =
+        deps.nowEventLoopUtilization?.(previousUtilization)
+      const eventLoopUtilization =
+        utilizationSample && Number.isFinite(utilizationSample.utilization)
+          ? utilizationSample.utilization
+          : undefined
+      const snapshotUnavailableReasons = [
+        ...unavailableReasons,
+        ...(deps.nowEventLoopUtilization && eventLoopUtilization === undefined
+          ? ["event_loop_utilization_unavailable"]
+          : []),
+      ]
       const snapshot: ProcessEventLoopMonitorSnapshot = {
         ...(histogram
           ? {
@@ -110,20 +138,17 @@ export function createProcessEventLoopMonitor(
               processEventLoopDelayP95Ms: histogram.percentile(95) / NS_PER_MS,
             }
           : {}),
-        ...(deps.nowEventLoopUtilization
-          ? {
-              eventLoopUtilization:
-                deps.nowEventLoopUtilization(previousUtilization).utilization,
-            }
-          : {}),
+        ...(eventLoopUtilization === undefined ? {} : { eventLoopUtilization }),
         ...(options.gcMetricsEnabled && gcObserver ? { gcPauseMs } : {}),
-        ...(unavailableReasons.length > 0
-          ? { unavailableReason: unavailableReasons.join(",") }
+        ...(snapshotUnavailableReasons.length > 0
+          ? { unavailableReason: snapshotUnavailableReasons.join(",") }
           : {}),
       }
       histogram?.reset()
       previousUtilization = deps.nowEventLoopUtilization?.()
       gcPauseMs = 0
+      sampledAtPerfMs = nowPerfMs
+      lastSnapshot = snapshot
       return snapshot
     },
     dispose(): void {
@@ -142,7 +167,11 @@ export function createProcessEventLoopMonitor(
 export function getProcessEventLoopMonitor(
   options: ProcessEventLoopMonitorOptions,
 ): ProcessEventLoopMonitor {
-  const key = `${options.resolutionMs}:${options.gcMetricsEnabled ? "gc" : "nogc"}`
+  const key = [
+    options.resolutionMs,
+    options.gcMetricsEnabled ? "gc" : "nogc",
+    options.sampleIntervalMs ?? DEFAULT_SAMPLE_INTERVAL_MS,
+  ].join(":")
   if (singleton?.key === key) return singleton.monitor
   singleton?.monitor.dispose()
   const monitor = createProcessEventLoopMonitor(options)
@@ -161,9 +190,12 @@ export function resetProcessEventLoopMonitorForTests(): void {
 /**
  * Resolves Node perf_hooks-backed monitor dependencies for the current runtime.
  *
+ * @param runtime - Runtime feature flags.
  * @returns Available event-loop and GC metric hooks.
  */
-function defaultDeps(): ProcessEventLoopMonitorDeps {
+export function createDefaultProcessEventLoopMonitorDeps(
+  runtime: ProcessEventLoopMonitorRuntime = detectProcessEventLoopMonitorRuntime(),
+): ProcessEventLoopMonitorDeps {
   const perf = performance as typeof performance & {
     eventLoopUtilization?: (previous?: unknown) => { readonly utilization: number }
   }
@@ -171,16 +203,30 @@ function defaultDeps(): ProcessEventLoopMonitorDeps {
     supportedEntryTypes?: readonly string[]
   }).supportedEntryTypes
   return {
+    /* v8 ignore next 4 -- perf_hooks availability is fixed by the runtime. */
     createDelayHistogram:
       typeof monitorEventLoopDelay === "function"
         ? (options) => monitorEventLoopDelay(options) as DelayHistogram
         : undefined,
     nowEventLoopUtilization:
-      typeof perf.eventLoopUtilization === "function"
+      !runtime.isBun && typeof perf.eventLoopUtilization === "function"
         ? (previous) => perf.eventLoopUtilization?.(previous)
         : undefined,
+    /* v8 ignore next 3 -- GC PerformanceObserver support is fixed by the runtime. */
     createGcObserver: supportedEntryTypes?.includes("gc")
       ? (callback) => new PerformanceObserver(callback) as GcObserver
       : undefined,
+    nowPerfMs: () => performance.now(),
+  }
+}
+
+/**
+ * Detects runtime capabilities that need coarse runtime-specific handling.
+ *
+ * @returns Runtime flags for default dependency resolution.
+ */
+function detectProcessEventLoopMonitorRuntime(): ProcessEventLoopMonitorRuntime {
+  return {
+    isBun: "Bun" in globalThis,
   }
 }

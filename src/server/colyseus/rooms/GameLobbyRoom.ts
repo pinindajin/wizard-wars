@@ -2547,7 +2547,7 @@ export class GameLobbyRoom extends Room {
     const {
       unavailableReason: processMetricUnavailableReason,
       ...processMetricFields
-    } = this.processEventLoopMonitor.snapshotAndReset()
+    } = this.processEventLoopMonitor.snapshot(nowPerfMs)
     const metrics: ServerPerformanceStatusPayload["metrics"] = {
       windowMs,
       droppedDebtMs: this.performanceDroppedDebtMs,

@@ -1014,7 +1014,7 @@ describe("GameLobbyRoom network batching", () => {
       performanceOwnerAckSendDurationMs: 1,
       performanceImmediateBroadcastDurationMs: 4,
       processEventLoopMonitor: {
-        snapshotAndReset: vi.fn(() => ({
+        snapshot: vi.fn(() => ({
           processEventLoopDelayMs: 12,
           processEventLoopDelayP95Ms: 7,
           eventLoopUtilization: 0.6,
@@ -1058,7 +1058,7 @@ describe("GameLobbyRoom network batching", () => {
       performanceDroppedDebtMs: 1,
       performanceCatchUpCallbacks: 2,
       processEventLoopMonitor: {
-        snapshotAndReset: vi.fn(() => ({})),
+        snapshot: vi.fn(() => ({})),
       },
     })
 
