@@ -115,6 +115,8 @@ describe("Reconnect resets input seq (refresh)", { timeout: 30_000 }, () => {
     })
     guest2.send(RoomEvent.RequestResync, {})
     await waitFor(() => guestEid != null, { timeout: 5000 })
+    await delay(200)
+    expect(sawAck0).toBe(false)
 
     guest2.send(RoomEvent.PlayerInput, { ...baseInput(0), up: true })
     await delay(200)

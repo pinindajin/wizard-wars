@@ -64,10 +64,9 @@ export function playerDeltaSystem(ctx: SimCtx): void {
     const hasSwiftBoots = Equipment.hasSwiftBoots[eid] === 1
     const terrainState = TERRAIN_KIND_TO_STATE[TerrainState.kind[eid]] ?? "land"
     const abilityStates = abilityRuntimeStatesForPlayer(eid, ctx.currentTick)
-    const lastProcessedInputSeq = Math.max(
-      0,
-      lastProcessedInputSeqByPlayer.get(userId) ?? 0,
-    )
+    const rawLastProcessedInputSeq = lastProcessedInputSeqByPlayer.get(userId)
+    const hasProcessedInputSeq = rawLastProcessedInputSeq !== -1
+    const lastProcessedInputSeq = Math.max(0, rawLastProcessedInputSeq ?? 0)
 
     if (!prev) {
       ctx.playerDeltas.push({
@@ -89,7 +88,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
         hasSwiftBoots,
         terrainState,
         abilityStates,
-        lastProcessedInputSeq,
+        ...(hasProcessedInputSeq ? { lastProcessedInputSeq } : {}),
       })
       prevPlayerStates.set(eid, {
         x,
@@ -143,7 +142,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
       ...(!abilityRuntimeStatesEqual(abilityStates, prev.abilityStates)
         ? { abilityStates }
         : {}),
-      ...(lastProcessedInputSeq !== prev.lastProcessedInputSeq
+      ...(hasProcessedInputSeq && lastProcessedInputSeq !== prev.lastProcessedInputSeq
         ? { lastProcessedInputSeq }
         : {}),
     }
@@ -187,7 +186,9 @@ export function playerDeltaSystem(ctx: SimCtx): void {
       prev.hasSwiftBoots = hasSwiftBoots
       prev.terrainState = terrainState
       prev.abilityStates = abilityStates
-      prev.lastProcessedInputSeq = lastProcessedInputSeq
+      if (hasProcessedInputSeq) {
+        prev.lastProcessedInputSeq = lastProcessedInputSeq
+      }
     }
   }
 }

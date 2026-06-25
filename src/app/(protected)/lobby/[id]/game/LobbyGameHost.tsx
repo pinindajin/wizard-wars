@@ -311,6 +311,9 @@ function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) 
           }
           break
         }
+        case WsEvent.PlayerOwnerAck:
+          recordAuthoritativeMessage()
+          break
         case WsEvent.ServerPerformanceStatus: {
           setServerPerformanceStatus(message.payload as ServerPerformanceStatusPayload)
           break

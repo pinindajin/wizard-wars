@@ -700,6 +700,24 @@ describe("buildGameStateSyncPayload", () => {
       lastProcessedInputSeq: 12,
     })
     expect(ctx.prevPlayerStates.get(eid)).toMatchObject({ hasSwiftBoots: true })
+
+    const unseededCtx = {
+      ...ctx,
+      lastProcessedInputSeqByPlayer: new Map(),
+      prevPlayerStates: new Map(),
+      playerDeltas: [],
+    } as SimCtx
+    playerDeltaSystem(unseededCtx)
+    expect(unseededCtx.playerDeltas[0]?.lastProcessedInputSeq).toBe(0)
+
+    const resetStreamCtx = {
+      ...ctx,
+      lastProcessedInputSeqByPlayer: new Map([["user1", -1]]),
+      prevPlayerStates: new Map(),
+      playerDeltas: [],
+    } as SimCtx
+    playerDeltaSystem(resetStreamCtx)
+    expect(resetStreamCtx.playerDeltas[0]?.lastProcessedInputSeq).toBeUndefined()
   })
 
   it("repeats aim facing when an unchanged angle enters an aim-driven cast animation", () => {
@@ -909,6 +927,28 @@ describe("buildGameStateSyncPayload", () => {
     )
     const delta = out.playerDeltas.find((d) => d.id === sim.playerEntityMap.get("user1"))
     expect(delta?.lastProcessedInputSeq).toBe(0)
+  })
+
+  it("does not emit a reconnect seq 0 ACK before the post-reconnect input is processed", () => {
+    const sim = createGameSimulation(Date.now())
+    sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    sim.tick(queueMap([["user1", { ...emptyInput({ up: true }), seq: 99 }]]), Date.now())
+
+    sim.resetClientInputStream("user1")
+    const idleOut = sim.tick(new Map(), Date.now() + 17)
+    const idleDelta = idleOut.playerDeltas.find(
+      (d) => d.id === sim.playerEntityMap.get("user1"),
+    )
+    expect(idleDelta?.lastProcessedInputSeq).toBeUndefined()
+
+    const ackOut = sim.tick(
+      queueMap([["user1", { ...emptyInput({ up: true }), seq: 0 }]]),
+      Date.now() + 34,
+    )
+    const ackDelta = ackOut.playerDeltas.find(
+      (d) => d.id === sim.playerEntityMap.get("user1"),
+    )
+    expect(ackDelta?.lastProcessedInputSeq).toBe(0)
   })
 
   it("exposes per-player velocity, move state, and last processed input seq", () => {
