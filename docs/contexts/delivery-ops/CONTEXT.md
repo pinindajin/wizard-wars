@@ -23,7 +23,7 @@ Own local setup, CI, container build/runtime, production image publishing, deplo
 - Docker runtime starts by applying Prisma migrations with the platform-provided `DATABASE_URL`, then runs `bun run start`.
 - Render remains represented by `render.yaml` as a fallback host.
 - Runtime netcode sends visual movement/projectile batches at `WW_NET_SEND_RATE_HZ` with default `30` and clamp range `10..60`; set `WW_NET_SEND_RATE_HZ=60` as the first rollback lever for cadence-related smoothness regressions.
-- Production rubber-banding investigations should record image digest, Dokploy image, replica count, resource limits, cgroup throttling, active rooms, and server loop-debt/performance-status logs in `docs/contexts/delivery-ops/prod-rubberbanding-verification.md`.
+- Production rubber-banding investigations should record image digest, Dokploy image, replica count, resource limits, repeated Docker stats, cgroup throttling deltas, active rooms, and server loop-debt/performance-status logs in `docs/contexts/delivery-ops/prod-rubberbanding-verification.md`.
 
 ## Boundaries
 

@@ -116,7 +116,7 @@ describe("game performance config", () => {
       serverPerfLogIntervalMs: 250,
       eventLoopMonitorResolutionMs: 1_000,
       gcMetricsEnabled: true,
-      perfRunId: "local-compact-8",
+      perfRunId: "local_compact_8",
       prodCaptureSeconds: 5,
       prodSampleIntervalMs: 60_000,
     })

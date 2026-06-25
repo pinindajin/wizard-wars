@@ -1,12 +1,15 @@
 import { mkdirSync, writeFileSync } from "node:fs"
-import { join } from "node:path"
+import { dirname } from "node:path"
 import { performance } from "node:perf_hooks"
 
 import type { Room } from "@colyseus/sdk"
 import { afterEach, describe, expect, it } from "vitest"
 
 import { PlayerInputStateScheduler } from "@/game/network/PlayerInputStateScheduler"
-import { playerLobbyIndex } from "@/server/colyseus/rooms/GameLobbyRoom"
+import {
+  getActiveGameLoopRoomCountForDiagnostics,
+  playerLobbyIndex,
+} from "@/server/colyseus/rooms/GameLobbyRoom"
 import { sanitizePerfRunId } from "@/server/game/performanceConfig"
 import { RoomEvent } from "@/shared/roomEvents"
 import type {
@@ -22,6 +25,11 @@ import {
   shutdownTestServer,
   type TestServer,
 } from "../integration/helpers/colyseus-test-server"
+import {
+  resolvePerfLoadReportPath,
+  summarizePerfLoadRun,
+  type PerfLoadReport,
+} from "./perfLoadReport"
 
 type PerfLoadScenario = {
   readonly id: string
@@ -46,13 +54,9 @@ type PerfLoadStats = {
   readonly sentInputs: number
   readonly ownerAcks: number
   readonly playerBatches: number
-  readonly maxAckGapMs: number
-  readonly maxPlayerBatchGapMs: number
-  readonly statusCount: number
-  readonly degradedStatusCount: number
-  readonly degradedStatusBudget: number
-  readonly degradedReasons: readonly string[]
-  readonly lastStatus: ServerPerformanceStatusPayload | null
+  readonly ackGapsMs: readonly number[]
+  readonly playerBatchGapsMs: readonly number[]
+  readonly statuses: readonly ServerPerformanceStatusPayload[]
 }
 
 const DEFAULT_CLIENTS = 8
@@ -94,8 +98,19 @@ describe("Colyseus perf load", () => {
       async () => {
         server = await bootTestServer()
         const rooms = await createStartedRoom(server, scenario.clientCount)
+        let leftRooms = false
         try {
-          const stats = await runScenario(rooms, scenario)
+          const rawStats = await runScenario(rooms, scenario)
+          await leaveRoomsBestEffort(rooms)
+          leftRooms = true
+          await delay(250)
+          const stats = summarizePerfLoadRun({
+            ...rawStats,
+            activeRoomsAfterCleanup: getActiveGameLoopRoomCountForDiagnostics(),
+            diagnosticOnly: readBooleanEnv("WW_PERF_LOAD_DIAGNOSTIC_ONLY", false),
+            diagnosticReason: process.env.WW_PERF_LOAD_DIAGNOSTIC_REASON,
+            maxDegradedStatusCount: scenario.maxDegradedStatusCount,
+          })
 
           writeReport(stats)
 
@@ -109,8 +124,9 @@ describe("Colyseus perf load", () => {
           expect(stats.maxPlayerBatchGapMs).toBeLessThanOrEqual(
             scenario.maxPlayerBatchGapMs,
           )
+          expect(stats.inputQueueDrops).toBe(0)
         } finally {
-          await leaveRoomsBestEffort(rooms)
+          if (!leftRooms) await leaveRoomsBestEffort(rooms)
         }
       },
     )
@@ -202,15 +218,15 @@ async function runScenario(
   const playerBatchCounts = new Array(rooms.length).fill(0) as number[]
   const lastAckAtMs = new Array(rooms.length).fill(0) as number[]
   const lastPlayerBatchAtMs = new Array(rooms.length).fill(0) as number[]
-  let maxAckGapMs = 0
-  let maxPlayerBatchGapMs = 0
+  const ackGapsMs: number[] = []
+  const playerBatchGapsMs: number[] = []
   const statusesByServerTimeMs = new Map<number, ServerPerformanceStatusPayload>()
 
   rooms.forEach((room, index) => {
     room.onMessage(RoomEvent.PlayerOwnerAck, () => {
       const now = performance.now()
       if (lastAckAtMs[index] > 0) {
-        maxAckGapMs = Math.max(maxAckGapMs, now - lastAckAtMs[index])
+        ackGapsMs.push(now - lastAckAtMs[index])
       }
       lastAckAtMs[index] = now
       ownerAckCounts[index] += 1
@@ -218,10 +234,7 @@ async function runScenario(
     room.onMessage(RoomEvent.PlayerBatchUpdate, () => {
       const now = performance.now()
       if (lastPlayerBatchAtMs[index] > 0) {
-        maxPlayerBatchGapMs = Math.max(
-          maxPlayerBatchGapMs,
-          now - lastPlayerBatchAtMs[index],
-        )
+        playerBatchGapsMs.push(now - lastPlayerBatchAtMs[index])
       }
       lastPlayerBatchAtMs[index] = now
       playerBatchCounts[index] += 1
@@ -268,7 +281,6 @@ async function runScenario(
   await delay(500)
 
   const statuses = [...statusesByServerTimeMs.values()]
-  const degradedStatuses = statuses.filter((status) => status.degraded)
   return {
     runId: sanitizePerfRunId(process.env.WW_PERF_RUN_ID),
     scenarioId: scenario.id,
@@ -281,25 +293,26 @@ async function runScenario(
     sentInputs,
     ownerAcks: ownerAckCounts.reduce((sum, count) => sum + count, 0),
     playerBatches: playerBatchCounts.reduce((sum, count) => sum + count, 0),
-    maxAckGapMs,
-    maxPlayerBatchGapMs,
-    statusCount: statuses.length,
-    degradedStatusCount: degradedStatuses.length,
-    degradedStatusBudget: degradedStatusBudget(scenario),
-    degradedReasons: [...new Set(degradedStatuses.flatMap((status) => status.reasons))],
-    lastStatus: statuses.at(-1) ?? null,
+    ackGapsMs,
+    playerBatchGapsMs,
+    statuses,
   }
 }
 
 /**
- * Returns the allowed degraded status count for one host-local perf run.
+ * Parses a boolean environment switch for perf-load diagnostics.
  *
- * @param scenario - Scenario under test.
- * @returns Absolute degraded status budget.
+ * @param name - Environment variable name.
+ * @param fallback - Value to use when unset or unrecognized.
+ * @returns Parsed boolean value.
  */
-function degradedStatusBudget(scenario: PerfLoadScenario): number {
-  if (scenario.seconds <= 10) return scenario.maxDegradedStatusCount
-  return Math.max(scenario.maxDegradedStatusCount, Math.ceil(scenario.seconds / 60))
+function readBooleanEnv(name: string, fallback: boolean): boolean {
+  const raw = process.env[name]
+  if (raw === undefined || raw.trim() === "") return fallback
+  const normalized = raw.trim().toLowerCase()
+  if (["1", "true", "yes", "on"].includes(normalized)) return true
+  if (["0", "false", "no", "off"].includes(normalized)) return false
+  return fallback
 }
 
 function registerNoopRoomHandlers(room: Room): void {
@@ -381,11 +394,15 @@ async function waitFor(
   throw new Error(`Timed out waiting for ${label}`)
 }
 
-function writeReport(stats: PerfLoadStats): void {
-  const dir = join(process.cwd(), "test-results", "perf-load")
-  mkdirSync(dir, { recursive: true })
+function writeReport(stats: PerfLoadReport): void {
+  const outPath = resolvePerfLoadReportPath({
+    cwd: process.cwd(),
+    runId: stats.runId,
+    scenarioId: stats.scenarioId,
+  })
+  mkdirSync(dirname(outPath), { recursive: true })
   writeFileSync(
-    join(dir, `${Date.now()}-${stats.scenarioId}.json`),
+    outPath,
     `${JSON.stringify(stats, null, 2)}\n`,
     "utf8",
   )

@@ -11,7 +11,10 @@ import {
   Velocity,
 } from "@/server/game/components"
 
-import { GameLobbyRoom } from "./GameLobbyRoom"
+import {
+  GameLobbyRoom,
+  getActiveGameLoopRoomCountForDiagnostics,
+} from "./GameLobbyRoom"
 
 function simOutput(overrides: Partial<SimOutput> = {}): SimOutput {
   return {
@@ -98,6 +101,33 @@ describe("GameLobbyRoom network batching", () => {
     expect(sync).toMatchObject({ input: matchGo.input })
 
     ;(room as unknown as { gameLoopTimer: { clear: () => void } | null }).gameLoopTimer?.clear()
+  })
+
+  it("reports active game-loop room count for diagnostics", () => {
+    const room = new GameLobbyRoom()
+    Object.defineProperty(room, "roomId", {
+      configurable: true,
+      value: "diagnostic-room-count-test",
+    })
+    const initialCount = getActiveGameLoopRoomCountForDiagnostics()
+
+    ;(
+      room as unknown as {
+        startGameLoop: (serverTimeMs: number) => void
+        clearGameLoopTimer: () => void
+      }
+    ).startGameLoop(1_000)
+
+    try {
+      expect(getActiveGameLoopRoomCountForDiagnostics()).toBe(initialCount + 1)
+    } finally {
+      ;(
+        room as unknown as {
+          clearGameLoopTimer: () => void
+        }
+      ).clearGameLoopTimer()
+    }
+    expect(getActiveGameLoopRoomCountForDiagnostics()).toBe(initialCount)
   })
 
   it("advertises legacy input transport when the compact rollout env is disabled", () => {
@@ -1099,7 +1129,7 @@ describe("GameLobbyRoom network batching", () => {
       performanceConfig: {
         serverPerfLogsEnabled: true,
         serverPerfLogIntervalMs: 1_000,
-        perfRunId: "local-compact-8",
+        perfRunId: "local_compact_8",
       },
     })
 
@@ -1139,7 +1169,7 @@ describe("GameLobbyRoom network batching", () => {
       expect.objectContaining({
         event: "room.performance.window",
         roomId: "room-test",
-        runId: "local-compact-8",
+        runId: "local_compact_8",
         degraded: true,
         reasons: ["event_loop_lag"],
         metrics: perfMetrics,
