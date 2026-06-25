@@ -11,6 +11,10 @@ services:
         generateValue: true
       - key: LOG_LEVEL
         value: warn
+      - key: WW_SERVER_MODE
+        value: single
+      - key: RUN_MIGRATIONS
+        value: "true"
       - key: ADMIN_USERNAMES
         sync: false
       - key: ADMIN_PREFIX

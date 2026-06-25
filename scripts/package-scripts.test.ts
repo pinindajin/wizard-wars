@@ -22,6 +22,16 @@ function readRootPackageJson(): PackageJson {
   return JSON.parse(raw) as PackageJson
 }
 
+/**
+ * Reads a repository-root text file for packaging invariant checks.
+ *
+ * @param relativePath - Path relative to the repository root.
+ * @returns The file contents as UTF-8 text.
+ */
+function readRepoText(relativePath: string): string {
+  return readFileSync(join(repoRoot, relativePath), "utf8")
+}
+
 describe("package.json dev scripts", () => {
   it("runs dev:animation-tool through Docker-backed dev-with-docker (not bare tsx server)", () => {
     const pkg = readRootPackageJson()
@@ -50,6 +60,30 @@ describe("package.json dev scripts", () => {
 
     expect(pkg.scripts?.["test:perf-load"]).toBe(
       "vitest run --config vitest.perf-load.config.ts",
+    )
+  })
+
+  it("exposes separate production web and realtime start commands", () => {
+    const pkg = readRootPackageJson()
+
+    expect(pkg.scripts?.["start:web"]).toBe("NODE_ENV=production WW_SERVER_MODE=web bun server.ts")
+    expect(pkg.scripts?.["start:realtime"]).toBe(
+      "NODE_ENV=production WW_SERVER_MODE=realtime bun src/server/colyseus/realtime-server.ts",
+    )
+  })
+})
+
+describe("Docker runtime packaging", () => {
+  it("passes the public Colyseus URL into Next's build-time environment", () => {
+    const dockerfile = readRepoText("Dockerfile")
+    const compose = readRepoText("docker-compose.yml")
+
+    expect(dockerfile).toContain("ARG NEXT_PUBLIC_COLYSEUS_URL")
+    expect(dockerfile).toContain("ENV NEXT_PUBLIC_COLYSEUS_URL=${NEXT_PUBLIC_COLYSEUS_URL}")
+    expect(compose).toContain("args:")
+    expect(compose).toContain("NEXT_PUBLIC_COLYSEUS_URL:")
+    expect(compose).toContain(
+      'NEXT_PUBLIC_COLYSEUS_URL: "${NEXT_PUBLIC_COLYSEUS_URL:-http://127.0.0.1:3001}"',
     )
   })
 })

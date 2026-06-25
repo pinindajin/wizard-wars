@@ -40,6 +40,7 @@ export default defineConfig({
         // Type-only modules (no runtime statements).
         "src/shared/types.ts",
         "src/server/store/types.ts",
+        "src/server/realtime/adminContracts.ts",
         // Jest-dom setup not used by default node Vitest include.
         "src/test/**",
         // React lobby chrome: covered by Playwright / manual QA; RTL would duplicate app tests.

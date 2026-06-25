@@ -6,7 +6,7 @@ Own HTTP server platform behavior: the custom Bun/Express/Next host, API routes,
 
 ## Owned Concepts
 
-- `server.ts` bootstrap: Next app, Express handler, Colyseus server co-hosting, WebSocket upgrade routing, and process-global matchMaker exposure.
+- `server.ts` bootstrap: Next app, Express handler, web-only mode, single-process local fallback with Colyseus co-hosting, WebSocket upgrade routing, and process-global matchMaker exposure only in fallback mode.
 - Auth: JWT signing/verification, `ww-token` cookie, protected route helpers, password hashing, rate limiting, session-expired redirect, and optional DB-backed protected user verification.
 - tRPC routers and route handlers under `src/app/api/**`.
 - Prisma database access and repository/store modules.
@@ -15,11 +15,12 @@ Own HTTP server platform behavior: the custom Bun/Express/Next host, API routes,
 
 ## Key Flows
 
-- Server bootstrap resolves log level, validates `AUTH_SECRET`, applies DB log-level override, prepares Next, creates the Colyseus server, then listens on `PORT`.
+- Server bootstrap resolves log level, validates `AUTH_SECRET`, applies DB log-level override, prepares Next, then either runs web-only mode (`WW_SERVER_MODE=web`) or the legacy single-process fallback (`WW_SERVER_MODE` unset/`single`).
 - Auth/signup/login create a `ww-token` JWT cookie; protected routes verify it and optionally check the DB row when `VERIFY_USER_ON_PROTECTED=true`.
 - `/api/auth/ws-token` gives browser code a token path for Colyseus joins without exposing the HttpOnly cookie directly.
+- Web-only admin/lobby routes call the realtime process through `WW_REALTIME_ADMIN_URL` with `WW_REALTIME_ADMIN_TOKEN`; missing/unreachable realtime maps to explicit 503/504 responses.
 - tRPC procedures provide auth/user/chat operations; API routes provide lobbies, health, and dev tooling endpoints.
-- Prisma migrations run at container startup in production images before `bun run start`.
+- Prisma migrations run only when the runtime owner sets `RUN_MIGRATIONS=true`.
 
 ## Boundaries
 
@@ -37,6 +38,7 @@ Own HTTP server platform behavior: the custom Bun/Express/Next host, API routes,
 - `src/server/trpc/**`
 - `src/server/db/**`
 - `src/server/admin/**`
+- `src/server/realtime/**`
 - `src/server/dev/**`
 - `src/server/store/**`
 - `src/server/logger.ts`

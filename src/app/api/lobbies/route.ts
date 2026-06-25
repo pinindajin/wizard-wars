@@ -10,28 +10,60 @@ import {
 } from "@/server/auth"
 import { prisma } from "@/server/db"
 import { resolveEffectiveAdmin } from "@/server/admin/auth"
+import type { LobbyListEntry, LobbyListResponse, RealtimeLobbyListResponse } from "@/server/realtime/adminContracts"
+import {
+  RealtimeAdminError,
+  isWebOnlyMode,
+  requestRealtimeAdmin,
+  resolveRealtimeAdminConfig,
+} from "@/server/realtime/adminClient"
+import { buildRealtimeLobbyList } from "@/server/realtime/lobbyAdminData"
 
-export type LobbyListEntry = {
-  readonly lobbyId: string
-  readonly lobbyPhase: "LOBBY" | "WAITING_FOR_CLIENTS" | "COUNTDOWN" | "IN_PROGRESS" | "SCOREBOARD"
-  readonly hostName: string
-  readonly hostPlayerId: string
-  readonly playerCount: number
-  readonly maxPlayers: number
-  readonly createdAt: string
-}
-
-export type LobbyListResponse = {
-  readonly lobbies: readonly LobbyListEntry[]
-  readonly viewer: {
-    readonly isAdmin: boolean
-  }
-}
+export type { LobbyListEntry, LobbyListResponse }
 
 const emptyLobbyListResponse = (isAdmin: boolean): LobbyListResponse => ({
   lobbies: [],
   viewer: { isAdmin },
 })
+
+/**
+ * Converts realtime admin bridge failures into stable API responses.
+ *
+ * @param err - Error thrown while calling the realtime admin bridge.
+ * @returns JSON response preserving bridge HTTP failures when available.
+ */
+function realtimeAdminErrorResponse(err: unknown): NextResponse {
+  if (err instanceof RealtimeAdminError) {
+    return NextResponse.json(err.body, { status: err.status })
+  }
+  return NextResponse.json({ error: "Realtime unavailable" }, { status: 503 })
+}
+
+/**
+ * Returns the remote realtime lobby list when split-process admin bridge config is present.
+ *
+ * @param isAdmin - Whether the authenticated viewer is an admin.
+ * @returns Realtime-backed response, web-only misconfiguration response, or null for single-process fallback.
+ */
+async function realtimeLobbyListResponse(isAdmin: boolean): Promise<NextResponse | null> {
+  const config = resolveRealtimeAdminConfig()
+  if (!config) {
+    if (isWebOnlyMode()) {
+      return NextResponse.json({ error: "Realtime admin bridge not configured" }, { status: 503 })
+    }
+    return null
+  }
+
+  try {
+    const body = await requestRealtimeAdmin<RealtimeLobbyListResponse>({
+      config,
+      path: "/internal/lobbies",
+    })
+    return NextResponse.json({ lobbies: body.lobbies, viewer: { isAdmin } } satisfies LobbyListResponse)
+  } catch (err) {
+    return realtimeAdminErrorResponse(err)
+  }
+}
 
 /**
  * GET /api/lobbies — Returns all open game_lobby rooms via Colyseus matchMaker.
@@ -64,6 +96,9 @@ export async function GET(): Promise<NextResponse> {
   }
 
   try {
+    const realtimeResponse = await realtimeLobbyListResponse(isAdmin)
+    if (realtimeResponse) return realtimeResponse
+
     const matchMaker = (
       globalThis as unknown as {
         __wizardWarsMatchMaker?: typeof import("@colyseus/core").matchMaker
@@ -76,17 +111,7 @@ export async function GET(): Promise<NextResponse> {
     }
 
     const rooms = await matchMaker.query({ name: "game_lobby" })
-    const lobbies: LobbyListEntry[] = rooms
-      .filter((r) => !r.locked)
-      .map((r) => ({
-        lobbyId: r.roomId,
-        lobbyPhase: (r.metadata?.lobbyPhase as LobbyListEntry["lobbyPhase"]) ?? "LOBBY",
-        hostName: (r.metadata?.hostName as string) ?? "",
-        hostPlayerId: (r.metadata?.hostPlayerId as string) ?? "",
-        playerCount: (r.metadata?.playerCount as number) ?? r.clients,
-        maxPlayers: (r.metadata?.maxPlayers as number) ?? 12,
-        createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : new Date().toISOString(),
-      }))
+    const { lobbies } = buildRealtimeLobbyList(rooms)
 
     return NextResponse.json({ lobbies, viewer: { isAdmin } } satisfies LobbyListResponse)
   } catch {
