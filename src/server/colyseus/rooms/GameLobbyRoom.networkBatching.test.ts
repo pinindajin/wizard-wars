@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { RoomEvent } from "@/shared/roomEvents"
 import { createGameSimulation, type SimOutput } from "@/server/game/simulation"
 import { createSessionEconomy } from "@/server/gameserver/sessionShop"
+import { logger } from "@/server/logger"
 import { hasComponent } from "bitecs"
 import {
   NeedsWorldCollisionResolution,
@@ -43,6 +44,7 @@ describe("GameLobbyRoom network batching", () => {
 
   afterEach(() => {
     vi.useRealTimers()
+    vi.restoreAllMocks()
     process.env.WIZARD_WARS_E2E = originalE2e
     if (originalInputProtocol === undefined) {
       delete process.env.WW_INPUT_PROTOCOL
@@ -565,6 +567,23 @@ describe("GameLobbyRoom network batching", () => {
     ).sendOwnerAckDeltas([{ id: 1, lastProcessedInputSeq: 3 }], 1_000)
 
     expect(buildPlayerOwnerAckPayload).not.toHaveBeenCalled()
+
+    Object.assign(room as object, {
+      simulation: {
+        entityPlayerMap: new Map(),
+        buildPlayerOwnerAckPayload,
+      },
+    })
+    ;(
+      room as unknown as {
+        sendOwnerAckDeltas: (
+          deltas: Array<{ id: number; lastProcessedInputSeq?: number }>,
+          serverTimeMs: number,
+        ) => void
+      }
+    ).sendOwnerAckDeltas([{ id: 2, lastProcessedInputSeq: 4 }], 1_100)
+
+    expect(buildPlayerOwnerAckPayload).not.toHaveBeenCalled()
   })
 
   it("marks E2E forced player positions for world collision repair", () => {
@@ -651,6 +670,34 @@ describe("GameLobbyRoom network batching", () => {
     })
   })
 
+  it("flushes pending player visual batches and records visual send duration", () => {
+    const room = new GameLobbyRoom()
+    const broadcast = vi.fn()
+    Object.assign(room as object, {
+      broadcast,
+      pendingPlayerDeltaBatches: [
+        [
+          { id: 1, x: 10 },
+          { id: 1, y: 20 },
+        ],
+      ],
+    })
+
+    ;(room as unknown as { flushPendingVisualBatches: (serverTimeMs: number) => void })
+      .flushPendingVisualBatches(3_250)
+
+    expect(broadcast).toHaveBeenCalledWith(RoomEvent.PlayerBatchUpdate, {
+      deltas: [{ id: 1, x: 10, y: 20 }],
+      removedIds: [],
+      seq: 0,
+      serverTimeMs: 3_250,
+    })
+    expect(
+      (room as unknown as { performanceVisualFlushDurationMs: number })
+        .performanceVisualFlushDurationMs,
+    ).toBeGreaterThanOrEqual(0)
+  })
+
   it("broadcasts damage floats and unicasts gold updates from tick output", () => {
     const room = new GameLobbyRoom()
     const broadcast = vi.fn()
@@ -693,6 +740,159 @@ describe("GameLobbyRoom network batching", () => {
     expect(
       client.send.mock.calls.filter(([event]) => event === RoomEvent.GoldBalance),
     ).toHaveLength(1)
+  })
+
+  it("broadcasts immediate combat events and records immediate send duration", () => {
+    const room = new GameLobbyRoom()
+    const broadcast = vi.fn()
+    const client = {
+      userData: { playerId: "player-1" },
+      send: vi.fn(),
+    }
+    const fireballLaunch = {
+      id: 1,
+      ownerId: "player-1",
+      x: 10,
+      y: 20,
+      vx: 30,
+      vy: 40,
+    }
+    const fireballImpact = {
+      id: 1,
+      x: 11,
+      y: 21,
+      targetId: "player-2",
+      damage: 8,
+    }
+    const homingOrbLaunch = {
+      id: 2,
+      ownerId: "player-1",
+      targetId: "player-2",
+      x: 20,
+      y: 30,
+      vx: 1,
+      vy: 2,
+      headingRad: 0.5,
+      expiresAtServerTimeMs: 4_000,
+    }
+    const homingOrbImpact = {
+      id: 2,
+      x: 21,
+      y: 31,
+      reason: "hit" as const,
+      targetId: "player-2",
+      hitPlayerIds: ["player-2"],
+      damage: 9,
+    }
+    const lightningBolt = {
+      casterId: "player-1",
+      originX: 1,
+      originY: 2,
+      targetX: 3,
+      targetY: 4,
+      seed: 123,
+      hitPlayerIds: ["player-2"],
+      damage: 12,
+    }
+    const primaryMeleeAttack = {
+      casterId: "player-1",
+      attackId: "primary",
+      x: 5,
+      y: 6,
+      facingAngle: 0.25,
+      damage: 4,
+      hurtboxRadiusPx: 32,
+      hurtboxArcDeg: 90,
+      durationMs: 300,
+      dangerousWindowStartMs: 50,
+      dangerousWindowEndMs: 150,
+    }
+    const combatTelegraphStart = {
+      id: "telegraph-1",
+      casterId: "player-1",
+      sourceId: "primary",
+      anchor: "caster" as const,
+      directionRad: 0.5,
+      shape: { type: "cone" as const, radiusPx: 100, arcDeg: 80 },
+      startsAtServerTimeMs: 1_000,
+      dangerStartsAtServerTimeMs: 1_050,
+      dangerEndsAtServerTimeMs: 1_150,
+      endsAtServerTimeMs: 1_200,
+    }
+    const combatTelegraphEnd = {
+      id: "telegraph-1",
+      reason: "expired" as const,
+    }
+    const abilitySfx = { sfxKey: "fireball.launch" }
+    const playerDeath = {
+      playerId: "player-2",
+      killerPlayerId: "player-1",
+      killerAbilityId: "fireball",
+      livesRemaining: 1,
+      x: 100,
+      y: 120,
+    }
+    const playerRespawn = {
+      playerId: "player-2",
+      spawnX: 200,
+      spawnY: 220,
+      facingAngle: 1.25,
+    }
+    const damageFloat = {
+      targetId: "player-2",
+      attackerUserId: "player-1",
+      amount: 8,
+      x: 100,
+      y: 120,
+    }
+    Object.defineProperty(room, "clients", {
+      configurable: true,
+      value: [client],
+    })
+    Object.assign(room as object, {
+      broadcast,
+      lobbyPhase: "IN_PROGRESS",
+      simulation: {
+        tick: vi.fn().mockReturnValue(
+          simOutput({
+            fireballLaunches: [fireballLaunch],
+            fireballImpacts: [fireballImpact],
+            homingOrbLaunches: [homingOrbLaunch],
+            homingOrbImpacts: [homingOrbImpact],
+            lightningBolts: [lightningBolt],
+            primaryMeleeAttacks: [primaryMeleeAttack],
+            combatTelegraphStarts: [combatTelegraphStart],
+            combatTelegraphEnds: [combatTelegraphEnd],
+            abilitySfxEvents: [abilitySfx],
+            playerDeaths: [playerDeath],
+            playerRespawns: [playerRespawn],
+            damageFloats: [damageFloat],
+            goldUpdates: [{ userId: "player-1", gold: 42 }],
+          }),
+        ),
+        entityPlayerMap: new Map(),
+      },
+    })
+
+    ;(room as unknown as { runGameTick: () => void }).runGameTick()
+
+    expect(broadcast).toHaveBeenCalledWith(RoomEvent.FireballLaunch, fireballLaunch)
+    expect(broadcast).toHaveBeenCalledWith(RoomEvent.FireballImpact, fireballImpact)
+    expect(broadcast).toHaveBeenCalledWith(RoomEvent.HomingOrbLaunch, homingOrbLaunch)
+    expect(broadcast).toHaveBeenCalledWith(RoomEvent.HomingOrbImpact, homingOrbImpact)
+    expect(broadcast).toHaveBeenCalledWith(RoomEvent.LightningBolt, lightningBolt)
+    expect(broadcast).toHaveBeenCalledWith(RoomEvent.PrimaryMeleeAttack, primaryMeleeAttack)
+    expect(broadcast).toHaveBeenCalledWith(RoomEvent.CombatTelegraphStart, combatTelegraphStart)
+    expect(broadcast).toHaveBeenCalledWith(RoomEvent.CombatTelegraphEnd, combatTelegraphEnd)
+    expect(broadcast).toHaveBeenCalledWith(RoomEvent.AbilitySfx, abilitySfx)
+    expect(broadcast).toHaveBeenCalledWith(RoomEvent.PlayerDeath, playerDeath)
+    expect(broadcast).toHaveBeenCalledWith(RoomEvent.PlayerRespawn, playerRespawn)
+    expect(broadcast).toHaveBeenCalledWith(RoomEvent.DamageFloat, damageFloat)
+    expect(client.send).toHaveBeenCalledWith(RoomEvent.GoldBalance, { gold: 42 })
+    expect(
+      (room as unknown as { performanceImmediateBroadcastDurationMs: number })
+        .performanceImmediateBroadcastDurationMs,
+    ).toBeGreaterThanOrEqual(0)
   })
 
   it("queues Homing Orb visual batches from tick output", () => {
@@ -789,6 +989,10 @@ describe("GameLobbyRoom network batching", () => {
       performanceInputQueueDrops: 0,
       performanceSimDurationMs: 0,
       performanceBroadcastDurationMs: 0,
+      performanceRoomTickDurationMs: 0,
+      performanceVisualFlushDurationMs: 0,
+      performanceOwnerAckSendDurationMs: 0,
+      performanceImmediateBroadcastDurationMs: 0,
       performanceEventLoopLagMs: 0,
     })
 
@@ -805,6 +1009,18 @@ describe("GameLobbyRoom network batching", () => {
       performanceWindowCpuStart: process.cpuUsage(),
       performanceDroppedDebtMs: 1,
       performanceCatchUpCallbacks: 2,
+      performanceRoomTickDurationMs: 9,
+      performanceVisualFlushDurationMs: 2,
+      performanceOwnerAckSendDurationMs: 1,
+      performanceImmediateBroadcastDurationMs: 4,
+      processEventLoopMonitor: {
+        snapshotAndReset: vi.fn(() => ({
+          processEventLoopDelayMs: 12,
+          processEventLoopDelayP95Ms: 7,
+          eventLoopUtilization: 0.6,
+          gcPauseMs: 3,
+        })),
+      },
     })
 
     ;(
@@ -822,6 +1038,14 @@ describe("GameLobbyRoom network batching", () => {
         metrics: expect.objectContaining({
           droppedDebtMs: 1,
           catchUpCallbacks: 2,
+          roomTickDurationMs: 9,
+          visualFlushDurationMs: 2,
+          ownerAckSendDurationMs: 1,
+          immediateBroadcastDurationMs: 4,
+          processEventLoopDelayMs: 12,
+          processEventLoopDelayP95Ms: 7,
+          eventLoopUtilization: 0.6,
+          gcPauseMs: 3,
           connectedClients: 1,
         }),
       }),
@@ -833,6 +1057,9 @@ describe("GameLobbyRoom network batching", () => {
       performanceWindowCpuStart: process.cpuUsage(),
       performanceDroppedDebtMs: 1,
       performanceCatchUpCallbacks: 2,
+      processEventLoopMonitor: {
+        snapshotAndReset: vi.fn(() => ({})),
+      },
     })
 
     ;(
@@ -842,5 +1069,114 @@ describe("GameLobbyRoom network batching", () => {
     ).maybeBroadcastServerPerformanceStatus(5_500)
 
     expect(broadcast).not.toHaveBeenCalled()
+  })
+
+  it("logs server performance windows only when the opt-in cadence allows it", () => {
+    const logSpy = vi.spyOn(logger, "info").mockImplementation(() => undefined)
+    const room = new GameLobbyRoom()
+    const perfMetrics = {
+      windowMs: 1_000,
+      droppedDebtMs: 0,
+      catchUpCallbacks: 0,
+      inputQueueDrops: 0,
+      simDurationMs: 1,
+      broadcastDurationMs: 2,
+      roomTickDurationMs: 3,
+      visualFlushDurationMs: 4,
+      ownerAckSendDurationMs: 5,
+      immediateBroadcastDurationMs: 6,
+      eventLoopLagMs: 0,
+      processCpuPercent: 1,
+      heapUsedBytes: 2,
+      rssBytes: 3,
+      activeRooms: 1,
+      connectedClients: 1,
+    }
+    Object.assign(room as object, {
+      lobbyPhase: "IN_PROGRESS",
+      roomId: "room-test",
+      lastServerPerfLogAtMs: 1_000,
+      performanceConfig: {
+        serverPerfLogsEnabled: true,
+        serverPerfLogIntervalMs: 1_000,
+        perfRunId: "local-compact-8",
+      },
+    })
+
+    ;(
+      room as unknown as {
+        maybeLogServerPerformanceWindow: (
+          serverTimeMs: number,
+          classification: { degraded: boolean; reasons: readonly string[] },
+          metrics: typeof perfMetrics,
+          processMetricUnavailableReason?: string,
+        ) => void
+      }
+    ).maybeLogServerPerformanceWindow(
+      1_500,
+      { degraded: false, reasons: [] },
+      perfMetrics,
+    )
+    expect(logSpy).not.toHaveBeenCalled()
+
+    ;(
+      room as unknown as {
+        maybeLogServerPerformanceWindow: (
+          serverTimeMs: number,
+          classification: { degraded: boolean; reasons: readonly string[] },
+          metrics: typeof perfMetrics,
+          processMetricUnavailableReason?: string,
+        ) => void
+      }
+    ).maybeLogServerPerformanceWindow(
+      2_000,
+      { degraded: true, reasons: ["event_loop_lag"] },
+      perfMetrics,
+      "monitorEventLoopDelay unavailable",
+    )
+
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: "room.performance.window",
+        roomId: "room-test",
+        runId: "local-compact-8",
+        degraded: true,
+        reasons: ["event_loop_lag"],
+        metrics: perfMetrics,
+        processMetricUnavailableReason: "monitorEventLoopDelay unavailable",
+      }),
+      "Room performance window",
+    )
+
+    logSpy.mockClear()
+    Object.assign(room as object, {
+      lastServerPerfLogAtMs: 2_000,
+      performanceConfig: {
+        serverPerfLogsEnabled: true,
+        serverPerfLogIntervalMs: 1_000,
+        perfRunId: null,
+      },
+    })
+    ;(
+      room as unknown as {
+        maybeLogServerPerformanceWindow: (
+          serverTimeMs: number,
+          classification: { degraded: boolean; reasons: readonly string[] },
+          metrics: typeof perfMetrics,
+        ) => void
+      }
+    ).maybeLogServerPerformanceWindow(
+      3_000,
+      { degraded: false, reasons: [] },
+      perfMetrics,
+    )
+
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: "room.performance.window",
+        runId: undefined,
+      }),
+      "Room performance window",
+    )
   })
 })

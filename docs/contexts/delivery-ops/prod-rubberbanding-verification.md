@@ -8,7 +8,7 @@ Record production evidence for the Wizard Wars solo rubber-banding/high-CPU inve
 
 - Client catch-up prediction sends a fresh full input with a unique sequence number for every committed fixed simulation step.
 - React HUD state ignores position-only and ACK-only player batches; Phaser still receives authoritative batches directly.
-- The room reports server loop degradation through `server_performance_status` using loop debt, catch-up callbacks, input queue drops, event-loop lag, broadcast cost, CPU, memory, active rooms, and client count.
+- The room reports server loop degradation through `server_performance_status` using loop debt, catch-up callbacks, input queue drops, event-loop lag, room tick time, simulation time, visual flush enqueue cost, owner ACK enqueue cost, immediate broadcast enqueue cost, process event-loop delay/utilization when supported, CPU, memory, active rooms, and client count.
 - Visual player/fireball deltas are cadence-limited by `WW_NET_SEND_RATE_HZ` while owner ACKs and critical discrete events remain immediate.
 - Held movement inputs expire after 250ms without accepted input, and empty in-progress rooms clean up after reconnect grace.
 - The server coalesces repeated held inputs while advancing ACKs one sequence per tick, matching Seas of Aleryn's transition-preserving queue pressure reduction without skipping client replay history.
@@ -48,6 +48,15 @@ WW_PROD_SSH_HOST=user@host WW_PROD_CONTAINER=container-name bun run ops:capture-
 ```
 
 The helper writes a Markdown snapshot to `test-results/prod-rubberbanding/`.
+Use `WW_PERF_RUN_ID` to align local perf-load reports, server perf logs, and prod snapshots. Use `WW_PROD_CAPTURE_SECONDS` (`5..18000`, default `60`) and `WW_PROD_SAMPLE_INTERVAL_MS` (`1000..60000`, default `5000`) to record the intended observation window in the snapshot.
+
+For a bounded 10-minute local comparison before production promotion:
+
+```sh
+WW_PERF_RUN_ID=local-compact8 WW_PERF_LOAD_SCENARIOS=compact8 WW_PERF_LOAD_SECONDS=600 bun run test:perf-load
+```
+
+For production diagnosis, enable `WW_SERVER_PERF_LOGS=true` only during a bounded capture window, set a matching `WW_PERF_RUN_ID`, restart/redeploy so room processes read the env, and then capture app logs plus this snapshot. Unset the log flag and restart/redeploy after capture.
 
 ## 2026-06-23 Live Solo Evidence
 
@@ -57,7 +66,7 @@ Public browser playtest against `https://wizard-wars.pinindajin.online` entered 
 
 - `room.player_input.queue_cap_drop` warning counts during solo movement.
 - `server_performance_status` payloads where `degraded=true`, especially `reasons`.
-- Loop debt/catch-up summaries from app logs.
+- Loop debt/catch-up summaries from app logs, especially `room.performance.window` when `WW_SERVER_PERF_LOGS=true`.
 - Docker CPU and memory samples while moving and while idle.
 
 ## Interpretation
@@ -70,5 +79,6 @@ Public browser playtest against `https://wizard-wars.pinindajin.online` entered 
 ## Rollback Levers
 
 - Set `WW_NET_SEND_RATE_HZ=60` to restore previous visual batch cadence.
+- Set `WW_SERVER_PERF_LOGS=false` and restart/redeploy to disable opt-in server performance logs.
 - Hide the player-facing overlay hook if the indicators themselves cause unexpected UI issues.
 - Revert the rubber-banding/performance-indicator PR if telemetry shows a new regression.

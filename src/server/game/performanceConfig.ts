@@ -12,6 +12,18 @@ export const DEFAULT_SIM_MAX_CATCH_UP_TICKS = 4
 export const MIN_SIM_MAX_CATCH_UP_TICKS = 1
 export const MAX_SIM_MAX_CATCH_UP_TICKS = 15
 export const PERFORMANCE_STATUS_WINDOW_MS = 1_000
+export const DEFAULT_SERVER_PERF_LOG_INTERVAL_MS = 1_000
+export const MIN_SERVER_PERF_LOG_INTERVAL_MS = 250
+export const MAX_SERVER_PERF_LOG_INTERVAL_MS = 60_000
+export const DEFAULT_EVENT_LOOP_MONITOR_RESOLUTION_MS = 20
+export const MIN_EVENT_LOOP_MONITOR_RESOLUTION_MS = 1
+export const MAX_EVENT_LOOP_MONITOR_RESOLUTION_MS = 1_000
+export const DEFAULT_PROD_CAPTURE_SECONDS = 60
+export const MIN_PROD_CAPTURE_SECONDS = 5
+export const MAX_PROD_CAPTURE_SECONDS = 18_000
+export const DEFAULT_PROD_SAMPLE_INTERVAL_MS = 5_000
+export const MIN_PROD_SAMPLE_INTERVAL_MS = 1_000
+export const MAX_PROD_SAMPLE_INTERVAL_MS = 60_000
 
 export type GamePerformanceConfig = {
   readonly simTickRateHz: number
@@ -20,6 +32,13 @@ export type GamePerformanceConfig = {
   readonly netSendRateHz: number
   readonly netSendIntervalMs: number
   readonly netTiming: GameNetTimingPayload
+  readonly serverPerfLogsEnabled: boolean
+  readonly serverPerfLogIntervalMs: number
+  readonly eventLoopMonitorResolutionMs: number
+  readonly gcMetricsEnabled: boolean
+  readonly perfRunId: string | null
+  readonly prodCaptureSeconds: number
+  readonly prodSampleIntervalMs: number
 }
 
 /**
@@ -59,6 +78,22 @@ function parseBooleanSwitch(raw: string | undefined, fallback: boolean): boolean
 }
 
 /**
+ * Sanitizes a run id for filenames and structured metric context.
+ *
+ * @param raw - Raw env value.
+ * @returns A compact safe run id, or null when unset.
+ */
+export function sanitizePerfRunId(raw: string | undefined): string | null {
+  if (raw === undefined || raw.trim() === "") return null
+  const sanitized = raw
+    .trim()
+    .replaceAll(/[^A-Za-z0-9._-]+/g, "-")
+    .replaceAll(/^-+|-+$/g, "")
+    .slice(0, 80)
+  return sanitized === "" ? null : sanitized
+}
+
+/**
  * Resolves game performance knobs from environment-like input.
  *
  * @param env - Environment source, defaults to process.env.
@@ -69,6 +104,13 @@ export function resolveGamePerformanceConfig(
     readonly WW_NET_SEND_RATE_HZ?: string | undefined
     readonly WW_SIM_ACCUMULATOR_ENABLED?: string | undefined
     readonly WW_SIM_MAX_CATCH_UP_TICKS?: string | undefined
+    readonly WW_SERVER_PERF_LOGS?: string | undefined
+    readonly WW_SERVER_PERF_LOG_INTERVAL_MS?: string | undefined
+    readonly WW_EVENT_LOOP_MONITOR_RESOLUTION_MS?: string | undefined
+    readonly WW_GC_METRICS?: string | undefined
+    readonly WW_PERF_RUN_ID?: string | undefined
+    readonly WW_PROD_CAPTURE_SECONDS?: string | undefined
+    readonly WW_PROD_SAMPLE_INTERVAL_MS?: string | undefined
     readonly [key: string]: string | undefined
   } = process.env,
 ): GamePerformanceConfig {
@@ -84,6 +126,18 @@ export function resolveGamePerformanceConfig(
     MIN_SIM_MAX_CATCH_UP_TICKS,
     MAX_SIM_MAX_CATCH_UP_TICKS,
   )
+  const serverPerfLogIntervalMs = parseBoundedInt(
+    env.WW_SERVER_PERF_LOG_INTERVAL_MS,
+    DEFAULT_SERVER_PERF_LOG_INTERVAL_MS,
+    MIN_SERVER_PERF_LOG_INTERVAL_MS,
+    MAX_SERVER_PERF_LOG_INTERVAL_MS,
+  )
+  const eventLoopMonitorResolutionMs = parseBoundedInt(
+    env.WW_EVENT_LOOP_MONITOR_RESOLUTION_MS,
+    DEFAULT_EVENT_LOOP_MONITOR_RESOLUTION_MS,
+    MIN_EVENT_LOOP_MONITOR_RESOLUTION_MS,
+    MAX_EVENT_LOOP_MONITOR_RESOLUTION_MS,
+  )
   return {
     simTickRateHz: TICK_RATE_HZ,
     simAccumulatorEnabled: parseBooleanSwitch(env.WW_SIM_ACCUMULATOR_ENABLED, true),
@@ -94,5 +148,22 @@ export function resolveGamePerformanceConfig(
       netSendRateHz,
       netSendIntervalMs: 1_000 / netSendRateHz,
     }),
+    serverPerfLogsEnabled: parseBooleanSwitch(env.WW_SERVER_PERF_LOGS, false),
+    serverPerfLogIntervalMs,
+    eventLoopMonitorResolutionMs,
+    gcMetricsEnabled: parseBooleanSwitch(env.WW_GC_METRICS, false),
+    perfRunId: sanitizePerfRunId(env.WW_PERF_RUN_ID),
+    prodCaptureSeconds: parseBoundedInt(
+      env.WW_PROD_CAPTURE_SECONDS,
+      DEFAULT_PROD_CAPTURE_SECONDS,
+      MIN_PROD_CAPTURE_SECONDS,
+      MAX_PROD_CAPTURE_SECONDS,
+    ),
+    prodSampleIntervalMs: parseBoundedInt(
+      env.WW_PROD_SAMPLE_INTERVAL_MS,
+      DEFAULT_PROD_SAMPLE_INTERVAL_MS,
+      MIN_PROD_SAMPLE_INTERVAL_MS,
+      MAX_PROD_SAMPLE_INTERVAL_MS,
+    ),
   }
 }

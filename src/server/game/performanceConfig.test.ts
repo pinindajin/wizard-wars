@@ -89,4 +89,38 @@ describe("game performance config", () => {
       simMaxCatchUpTicks: 4,
     })
   })
+
+  it("parses production performance instrumentation knobs", () => {
+    expect(resolveGamePerformanceConfig({})).toMatchObject({
+      serverPerfLogsEnabled: false,
+      serverPerfLogIntervalMs: 1_000,
+      eventLoopMonitorResolutionMs: 20,
+      gcMetricsEnabled: false,
+      perfRunId: null,
+      prodCaptureSeconds: 60,
+      prodSampleIntervalMs: 5_000,
+    })
+
+    expect(
+      resolveGamePerformanceConfig({
+        WW_SERVER_PERF_LOGS: "yes",
+        WW_SERVER_PERF_LOG_INTERVAL_MS: "10",
+        WW_EVENT_LOOP_MONITOR_RESOLUTION_MS: "5000",
+        WW_GC_METRICS: "on",
+        WW_PERF_RUN_ID: " local:compact/8 ",
+        WW_PROD_CAPTURE_SECONDS: "1",
+        WW_PROD_SAMPLE_INTERVAL_MS: "999999",
+      }),
+    ).toMatchObject({
+      serverPerfLogsEnabled: true,
+      serverPerfLogIntervalMs: 250,
+      eventLoopMonitorResolutionMs: 1_000,
+      gcMetricsEnabled: true,
+      perfRunId: "local-compact-8",
+      prodCaptureSeconds: 5,
+      prodSampleIntervalMs: 60_000,
+    })
+
+    expect(resolveGamePerformanceConfig({ WW_PERF_RUN_ID: "!!!" }).perfRunId).toBeNull()
+  })
 })
