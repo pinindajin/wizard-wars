@@ -11,6 +11,12 @@ Run the default 8-client compact-input gate:
 bun run test:perf-load
 ```
 
+Tag reports with a shared run id:
+
+```sh
+WW_PERF_RUN_ID=local-compact8 bun run test:perf-load
+```
+
 Run explicit scenarios:
 
 ```sh

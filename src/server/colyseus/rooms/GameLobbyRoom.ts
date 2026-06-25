@@ -79,6 +79,7 @@ import {
   PERFORMANCE_STATUS_WINDOW_MS,
   resolveGamePerformanceConfig,
 } from "../../game/performanceConfig"
+import { getProcessEventLoopMonitor } from "../../game/processEventLoopMonitor"
 import {
   mergeFireballBatch,
   mergeHomingOrbBatch,
@@ -439,6 +440,12 @@ export class GameLobbyRoom extends Room {
   /** Runtime knobs for network cadence and performance reporting. */
   private readonly performanceConfig = resolveGamePerformanceConfig()
 
+  /** Process-wide event-loop monitor shared across all rooms. */
+  private readonly processEventLoopMonitor = getProcessEventLoopMonitor({
+    resolutionMs: this.performanceConfig.eventLoopMonitorResolutionMs,
+    gcMetricsEnabled: this.performanceConfig.gcMetricsEnabled,
+  })
+
   /** Pending player visual deltas awaiting the next network flush. */
   private pendingPlayerDeltaBatches: PlayerDelta[][] = []
 
@@ -481,9 +488,14 @@ export class GameLobbyRoom extends Room {
   private performanceInputQueueDrops = 0
   private performanceSimDurationMs = 0
   private performanceBroadcastDurationMs = 0
+  private performanceRoomTickDurationMs = 0
+  private performanceVisualFlushDurationMs = 0
+  private performanceOwnerAckSendDurationMs = 0
+  private performanceImmediateBroadcastDurationMs = 0
   private performanceEventLoopLagMs = 0
   private lastPerformanceStatusKey = "nominal"
   private lastPerformanceStatusBroadcastAtMs = 0
+  private lastServerPerfLogAtMs = 0
 
   /**
    * Highest `seq` accepted from each player across the queue lifetime, used
@@ -2391,6 +2403,10 @@ export class GameLobbyRoom extends Room {
     this.performanceInputQueueDrops = 0
     this.performanceSimDurationMs = 0
     this.performanceBroadcastDurationMs = 0
+    this.performanceRoomTickDurationMs = 0
+    this.performanceVisualFlushDurationMs = 0
+    this.performanceOwnerAckSendDurationMs = 0
+    this.performanceImmediateBroadcastDurationMs = 0
     this.performanceEventLoopLagMs = 0
   }
 
@@ -2441,21 +2457,27 @@ export class GameLobbyRoom extends Room {
     playerDeltas: readonly PlayerDelta[],
     serverTimeMs: number,
   ): void {
-    const sim = this.simulation
-    if (!sim) return
-    for (const delta of playerDeltas) {
-      if (delta.lastProcessedInputSeq === undefined) continue
-      const playerId = sim.entityPlayerMap.get(delta.id)
-      if (!playerId) continue
-      const client = this.findClientByUserId(playerId)
-      if (!client) continue
-      const payload = sim.buildPlayerOwnerAckPayload(
-        delta.id,
-        delta.lastProcessedInputSeq,
-        serverTimeMs,
-      )
-      if (!payload) continue
-      client.send(RoomEvent.PlayerOwnerAck, parsePlayerOwnerAckPayload(payload))
+    const startedAtPerfMs = performance.now()
+    try {
+      const sim = this.simulation
+      if (!sim) return
+      for (const delta of playerDeltas) {
+        if (delta.lastProcessedInputSeq === undefined) continue
+        const playerId = sim.entityPlayerMap.get(delta.id)
+        if (!playerId) continue
+        const client = this.findClientByUserId(playerId)
+        if (!client) continue
+        const payload = sim.buildPlayerOwnerAckPayload(
+          delta.id,
+          delta.lastProcessedInputSeq,
+          serverTimeMs,
+        )
+        if (!payload) continue
+        client.send(RoomEvent.PlayerOwnerAck, parsePlayerOwnerAckPayload(payload))
+      }
+    } finally {
+      this.performanceOwnerAckSendDurationMs +=
+        performance.now() - startedAtPerfMs
     }
   }
 
@@ -2465,43 +2487,49 @@ export class GameLobbyRoom extends Room {
    * @param serverTimeMs - Current server wall-clock time.
    */
   private flushPendingVisualBatches(serverTimeMs: number): void {
-    if (this.pendingPlayerDeltaBatches.length > 0) {
-      const deltas = mergePlayerBatch(this.pendingPlayerDeltaBatches)
-      this.pendingPlayerDeltaBatches = []
-      if (deltas.length > 0) {
-        this.broadcast(RoomEvent.PlayerBatchUpdate, {
-          deltas,
-          removedIds: [],
-          seq: this.playerBatchSeq++,
-          serverTimeMs,
-        })
+    const startedAtPerfMs = performance.now()
+    try {
+      if (this.pendingPlayerDeltaBatches.length > 0) {
+        const deltas = mergePlayerBatch(this.pendingPlayerDeltaBatches)
+        this.pendingPlayerDeltaBatches = []
+        if (deltas.length > 0) {
+          this.broadcast(RoomEvent.PlayerBatchUpdate, {
+            deltas,
+            removedIds: [],
+            seq: this.playerBatchSeq++,
+            serverTimeMs,
+          })
+        }
       }
-    }
 
-    if (this.pendingFireballBatches.length > 0) {
-      const fireballs = mergeFireballBatch(this.pendingFireballBatches)
-      this.pendingFireballBatches = []
-      if (fireballs.deltas.length > 0 || fireballs.removedIds.length > 0) {
-        this.broadcast(RoomEvent.FireballBatchUpdate, {
-          ...fireballs,
-          seq: this.fireballBatchSeq++,
-          serverTimeMs: fireballs.serverTimeMs ?? serverTimeMs,
-        })
+      if (this.pendingFireballBatches.length > 0) {
+        const fireballs = mergeFireballBatch(this.pendingFireballBatches)
+        this.pendingFireballBatches = []
+        if (fireballs.deltas.length > 0 || fireballs.removedIds.length > 0) {
+          this.broadcast(RoomEvent.FireballBatchUpdate, {
+            ...fireballs,
+            seq: this.fireballBatchSeq++,
+            serverTimeMs: fireballs.serverTimeMs ?? serverTimeMs,
+          })
+        }
       }
-    }
 
-    if (this.pendingHomingOrbBatches.length > 0) {
-      const homingOrbs = mergeHomingOrbBatch(this.pendingHomingOrbBatches)
-      this.pendingHomingOrbBatches = []
-      if (homingOrbs.deltas.length > 0 || homingOrbs.removedIds.length > 0) {
-        this.broadcast(RoomEvent.HomingOrbBatchUpdate, {
-          ...homingOrbs,
-          seq: this.homingOrbBatchSeq++,
-          serverTimeMs: homingOrbs.serverTimeMs ?? serverTimeMs,
-        })
+      if (this.pendingHomingOrbBatches.length > 0) {
+        const homingOrbs = mergeHomingOrbBatch(this.pendingHomingOrbBatches)
+        this.pendingHomingOrbBatches = []
+        if (homingOrbs.deltas.length > 0 || homingOrbs.removedIds.length > 0) {
+          this.broadcast(RoomEvent.HomingOrbBatchUpdate, {
+            ...homingOrbs,
+            seq: this.homingOrbBatchSeq++,
+            serverTimeMs: homingOrbs.serverTimeMs ?? serverTimeMs,
+          })
+        }
       }
+      this.lastNetworkFlushAtMs = serverTimeMs
+    } finally {
+      this.performanceVisualFlushDurationMs +=
+        performance.now() - startedAtPerfMs
     }
-    this.lastNetworkFlushAtMs = serverTimeMs
   }
 
   /**
@@ -2516,6 +2544,10 @@ export class GameLobbyRoom extends Room {
 
     const cpu = process.cpuUsage(this.performanceWindowCpuStart)
     const memory = process.memoryUsage()
+    const {
+      unavailableReason: processMetricUnavailableReason,
+      ...processMetricFields
+    } = this.processEventLoopMonitor.snapshot(nowPerfMs)
     const metrics: ServerPerformanceStatusPayload["metrics"] = {
       windowMs,
       droppedDebtMs: this.performanceDroppedDebtMs,
@@ -2523,6 +2555,11 @@ export class GameLobbyRoom extends Room {
       inputQueueDrops: this.performanceInputQueueDrops,
       simDurationMs: this.performanceSimDurationMs,
       broadcastDurationMs: this.performanceBroadcastDurationMs,
+      roomTickDurationMs: this.performanceRoomTickDurationMs,
+      visualFlushDurationMs: this.performanceVisualFlushDurationMs,
+      ownerAckSendDurationMs: this.performanceOwnerAckSendDurationMs,
+      immediateBroadcastDurationMs: this.performanceImmediateBroadcastDurationMs,
+      ...processMetricFields,
       eventLoopLagMs: this.performanceEventLoopLagMs,
       processCpuPercent: ((cpu.user + cpu.system) / 1000 / windowMs) * 100,
       heapUsedBytes: memory.heapUsed,
@@ -2550,7 +2587,53 @@ export class GameLobbyRoom extends Room {
       this.lastPerformanceStatusBroadcastAtMs = serverTimeMs
     }
 
+    this.maybeLogServerPerformanceWindow(
+      serverTimeMs,
+      classification,
+      metrics,
+      processMetricUnavailableReason,
+    )
+
     this.resetPerformanceWindow(nowPerfMs)
+  }
+
+  /**
+   * Emits opt-in structured server performance logs at a bounded cadence.
+   *
+   * @param serverTimeMs - Current server wall-clock time.
+   * @param classification - Degradation classification for the window.
+   * @param metrics - Aggregated metrics for the window.
+   * @param processMetricUnavailableReason - Feature-detection reasons, when any.
+   */
+  private maybeLogServerPerformanceWindow(
+    serverTimeMs: number,
+    classification: ReturnType<typeof classifyServerPerformance>,
+    metrics: ServerPerformanceStatusPayload["metrics"],
+    processMetricUnavailableReason?: string,
+  ): void {
+    if (!this.performanceConfig.serverPerfLogsEnabled) return
+    if (
+      serverTimeMs - this.lastServerPerfLogAtMs <
+      this.performanceConfig.serverPerfLogIntervalMs
+    ) {
+      return
+    }
+    logger.info(
+      {
+        event: "room.performance.window",
+        area: "netcode",
+        side: "server",
+        roomId: this.roomId,
+        phase: this.lobbyPhase,
+        runId: this.performanceConfig.perfRunId ?? undefined,
+        degraded: classification.degraded,
+        reasons: classification.reasons,
+        metrics,
+        processMetricUnavailableReason,
+      },
+      "Room performance window",
+    )
+    this.lastServerPerfLogAtMs = serverTimeMs
   }
 
   /**
@@ -2599,91 +2682,108 @@ export class GameLobbyRoom extends Room {
       return false
     }
 
-    const simStartedAtPerfMs = performance.now()
-    const output = this.simulation.tick(this.inputQueue, serverTimeMs)
-    this.performanceSimDurationMs += performance.now() - simStartedAtPerfMs
+    const roomTickStartedAtPerfMs = performance.now()
+    let roomTickDurationRecorded = false
+    const recordRoomTickDuration = (): void => {
+      if (roomTickDurationRecorded) return
+      this.performanceRoomTickDurationMs +=
+        performance.now() - roomTickStartedAtPerfMs
+      roomTickDurationRecorded = true
+    }
+    try {
+      const simStartedAtPerfMs = performance.now()
+      const output = this.simulation.tick(this.inputQueue, serverTimeMs)
+      this.performanceSimDurationMs += performance.now() - simStartedAtPerfMs
 
-    const broadcastStartedAtPerfMs = performance.now()
-    if (output.playerDeltas.length > 0) {
-      this.pendingPlayerDeltaBatches.push([...output.playerDeltas])
-    }
-    if (output.fireballDeltas.length > 0 || output.fireballRemovedIds.length > 0) {
-      this.pendingFireballBatches.push({
-        deltas: output.fireballDeltas,
-        removedIds: output.fireballRemovedIds,
-        serverTimeMs,
-      })
-    }
-    if (output.homingOrbDeltas.length > 0 || output.homingOrbRemovedIds.length > 0) {
-      this.pendingHomingOrbBatches.push({
-        deltas: output.homingOrbDeltas,
-        removedIds: output.homingOrbRemovedIds,
-        serverTimeMs,
-      })
-    }
-
-    if (output.playerDeltas.length > 0) {
-      this.sendOwnerAckDeltas(output.playerDeltas, serverTimeMs)
-    }
-
-    if (
-      this.hasPendingVisualBatches() &&
-      this.shouldFlushVisualBatches(serverTimeMs)
-    ) {
-      this.flushPendingVisualBatches(serverTimeMs)
-    }
-
-    for (const launch of output.fireballLaunches) {
-      this.broadcast(RoomEvent.FireballLaunch, launch)
-    }
-    for (const impact of output.fireballImpacts) {
-      this.broadcast(RoomEvent.FireballImpact, impact)
-    }
-    for (const launch of output.homingOrbLaunches) {
-      this.broadcast(RoomEvent.HomingOrbLaunch, launch)
-    }
-    for (const impact of output.homingOrbImpacts) {
-      this.broadcast(RoomEvent.HomingOrbImpact, impact)
-    }
-    for (const bolt of output.lightningBolts) {
-      this.broadcast(RoomEvent.LightningBolt, bolt)
-    }
-    for (const swing of output.primaryMeleeAttacks) {
-      this.broadcast(RoomEvent.PrimaryMeleeAttack, swing)
-    }
-    for (const telegraph of output.combatTelegraphStarts) {
-      this.broadcast(RoomEvent.CombatTelegraphStart, telegraph)
-    }
-    for (const telegraph of output.combatTelegraphEnds) {
-      this.broadcast(RoomEvent.CombatTelegraphEnd, telegraph)
-    }
-    for (const sfx of output.abilitySfxEvents) {
-      this.broadcast(RoomEvent.AbilitySfx, sfx)
-    }
-    for (const death of output.playerDeaths) {
-      this.broadcast(RoomEvent.PlayerDeath, parsePlayerDeathPayload(death))
-    }
-    for (const respawn of output.playerRespawns) {
-      this.broadcast(RoomEvent.PlayerRespawn, respawn)
-    }
-    for (const float of output.damageFloats) {
-      this.broadcast(RoomEvent.DamageFloat, float)
-    }
-    for (const goldUpdate of output.goldUpdates) {
-      const client = this.findClientByUserId(goldUpdate.userId)
-      if (client) {
-        client.send(RoomEvent.GoldBalance, { gold: goldUpdate.gold })
+      const broadcastStartedAtPerfMs = performance.now()
+      if (output.playerDeltas.length > 0) {
+        this.pendingPlayerDeltaBatches.push([...output.playerDeltas])
       }
-    }
+      if (output.fireballDeltas.length > 0 || output.fireballRemovedIds.length > 0) {
+        this.pendingFireballBatches.push({
+          deltas: output.fireballDeltas,
+          removedIds: output.fireballRemovedIds,
+          serverTimeMs,
+        })
+      }
+      if (output.homingOrbDeltas.length > 0 || output.homingOrbRemovedIds.length > 0) {
+        this.pendingHomingOrbBatches.push({
+          deltas: output.homingOrbDeltas,
+          removedIds: output.homingOrbRemovedIds,
+          serverTimeMs,
+        })
+      }
 
-    if (output.matchEnded) {
-      this.transitionToScoreboard(output.matchEnded.reason, output.matchEnded.entries)
+      if (output.playerDeltas.length > 0) {
+        this.sendOwnerAckDeltas(output.playerDeltas, serverTimeMs)
+      }
+
+      if (
+        this.hasPendingVisualBatches() &&
+        this.shouldFlushVisualBatches(serverTimeMs)
+      ) {
+        this.flushPendingVisualBatches(serverTimeMs)
+      }
+
+      const immediateStartedAtPerfMs = performance.now()
+      for (const launch of output.fireballLaunches) {
+        this.broadcast(RoomEvent.FireballLaunch, launch)
+      }
+      for (const impact of output.fireballImpacts) {
+        this.broadcast(RoomEvent.FireballImpact, impact)
+      }
+      for (const launch of output.homingOrbLaunches) {
+        this.broadcast(RoomEvent.HomingOrbLaunch, launch)
+      }
+      for (const impact of output.homingOrbImpacts) {
+        this.broadcast(RoomEvent.HomingOrbImpact, impact)
+      }
+      for (const bolt of output.lightningBolts) {
+        this.broadcast(RoomEvent.LightningBolt, bolt)
+      }
+      for (const swing of output.primaryMeleeAttacks) {
+        this.broadcast(RoomEvent.PrimaryMeleeAttack, swing)
+      }
+      for (const telegraph of output.combatTelegraphStarts) {
+        this.broadcast(RoomEvent.CombatTelegraphStart, telegraph)
+      }
+      for (const telegraph of output.combatTelegraphEnds) {
+        this.broadcast(RoomEvent.CombatTelegraphEnd, telegraph)
+      }
+      for (const sfx of output.abilitySfxEvents) {
+        this.broadcast(RoomEvent.AbilitySfx, sfx)
+      }
+      for (const death of output.playerDeaths) {
+        this.broadcast(RoomEvent.PlayerDeath, parsePlayerDeathPayload(death))
+      }
+      for (const respawn of output.playerRespawns) {
+        this.broadcast(RoomEvent.PlayerRespawn, respawn)
+      }
+      for (const float of output.damageFloats) {
+        this.broadcast(RoomEvent.DamageFloat, float)
+      }
+      for (const goldUpdate of output.goldUpdates) {
+        const client = this.findClientByUserId(goldUpdate.userId)
+        if (client) {
+          client.send(RoomEvent.GoldBalance, { gold: goldUpdate.gold })
+        }
+      }
+      this.performanceImmediateBroadcastDurationMs +=
+        performance.now() - immediateStartedAtPerfMs
+
+      if (output.matchEnded) {
+        recordRoomTickDuration()
+        this.transitionToScoreboard(output.matchEnded.reason, output.matchEnded.entries)
+        this.performanceBroadcastDurationMs += performance.now() - broadcastStartedAtPerfMs
+        return false
+      }
       this.performanceBroadcastDurationMs += performance.now() - broadcastStartedAtPerfMs
-      return false
+      recordRoomTickDuration()
+      this.maybeBroadcastServerPerformanceStatus(serverTimeMs)
+      return this.simulation !== null && this.lobbyPhase === "IN_PROGRESS"
+    } finally {
+      recordRoomTickDuration()
     }
-    this.performanceBroadcastDurationMs += performance.now() - broadcastStartedAtPerfMs
-    this.maybeBroadcastServerPerformanceStatus(serverTimeMs)
-    return this.simulation !== null && this.lobbyPhase === "IN_PROGRESS"
   }
 
   /**

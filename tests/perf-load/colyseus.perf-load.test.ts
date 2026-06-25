@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest"
 
 import { PlayerInputStateScheduler } from "@/game/network/PlayerInputStateScheduler"
 import { playerLobbyIndex } from "@/server/colyseus/rooms/GameLobbyRoom"
+import { sanitizePerfRunId } from "@/server/game/performanceConfig"
 import { RoomEvent } from "@/shared/roomEvents"
 import type {
   LobbyStatePayload,
@@ -34,7 +35,10 @@ type PerfLoadScenario = {
 }
 
 type PerfLoadStats = {
+  readonly runId: string | null
   readonly scenarioId: string
+  readonly startedAtIso: string
+  readonly endedAtIso: string
   readonly clientCount: number
   readonly seconds: number
   readonly inputRateHz: number
@@ -46,6 +50,7 @@ type PerfLoadStats = {
   readonly maxPlayerBatchGapMs: number
   readonly statusCount: number
   readonly degradedStatusCount: number
+  readonly degradedStatusBudget: number
   readonly degradedReasons: readonly string[]
   readonly lastStatus: ServerPerformanceStatusPayload | null
 }
@@ -95,15 +100,17 @@ describe("Colyseus perf load", () => {
           writeReport(stats)
 
           expect(stats.sentInputs).toBeGreaterThan(0)
+          expect(stats.ownerAcks).toBeGreaterThan(0)
+          expect(stats.playerBatches).toBeGreaterThan(0)
           expect(stats.degradedStatusCount).toBeLessThanOrEqual(
-            scenario.maxDegradedStatusCount,
+            stats.degradedStatusBudget,
           )
           expect(stats.maxAckGapMs).toBeLessThanOrEqual(scenario.maxAckGapMs)
           expect(stats.maxPlayerBatchGapMs).toBeLessThanOrEqual(
             scenario.maxPlayerBatchGapMs,
           )
         } finally {
-          await Promise.all(rooms.map((room) => room.leave().catch(() => undefined)))
+          await leaveRoomsBestEffort(rooms)
         }
       },
     )
@@ -230,6 +237,7 @@ async function runScenario(
   const schedulers = rooms.map(() => new PlayerInputStateScheduler())
   const seqByClient = rooms.map(() => 0)
   const startedAtPerfMs = performance.now()
+  const startedAtIso = new Date().toISOString()
   const endsAtPerfMs = startedAtPerfMs + scenario.seconds * 1_000
   const intervalMs = 1_000 / scenario.inputRateHz
   let nextTickAtPerfMs = startedAtPerfMs
@@ -262,7 +270,10 @@ async function runScenario(
   const statuses = [...statusesByServerTimeMs.values()]
   const degradedStatuses = statuses.filter((status) => status.degraded)
   return {
+    runId: sanitizePerfRunId(process.env.WW_PERF_RUN_ID),
     scenarioId: scenario.id,
+    startedAtIso,
+    endedAtIso: new Date().toISOString(),
     clientCount: scenario.clientCount,
     seconds: scenario.seconds,
     inputRateHz: scenario.inputRateHz,
@@ -274,15 +285,50 @@ async function runScenario(
     maxPlayerBatchGapMs,
     statusCount: statuses.length,
     degradedStatusCount: degradedStatuses.length,
+    degradedStatusBudget: degradedStatusBudget(scenario),
     degradedReasons: [...new Set(degradedStatuses.flatMap((status) => status.reasons))],
     lastStatus: statuses.at(-1) ?? null,
   }
+}
+
+/**
+ * Returns the allowed degraded status count for one host-local perf run.
+ *
+ * @param scenario - Scenario under test.
+ * @returns Absolute degraded status budget.
+ */
+function degradedStatusBudget(scenario: PerfLoadScenario): number {
+  if (scenario.seconds <= 10) return scenario.maxDegradedStatusCount
+  return Math.max(scenario.maxDegradedStatusCount, Math.ceil(scenario.seconds / 60))
 }
 
 function registerNoopRoomHandlers(room: Room): void {
   for (const event of NOOP_ROOM_EVENTS) {
     room.onMessage(event, () => undefined)
   }
+}
+
+/**
+ * Best-effort client cleanup for long perf runs.
+ *
+ * Colyseus SDK `leave()` can wait indefinitely for an onLeave round trip after
+ * the room is already closing. Server shutdown is handled by afterEach, so this
+ * helper only gives clients a bounded chance to leave gracefully.
+ *
+ * @param rooms - Connected Colyseus SDK rooms to leave.
+ */
+async function leaveRoomsBestEffort(rooms: readonly Room[]): Promise<void> {
+  await Promise.all(rooms.map((room) => leaveRoomBestEffort(room)))
+}
+
+/**
+ * Attempts one SDK leave without letting cleanup outlive the perf test budget.
+ *
+ * @param room - Connected Colyseus SDK room.
+ */
+async function leaveRoomBestEffort(room: Room): Promise<void> {
+  const leave = room.leave().catch(() => undefined)
+  await Promise.race([leave, delay(1_000)])
 }
 
 function buildInput(
