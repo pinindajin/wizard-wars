@@ -23,16 +23,28 @@ function abilityStates(charges: number) {
 }
 
 describe("server network batching", () => {
-  it("merges player deltas by entity id with later fields winning", () => {
+  it("merges player visual deltas by entity id with later fields winning and strips ACK cursors", () => {
     const merged = mergePlayerBatch([
       [{ id: 1, x: 10, y: 20, lastProcessedInputSeq: 1 }],
       [{ id: 1, x: 12, health: 80 }, { id: 2, x: 5 }],
     ])
 
     expect(merged).toEqual([
-      { id: 1, x: 12, y: 20, lastProcessedInputSeq: 1, health: 80 },
+      { id: 1, x: 12, y: 20, health: 80 },
       { id: 2, x: 5 },
     ])
+  })
+
+  it("drops ACK-only player visual deltas instead of retaining id-only rows", () => {
+    const coalescer = new PlayerVisualBatchCoalescer()
+
+    coalescer.ingest([
+      { id: 1, lastProcessedInputSeq: 4 },
+      { id: 2, lastProcessedInputSeq: 8 },
+    ])
+
+    expect(coalescer.hasPending()).toBe(false)
+    expect(coalescer.flush()).toEqual([])
   })
 
   it("merges fireball deltas and keeps removed ids unique", () => {
@@ -190,7 +202,6 @@ describe("server network batching", () => {
         jumpZ: 7,
         hasSwiftBoots: true,
         abilityStates: abilityStates(2),
-        lastProcessedInputSeq: 5,
         y: 20,
       },
       { id: 2, x: 5 },

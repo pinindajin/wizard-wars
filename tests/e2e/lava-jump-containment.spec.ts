@@ -168,6 +168,39 @@ async function installAuthoritativeStateRecorder(page: Page): Promise<void> {
           return
         }
 
+        if (message.type === "PLAYER_OWNER_ACK" && w.__wwLavaJumpState) {
+          const payload = message.payload as {
+            id: number
+            playerId: string
+            x: number
+            y: number
+            lastProcessedInputSeq: number
+            replayContext?: Partial<
+              Pick<TrackedPlayer, "terrainState" | "moveState" | "jumpZ">
+            >
+          }
+          if (payload.playerId === localPlayerId) {
+            w.__wwLavaJumpState = {
+              ...w.__wwLavaJumpState,
+              id: payload.id,
+              playerId: payload.playerId,
+              x: payload.x,
+              y: payload.y,
+              lastProcessedInputSeq: payload.lastProcessedInputSeq,
+              ...(payload.replayContext?.terrainState !== undefined
+                ? { terrainState: payload.replayContext.terrainState }
+                : {}),
+              ...(payload.replayContext?.moveState !== undefined
+                ? { moveState: payload.replayContext.moveState }
+                : {}),
+              ...(payload.replayContext?.jumpZ !== undefined
+                ? { jumpZ: payload.replayContext.jumpZ }
+                : {}),
+            }
+          }
+          return
+        }
+
         if (message.type !== "PLAYER_BATCH_UPDATE" || !w.__wwLavaJumpState) return
         const payload = message.payload as {
           deltas?: readonly Partial<TrackedPlayer>[]

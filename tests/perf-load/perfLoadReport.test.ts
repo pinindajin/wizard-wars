@@ -43,6 +43,10 @@ describe("perf-load report helpers", () => {
       sentInputs: 100,
       ownerAcks: 90,
       playerBatches: 80,
+      roomWideAckCursorLeaks: 0,
+      wrongOwnerAckCount: 0,
+      clientsWithoutOwnerAcks: 0,
+      minOwnerAcksPerClient: 9,
       ackGapsMs: [10, 20, 30, 40, 100],
       playerBatchGapsMs: [5, 10, 20, 30, 50],
       statuses: [
@@ -78,6 +82,10 @@ describe("perf-load report helpers", () => {
     expect(stats.rssDeltaBytes).toBe(1_250)
     expect(stats.activeRoomsAfterCleanup).toBe(0)
     expect(stats.activeRoomLeakDetected).toBe(false)
+    expect(stats.roomWideAckCursorLeaks).toBe(0)
+    expect(stats.wrongOwnerAckCount).toBe(0)
+    expect(stats.clientsWithoutOwnerAcks).toBe(0)
+    expect(stats.minOwnerAcksPerClient).toBe(9)
     expect(stats.diagnosticOnly).toBe(false)
   })
 

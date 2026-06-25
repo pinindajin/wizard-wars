@@ -304,6 +304,32 @@ describe("NetworkSyncSystem.applyBatchUpdate", () => {
       lastProcessedInputSeq: 3,
     })
   })
+
+  it("keeps legacy batch ACK fallback for seq 0 after a pre-first-input full sync", () => {
+    const onLocalAck = vi.fn()
+    const system = new NetworkSyncSystem({ onLocalAck })
+    system.localPlayerId = "p1"
+    system.applyFullSync({
+      players: [baseSnapshot({ id: 1, playerId: "p1", lastProcessedInputSeq: 0 })],
+      fireballs: [],
+      seq: 0,
+      serverTimeMs: 1,
+    })
+
+    system.applyBatchUpdate({
+      deltas: [{ id: 1, x: 15, y: 25, lastProcessedInputSeq: 0 }],
+      removedIds: [],
+      seq: 1,
+      serverTimeMs: 2,
+    })
+
+    expect(onLocalAck).toHaveBeenCalledWith({
+      id: 1,
+      x: 15,
+      y: 25,
+      lastProcessedInputSeq: 0,
+    })
+  })
 })
 
 describe("NetworkSyncSystem.applyOwnerAck", () => {
@@ -372,6 +398,41 @@ describe("NetworkSyncSystem.applyOwnerAck", () => {
     expect(onLocalAck).toHaveBeenCalledWith(
       expect.objectContaining({ lastProcessedInputSeq: 0 }),
     )
+  })
+
+  it("accepts the first seq 0 owner ACK after a pre-first-input full sync", () => {
+    const onLocalAck = vi.fn()
+    const system = new NetworkSyncSystem({ onLocalAck })
+    system.localPlayerId = "p1"
+    system.applyFullSync({
+      players: [baseSnapshot({ id: 1, playerId: "p1", lastProcessedInputSeq: 0 })],
+      fireballs: [],
+      seq: 0,
+      serverTimeMs: 1,
+    })
+
+    system.applyOwnerAck(ownerAck({ id: 1, playerId: "p1", lastProcessedInputSeq: 0 }))
+
+    expect(onLocalAck).toHaveBeenCalledWith(
+      expect.objectContaining({ lastProcessedInputSeq: 0 }),
+    )
+  })
+
+  it("does not treat nonzero full sync cursors as pending first seq 0 ACKs", () => {
+    const onLocalAck = vi.fn()
+    const system = new NetworkSyncSystem({ onLocalAck })
+    system.localPlayerId = "p1"
+    system.applyFullSync({
+      players: [baseSnapshot({ id: 1, playerId: "p1", lastProcessedInputSeq: 3 })],
+      fireballs: [],
+      seq: 0,
+      serverTimeMs: 1,
+    })
+
+    system.applyOwnerAck(ownerAck({ id: 1, playerId: "p1", lastProcessedInputSeq: 3 }))
+    system.applyOwnerAck(ownerAck({ id: 1, playerId: "p1", lastProcessedInputSeq: 4 }))
+
+    expect(onLocalAck.mock.calls.map(([sample]) => sample.lastProcessedInputSeq)).toEqual([4])
   })
 })
 
