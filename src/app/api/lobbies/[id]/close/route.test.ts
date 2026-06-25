@@ -42,6 +42,7 @@ async function signedRequest(
 describe("POST /api/lobbies/[id]/close", () => {
   beforeEach(() => {
     vi.unstubAllEnvs()
+    vi.unstubAllGlobals()
     prismaMock.user.findUnique.mockReset()
     setMatchMaker(undefined)
   })
@@ -179,6 +180,52 @@ describe("POST /api/lobbies/[id]/close", () => {
       occupied: true,
       playerCount: 2,
       lobbyPhase: "LOBBY",
+    })
+  })
+
+  it("forwards confirmed close requests to the realtime admin bridge when configured", async () => {
+    vi.stubEnv("WW_REALTIME_ADMIN_URL", "http://realtime:3001")
+    vi.stubEnv("WW_REALTIME_ADMIN_TOKEN", "secret")
+    prismaMock.user.findUnique.mockResolvedValueOnce({
+      id: "u1",
+      username: "Admin",
+      usernameLower: "admin",
+      isAdmin: true,
+    })
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          status: "closing",
+          occupied: true,
+          closeAtServerMs: 12345,
+          countdownMs: 30000,
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const res = await POST(await signedRequest({ confirmed: true }), {
+      params: Promise.resolve({ id: "r1" }),
+    })
+
+    expect(res.status).toBe(200)
+    const call = fetchMock.mock.calls[0]
+    expect(call[0]).toBe("http://realtime:3001/internal/lobbies/r1/close")
+    expect(call[1]).toMatchObject({
+      method: "POST",
+      headers: expect.objectContaining({ authorization: "Bearer secret" }),
+    })
+    expect(JSON.parse(String(call[1]?.body))).toMatchObject({
+      adminUserId: "u1",
+      adminUsername: "Admin",
+      confirmed: true,
+    })
+    await expect(res.json()).resolves.toEqual({
+      status: "closing",
+      occupied: true,
+      closeAtServerMs: 12345,
+      countdownMs: 30000,
     })
   })
 

@@ -38,9 +38,40 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_COLYSEUS_URL: "${NEXT_PUBLIC_COLYSEUS_URL:-http://127.0.0.1:3001}"
     restart: unless-stopped
     ports:
       - "${WW_APP_HOST_PORT:-3000}:3000"
+    environment:
+      WW_SERVER_MODE: web
+      RUN_MIGRATIONS: "true"
+      WW_REALTIME_ADMIN_URL: "http://realtime:3001"
+      WW_REALTIME_ADMIN_TOKEN: "${WW_REALTIME_ADMIN_TOKEN:-local-realtime-admin-token-change-me}"
+      NEXT_PUBLIC_COLYSEUS_URL: "${NEXT_PUBLIC_COLYSEUS_URL:-http://127.0.0.1:3001}"
+    env_file:
+      - .env.docker
+    depends_on:
+      db:
+        condition: service_healthy
+      realtime:
+        condition: service_started
+
+  realtime:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_COLYSEUS_URL: "${NEXT_PUBLIC_COLYSEUS_URL:-http://127.0.0.1:3001}"
+    restart: unless-stopped
+    ports:
+      - "${WW_REALTIME_HOST_PORT:-3001}:3001"
+    environment:
+      WW_SERVER_MODE: realtime
+      RUN_MIGRATIONS: "false"
+      PORT: 3001
+      WW_WEB_ORIGIN: "${WW_WEB_ORIGIN:-http://127.0.0.1:3000}"
+      WW_REALTIME_ADMIN_TOKEN: "${WW_REALTIME_ADMIN_TOKEN:-local-realtime-admin-token-change-me}"
     env_file:
       - .env.docker
     depends_on:

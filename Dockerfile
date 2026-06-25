@@ -12,8 +12,10 @@ FROM oven/bun:1.2-slim AS builder
 WORKDIR /app
 # NODE_ENV=production avoids a known Next.js 16 bug where /_global-error
 # prerender crashes with "useContext null" if NODE_ENV is unset/development.
+ARG NEXT_PUBLIC_COLYSEUS_URL=""
 ENV NODE_ENV=production
 ENV DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build"
+ENV NEXT_PUBLIC_COLYSEUS_URL=${NEXT_PUBLIC_COLYSEUS_URL}
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN bun run build
@@ -33,7 +35,7 @@ COPY --from=builder /app/next.config.ts ./
 COPY --from=builder /app/prisma.config.ts ./
 COPY --from=builder /app/middleware.ts ./
 
-EXPOSE 3000
+EXPOSE 3000 3001
 
-# Run migrations at container startup with the platform-injected DATABASE_URL.
-CMD ["sh", "-c", "bunx prisma migrate deploy && bun run start"]
+# Only the configured migration owner should run Prisma migrations.
+CMD ["sh", "-c", "if [ \"${RUN_MIGRATIONS:-false}\" = \"true\" ]; then bunx prisma migrate deploy; fi; case \"${WW_SERVER_MODE:-single}\" in web) bun run start:web ;; realtime) bun run start:realtime ;; *) bun run start ;; esac"]

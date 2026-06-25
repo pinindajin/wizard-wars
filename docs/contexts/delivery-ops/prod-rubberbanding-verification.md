@@ -64,6 +64,15 @@ WW_PERF_RUN_ID=local-compact8-5h WW_PERF_LOAD_SCENARIOS=compact8 WW_PERF_LOAD_SE
 
 For production diagnosis, enable `WW_SERVER_PERF_LOGS=true` only during a bounded capture window, set a matching `WW_PERF_RUN_ID`, restart/redeploy so room processes read the env, and then capture app logs plus this snapshot. The relevant app-log event is `room.performance.window`; summarize bounded log counts and do not paste secrets. Unset the log flag and restart/redeploy after capture.
 
+## Split Realtime Runtime Notes
+
+When web and realtime are deployed separately, record both service roles:
+
+- Web process: `WW_SERVER_MODE=web`, `RUN_MIGRATIONS=true`, `WW_REALTIME_ADMIN_URL`, build-time and runtime `NEXT_PUBLIC_COLYSEUS_URL`, health URL, image/digest, and host/container stats.
+- Realtime process: `WW_SERVER_MODE=realtime`, `RUN_MIGRATIONS=false`, `PORT`, `WW_WEB_ORIGIN`, `/healthz`, `/readyz`, image/digest, active-room count, and host/container stats.
+- Shared secret presence only: confirm `WW_REALTIME_ADMIN_TOKEN` is set on both services without recording its value.
+- Replica policy: keep realtime at one replica until sticky routing and shared Colyseus Presence/Driver design land.
+
 Normal local perf-load gates require ACK max gap `<=250ms`, player batch max gap `<=300ms`, degraded status count `<=1`, and input drops `0`. The active-room cleanup field is report-only because in-progress rooms intentionally remain eligible for reconnect during `RECONNECT_WINDOW_MS`. `WW_PERF_LOAD_DIAGNOSTIC_ONLY=true` with `WW_PERF_LOAD_DIAGNOSTIC_REASON` is reserved for non-gating investigations and must be called out as diagnostic-only in PR evidence.
 
 ## 2026-06-23 Live Solo Evidence
