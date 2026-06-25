@@ -273,6 +273,15 @@ export type PlayerData = {
  */
 export const playerLobbyIndex = new Map<string, string>()
 
+/**
+ * Returns the active in-progress game-loop room count for local diagnostics.
+ *
+ * @returns Number of rooms currently tracked as running a simulation loop.
+ */
+export function getActiveGameLoopRoomCountForDiagnostics(): number {
+  return activeGameLoopRoomIds.size
+}
+
 // ---------------------------------------------------------------------------
 // Real-timer helpers
 // ---------------------------------------------------------------------------

@@ -14,7 +14,7 @@ Record production evidence for the Wizard Wars solo rubber-banding/high-CPU inve
 - The server coalesces repeated held inputs while advancing ACKs one sequence per tick, matching Seas of Aleryn's transition-preserving queue pressure reduction without skipping client replay history.
 - The default fixed-step catch-up budget is `4` ticks to reduce long catch-up bursts under host stalls; `WW_SIM_MAX_CATCH_UP_TICKS` remains the rollback knob.
 - Fireball movement batches now carry `serverTimeMs`, and the client buffers Fireball positions like Homing Orbs instead of snapping sprites on batch receipt.
-- `bun run test:perf-load` runs an opt-in local 8-client Colyseus load gate and writes JSON reports under `test-results/perf-load/`.
+- `bun run test:perf-load` runs an opt-in local 8-client Colyseus load gate and writes JSON reports under `test-results/perf-load/` with max/p95/p99 ACK and player-batch gaps, degraded reason counts, input-drop totals, heap/RSS deltas, and active-room cleanup evidence.
 
 ## Required Production Snapshot
 
@@ -48,15 +48,23 @@ WW_PROD_SSH_HOST=user@host WW_PROD_CONTAINER=container-name bun run ops:capture-
 ```
 
 The helper writes a Markdown snapshot to `test-results/prod-rubberbanding/`.
-Use `WW_PERF_RUN_ID` to align local perf-load reports, server perf logs, and prod snapshots. Use `WW_PROD_CAPTURE_SECONDS` (`5..18000`, default `60`) and `WW_PROD_SAMPLE_INTERVAL_MS` (`1000..60000`, default `5000`) to record the intended observation window in the snapshot.
+Use `WW_PERF_RUN_ID` to align local perf-load reports, server perf logs, and prod snapshots. Unsafe filename characters are replaced with `_`; when a run id is present, the helper writes `test-results/prod-rubberbanding/<run-id>.md`. Use `WW_PROD_CAPTURE_SECONDS` (`5..18000`, default `60`) and `WW_PROD_SAMPLE_INTERVAL_MS` (`1000..60000`, default `5000`) to collect repeated `docker stats --no-stream` samples and before/after cgroup v2 CPU/memory deltas. The snapshot marks host data incomplete when SSH, target container, stats, cgroup fields, or deltas are unavailable.
 
 For a bounded 10-minute local comparison before production promotion:
 
 ```sh
-WW_PERF_RUN_ID=local-compact8 WW_PERF_LOAD_SCENARIOS=compact8 WW_PERF_LOAD_SECONDS=600 bun run test:perf-load
+WW_PERF_RUN_ID=local-compact8-10m WW_PERF_LOAD_SCENARIOS=compact8 WW_PERF_LOAD_SECONDS=600 bun run test:perf-load
 ```
 
-For production diagnosis, enable `WW_SERVER_PERF_LOGS=true` only during a bounded capture window, set a matching `WW_PERF_RUN_ID`, restart/redeploy so room processes read the env, and then capture app logs plus this snapshot. Unset the log flag and restart/redeploy after capture.
+For the 5-hour compact-input soak:
+
+```sh
+WW_PERF_RUN_ID=local-compact8-5h WW_PERF_LOAD_SCENARIOS=compact8 WW_PERF_LOAD_SECONDS=18000 bun run test:perf-load
+```
+
+For production diagnosis, enable `WW_SERVER_PERF_LOGS=true` only during a bounded capture window, set a matching `WW_PERF_RUN_ID`, restart/redeploy so room processes read the env, and then capture app logs plus this snapshot. The relevant app-log event is `room.performance.window`; summarize bounded log counts and do not paste secrets. Unset the log flag and restart/redeploy after capture.
+
+Normal local perf-load gates require ACK max gap `<=250ms`, player batch max gap `<=300ms`, degraded status count `<=1`, and input drops `0`. The active-room cleanup field is report-only because in-progress rooms intentionally remain eligible for reconnect during `RECONNECT_WINDOW_MS`. `WW_PERF_LOAD_DIAGNOSTIC_ONLY=true` with `WW_PERF_LOAD_DIAGNOSTIC_REASON` is reserved for non-gating investigations and must be called out as diagnostic-only in PR evidence.
 
 ## 2026-06-23 Live Solo Evidence
 
@@ -68,6 +76,7 @@ Public browser playtest against `https://wizard-wars.pinindajin.online` entered 
 - `server_performance_status` payloads where `degraded=true`, especially `reasons`.
 - Loop debt/catch-up summaries from app logs, especially `room.performance.window` when `WW_SERVER_PERF_LOGS=true`.
 - Docker CPU and memory samples while moving and while idle.
+- Cgroup v2 `cpu.stat`, `cpu.max`, `memory.current`, `memory.max`, and `memory.events` before/after deltas.
 
 ## Interpretation
 
@@ -80,5 +89,6 @@ Public browser playtest against `https://wizard-wars.pinindajin.online` entered 
 
 - Set `WW_NET_SEND_RATE_HZ=60` to restore previous visual batch cadence.
 - Set `WW_SERVER_PERF_LOGS=false` and restart/redeploy to disable opt-in server performance logs.
+- Revert the production event-loop instrumentation PR if the always-initialized room monitor itself becomes suspect.
 - Hide the player-facing overlay hook if the indicators themselves cause unexpected UI issues.
 - Revert the rubber-banding/performance-indicator PR if telemetry shows a new regression.

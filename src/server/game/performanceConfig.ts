@@ -87,8 +87,8 @@ export function sanitizePerfRunId(raw: string | undefined): string | null {
   if (raw === undefined || raw.trim() === "") return null
   const sanitized = raw
     .trim()
-    .replaceAll(/[^A-Za-z0-9._-]+/g, "-")
-    .replaceAll(/^-+|-+$/g, "")
+    .replaceAll(/[^A-Za-z0-9._-]+/g, "_")
+    .replaceAll(/^_+|_+$/g, "")
     .slice(0, 80)
   return sanitized === "" ? null : sanitized
 }
