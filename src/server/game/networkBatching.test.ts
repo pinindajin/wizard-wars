@@ -1,6 +1,26 @@
 import { describe, expect, it } from "vitest"
 
-import { mergeFireballBatch, mergeHomingOrbBatch, mergePlayerBatch } from "./networkBatching"
+import {
+  FireballVisualBatchCoalescer,
+  HomingOrbVisualBatchCoalescer,
+  PlayerVisualBatchCoalescer,
+  mergeFireballBatch,
+  mergeHomingOrbBatch,
+  mergePlayerBatch,
+} from "./networkBatching"
+
+function abilityStates(charges: number) {
+  return {
+    fireball: {
+      cooldownEndsAtServerTimeMs: null,
+      cooldownDurationMs: null,
+      charges,
+      maxCharges: 3,
+      rechargeEndsAtServerTimeMs: null,
+      rechargeDurationMs: null,
+    },
+  }
+}
 
 describe("server network batching", () => {
   it("merges player deltas by entity id with later fields winning", () => {
@@ -113,5 +133,127 @@ describe("server network batching", () => {
       removedIds: [],
       serverTimeMs: 1_017,
     })
+  })
+
+  it("coalesces player deltas incrementally and snapshots nested ability state", () => {
+    const coalescer = new PlayerVisualBatchCoalescer()
+    const first = {
+      id: 1,
+      x: 10,
+      moveFacingAngle: 0.25,
+      castingAbilityId: "fireball",
+      jumpStartedInLava: false,
+      abilityStates: abilityStates(2),
+      lastProcessedInputSeq: 4,
+    }
+
+    coalescer.ingest([first])
+    first.x = 999
+    first.abilityStates.fireball.charges = 0
+    coalescer.ingest([
+      {
+        id: 1,
+        y: 20,
+        vx: 1.5,
+        vy: -2.5,
+        facingAngle: 1.25,
+        moveFacingAngle: 0.5,
+        castingAbilityId: null,
+        jumpStartedInLava: true,
+        lives: 2,
+        animState: "walk",
+        moveState: "moving",
+        terrainState: "lava",
+        invulnerable: false,
+        jumpZ: 7,
+        hasSwiftBoots: true,
+        lastProcessedInputSeq: 5,
+      },
+      { id: 2, x: 5 },
+    ])
+
+    expect(coalescer.flush()).toEqual([
+      {
+        id: 1,
+        x: 10,
+        vx: 1.5,
+        vy: -2.5,
+        facingAngle: 1.25,
+        moveFacingAngle: 0.5,
+        castingAbilityId: null,
+        jumpStartedInLava: true,
+        lives: 2,
+        animState: "walk",
+        moveState: "moving",
+        terrainState: "lava",
+        invulnerable: false,
+        jumpZ: 7,
+        hasSwiftBoots: true,
+        abilityStates: abilityStates(2),
+        lastProcessedInputSeq: 5,
+        y: 20,
+      },
+      { id: 2, x: 5 },
+    ])
+    expect(coalescer.hasPending()).toBe(false)
+  })
+
+  it("coalesces fireball deltas incrementally with id reuse and snapshot isolation", () => {
+    const coalescer = new FireballVisualBatchCoalescer()
+    const reused = { id: 8, x: 25, y: 35 }
+
+    coalescer.ingest({
+      deltas: [{ id: 7, x: 10, y: 20 }],
+      removedIds: [8],
+      serverTimeMs: 1_000,
+    })
+    coalescer.ingest({
+      deltas: [reused],
+      removedIds: [7],
+      serverTimeMs: 1_017,
+    })
+    reused.x = 999
+
+    expect(coalescer.flush()).toEqual({
+      deltas: [{ id: 8, x: 25, y: 35 }],
+      removedIds: [7],
+      serverTimeMs: 1_017,
+    })
+    expect(coalescer.hasPending()).toBe(false)
+  })
+
+  it("ignores empty fireball batches without retaining server time", () => {
+    const coalescer = new FireballVisualBatchCoalescer()
+
+    coalescer.ingest({ deltas: [], removedIds: [], serverTimeMs: 2_000 })
+
+    expect(coalescer.hasPending()).toBe(false)
+    expect(coalescer.flush()).toEqual({ deltas: [], removedIds: [] })
+  })
+
+  it("coalesces Homing Orb sparse deltas incrementally and snapshots rows", () => {
+    const coalescer = new HomingOrbVisualBatchCoalescer()
+    const first = { id: 12, x: 1, y: 2, targetId: "target-a" }
+    const second = { id: 12, vx: 3, vy: 4, headingRad: 0.5, targetId: null }
+
+    coalescer.ingest({
+      deltas: [first],
+      removedIds: [],
+      serverTimeMs: 1_000,
+    })
+    first.x = 999
+    coalescer.ingest({
+      deltas: [second],
+      removedIds: [],
+      serverTimeMs: 1_017,
+    })
+    second.vx = 999
+
+    expect(coalescer.flush()).toEqual({
+      deltas: [{ id: 12, x: 1, y: 2, targetId: null, vx: 3, vy: 4, headingRad: 0.5 }],
+      removedIds: [],
+      serverTimeMs: 1_017,
+    })
+    expect(coalescer.hasPending()).toBe(false)
   })
 })

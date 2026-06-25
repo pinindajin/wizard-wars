@@ -2,6 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { RoomEvent } from "@/shared/roomEvents"
 import { createGameSimulation, type SimOutput } from "@/server/game/simulation"
+import {
+  FireballVisualBatchCoalescer,
+  HomingOrbVisualBatchCoalescer,
+  PlayerVisualBatchCoalescer,
+} from "@/server/game/networkBatching"
 import { createSessionEconomy } from "@/server/gameserver/sessionShop"
 import { logger } from "@/server/logger"
 import { hasComponent } from "bitecs"
@@ -38,6 +43,19 @@ function simOutput(overrides: Partial<SimOutput> = {}): SimOutput {
     abilitySfxEvents: [],
     matchEnded: null,
     ...overrides,
+  }
+}
+
+function abilityStates(charges: number) {
+  return {
+    fireball: {
+      cooldownEndsAtServerTimeMs: null,
+      cooldownDurationMs: null,
+      charges,
+      maxCharges: 3,
+      rechargeEndsAtServerTimeMs: null,
+      rechargeDurationMs: null,
+    },
   }
 }
 
@@ -681,12 +699,162 @@ describe("GameLobbyRoom network batching", () => {
     })
   })
 
-  it("falls back to flush time when legacy Fireball pending batches lack serverTimeMs", () => {
+  it("flushes snapshotted player visual batches after a quiet cadence tick", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(1_000)
+
     const room = new GameLobbyRoom()
     const broadcast = vi.fn()
+    const playerDelta = {
+      id: 1,
+      x: 10,
+      abilityStates: abilityStates(2),
+      lastProcessedInputSeq: 7,
+    }
+    const tick = vi
+      .fn()
+      .mockReturnValueOnce(simOutput({ playerDeltas: [playerDelta] }))
+      .mockReturnValueOnce(simOutput())
+
     Object.assign(room as object, {
       broadcast,
-      pendingFireballBatches: [{ deltas: [{ id: 43, x: 1, y: 2 }], removedIds: [] }],
+      lobbyPhase: "IN_PROGRESS",
+      lastNetworkFlushAtMs: 1_000,
+      simulation: {
+        tick,
+        entityPlayerMap: new Map(),
+      },
+    })
+
+    ;(room as unknown as { runGameTick: () => void }).runGameTick()
+    playerDelta.x = 999
+    playerDelta.abilityStates.fireball.charges = 0
+    expect(broadcast).not.toHaveBeenCalledWith(
+      RoomEvent.PlayerBatchUpdate,
+      expect.anything(),
+    )
+
+    vi.setSystemTime(1_040)
+    ;(room as unknown as { runGameTick: () => void }).runGameTick()
+
+    expect(broadcast).toHaveBeenCalledWith(RoomEvent.PlayerBatchUpdate, {
+      deltas: [
+        {
+          id: 1,
+          x: 10,
+          abilityStates: abilityStates(2),
+          lastProcessedInputSeq: 7,
+        },
+      ],
+      removedIds: [],
+      seq: 0,
+      serverTimeMs: 1_040,
+    })
+  })
+
+  it("keeps a reused fireball id delta when removal and relaunch coalesce before flush", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(1_000)
+
+    const room = new GameLobbyRoom()
+    const broadcast = vi.fn()
+    const reusedDelta = { id: 42, x: 10, y: 20 }
+    const tick = vi
+      .fn()
+      .mockReturnValueOnce(simOutput({ fireballRemovedIds: [42] }))
+      .mockReturnValueOnce(simOutput({ fireballDeltas: [reusedDelta] }))
+      .mockReturnValueOnce(simOutput())
+
+    Object.assign(room as object, {
+      broadcast,
+      lobbyPhase: "IN_PROGRESS",
+      lastNetworkFlushAtMs: 1_000,
+      simulation: {
+        tick,
+        entityPlayerMap: new Map(),
+      },
+    })
+
+    ;(room as unknown as { runGameTick: () => void }).runGameTick()
+    vi.setSystemTime(1_010)
+    ;(room as unknown as { runGameTick: () => void }).runGameTick()
+    reusedDelta.x = 999
+    expect(broadcast).not.toHaveBeenCalledWith(
+      RoomEvent.FireballBatchUpdate,
+      expect.anything(),
+    )
+
+    vi.setSystemTime(1_040)
+    ;(room as unknown as { runGameTick: () => void }).runGameTick()
+
+    expect(broadcast).toHaveBeenCalledWith(RoomEvent.FireballBatchUpdate, {
+      deltas: [{ id: 42, x: 10, y: 20 }],
+      removedIds: [],
+      seq: 0,
+      serverTimeMs: 1_010,
+    })
+  })
+
+  it("clears pending coalescer state with match runtime cleanup", () => {
+    const room = new GameLobbyRoom()
+    const broadcast = vi.fn()
+    Object.assign(room as object, { broadcast })
+    ;(
+      room as unknown as {
+        playerVisualBatchCoalescer: PlayerVisualBatchCoalescer
+        fireballVisualBatchCoalescer: FireballVisualBatchCoalescer
+        homingOrbVisualBatchCoalescer: HomingOrbVisualBatchCoalescer
+      }
+    ).playerVisualBatchCoalescer.ingest([{ id: 1, x: 10 }])
+    ;(
+      room as unknown as {
+        fireballVisualBatchCoalescer: FireballVisualBatchCoalescer
+      }
+    ).fireballVisualBatchCoalescer.ingest({
+      deltas: [{ id: 2, x: 20, y: 30 }],
+      removedIds: [],
+      serverTimeMs: 2_000,
+    })
+    ;(
+      room as unknown as {
+        homingOrbVisualBatchCoalescer: HomingOrbVisualBatchCoalescer
+      }
+    ).homingOrbVisualBatchCoalescer.ingest({
+      deltas: [{ id: 3, x: 40 }],
+      removedIds: [],
+      serverTimeMs: 2_000,
+    })
+
+    ;(room as unknown as { clearMatchRuntimeState: () => void })
+      .clearMatchRuntimeState()
+    ;(room as unknown as { flushPendingVisualBatches: (serverTimeMs: number) => void })
+      .flushPendingVisualBatches(2_040)
+
+    expect(broadcast).not.toHaveBeenCalledWith(
+      RoomEvent.PlayerBatchUpdate,
+      expect.anything(),
+    )
+    expect(broadcast).not.toHaveBeenCalledWith(
+      RoomEvent.FireballBatchUpdate,
+      expect.anything(),
+    )
+    expect(broadcast).not.toHaveBeenCalledWith(
+      RoomEvent.HomingOrbBatchUpdate,
+      expect.anything(),
+    )
+  })
+
+  it("falls back to flush time when a pending fireball batch lacks serverTimeMs", () => {
+    const room = new GameLobbyRoom()
+    const broadcast = vi.fn()
+    Object.assign(room as object, { broadcast })
+    ;(
+      room as unknown as {
+        fireballVisualBatchCoalescer: FireballVisualBatchCoalescer
+      }
+    ).fireballVisualBatchCoalescer.ingest({
+      deltas: [{ id: 43, x: 1, y: 2 }],
+      removedIds: [],
     })
 
     ;(room as unknown as { flushPendingVisualBatches: (serverTimeMs: number) => void })
@@ -703,15 +871,15 @@ describe("GameLobbyRoom network batching", () => {
   it("flushes pending player visual batches and records visual send duration", () => {
     const room = new GameLobbyRoom()
     const broadcast = vi.fn()
-    Object.assign(room as object, {
-      broadcast,
-      pendingPlayerDeltaBatches: [
-        [
-          { id: 1, x: 10 },
-          { id: 1, y: 20 },
-        ],
-      ],
-    })
+    Object.assign(room as object, { broadcast })
+    ;(
+      room as unknown as {
+        playerVisualBatchCoalescer: PlayerVisualBatchCoalescer
+      }
+    ).playerVisualBatchCoalescer.ingest([
+      { id: 1, x: 10 },
+      { id: 1, y: 20 },
+    ])
 
     ;(room as unknown as { flushPendingVisualBatches: (serverTimeMs: number) => void })
       .flushPendingVisualBatches(3_250)
@@ -967,12 +1135,17 @@ describe("GameLobbyRoom network batching", () => {
     })
   })
 
-  it("falls back to flush time when legacy Homing Orb pending batches lack serverTimeMs", () => {
+  it("falls back to flush time when a pending Homing Orb batch lacks serverTimeMs", () => {
     const room = new GameLobbyRoom()
     const broadcast = vi.fn()
-    Object.assign(room as object, {
-      broadcast,
-      pendingHomingOrbBatches: [{ deltas: [{ id: 8, x: 1 }], removedIds: [] }],
+    Object.assign(room as object, { broadcast })
+    ;(
+      room as unknown as {
+        homingOrbVisualBatchCoalescer: HomingOrbVisualBatchCoalescer
+      }
+    ).homingOrbVisualBatchCoalescer.ingest({
+      deltas: [{ id: 8, x: 1 }],
+      removedIds: [],
     })
 
     ;(room as unknown as { flushPendingVisualBatches: (serverTimeMs: number) => void })
@@ -986,12 +1159,18 @@ describe("GameLobbyRoom network batching", () => {
     })
   })
 
-  it("skips empty Homing Orb pending batches after merge", () => {
+  it("skips empty Homing Orb batches after ingest", () => {
     const room = new GameLobbyRoom()
     const broadcast = vi.fn()
-    Object.assign(room as object, {
-      broadcast,
-      pendingHomingOrbBatches: [{ deltas: [], removedIds: [], serverTimeMs: 3_100 }],
+    Object.assign(room as object, { broadcast })
+    ;(
+      room as unknown as {
+        homingOrbVisualBatchCoalescer: HomingOrbVisualBatchCoalescer
+      }
+    ).homingOrbVisualBatchCoalescer.ingest({
+      deltas: [],
+      removedIds: [],
+      serverTimeMs: 3_100,
     })
 
     ;(room as unknown as { flushPendingVisualBatches: (serverTimeMs: number) => void })
