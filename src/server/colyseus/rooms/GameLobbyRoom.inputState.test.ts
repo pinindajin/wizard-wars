@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 
 import { RoomEvent } from "@/shared/roomEvents"
 import type { PlayerInputPayload, PlayerInputStatePayload } from "@/shared/types"
+import type { PlayerInputQueueMap } from "@/server/game/playerInputQueue"
 
 import { GameLobbyRoom } from "./GameLobbyRoom"
 
@@ -9,7 +10,7 @@ type InputRoomInternals = {
   isAdminClosing: boolean
   lobbyPhase: string
   simulation: object | null
-  inputQueue: Map<string, PlayerInputPayload[]>
+  inputQueue: PlayerInputQueueMap
   performanceInputQueueDrops: number
   onMessage: ReturnType<typeof vi.fn>
   registerLobbyHandlers: () => void
@@ -105,7 +106,7 @@ describe("GameLobbyRoom compact player input state", () => {
 
     r.handlePlayerInput(c, legacy)
 
-    expect(r.inputQueue.get("player-1")).toEqual([legacy])
+    expect(r.inputQueue.get("player-1")?.toArray()).toEqual([legacy])
   })
 
   it("decodes player_input_state into the canonical full input queue", () => {
@@ -123,7 +124,7 @@ describe("GameLobbyRoom compact player input state", () => {
       }),
     )
 
-    expect(r.inputQueue.get("player-1")).toEqual([
+    expect(r.inputQueue.get("player-1")?.toArray()).toEqual([
       {
         up: true,
         down: false,
@@ -151,10 +152,8 @@ describe("GameLobbyRoom compact player input state", () => {
     r.handlePlayerInput(c, input({ seq: 5 }))
     r.handlePlayerInputState(c, compact({ seq: 6, buttons: 0 }))
 
-    expect(r.inputQueue.get("player-1")?.map((queued) => queued.seq)).toEqual([
-      5,
-      6,
-    ])
+    expect(r.inputQueue.get("player-1")?.toArray().map((queued) => queued.seq))
+      .toEqual([5, 6])
   })
 
   it("rejects legacy and compact input outside active simulation", () => {
@@ -186,7 +185,10 @@ describe("GameLobbyRoom compact player input state", () => {
       r.handlePlayerInputState(c, compact({ seq }))
     }
 
-    const queuedSeqs = r.inputQueue.get("player-1")?.map((queued) => queued.seq)
+    const queuedSeqs = r.inputQueue
+      .get("player-1")
+      ?.toArray()
+      .map((queued) => queued.seq)
     expect(queuedSeqs).toHaveLength(32)
     expect(queuedSeqs?.[0]).toBe(8)
     expect(queuedSeqs?.at(-1)).toBe(39)

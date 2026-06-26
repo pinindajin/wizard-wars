@@ -12,6 +12,10 @@ import {
 } from "@/server/game/components"
 import { computePlayerAnimState } from "@/server/game/playerAnimState"
 import { computePlayerMoveState } from "@/server/game/playerMoveState"
+import {
+  PlayerInputQueue,
+  type PlayerInputQueueMap,
+} from "@/server/game/playerInputQueue"
 import { createGameSimulation } from "@/server/game/simulation"
 import {
   ARENA_CLIFF_COLLIDERS,
@@ -44,8 +48,8 @@ function input(overrides: Partial<PlayerInputPayload> = {}): PlayerInputPayload 
   }
 }
 
-function queue(payload: PlayerInputPayload): Map<string, PlayerInputPayload[]> {
-  return new Map([["user1", [payload]]])
+function queue(payload: PlayerInputPayload): PlayerInputQueueMap {
+  return new Map([["user1", new PlayerInputQueue([payload])]])
 }
 
 /**

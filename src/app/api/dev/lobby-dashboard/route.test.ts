@@ -69,6 +69,7 @@ function mockAdminUser(): void {
 describe("GET /api/dev/lobby-dashboard", () => {
   beforeEach(() => {
     vi.unstubAllEnvs()
+    vi.unstubAllGlobals()
     prismaMock.user.findUnique.mockReset()
     setMatchMaker(undefined)
   })
@@ -182,6 +183,73 @@ describe("GET /api/dev/lobby-dashboard", () => {
     })
   })
 
+  it("uses realtime admin bridge when configured", async () => {
+    vi.stubEnv("WW_REALTIME_ADMIN_URL", "http://realtime:3001")
+    vi.stubEnv("WW_REALTIME_ADMIN_TOKEN", "secret")
+    mockAdminUser()
+    mockCookie(await signedToken())
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          generatedAt: "2026-06-25T00:00:00.000Z",
+          runtimeAvailable: true,
+          viewer: { isAdmin: true },
+          lobbies: [],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const res = await GET()
+
+    expect(res.status).toBe(200)
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://realtime:3001/internal/dev/lobby-dashboard",
+      expect.objectContaining({
+        headers: expect.objectContaining({ authorization: "Bearer secret" }),
+      }),
+    )
+    await expect(res.json()).resolves.toEqual({
+      generatedAt: "2026-06-25T00:00:00.000Z",
+      runtimeAvailable: true,
+      viewer: { isAdmin: true },
+      lobbies: [],
+    })
+  })
+
+  it("passes realtime admin bridge errors through", async () => {
+    vi.stubEnv("WW_REALTIME_ADMIN_URL", "http://realtime:3001")
+    vi.stubEnv("WW_REALTIME_ADMIN_TOKEN", "secret")
+    mockAdminUser()
+    mockCookie(await signedToken())
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ error: "upstream unavailable" }), {
+          status: 502,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    )
+
+    const res = await GET()
+
+    expect(res.status).toBe(502)
+    await expect(res.json()).resolves.toEqual({ error: "upstream unavailable" })
+  })
+
+  it("returns 503 for web-only mode without realtime admin bridge config", async () => {
+    vi.stubEnv("WW_SERVER_MODE", "web")
+    mockAdminUser()
+    mockCookie(await signedToken())
+
+    const res = await GET()
+
+    expect(res.status).toBe(503)
+    await expect(res.json()).resolves.toEqual({ error: "Realtime admin bridge not configured" })
+  })
+
   it("uses local room snapshots when available", async () => {
     mockAdminUser()
     mockCookie(await signedToken())
@@ -251,5 +319,38 @@ describe("GET /api/dev/lobby-dashboard", () => {
       snapshotError: "snapshot_failed",
       lobbyId: "r1",
     })
+  })
+
+  it("maps unexpected realtime admin bridge errors to unavailable", async () => {
+    vi.stubEnv("AUTH_SECRET", "test-secret-32-chars-minimum-required")
+    vi.resetModules()
+    vi.doMock("@/server/realtime/adminClient", async () => {
+      const actual = await vi.importActual<typeof import("@/server/realtime/adminClient")>(
+        "@/server/realtime/adminClient",
+      )
+      return {
+        ...actual,
+        resolveRealtimeAdminConfig: () => ({
+          url: "http://realtime:3001",
+          token: "secret",
+          timeoutMs: 2500,
+        }),
+        requestRealtimeAdmin: vi.fn().mockRejectedValue(new Error("boom")),
+        isWebOnlyMode: () => false,
+      }
+    })
+    const { GET: isolatedGET } = await import("./route")
+    mockAdminUser()
+    mockCookie(await signedToken())
+
+    try {
+      const res = await isolatedGET()
+
+      expect(res.status).toBe(503)
+      await expect(res.json()).resolves.toEqual({ error: "Realtime unavailable" })
+    } finally {
+      vi.doUnmock("@/server/realtime/adminClient")
+      vi.resetModules()
+    }
   })
 })

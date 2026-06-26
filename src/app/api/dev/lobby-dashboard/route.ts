@@ -7,6 +7,12 @@ import { verifyAdminToken } from "@/server/admin/verifyAdminToken"
 import { prisma } from "@/server/db"
 import type { AdminLobbySnapshot } from "@/server/colyseus/rooms/GameLobbyRoom"
 import type { LobbyPhase } from "@/shared/types"
+import {
+  RealtimeAdminError,
+  isWebOnlyMode,
+  requestRealtimeAdmin,
+  resolveRealtimeAdminConfig,
+} from "@/server/realtime/adminClient"
 
 export type DevLobbyDashboardBandwidth = {
   readonly inboundBytes: number
@@ -199,6 +205,19 @@ function dashboardResponse(
 }
 
 /**
+ * Converts realtime admin bridge failures into stable dashboard API responses.
+ *
+ * @param err - Error thrown while calling the realtime admin bridge.
+ * @returns JSON response preserving bridge HTTP failures when available.
+ */
+function realtimeAdminErrorResponse(err: unknown): NextResponse {
+  if (err instanceof RealtimeAdminError) {
+    return NextResponse.json(err.body, { status: err.status })
+  }
+  return NextResponse.json({ error: "Realtime unavailable" }, { status: 503 })
+}
+
+/**
  * GET /api/dev/lobby-dashboard - Admin-only live lobby dashboard data.
  */
 export async function GET(): Promise<NextResponse> {
@@ -215,6 +234,24 @@ export async function GET(): Promise<NextResponse> {
       response.headers.append("set-cookie", createClearAuthCookie())
     }
     return response
+  }
+
+  const realtimeConfig = resolveRealtimeAdminConfig()
+  if (realtimeConfig) {
+    try {
+      return NextResponse.json(
+        await requestRealtimeAdmin<DevLobbyDashboardResponse>({
+          config: realtimeConfig,
+          path: "/internal/dev/lobby-dashboard",
+        }),
+      )
+    } catch (err) {
+      return realtimeAdminErrorResponse(err)
+    }
+  }
+
+  if (isWebOnlyMode()) {
+    return NextResponse.json({ error: "Realtime admin bridge not configured" }, { status: 503 })
   }
 
   const matchMaker = getMatchMaker()

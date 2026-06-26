@@ -3,8 +3,13 @@ import { describe, it, expect } from "vitest"
 import {
   HELD_INPUT_STALE_TICKS,
   createGameSimulation,
+  type SimOutput,
   type SimCtx,
 } from "@/server/game/simulation"
+import {
+  PlayerInputQueue,
+  type PlayerInputQueueMap,
+} from "@/server/game/playerInputQueue"
 import {
   ARENA_CENTER_X,
   ARENA_CENTER_Y,
@@ -95,10 +100,10 @@ function sampleBlockingColliderFromBelow() {
 /** Convenience: wrap a single input per player into the new queue-style map. */
 function queueMap(
   entries: Array<[string, PlayerInputPayload]>,
-): Map<string, PlayerInputPayload[]> {
-  const out = new Map<string, PlayerInputPayload[]>()
+): PlayerInputQueueMap {
+  const out: PlayerInputQueueMap = new Map()
   for (const [userId, input] of entries) {
-    out.set(userId, [input])
+    out.set(userId, new PlayerInputQueue([input]))
   }
   return out
 }
@@ -108,9 +113,39 @@ function advanceTicks(sim: ReturnType<typeof createGameSimulation>, n: number): 
   for (let i = 0; i < n; i++) sim.tick(new Map(), Date.now())
 }
 
+/** Reads the current tick's ACK cursor for a player output row. */
+function ackSeqFromOutput(
+  sim: ReturnType<typeof createGameSimulation>,
+  output: SimOutput,
+  userId = "user1",
+): number | undefined {
+  return output.playerDeltas.find((d) => d.id === sim.playerEntityMap.get(userId))
+    ?.lastProcessedInputSeq
+}
+
 /** Number of ticks needed to clear the dangerous window for the cleaver attack. */
 const TICKS_PAST_DANGEROUS_WINDOW =
   Math.ceil(PRIMARY_MELEE_ATTACK_CONFIGS.red_wizard_cleaver.dangerousWindowEndMs / TICK_MS) + 1
+const SIM_OUTPUT_COLLECTION_KEYS = [
+  "playerDeltas",
+  "fireballDeltas",
+  "fireballRemovedIds",
+  "homingOrbDeltas",
+  "homingOrbRemovedIds",
+  "playerDeaths",
+  "playerRespawns",
+  "fireballLaunches",
+  "fireballImpacts",
+  "homingOrbLaunches",
+  "homingOrbImpacts",
+  "lightningBolts",
+  "primaryMeleeAttacks",
+  "combatTelegraphStarts",
+  "combatTelegraphEnds",
+  "damageFloats",
+  "goldUpdates",
+  "abilitySfxEvents",
+] as const satisfies ReadonlyArray<keyof SimOutput>
 
 describe("createGameSimulation", () => {
   it("creates a simulation with correct match start time", () => {
@@ -232,47 +267,54 @@ describe("movement system", () => {
 
     // Seed three queued inputs (all moving up) and verify lastProcessedInputSeq
     // increments one per tick.
-    const queues = new Map<string, PlayerInputPayload[]>()
-    queues.set("user1", [
+    const queues: PlayerInputQueueMap = new Map()
+    queues.set("user1", new PlayerInputQueue([
       { ...emptyInput({ up: true }), seq: 100 },
       { ...emptyInput({ up: true }), seq: 101 },
       { ...emptyInput({ up: true }), seq: 102 },
-    ])
+    ]))
 
-    const out1 = sim.tick(queues, Date.now())
-    const out2 = sim.tick(queues, Date.now() + 17)
-    const out3 = sim.tick(queues, Date.now() + 34)
-
-    const acks = [out1, out2, out3].map((o) =>
-      o.playerDeltas.find((d) => d.id === sim.playerEntityMap.get("user1"))
-        ?.lastProcessedInputSeq,
-    )
+    const acks = [
+      ackSeqFromOutput(sim, sim.tick(queues, Date.now())),
+      ackSeqFromOutput(sim, sim.tick(queues, Date.now() + 17)),
+      ackSeqFromOutput(sim, sim.tick(queues, Date.now() + 34)),
+    ]
     expect(acks).toEqual([100, 101, 102])
+  })
+
+  it("emits an owner ACK for the first fresh-match input seq 0", () => {
+    const sim = createGameSimulation(Date.now())
+    sim.addPlayer("user1", "Alice", "red_wizard", 0)
+
+    const out = sim.tick(
+      queueMap([["user1", { ...emptyInput({ up: true }), seq: 0 }]]),
+      Date.now(),
+    )
+
+    expect(ackSeqFromOutput(sim, out)).toBe(0)
   })
 
   it("coalesces repeated held inputs while advancing ACKs one sequence per tick", () => {
     const sim = createGameSimulation(Date.now())
     sim.addPlayer("user1", "Alice", "red_wizard", 0)
 
-    const queues = new Map<string, PlayerInputPayload[]>()
-    queues.set("user1", [
+    const queues: PlayerInputQueueMap = new Map()
+    queues.set("user1", new PlayerInputQueue([
       { ...emptyInput({ up: true }), seq: 200 },
       { ...emptyInput({ up: true }), seq: 201 },
       { ...emptyInput({ up: true }), seq: 202 },
       { ...emptyInput({ up: true }), seq: 203 },
-    ])
+    ]))
 
-    const out1 = sim.tick(queues, Date.now())
-    expect(queues.get("user1")).toHaveLength(0)
+    const ack1 = ackSeqFromOutput(sim, sim.tick(queues, Date.now()))
+    expect(queues.get("user1")?.length).toBe(0)
 
-    const out2 = sim.tick(queues, Date.now() + 17)
-    const out3 = sim.tick(queues, Date.now() + 34)
-    const out4 = sim.tick(queues, Date.now() + 51)
-
-    const acks = [out1, out2, out3, out4].map((o) =>
-      o.playerDeltas.find((d) => d.id === sim.playerEntityMap.get("user1"))
-        ?.lastProcessedInputSeq,
-    )
+    const acks = [
+      ack1,
+      ackSeqFromOutput(sim, sim.tick(queues, Date.now() + 17)),
+      ackSeqFromOutput(sim, sim.tick(queues, Date.now() + 34)),
+      ackSeqFromOutput(sim, sim.tick(queues, Date.now() + 51)),
+    ]
     expect(acks).toEqual([200, 201, 202, 203])
   })
 
@@ -301,16 +343,17 @@ describe("movement system", () => {
     const sim = createGameSimulation(Date.now())
     sim.addPlayer("user1", "Alice", "red_wizard", 0)
 
-    const queue = [
+    const queue = new PlayerInputQueue([
       { ...emptyInput(first), seq: first.seq },
       { ...emptyInput(second), seq: second.seq },
+    ])
+    const acks = [
+      ackSeqFromOutput(sim, sim.tick(new Map([["user1", queue]]), Date.now())),
+      ackSeqFromOutput(
+        sim,
+        sim.tick(new Map([["user1", queue]]), Date.now() + 17),
+      ),
     ]
-    const out1 = sim.tick(new Map([["user1", queue]]), Date.now())
-    const out2 = sim.tick(new Map([["user1", queue]]), Date.now() + 17)
-    const acks = [out1, out2].map((o) =>
-      o.playerDeltas.find((d) => d.id === sim.playerEntityMap.get("user1"))
-        ?.lastProcessedInputSeq,
-    )
 
     expect(acks).toEqual([first.seq, second.seq])
   })
@@ -319,15 +362,18 @@ describe("movement system", () => {
     const sim = createGameSimulation(Date.now())
     sim.addPlayer("user1", "Alice", "red_wizard", 0)
 
-    const queue: PlayerInputPayload[] = [
+    const queue = new PlayerInputQueue([
       { ...emptyInput({ up: true }), seq: 400 },
       { ...emptyInput({ up: true }), seq: 401 },
       { ...emptyInput({ up: true }), seq: 402 },
       { ...emptyInput({ up: true }), seq: 403 },
-    ]
+    ])
 
-    const out1 = sim.tick(new Map([["user1", queue]]), Date.now())
-    expect(queue).toHaveLength(0)
+    const ack1 = ackSeqFromOutput(
+      sim,
+      sim.tick(new Map([["user1", queue]]), Date.now()),
+    )
+    expect(queue.length).toBe(0)
     queue.push(
       emptyInput({
         up: true,
@@ -338,11 +384,13 @@ describe("movement system", () => {
       }),
     )
 
-    const out2 = sim.tick(new Map([["user1", queue]]), Date.now() + 17)
-    const acks = [out1, out2].map((o) =>
-      o.playerDeltas.find((d) => d.id === sim.playerEntityMap.get("user1"))
-        ?.lastProcessedInputSeq,
-    )
+    const acks = [
+      ack1,
+      ackSeqFromOutput(
+        sim,
+        sim.tick(new Map([["user1", queue]]), Date.now() + 17),
+      ),
+    ]
 
     expect(acks).toEqual([400, 404])
   })
@@ -359,10 +407,10 @@ describe("movement system", () => {
 
     // Now enqueue a stale input (seq 9) alongside a fresh one (seq 11);
     // only the fresh one should advance the ack.
-    const queue: PlayerInputPayload[] = [
+    const queue = new PlayerInputQueue([
       { ...emptyInput({ up: true }), seq: 9 },
       { ...emptyInput({ up: true }), seq: 11 },
-    ]
+    ])
     const out = sim.tick(new Map([["user1", queue]]), Date.now() + 17)
     const delta = out.playerDeltas.find((d) => d.id === sim.playerEntityMap.get("user1"))
     expect(delta?.lastProcessedInputSeq).toBe(11)
@@ -700,6 +748,24 @@ describe("buildGameStateSyncPayload", () => {
       lastProcessedInputSeq: 12,
     })
     expect(ctx.prevPlayerStates.get(eid)).toMatchObject({ hasSwiftBoots: true })
+
+    const unseededCtx = {
+      ...ctx,
+      lastProcessedInputSeqByPlayer: new Map(),
+      prevPlayerStates: new Map(),
+      playerDeltas: [],
+    } as SimCtx
+    playerDeltaSystem(unseededCtx)
+    expect(unseededCtx.playerDeltas[0]?.lastProcessedInputSeq).toBe(0)
+
+    const resetStreamCtx = {
+      ...ctx,
+      lastProcessedInputSeqByPlayer: new Map([["user1", -1]]),
+      prevPlayerStates: new Map(),
+      playerDeltas: [],
+    } as SimCtx
+    playerDeltaSystem(resetStreamCtx)
+    expect(resetStreamCtx.playerDeltas[0]?.lastProcessedInputSeq).toBeUndefined()
   })
 
   it("repeats aim facing when an unchanged angle enters an aim-driven cast animation", () => {
@@ -911,6 +977,28 @@ describe("buildGameStateSyncPayload", () => {
     expect(delta?.lastProcessedInputSeq).toBe(0)
   })
 
+  it("does not emit a reconnect seq 0 ACK before the post-reconnect input is processed", () => {
+    const sim = createGameSimulation(Date.now())
+    sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    sim.tick(queueMap([["user1", { ...emptyInput({ up: true }), seq: 99 }]]), Date.now())
+
+    sim.resetClientInputStream("user1")
+    const idleOut = sim.tick(new Map(), Date.now() + 17)
+    const idleDelta = idleOut.playerDeltas.find(
+      (d) => d.id === sim.playerEntityMap.get("user1"),
+    )
+    expect(idleDelta?.lastProcessedInputSeq).toBeUndefined()
+
+    const ackOut = sim.tick(
+      queueMap([["user1", { ...emptyInput({ up: true }), seq: 0 }]]),
+      Date.now() + 34,
+    )
+    const ackDelta = ackOut.playerDeltas.find(
+      (d) => d.id === sim.playerEntityMap.get("user1"),
+    )
+    expect(ackDelta?.lastProcessedInputSeq).toBe(0)
+  })
+
   it("exposes per-player velocity, move state, and last processed input seq", () => {
     const sim = createGameSimulation(Date.now())
     sim.addPlayer("user1", "Alice", "red_wizard", 0)
@@ -939,6 +1027,23 @@ describe("match end", () => {
     const output = sim.tick(new Map(), Date.now())
     expect(output.matchEnded).not.toBe(null)
     expect(output.matchEnded?.reason).toBe("host_ended")
+  })
+
+  it("reuses scratch output and clears tick-local collections on the next tick", () => {
+    const sim = createGameSimulation(1_000)
+    sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    sim.requestHostEnd()
+
+    const endedOutput = sim.tick(new Map(), 1_000)
+    expect(endedOutput.matchEnded?.reason).toBe("host_ended")
+
+    const nextOutput = sim.tick(new Map(), 1_000 + TICK_MS)
+
+    expect(nextOutput).toBe(endedOutput)
+    expect(endedOutput.matchEnded).toBeNull()
+    for (const key of SIM_OUTPUT_COLLECTION_KEYS) {
+      expect(endedOutput[key]).toHaveLength(0)
+    }
   })
 
   it("scoreboard entries include the player", () => {
@@ -1124,7 +1229,7 @@ describe("primary melee attack", () => {
     const swingTicks = Math.ceil(
       getPrimaryAttackAnimationConfigByAttackId("red_wizard_cleaver").durationMs / TICK_MS,
     )
-    const queue: PlayerInputPayload[] = []
+    const queue = new PlayerInputQueue()
     for (let i = 0; i < swingTicks; i++) {
       queue.push(
         emptyInput({

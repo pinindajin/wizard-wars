@@ -17,6 +17,12 @@ import type {
   GameLobbyRoom,
 } from "@/server/colyseus/rooms/GameLobbyRoom"
 import type { LobbyPhase } from "@/shared/types"
+import {
+  RealtimeAdminError,
+  isWebOnlyMode,
+  requestRealtimeAdmin,
+  resolveRealtimeAdminConfig,
+} from "@/server/realtime/adminClient"
 
 type RouteContext = {
   readonly params: Promise<{ readonly id: string }>
@@ -85,6 +91,19 @@ function adminCloseResponse(result: AdminCloseLobbyResult): NextResponse {
 }
 
 /**
+ * Converts realtime admin bridge failures into stable close-route responses.
+ *
+ * @param err - Error thrown while calling the realtime admin bridge.
+ * @returns JSON response preserving bridge HTTP failures when available.
+ */
+function realtimeAdminErrorResponse(err: unknown): NextResponse {
+  if (err instanceof RealtimeAdminError) {
+    return NextResponse.json(err.body, { status: err.status })
+  }
+  return NextResponse.json({ error: "Realtime unavailable" }, { status: 503 })
+}
+
+/**
  * POST /api/lobbies/[id]/close — Admin-only lobby close endpoint.
  *
  * The room re-checks live occupancy so stale browser/matchmaker metadata cannot
@@ -120,18 +139,43 @@ export async function POST(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
+  const { id: roomId } = await params
+  const confirmed = await parseConfirmed(request)
+  const input: AdminCloseLobbyInput = {
+    adminUserId: auth.sub,
+    adminUsername: admin.user?.username ?? auth.username,
+    confirmed,
+  }
+
+  const realtimeConfig = resolveRealtimeAdminConfig()
+  if (realtimeConfig) {
+    try {
+      const result = await requestRealtimeAdmin<AdminCloseLobbyResult>({
+        config: realtimeConfig,
+        path: `/internal/lobbies/${encodeURIComponent(roomId)}/close`,
+        method: "POST",
+        body: input,
+      })
+      return adminCloseResponse(result)
+    } catch (err) {
+      return realtimeAdminErrorResponse(err)
+    }
+  }
+
+  if (isWebOnlyMode()) {
+    return NextResponse.json({ error: "Realtime admin bridge not configured" }, { status: 503 })
+  }
+
   const matchMaker = getMatchMaker()
   if (!matchMaker) {
     return NextResponse.json({ error: "Matchmaker unavailable" }, { status: 503 })
   }
 
-  const { id: roomId } = await params
   const listing = await getRoomListing(matchMaker, roomId)
   if (!listing) {
     return NextResponse.json({ error: "Lobby not found" }, { status: 404 })
   }
 
-  const confirmed = await parseConfirmed(request)
   const playerCount = getListingPlayerCount(listing)
   const lobbyPhase = getListingPhase(listing)
 
@@ -159,12 +203,6 @@ export async function POST(
       },
       { status: 409 },
     )
-  }
-
-  const input: AdminCloseLobbyInput = {
-    adminUserId: auth.sub,
-    adminUsername: admin.user?.username ?? auth.username,
-    confirmed,
   }
 
   try {

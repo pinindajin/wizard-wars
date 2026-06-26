@@ -34,6 +34,10 @@ import {
   abilityRuntimeStatesForPlayer,
 } from "../abilityRuntimeState"
 
+type MutablePlayerDelta = {
+  -readonly [Key in keyof PlayerDelta]: PlayerDelta[Key]
+}
+
 /**
  * Runs the player delta system for one tick.
  *
@@ -64,13 +68,13 @@ export function playerDeltaSystem(ctx: SimCtx): void {
     const hasSwiftBoots = Equipment.hasSwiftBoots[eid] === 1
     const terrainState = TERRAIN_KIND_TO_STATE[TerrainState.kind[eid]] ?? "land"
     const abilityStates = abilityRuntimeStatesForPlayer(eid, ctx.currentTick)
-    const lastProcessedInputSeq = Math.max(
-      0,
-      lastProcessedInputSeqByPlayer.get(userId) ?? 0,
-    )
+    const rawLastProcessedInputSeq = lastProcessedInputSeqByPlayer.get(userId)
+    const hasProcessedInputSeq = rawLastProcessedInputSeq !== -1
+    const lastProcessedInputSeq = Math.max(0, rawLastProcessedInputSeq ?? 0)
+    const storedLastProcessedInputSeq = hasProcessedInputSeq ? lastProcessedInputSeq : -1
 
     if (!prev) {
-      ctx.playerDeltas.push({
+      const fullDelta: MutablePlayerDelta = {
         id: eid,
         x,
         y,
@@ -89,8 +93,11 @@ export function playerDeltaSystem(ctx: SimCtx): void {
         hasSwiftBoots,
         terrainState,
         abilityStates,
-        lastProcessedInputSeq,
-      })
+      }
+      if (hasProcessedInputSeq) {
+        fullDelta.lastProcessedInputSeq = lastProcessedInputSeq
+      }
+      ctx.playerDeltas.push(fullDelta)
       prevPlayerStates.set(eid, {
         x,
         y,
@@ -109,7 +116,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
         hasSwiftBoots,
         terrainState,
         abilityStates,
-        lastProcessedInputSeq,
+        lastProcessedInputSeq: storedLastProcessedInputSeq,
       })
       continue
     }
@@ -118,55 +125,80 @@ export function playerDeltaSystem(ctx: SimCtx): void {
     const shouldRepeatAimFacing =
       animStateChanged && animUsesMouseAim(animState)
 
-    const delta: PlayerDelta = {
-      id: eid,
-      ...(x !== prev.x ? { x } : {}),
-      ...(y !== prev.y ? { y } : {}),
-      ...(vx !== prev.vx ? { vx } : {}),
-      ...(vy !== prev.vy ? { vy } : {}),
-      ...(facingAngle !== prev.facingAngle || shouldRepeatAimFacing
-        ? { facingAngle }
-        : {}),
-      ...(moveFacingAngle !== prev.moveFacingAngle ? { moveFacingAngle } : {}),
-      ...(health !== prev.health ? { health } : {}),
-      ...(lives !== prev.lives ? { lives } : {}),
-      ...(animStateChanged ? { animState } : {}),
-      ...(moveState !== prev.moveState ? { moveState } : {}),
-      ...(castingAbilityId !== prev.castingAbilityId ? { castingAbilityId } : {}),
-      ...(invulnerable !== prev.invulnerable ? { invulnerable } : {}),
-      ...(jumpZ !== prev.jumpZ ? { jumpZ } : {}),
-      ...(jumpStartedInLava !== prev.jumpStartedInLava
-        ? { jumpStartedInLava }
-        : {}),
-      ...(hasSwiftBoots !== prev.hasSwiftBoots ? { hasSwiftBoots } : {}),
-      ...(terrainState !== prev.terrainState ? { terrainState } : {}),
-      ...(!abilityRuntimeStatesEqual(abilityStates, prev.abilityStates)
-        ? { abilityStates }
-        : {}),
-      ...(lastProcessedInputSeq !== prev.lastProcessedInputSeq
-        ? { lastProcessedInputSeq }
-        : {}),
+    const delta: MutablePlayerDelta = { id: eid }
+    let changed = false
+    if (x !== prev.x) {
+      delta.x = x
+      changed = true
     }
-
-    const changed =
-      delta.x !== undefined ||
-      delta.y !== undefined ||
-      delta.vx !== undefined ||
-      delta.vy !== undefined ||
-      delta.facingAngle !== undefined ||
-      delta.moveFacingAngle !== undefined ||
-      delta.health !== undefined ||
-      delta.lives !== undefined ||
-      delta.animState !== undefined ||
-      delta.moveState !== undefined ||
-      delta.castingAbilityId !== undefined ||
-      delta.invulnerable !== undefined ||
-      delta.jumpZ !== undefined ||
-      delta.jumpStartedInLava !== undefined ||
-      delta.hasSwiftBoots !== undefined ||
-      delta.terrainState !== undefined ||
-      delta.abilityStates !== undefined ||
-      delta.lastProcessedInputSeq !== undefined
+    if (y !== prev.y) {
+      delta.y = y
+      changed = true
+    }
+    if (vx !== prev.vx) {
+      delta.vx = vx
+      changed = true
+    }
+    if (vy !== prev.vy) {
+      delta.vy = vy
+      changed = true
+    }
+    if (facingAngle !== prev.facingAngle || shouldRepeatAimFacing) {
+      delta.facingAngle = facingAngle
+      changed = true
+    }
+    if (moveFacingAngle !== prev.moveFacingAngle) {
+      delta.moveFacingAngle = moveFacingAngle
+      changed = true
+    }
+    if (health !== prev.health) {
+      delta.health = health
+      changed = true
+    }
+    if (lives !== prev.lives) {
+      delta.lives = lives
+      changed = true
+    }
+    if (animStateChanged) {
+      delta.animState = animState
+      changed = true
+    }
+    if (moveState !== prev.moveState) {
+      delta.moveState = moveState
+      changed = true
+    }
+    if (castingAbilityId !== prev.castingAbilityId) {
+      delta.castingAbilityId = castingAbilityId
+      changed = true
+    }
+    if (invulnerable !== prev.invulnerable) {
+      delta.invulnerable = invulnerable
+      changed = true
+    }
+    if (jumpZ !== prev.jumpZ) {
+      delta.jumpZ = jumpZ
+      changed = true
+    }
+    if (jumpStartedInLava !== prev.jumpStartedInLava) {
+      delta.jumpStartedInLava = jumpStartedInLava
+      changed = true
+    }
+    if (hasSwiftBoots !== prev.hasSwiftBoots) {
+      delta.hasSwiftBoots = hasSwiftBoots
+      changed = true
+    }
+    if (terrainState !== prev.terrainState) {
+      delta.terrainState = terrainState
+      changed = true
+    }
+    if (!abilityRuntimeStatesEqual(abilityStates, prev.abilityStates)) {
+      delta.abilityStates = abilityStates
+      changed = true
+    }
+    if (hasProcessedInputSeq && lastProcessedInputSeq !== prev.lastProcessedInputSeq) {
+      delta.lastProcessedInputSeq = lastProcessedInputSeq
+      changed = true
+    }
 
     if (changed) {
       ctx.playerDeltas.push(delta)
@@ -187,7 +219,9 @@ export function playerDeltaSystem(ctx: SimCtx): void {
       prev.hasSwiftBoots = hasSwiftBoots
       prev.terrainState = terrainState
       prev.abilityStates = abilityStates
-      prev.lastProcessedInputSeq = lastProcessedInputSeq
+      if (hasProcessedInputSeq) {
+        prev.lastProcessedInputSeq = lastProcessedInputSeq
+      }
     }
   }
 }

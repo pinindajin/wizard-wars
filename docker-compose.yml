@@ -38,11 +38,46 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_COLYSEUS_URL: "${NEXT_PUBLIC_COLYSEUS_URL:-http://127.0.0.1:${WW_REALTIME_HOST_PORT:-3001}}"
     restart: unless-stopped
     ports:
       - "${WW_APP_HOST_PORT:-3000}:3000"
+    environment:
+      WW_SERVER_MODE: web
+      RUN_MIGRATIONS: "true"
+      WW_REALTIME_ADMIN_URL: "http://realtime:3001"
+      # Dockerfile maps this optional shell/CI override onto WW_REALTIME_ADMIN_TOKEN at startup.
+      WW_REALTIME_ADMIN_TOKEN_FROM_COMPOSE: "${WW_REALTIME_ADMIN_TOKEN:-}"
+      NEXT_PUBLIC_COLYSEUS_URL: "${NEXT_PUBLIC_COLYSEUS_URL:-http://127.0.0.1:${WW_REALTIME_HOST_PORT:-3001}}"
     env_file:
-      - .env.docker
+      - path: .env.docker
+        required: false
+    depends_on:
+      db:
+        condition: service_healthy
+      realtime:
+        condition: service_started
+
+  realtime:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_COLYSEUS_URL: "${NEXT_PUBLIC_COLYSEUS_URL:-http://127.0.0.1:${WW_REALTIME_HOST_PORT:-3001}}"
+    restart: unless-stopped
+    ports:
+      - "${WW_REALTIME_HOST_PORT:-3001}:3001"
+    environment:
+      WW_SERVER_MODE: realtime
+      RUN_MIGRATIONS: "false"
+      PORT: 3001
+      WW_WEB_ORIGIN: "${WW_WEB_ORIGIN:-http://127.0.0.1:${WW_APP_HOST_PORT:-3000},http://localhost:${WW_APP_HOST_PORT:-3000}}"
+      # Dockerfile maps this optional shell/CI override onto WW_REALTIME_ADMIN_TOKEN at startup.
+      WW_REALTIME_ADMIN_TOKEN_FROM_COMPOSE: "${WW_REALTIME_ADMIN_TOKEN:-}"
+    env_file:
+      - path: .env.docker
+        required: false
     depends_on:
       db:
         condition: service_healthy

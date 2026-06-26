@@ -2,6 +2,7 @@
 import { act, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import { mountGame } from "@/game/main"
 import { WsEvent } from "@/shared/events"
 import type {
   AnyWsMessage,
@@ -102,6 +103,64 @@ describe("LobbyGameHost performance indicators", () => {
       error: null,
       isConnected: true,
       onMessage: vi.fn(),
+    }
+  })
+
+  it("counts owner ACKs as authoritative traffic while only ACK cursors arrive", async () => {
+    render(<LobbyGameHost lobbyId="room-1" />)
+    await waitFor(() => expect(mountGame).toHaveBeenCalled())
+    await waitFor(() => expect(testState.handlers.size).toBeGreaterThan(0))
+
+    try {
+      vi.useFakeTimers()
+      vi.setSystemTime(1_000)
+
+      act(() => {
+        emit({
+          type: WsEvent.PlayerBatchUpdate,
+          payload: {
+            deltas: [],
+            removedIds: [],
+            seq: 1,
+            serverTimeMs: 1_000,
+          },
+        })
+      })
+
+      const mountOptions = vi.mocked(mountGame).mock.calls[0]![0]
+      act(() => {
+        vi.setSystemTime(6_100)
+        mountOptions.onActiveLocalInput?.()
+      })
+      expect(screen.getByTestId("performance-issue-lost_connection")).toBeTruthy()
+
+      act(() => {
+        emit({
+          type: WsEvent.PlayerOwnerAck,
+          payload: {
+            id: 1,
+            playerId: "player-1",
+            x: 10,
+            y: 20,
+            vx: 0,
+            vy: 0,
+            lastProcessedInputSeq: 0,
+            serverTimeMs: 6_100,
+            replayContext: {
+              moveState: "idle",
+              terrainState: "land",
+              castingAbilityId: null,
+              jumpZ: 0,
+              jumpStartedInLava: false,
+              isSwinging: false,
+              hasSwiftBoots: false,
+            },
+          },
+        })
+      })
+      expect(screen.queryByTestId("performance-issue-lost_connection")).toBeNull()
+    } finally {
+      vi.useRealTimers()
     }
   })
 

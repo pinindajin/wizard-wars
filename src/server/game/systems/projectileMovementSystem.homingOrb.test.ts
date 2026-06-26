@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   DeadTag,
+  FireballTag,
   HomingOrb,
   HomingOrbTag,
   Ownership,
@@ -84,6 +85,27 @@ function addPlayer(world: ReturnType<typeof createWorld>, x: number, y: number):
   return eid
 }
 
+/**
+ * Adds one Fireball projectile entity to the test world.
+ *
+ * @param world - ECS world.
+ * @param x - Initial x coordinate.
+ * @param y - Initial y coordinate.
+ * @returns Fireball entity id.
+ */
+function addFireball(world: ReturnType<typeof createWorld>, x: number, y: number): number {
+  const eid = addEntity(world)
+  addComponent(world, eid, FireballTag)
+  addComponent(world, eid, ProjectileTag)
+  addComponent(world, eid, Position)
+  addComponent(world, eid, Velocity)
+  Position.x[eid] = x
+  Position.y[eid] = y
+  Velocity.vx[eid] = 0
+  Velocity.vy[eid] = 0
+  return eid
+}
+
 function addOrb(
   world: ReturnType<typeof createWorld>,
   owner: number,
@@ -108,6 +130,26 @@ function addOrb(
   HomingOrb.expiresAtTick[eid] = expiresAtTick
   return eid
 }
+
+describe("projectileMovementSystem fireballs", () => {
+  it("cleans previous fireball state when an out-of-bounds fireball despawns", () => {
+    const world = createWorld()
+    const fireball = addFireball(world, -10_000, 100)
+    const ctx = emptyCtx({
+      world,
+      fireballOwnerMap: new Map([[fireball, "caster"]]),
+      fireballCreatedAtTickMap: new Map([[fireball, 10]]),
+      prevFireballStates: new Map([[fireball, { x: -10_000, y: 100 }]]),
+    })
+
+    projectileMovementSystem(ctx)
+
+    expect(ctx.fireballRemovedIds).toEqual([fireball])
+    expect(ctx.fireballOwnerMap.has(fireball)).toBe(false)
+    expect(ctx.fireballCreatedAtTickMap.has(fireball)).toBe(false)
+    expect(ctx.prevFireballStates.has(fireball)).toBe(false)
+  })
+})
 
 describe("projectileMovementSystem homing orbs", () => {
   it("accelerates within the front cone without exceeding max speed", () => {

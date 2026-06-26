@@ -7,7 +7,7 @@ Own local setup, CI, container build/runtime, production image publishing, deplo
 ## Owned Concepts
 
 - Package scripts and task expectations in `package.json`.
-- Dockerfile and docker-compose services for local and production-like runs.
+- Dockerfile and docker-compose services for local and production-like runs, including split web/realtime roles.
 - GitHub Actions CI for PRs to `main` and `prod`.
 - Production image publishing from `prod` to GHCR.
 - Dokploy deploy trigger and Render fallback blueprint.
@@ -17,13 +17,17 @@ Own local setup, CI, container build/runtime, production image publishing, deplo
 
 ## Key Flows
 
-- Local hybrid dev uses `bun run dev:hybrid`, which starts Docker Postgres services and the Bun/Next/Colyseus server.
+- Local hybrid dev uses `bun run dev:hybrid`, which starts Docker Postgres services and the Bun/Next/Colyseus single-process fallback.
+- Full Docker compose runs separate `app` (`WW_SERVER_MODE=web`) and `realtime` (`WW_SERVER_MODE=realtime`) services; browser clients use `NEXT_PUBLIC_COLYSEUS_URL` and web admin routes use `WW_REALTIME_ADMIN_URL`.
+- `NEXT_PUBLIC_COLYSEUS_URL` must be supplied before Docker/Next build as well as at runtime, because Next inlines public env values into browser bundles.
 - PR CI runs unit coverage, fast integration, slow integration with Postgres, and production-build Playwright E2E.
 - Pushes to `prod` run lint, typecheck, coverage, integration, build, E2E, Docker build/push to `ghcr.io/pinindajin/wizard-wars`, then trigger Dokploy deployment.
-- Docker runtime starts by applying Prisma migrations with the platform-provided `DATABASE_URL`, then runs `bun run start`.
+- Docker runtime applies Prisma migrations only when `RUN_MIGRATIONS=true`; realtime defaults false so it does not race the web/migration owner.
 - Render remains represented by `render.yaml` as a fallback host.
 - Runtime netcode sends visual movement/projectile batches at `WW_NET_SEND_RATE_HZ` with default `30` and clamp range `10..60`; set `WW_NET_SEND_RATE_HZ=60` as the first rollback lever for cadence-related smoothness regressions.
-- Production rubber-banding investigations should record image digest, Dokploy image, replica count, resource limits, cgroup throttling, active rooms, and server loop-debt/performance-status logs in `docs/contexts/delivery-ops/prod-rubberbanding-verification.md`.
+- The visual send budget is disabled by default with `WW_NET_SEND_BUDGET_ENABLED=false`. Controlled enablement must set explicit `WW_NET_SEND_BUDGET_MAX_PLAYER_DELTAS`, `WW_NET_SEND_BUDGET_MAX_PROJECTILE_DELTAS`, `WW_NET_SEND_BUDGET_MAX_REMOVALS`, optional `WW_NET_SEND_BUDGET_MAX_BYTES`, and `WW_NET_SEND_BUDGET_MAX_DEFERRAL_MS` values, then verify `server_performance_status` budget counters and perf-load artifacts show zero `criticalSendFailures` and zero hard-dropped visuals.
+- Production rubber-banding investigations should record image digest, Dokploy image, replica count, resource limits, repeated Docker stats, cgroup throttling deltas, active rooms, and server loop-debt/performance-status logs in `docs/contexts/delivery-ops/prod-rubberbanding-verification.md`.
+- Keep realtime replica count at 1 until sticky routing plus shared Colyseus Presence/Driver are designed and tested.
 
 ## Boundaries
 

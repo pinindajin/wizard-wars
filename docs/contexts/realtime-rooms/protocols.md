@@ -45,7 +45,8 @@ When adding a room event, update the shared event constant, payload type, valida
 | `player_input` | Client to server | Fixed-step player intent payload. |
 | `player_join` | Server to clients | Player entered match. |
 | `player_leave` | Server to clients | Player exited match. |
-| `player_batch_update` | Server to clients | Player deltas, removals, and sequence. |
+| `player_batch_update` | Server to clients | Room-wide player visual deltas, removals, and sequence. |
+| `player_owner_ack` | Server to owning client | Owner-only reconciliation cursor and replay context. |
 | `game_state_sync` | Server to client | Full authoritative state hydration. |
 | `player_death` | Server to clients | Death event. |
 | `player_respawn` | Server to clients | Respawn event. |
@@ -87,8 +88,8 @@ When adding a room event, update the shared event constant, payload type, valida
 - Server remains authoritative for match state and combat outcomes.
 - Clients may render telegraphs and VFX from server-seeded timing/geometry, but they do not decide damage.
 - Input payloads are sequence-numbered, validated by the room, queued per player, capped, and consumed by the simulation at most once per player per tick.
-- Player and fireball movement deltas may be cadence-limited by `WW_NET_SEND_RATE_HZ`, but owner ACKs, full syncs, death/respawn, shop/economy, ability SFX, combat events, and performance status are sent immediately.
+- Player, Fireball, and Homing Orb movement deltas may be cadence-limited by `WW_NET_SEND_RATE_HZ`. When `WW_NET_SEND_BUDGET_ENABLED=true`, visual-only movement/projectile rows can also be deferred by `WW_NET_SEND_BUDGET_MAX_*` limits until `WW_NET_SEND_BUDGET_MAX_DEFERRAL_MS`; semantic player fields are split out before budgeting. Owner ACKs, full syncs, death/respawn, shop/economy, ability SFX, combat impacts/telegraphs, and performance status bypass the visual budget.
 - `game_state_sync` includes active `fireballs` and `homingOrbs` so reconnecting clients can rebuild projectile sprites immediately.
-- `lastProcessedInputSeq` advancement is not allowed to wait for the visual delta cadence; when needed, the owner receives a minimal ACK-only player delta.
-- `server_performance_status` is emitted on degraded-state changes, or at most once per second while degraded. Its `server_cpu` client indicator name is retained for parity with Seas of Aleryn, but the signal means "server loop degraded".
+- `lastProcessedInputSeq` advancement is not allowed to wait for the visual delta cadence; modern servers send owner-only `player_owner_ack` messages. Clients retain batch-delivered ACK handling only as a compatibility fallback for older servers, and `game_state_sync` still carries full snapshot cursors for hydration.
+- `server_performance_status` is emitted on degraded-state changes, at most once per second while degraded, and at the same bounded cadence when visual-budget telemetry is present. Its `server_cpu` client indicator name is retained for parity with Seas of Aleryn, but the signal means "server loop degraded". Metrics include aggregate loop debt, catch-up callbacks, input drops, room tick time, simulation time, visual flush enqueue cost, owner ACK enqueue cost, immediate broadcast enqueue cost, visual-budget deferrals/deferred entities/max deferral age/dropped visuals, critical send failures, process event-loop delay/utilization when supported, CPU, memory, active rooms, and connected clients. Bun reports event-loop utilization as unavailable until its `perf_hooks` readings are non-zero/trustworthy.
 - Full hydration should include enough lobby/shop/game state for reconnect and resync paths to recover without relying on stale client memory.

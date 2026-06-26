@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest"
 
 import { Position } from "@/server/game/components"
+import {
+  PlayerInputQueue,
+  type PlayerInputQueueMap,
+} from "@/server/game/playerInputQueue"
 import { createGameSimulation } from "@/server/game/simulation"
 import {
   ARENA_HEIGHT,
@@ -46,8 +50,8 @@ function input(overrides: Partial<PlayerInputPayload> = {}): PlayerInputPayload 
  * @param payload - Player input payload.
  * @returns Per-player input queue map.
  */
-function queue(payload: PlayerInputPayload): Map<string, PlayerInputPayload[]> {
-  return new Map([["user1", [payload]]])
+function queue(payload: PlayerInputPayload): PlayerInputQueueMap {
+  return new Map([["user1", new PlayerInputQueue([payload])]])
 }
 
 function sampleUpperBlocker(): { x: number; y: number; minY: number } {

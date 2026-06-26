@@ -12,6 +12,27 @@ import {
 import { addEntity, hasEntity, clientEntities, removeEntity } from "../world"
 
 type AuthoritativePositionReason = "full_sync" | "batch_update"
+type PlayerDelta = PlayerBatchUpdatePayload["deltas"][number]
+
+/**
+ * Returns true when a player delta carries fields used by remote interpolation.
+ *
+ * Semantic-only deltas may still update ECS state, but they should not enqueue
+ * a duplicate render sample at the previous position.
+ *
+ * @param delta - Player batch delta from the server.
+ * @returns Whether the delta contains visual sample data.
+ */
+function hasRemoteVisualSample(delta: PlayerDelta): boolean {
+  return (
+    delta.x !== undefined ||
+    delta.y !== undefined ||
+    delta.vx !== undefined ||
+    delta.vy !== undefined ||
+    delta.facingAngle !== undefined ||
+    delta.moveFacingAngle !== undefined
+  )
+}
 
 /**
  * Opaque sample passed to {@link NetworkSyncHooks.onRemoteSnapshot} when a
@@ -76,6 +97,9 @@ export class NetworkSyncSystem {
   /** Last ACKed `lastProcessedInputSeq` observed per player. */
   private readonly lastAckByPlayer = new Map<string, number>()
 
+  /** Players whose full-sync cursor `0` still needs the first real ACK `0`. */
+  private readonly pendingFirstZeroAckByPlayer = new Set<string>()
+
   /**
    * @param hooks - Optional render hooks that track authoritative position changes.
    */
@@ -133,6 +157,11 @@ export class NetworkSyncSystem {
         abilityStates: snap.abilityStates,
       }
       this.lastAckByPlayer.set(snap.playerId, snap.lastProcessedInputSeq)
+      if (snap.lastProcessedInputSeq === 0) {
+        this.pendingFirstZeroAckByPlayer.add(snap.playerId)
+      } else {
+        this.pendingFirstZeroAckByPlayer.delete(snap.playerId)
+      }
     }
     this.log.debug(
       {
@@ -234,6 +263,7 @@ export class NetworkSyncSystem {
 
       if (
         !isLocal &&
+        hasRemoteVisualSample(delta) &&
         nextX !== undefined &&
         nextY !== undefined &&
         state !== undefined
@@ -256,20 +286,14 @@ export class NetworkSyncSystem {
         nextX !== undefined &&
         nextY !== undefined
       ) {
-        const prev = this.lastAckByPlayer.get(playerId!) ?? -1
-        if (delta.lastProcessedInputSeq < prev) {
-          this.log.warn(
-            {
-              event: "net.sync.ack.regressed",
-              playerId,
-              previousSeq: prev,
-              seq: delta.lastProcessedInputSeq,
-            },
+        if (
+          this.acceptLocalAckCursor(
+            playerId!,
+            delta.lastProcessedInputSeq,
+            "net.sync.ack.regressed",
             "Local input ack regressed",
           )
-        }
-        if (delta.lastProcessedInputSeq > prev) {
-          this.lastAckByPlayer.set(playerId!, delta.lastProcessedInputSeq)
+        ) {
           this.onLocalAck?.({
             id: delta.id,
             x: nextX,
@@ -290,30 +314,65 @@ export class NetworkSyncSystem {
     this.onServerTime?.(payload.serverTimeMs)
     if (payload.playerId !== this.localPlayerId) return
 
-    const prev = this.lastAckByPlayer.get(payload.playerId) ?? -1
-    if (payload.lastProcessedInputSeq < prev) {
-      this.log.warn(
-        {
-          event: "net.sync.owner_ack.regressed",
-          playerId: payload.playerId,
-          previousSeq: prev,
-          seq: payload.lastProcessedInputSeq,
-        },
+    if (
+      this.acceptLocalAckCursor(
+        payload.playerId,
+        payload.lastProcessedInputSeq,
+        "net.sync.owner_ack.regressed",
         "Local owner input ack regressed",
       )
-      return
+    ) {
+      this.onLocalAck?.({
+        id: payload.id,
+        x: payload.x,
+        y: payload.y,
+        vx: payload.vx,
+        vy: payload.vy,
+        lastProcessedInputSeq: payload.lastProcessedInputSeq,
+        replayContext: payload.replayContext,
+      })
     }
-    if (payload.lastProcessedInputSeq === prev) return
+  }
 
-    this.lastAckByPlayer.set(payload.playerId, payload.lastProcessedInputSeq)
-    this.onLocalAck?.({
-      id: payload.id,
-      x: payload.x,
-      y: payload.y,
-      vx: payload.vx,
-      vy: payload.vy,
-      lastProcessedInputSeq: payload.lastProcessedInputSeq,
-      replayContext: payload.replayContext,
-    })
+  /**
+   * Applies monotonic ACK cursor rules and consumes pending first-ACK `0`.
+   *
+   * Full sync exposes pre-first-input state as `0`; the first real owner ACK or
+   * legacy batch ACK for `0` must still notify local reconciliation once.
+   *
+   * @param playerId - Local player id whose cursor is being applied.
+   * @param lastProcessedInputSeq - ACK cursor from the server.
+   * @param regressionEvent - Structured log event name for regressed cursors.
+   * @param regressionMessage - Human-readable log message for regressions.
+   * @returns True when the caller should emit the local ACK sample.
+   */
+  private acceptLocalAckCursor(
+    playerId: string,
+    lastProcessedInputSeq: number,
+    regressionEvent: "net.sync.ack.regressed" | "net.sync.owner_ack.regressed",
+    regressionMessage: string,
+  ): boolean {
+    const prev = this.lastAckByPlayer.get(playerId) ?? -1
+    const acceptsPendingZero =
+      lastProcessedInputSeq === 0 &&
+      prev === 0 &&
+      this.pendingFirstZeroAckByPlayer.has(playerId)
+    if (lastProcessedInputSeq < prev) {
+      this.log.warn(
+        {
+          event: regressionEvent,
+          playerId,
+          previousSeq: prev,
+          seq: lastProcessedInputSeq,
+        },
+        regressionMessage,
+      )
+      return false
+    }
+    if (lastProcessedInputSeq === prev && !acceptsPendingZero) return false
+
+    this.lastAckByPlayer.set(playerId, lastProcessedInputSeq)
+    this.pendingFirstZeroAckByPlayer.delete(playerId)
+    return true
   }
 }

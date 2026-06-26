@@ -43,6 +43,19 @@ export type ServerPerformanceMetrics = {
   readonly inputQueueDrops: number
   readonly simDurationMs: number
   readonly broadcastDurationMs: number
+  readonly roomTickDurationMs?: number
+  readonly visualFlushDurationMs?: number
+  readonly ownerAckSendDurationMs?: number
+  readonly immediateBroadcastDurationMs?: number
+  readonly visualBudgetDeferrals?: number
+  readonly visualBudgetDeferredEntities?: number
+  readonly visualBudgetMaxDeferralAgeMs?: number
+  readonly visualBudgetDroppedVisuals?: number
+  readonly criticalSendFailures?: number
+  readonly processEventLoopDelayMs?: number
+  readonly processEventLoopDelayP95Ms?: number
+  readonly eventLoopUtilization?: number
+  readonly gcPauseMs?: number
   readonly eventLoopLagMs: number
   readonly processCpuPercent: number
   readonly heapUsedBytes: number

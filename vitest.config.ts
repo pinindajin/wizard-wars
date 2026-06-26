@@ -6,7 +6,12 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
-    include: ["src/**/*.test.{ts,tsx}", "scripts/**/*.test.ts"],
+    include: [
+      "src/**/*.test.{ts,tsx}",
+      "scripts/**/*.test.ts",
+      "tests/perf-load/perfLoadReport.test.ts",
+      "vitest.perf-load.config.test.ts",
+    ],
     server: {
       deps: {
         inline: ["zod"],
@@ -35,6 +40,7 @@ export default defineConfig({
         // Type-only modules (no runtime statements).
         "src/shared/types.ts",
         "src/server/store/types.ts",
+        "src/server/realtime/adminContracts.ts",
         // Jest-dom setup not used by default node Vitest include.
         "src/test/**",
         // React lobby chrome: covered by Playwright / manual QA; RTL would duplicate app tests.

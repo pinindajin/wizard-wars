@@ -166,6 +166,24 @@ describe("projectileCollisionSystem", () => {
     expect(ctx.fireballImpacts[0]!.targetId).toBe("target")
   })
 
+  it("preserves first overlapping fireball hit order when the first target is unmapped", () => {
+    const world = createWorld()
+    const unmappedTarget = addPlayer(world, 100, 100)
+    const mappedTarget = addPlayer(world, 100, 100)
+    const fireball = addFireball(world, 100, 75)
+    const ctx = emptyCtx({
+      world,
+      entityPlayerMap: new Map([[mappedTarget, "mapped"]]),
+      fireballOwnerMap: new Map([[fireball, "caster"]]),
+    })
+
+    projectileCollisionSystem(ctx)
+
+    expect(ctx.damageRequests).toHaveLength(1)
+    expect(ctx.damageRequests[0]!.targetEid).toBe(unmappedTarget)
+    expect(ctx.fireballImpacts[0]!.targetId).toBeUndefined()
+  })
+
   it("damages the fireball owner after the launch grace window expires", () => {
     const world = createWorld()
     const owner = addPlayer(world, 100, 100)
@@ -178,6 +196,7 @@ describe("projectileCollisionSystem", () => {
       fireballCreatedAtTickMap: new Map([
         [fireball, 20 - FIREBALL_OWNER_SELF_DAMAGE_GRACE_TICKS],
       ]),
+      prevFireballStates: new Map([[fireball, { x: 100, y: 75 }]]),
     })
 
     projectileCollisionSystem(ctx)
@@ -188,6 +207,7 @@ describe("projectileCollisionSystem", () => {
     expect(ctx.fireballRemovedIds).toEqual([fireball])
     expect(ctx.fireballOwnerMap.has(fireball)).toBe(false)
     expect(ctx.fireballCreatedAtTickMap.has(fireball)).toBe(false)
+    expect(ctx.prevFireballStates.has(fireball)).toBe(false)
   })
 
   it("keeps existing collision behavior when the fireball launch tick is missing", () => {
@@ -237,6 +257,7 @@ describe("projectileCollisionSystem", () => {
       world,
       entityPlayerMap: new Map([[target, "target"]]),
       fireballOwnerMap: new Map([[fireball, "caster"]]),
+      prevFireballStates: new Map([[fireball, { x, y }]]),
     })
 
     projectileCollisionSystem(ctx)
@@ -245,6 +266,7 @@ describe("projectileCollisionSystem", () => {
     expect(ctx.fireballImpacts).toEqual([{ id: fireball, x, y }])
     expect(ctx.fireballRemovedIds).toEqual([fireball])
     expect(ctx.fireballOwnerMap.has(fireball)).toBe(false)
+    expect(ctx.prevFireballStates.has(fireball)).toBe(false)
   })
 
   it("despawns fireballs when only the fireball radius touches a prop edge", () => {
