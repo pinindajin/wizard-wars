@@ -5,13 +5,17 @@ import { RoomEvent } from "@/shared/roomEvents"
 import { TICK_MS } from "@/shared/balance-config/rendering"
 import type { PlayerInputPayload } from "@/shared/types"
 import { resolveGamePerformanceConfig } from "@/server/game/performanceConfig"
+import {
+  PlayerInputQueue,
+  type PlayerInputQueueMap,
+} from "@/server/game/playerInputQueue"
 import type { SimOutput } from "@/server/game/simulation"
 
 import { GameLobbyRoom } from "./GameLobbyRoom"
 
 type LoopRoomInternals = {
   broadcast: ReturnType<typeof vi.fn>
-  inputQueue: Map<string, PlayerInputPayload[]>
+  inputQueue: PlayerInputQueueMap
   gameLoopTimer: { clear: () => void } | null
   adminCloseTimer: { clear: () => void } | null
   disposalGraceTimer: { clear: () => void } | null
@@ -25,7 +29,7 @@ type LoopRoomInternals = {
   runGameTick: (serverTimeMs?: number) => boolean
   setSimulationInterval: (callback?: (deltaMs: number) => void, delay?: number) => void
   simulation: {
-    tick: (inputQueue: Map<string, PlayerInputPayload[]>, serverTimeMs: number) => SimOutput
+    tick: (inputQueue: PlayerInputQueueMap, serverTimeMs: number) => SimOutput
     entityPlayerMap: Map<number, string>
   } | null
 }
@@ -42,7 +46,7 @@ describe("GameLobbyRoom fixed-step loop", () => {
 
     const room = loopRoom()
     const times: number[] = []
-    const tick = vi.fn((_queue: Map<string, PlayerInputPayload[]>, serverTimeMs: number) => {
+    const tick = vi.fn((_queue: PlayerInputQueueMap, serverTimeMs: number) => {
       times.push(serverTimeMs)
       return simOutput()
     })
@@ -96,13 +100,13 @@ describe("GameLobbyRoom fixed-step loop", () => {
     const consumedSeqs: number[] = []
     room.inputQueue.set(
       "player-1",
-      Array.from({ length: 6 }, (_, seq) => input(seq)),
+      new PlayerInputQueue(Array.from({ length: 6 }, (_, seq) => input(seq))),
     )
     Object.assign(room, {
       lobbyPhase: "IN_PROGRESS",
       simulation: {
-        tick: vi.fn((queue: Map<string, PlayerInputPayload[]>) => {
-          const next = queue.get("player-1")?.shift()
+        tick: vi.fn((queue: PlayerInputQueueMap) => {
+          const next = queue.get("player-1")?.consume()
           if (next) consumedSeqs.push(next.seq)
           return simOutput()
         }),
@@ -144,7 +148,7 @@ describe("GameLobbyRoom fixed-step loop", () => {
 
     const room = loopRoom({ simMaxCatchUpTicks: 3 })
     const times: number[] = []
-    const tick = vi.fn((_queue: Map<string, PlayerInputPayload[]>, serverTimeMs: number) => {
+    const tick = vi.fn((_queue: PlayerInputQueueMap, serverTimeMs: number) => {
       times.push(serverTimeMs)
       return simOutput()
     })
@@ -237,7 +241,7 @@ describe("GameLobbyRoom fixed-step loop", () => {
 
     const room = loopRoom({ simAccumulatorEnabled: false })
     const times: number[] = []
-    const tick = vi.fn((_queue: Map<string, PlayerInputPayload[]>, serverTimeMs: number) => {
+    const tick = vi.fn((_queue: PlayerInputQueueMap, serverTimeMs: number) => {
       times.push(serverTimeMs)
       return simOutput()
     })

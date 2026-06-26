@@ -7,6 +7,10 @@ import {
   type SimCtx,
 } from "@/server/game/simulation"
 import {
+  PlayerInputQueue,
+  type PlayerInputQueueMap,
+} from "@/server/game/playerInputQueue"
+import {
   ARENA_CENTER_X,
   ARENA_CENTER_Y,
   ARENA_HEIGHT,
@@ -96,10 +100,10 @@ function sampleBlockingColliderFromBelow() {
 /** Convenience: wrap a single input per player into the new queue-style map. */
 function queueMap(
   entries: Array<[string, PlayerInputPayload]>,
-): Map<string, PlayerInputPayload[]> {
-  const out = new Map<string, PlayerInputPayload[]>()
+): PlayerInputQueueMap {
+  const out: PlayerInputQueueMap = new Map()
   for (const [userId, input] of entries) {
-    out.set(userId, [input])
+    out.set(userId, new PlayerInputQueue([input]))
   }
   return out
 }
@@ -263,12 +267,12 @@ describe("movement system", () => {
 
     // Seed three queued inputs (all moving up) and verify lastProcessedInputSeq
     // increments one per tick.
-    const queues = new Map<string, PlayerInputPayload[]>()
-    queues.set("user1", [
+    const queues: PlayerInputQueueMap = new Map()
+    queues.set("user1", new PlayerInputQueue([
       { ...emptyInput({ up: true }), seq: 100 },
       { ...emptyInput({ up: true }), seq: 101 },
       { ...emptyInput({ up: true }), seq: 102 },
-    ])
+    ]))
 
     const acks = [
       ackSeqFromOutput(sim, sim.tick(queues, Date.now())),
@@ -282,16 +286,16 @@ describe("movement system", () => {
     const sim = createGameSimulation(Date.now())
     sim.addPlayer("user1", "Alice", "red_wizard", 0)
 
-    const queues = new Map<string, PlayerInputPayload[]>()
-    queues.set("user1", [
+    const queues: PlayerInputQueueMap = new Map()
+    queues.set("user1", new PlayerInputQueue([
       { ...emptyInput({ up: true }), seq: 200 },
       { ...emptyInput({ up: true }), seq: 201 },
       { ...emptyInput({ up: true }), seq: 202 },
       { ...emptyInput({ up: true }), seq: 203 },
-    ])
+    ]))
 
     const ack1 = ackSeqFromOutput(sim, sim.tick(queues, Date.now()))
-    expect(queues.get("user1")).toHaveLength(0)
+    expect(queues.get("user1")?.length).toBe(0)
 
     const acks = [
       ack1,
@@ -327,10 +331,10 @@ describe("movement system", () => {
     const sim = createGameSimulation(Date.now())
     sim.addPlayer("user1", "Alice", "red_wizard", 0)
 
-    const queue = [
+    const queue = new PlayerInputQueue([
       { ...emptyInput(first), seq: first.seq },
       { ...emptyInput(second), seq: second.seq },
-    ]
+    ])
     const acks = [
       ackSeqFromOutput(sim, sim.tick(new Map([["user1", queue]]), Date.now())),
       ackSeqFromOutput(
@@ -346,18 +350,18 @@ describe("movement system", () => {
     const sim = createGameSimulation(Date.now())
     sim.addPlayer("user1", "Alice", "red_wizard", 0)
 
-    const queue: PlayerInputPayload[] = [
+    const queue = new PlayerInputQueue([
       { ...emptyInput({ up: true }), seq: 400 },
       { ...emptyInput({ up: true }), seq: 401 },
       { ...emptyInput({ up: true }), seq: 402 },
       { ...emptyInput({ up: true }), seq: 403 },
-    ]
+    ])
 
     const ack1 = ackSeqFromOutput(
       sim,
       sim.tick(new Map([["user1", queue]]), Date.now()),
     )
-    expect(queue).toHaveLength(0)
+    expect(queue.length).toBe(0)
     queue.push(
       emptyInput({
         up: true,
@@ -391,10 +395,10 @@ describe("movement system", () => {
 
     // Now enqueue a stale input (seq 9) alongside a fresh one (seq 11);
     // only the fresh one should advance the ack.
-    const queue: PlayerInputPayload[] = [
+    const queue = new PlayerInputQueue([
       { ...emptyInput({ up: true }), seq: 9 },
       { ...emptyInput({ up: true }), seq: 11 },
-    ]
+    ])
     const out = sim.tick(new Map([["user1", queue]]), Date.now() + 17)
     const delta = out.playerDeltas.find((d) => d.id === sim.playerEntityMap.get("user1"))
     expect(delta?.lastProcessedInputSeq).toBe(11)
@@ -1213,7 +1217,7 @@ describe("primary melee attack", () => {
     const swingTicks = Math.ceil(
       getPrimaryAttackAnimationConfigByAttackId("red_wizard_cleaver").durationMs / TICK_MS,
     )
-    const queue: PlayerInputPayload[] = []
+    const queue = new PlayerInputQueue()
     for (let i = 0; i < swingTicks; i++) {
       queue.push(
         emptyInput({

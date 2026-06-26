@@ -37,6 +37,7 @@ import {
   TERRAIN_KIND_TO_STATE,
 } from "./components"
 import { createCommandBuffer, CommandBuffer } from "./commandBuffer"
+import type { PlayerInputQueueMap } from "./playerInputQueue"
 import {
   ARENA_SPAWN_POINTS,
   ARENA_CENTER_X,
@@ -568,10 +569,7 @@ export type GameSimulation = {
    * is invalid after the next `tick` call. Rooms must copy, broadcast, or
    * coalesce output before advancing the simulation again.
    */
-  tick: (
-    perPlayerInputs: Map<string, PlayerInputPayload[]>,
-    serverTimeMs: number,
-  ) => SimOutput
+  tick: (perPlayerInputs: PlayerInputQueueMap, serverTimeMs: number) => SimOutput
   /** Signal that the host has requested an immediate match end. */
   requestHostEnd: () => void
   /**
@@ -1038,13 +1036,13 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
    * for that player are dropped. `lastProcessedInputSeqByPlayer` is advanced
    * to the highest consumed `seq`.
    *
-   * @param perPlayerInputs - Map of userId → ordered `PlayerInputPayload[]`.
-   *   The map is **mutated**: consumed inputs are shifted off the front.
+   * @param perPlayerInputs - Map of userId → owned `PlayerInputQueue`.
+   *   Queues are **mutated**: consumed inputs advance the queue head.
    * @param serverTimeMs - Current wall-clock time in milliseconds.
    * @returns Aggregated output events for this tick.
    */
   function tick(
-    perPlayerInputs: Map<string, PlayerInputPayload[]>,
+    perPlayerInputs: PlayerInputQueueMap,
     serverTimeMs: number,
   ): SimOutput {
     currentTick++
@@ -1064,13 +1062,10 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
         lastSeq,
         coalescedHeld?.heldThroughSeq ?? lastSeq,
       )
-      // Drop already-processed inputs at the head of the queue.
-      while (queue.length > 0 && queue[0].seq <= staleThroughSeq) {
-        queue.shift()
-      }
+      queue.dropThroughSeq(staleThroughSeq)
 
-      const freshest = queue[queue.length - 1]
-      const next = queue[0]
+      const freshest = queue.latest()
+      const next = queue.peek()
 
       if (coalescedHeld && coalescedHeld.heldThroughSeq > lastSeq) {
         // Fresh casts/items/changed intent should not wait behind a virtual held-input backlog.
@@ -1106,13 +1101,16 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       }
       if (next !== undefined) {
         inputMap.set(userId, next)
-        queue.shift()
+        queue.consume()
         lastProcessedInputSeqByPlayer.set(userId, next.seq)
         lastInputTickByPlayer.set(userId, currentTick)
         let heldThroughSeq = next.seq
-        while (queue.length > 0 && canCoalesceHeldInput(next, queue[0]!)) {
-          heldThroughSeq = Math.max(heldThroughSeq, queue.shift()!.seq)
-        }
+        queue.consumeWhile(
+          (queued) => canCoalesceHeldInput(next, queued),
+          (queued) => {
+            heldThroughSeq = Math.max(heldThroughSeq, queued.seq)
+          },
+        )
         if (heldThroughSeq > next.seq) {
           coalescedHeldInputByPlayer.set(userId, {
             input: heldInputForVirtualAck(next, next.seq, serverTimeMs),

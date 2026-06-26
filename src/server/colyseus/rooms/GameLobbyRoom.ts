@@ -5,6 +5,8 @@ import { performance } from "node:perf_hooks"
 
 import { verifyToken } from "../../auth"
 import { advanceFixedStepAccumulator } from "../../game/fixedStepAccumulator"
+import { PlayerInputQueue } from "../../game/playerInputQueue"
+import type { PlayerInputQueueMap } from "../../game/playerInputQueue"
 import { createGameSimulation, type GameSimulation } from "../../game/simulation"
 import { createSessionEconomy, attemptPurchase, buildShopStatePayload } from "../../gameserver/sessionShop"
 import type { SessionEconomy } from "../../gameserver/sessionShop"
@@ -440,12 +442,12 @@ export class GameLobbyRoom extends Room {
   private readonly economies = new Map<string, SessionEconomy>()
 
   /**
-   * Ordered per-player input queue. Each `handlePlayerInput` pushes the
-   * validated payload sorted by `seq`; `runGameTick` pops exactly one input
-   * per player per tick (see `simulation.tick` semantics). Capped per
-   * {@link INPUT_QUEUE_CAP_PER_PLAYER} to bound memory if a client floods.
+   * Ordered per-player input queues. Each `handlePlayerInput` appends one
+   * validated payload after duplicate/stale checks; `runGameTick` gives the
+   * queue map to `simulation.tick`, which consumes from each queue head.
+   * Queues are capped per {@link INPUT_QUEUE_CAP_PER_PLAYER} to bound memory.
    */
-  private readonly inputQueue = new Map<string, PlayerInputPayload[]>()
+  private readonly inputQueue: PlayerInputQueueMap = new Map()
 
   /** Runtime knobs for network cadence and performance reporting. */
   private readonly performanceConfig = resolveGamePerformanceConfig()
@@ -1360,15 +1362,15 @@ export class GameLobbyRoom extends Room {
 
     let queue = this.inputQueue.get(pd.playerId)
     if (!queue) {
-      queue = []
+      queue = new PlayerInputQueue()
       this.inputQueue.set(pd.playerId, queue)
     }
     queue.push(input)
     this.highestAcceptedSeqByPlayer.set(pd.playerId, input.seq)
 
     // Cap queue: drop from the front if it grows unbounded.
-    while (queue.length > INPUT_QUEUE_CAP_PER_PLAYER) {
-      queue.shift()
+    const dropped = queue.trimToCap(INPUT_QUEUE_CAP_PER_PLAYER)
+    for (let i = 0; i < dropped; i += 1) {
       this.performanceInputQueueDrops += 1
       logger.warn(
         {
@@ -2885,8 +2887,8 @@ export class GameLobbyRoom extends Room {
    * Runs one game simulation tick, broadcasts deltas and events to all clients.
    * Called at `TICK_MS` intervals during `IN_PROGRESS` phase.
    *
-   * Per-player input queues are mutated in-place by `simulation.tick`, which
-   * pops exactly one queued input per player per tick.
+   * Per-player input queues are owned by the room and mutated in-place by
+   * `simulation.tick`, which consumes from queue heads without shifting arrays.
    */
   private runGameTick(serverTimeMs = Date.now()): boolean {
     if (!this.simulation || this.lobbyPhase !== "IN_PROGRESS") {
