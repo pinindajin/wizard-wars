@@ -71,19 +71,56 @@ describe("package.json dev scripts", () => {
       "NODE_ENV=production WW_SERVER_MODE=realtime bun src/server/colyseus/realtime-server.ts",
     )
   })
+
+  it("loads .env.docker for full Docker app stack scripts", () => {
+    const pkg = readRootPackageJson()
+
+    expect(pkg.scripts?.["docker:up"]).toBe("docker compose --env-file .env.docker up --build")
+    expect(pkg.scripts?.["docker:reset"]).toBe(
+      "docker compose --env-file .env.docker down -v && docker compose --env-file .env.docker up --build",
+    )
+  })
 })
 
 describe("Docker runtime packaging", () => {
+  it("stops container startup when configured migrations fail", () => {
+    const dockerfile = readRepoText("Dockerfile")
+
+    expect(dockerfile).toContain('CMD ["sh", "-c", "set -e;')
+    expect(dockerfile).toContain('if [ \\"${RUN_MIGRATIONS:-false}\\" = \\"true\\" ]; then bunx prisma migrate deploy; fi;')
+    expect(dockerfile).toContain("exec bun run start:web")
+    expect(dockerfile).toContain("exec bun run start:realtime")
+    expect(dockerfile).toContain("exec bun run start")
+  })
+
   it("passes the public Colyseus URL into Next's build-time environment", () => {
     const dockerfile = readRepoText("Dockerfile")
     const compose = readRepoText("docker-compose.yml")
+    const alignedPublicUrl =
+      'NEXT_PUBLIC_COLYSEUS_URL: "${NEXT_PUBLIC_COLYSEUS_URL:-http://127.0.0.1:${WW_REALTIME_HOST_PORT:-3001}}"'
 
     expect(dockerfile).toContain("ARG NEXT_PUBLIC_COLYSEUS_URL")
     expect(dockerfile).toContain("ENV NEXT_PUBLIC_COLYSEUS_URL=${NEXT_PUBLIC_COLYSEUS_URL}")
     expect(compose).toContain("args:")
     expect(compose).toContain("NEXT_PUBLIC_COLYSEUS_URL:")
-    expect(compose).toContain(
-      'NEXT_PUBLIC_COLYSEUS_URL: "${NEXT_PUBLIC_COLYSEUS_URL:-http://127.0.0.1:3001}"',
+    expect(compose).toContain(alignedPublicUrl)
+    expect(compose.split(alignedPublicUrl).length - 1).toBe(3)
+  })
+
+  it("does not expose a checked-in realtime admin token fallback", () => {
+    const dockerfile = readRepoText("Dockerfile")
+    const compose = readRepoText("docker-compose.yml")
+    const dockerEnvSample = readRepoText("sample.env.docker")
+    const tokenOverride = 'WW_REALTIME_ADMIN_TOKEN_FROM_COMPOSE: "${WW_REALTIME_ADMIN_TOKEN:-}"'
+
+    expect(compose).not.toContain("local-realtime-admin-token-change-me")
+    expect(compose).not.toMatch(/^ +WW_REALTIME_ADMIN_TOKEN:/m)
+    expect(compose).toContain(tokenOverride)
+    expect(compose.split(tokenOverride).length - 1).toBe(2)
+    expect(compose.split("required: false").length - 1).toBe(2)
+    expect(dockerfile).toContain(
+      'if [ -n \\"${WW_REALTIME_ADMIN_TOKEN_FROM_COMPOSE:-}\\" ]; then export WW_REALTIME_ADMIN_TOKEN=\\"${WW_REALTIME_ADMIN_TOKEN_FROM_COMPOSE}\\"; fi;',
     )
+    expect(dockerEnvSample).toContain('WW_REALTIME_ADMIN_TOKEN="replace-with-shared-service-token"')
   })
 })
