@@ -36,28 +36,48 @@ function collectHomingOrbDelta(
   const targetId = ctx.homingOrbTargetPlayerMap.get(eid)
 
   if (!prev) {
-    ctx.prevHomingOrbStates.set(eid, {
+    const next: HomingOrbPrevState = {
       x,
       y,
       vx,
       vy,
       headingRad,
-      ...(targetId !== undefined ? { targetId } : {}),
-    })
+    }
+    if (targetId !== undefined) {
+      next.targetId = targetId
+    }
+    ctx.prevHomingOrbStates.set(eid, next)
     return
   }
 
   const delta: MutableHomingOrbDelta = { id: eid }
-  if (x !== prev.x) delta.x = x
-  if (y !== prev.y) delta.y = y
-  if (vx !== prev.vx) delta.vx = vx
-  if (vy !== prev.vy) delta.vy = vy
-  if (headingRad !== prev.headingRad) delta.headingRad = headingRad
+  let changed = false
+  if (x !== prev.x) {
+    delta.x = x
+    changed = true
+  }
+  if (y !== prev.y) {
+    delta.y = y
+    changed = true
+  }
+  if (vx !== prev.vx) {
+    delta.vx = vx
+    changed = true
+  }
+  if (vy !== prev.vy) {
+    delta.vy = vy
+    changed = true
+  }
+  if (headingRad !== prev.headingRad) {
+    delta.headingRad = headingRad
+    changed = true
+  }
   if (targetId !== prev.targetId) {
     delta.targetId = targetId ?? null
+    changed = true
   }
 
-  if (Object.keys(delta).length > 1) {
+  if (changed) {
     ctx.homingOrbDeltas.push(delta)
     prev.x = x
     prev.y = y
@@ -98,24 +118,7 @@ export function projectileDeltaSystem(ctx: SimCtx): void {
     }
   }
 
-  // Clean up prev states for removed fireballs (those not in current query)
-  const alive = new Set<number>()
-  for (const eid of query(world, [FireballTag])) alive.add(eid)
-  for (const eid of prevFireballStates.keys()) {
-    if (!alive.has(eid)) {
-      prevFireballStates.delete(eid)
-    }
-  }
-
   for (const eid of query(world, [HomingOrbTag])) {
     collectHomingOrbDelta(ctx, eid, ctx.prevHomingOrbStates.get(eid))
-  }
-
-  const aliveHomingOrbs = new Set<number>()
-  for (const eid of query(world, [HomingOrbTag])) aliveHomingOrbs.add(eid)
-  for (const eid of ctx.prevHomingOrbStates.keys()) {
-    if (!aliveHomingOrbs.has(eid)) {
-      ctx.prevHomingOrbStates.delete(eid)
-    }
   }
 }

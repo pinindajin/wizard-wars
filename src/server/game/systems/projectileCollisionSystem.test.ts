@@ -196,6 +196,7 @@ describe("projectileCollisionSystem", () => {
       fireballCreatedAtTickMap: new Map([
         [fireball, 20 - FIREBALL_OWNER_SELF_DAMAGE_GRACE_TICKS],
       ]),
+      prevFireballStates: new Map([[fireball, { x: 100, y: 75 }]]),
     })
 
     projectileCollisionSystem(ctx)
@@ -206,6 +207,7 @@ describe("projectileCollisionSystem", () => {
     expect(ctx.fireballRemovedIds).toEqual([fireball])
     expect(ctx.fireballOwnerMap.has(fireball)).toBe(false)
     expect(ctx.fireballCreatedAtTickMap.has(fireball)).toBe(false)
+    expect(ctx.prevFireballStates.has(fireball)).toBe(false)
   })
 
   it("keeps existing collision behavior when the fireball launch tick is missing", () => {
@@ -255,6 +257,7 @@ describe("projectileCollisionSystem", () => {
       world,
       entityPlayerMap: new Map([[target, "target"]]),
       fireballOwnerMap: new Map([[fireball, "caster"]]),
+      prevFireballStates: new Map([[fireball, { x, y }]]),
     })
 
     projectileCollisionSystem(ctx)
@@ -263,6 +266,7 @@ describe("projectileCollisionSystem", () => {
     expect(ctx.fireballImpacts).toEqual([{ id: fireball, x, y }])
     expect(ctx.fireballRemovedIds).toEqual([fireball])
     expect(ctx.fireballOwnerMap.has(fireball)).toBe(false)
+    expect(ctx.prevFireballStates.has(fireball)).toBe(false)
   })
 
   it("despawns fireballs when only the fireball radius touches a prop edge", () => {

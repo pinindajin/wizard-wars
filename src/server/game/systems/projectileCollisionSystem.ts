@@ -35,6 +35,7 @@ import {
   circleIntersectsRect,
 } from "../../../shared/collision/characterHitbox"
 import { queryAabbIds } from "../../../shared/collision/spatialIndex"
+import { removeFireballProjectile } from "../projectileCleanup"
 
 const FIREBALL_OWNER_SELF_DAMAGE_GRACE_TICKS = Math.ceil(
   FIREBALL_OWNER_SELF_DAMAGE_GRACE_MS / TICK_MS,
@@ -91,7 +92,6 @@ export function projectileCollisionSystem(ctx: SimCtx): void {
   const {
     world,
     currentTick,
-    commandBuffer,
     fireballOwnerMap,
     fireballCreatedAtTickMap,
     fireballRemovedIds,
@@ -121,10 +121,7 @@ export function projectileCollisionSystem(ctx: SimCtx): void {
     if (FIREBALL_BLOCKED_BY_PROPS && fireballIntersectsArenaProp(fbX, fbY)) {
       fireballImpacts.push({ id: fbEid, x: fbX, y: fbY })
       removedThisTick.add(fbEid)
-      fireballRemovedIds.push(fbEid)
-      fireballOwnerMap.delete(fbEid)
-      fireballCreatedAtTickMap.delete(fbEid)
-      commandBuffer.enqueue({ type: "removeEntity", eid: fbEid })
+      removeFireballProjectile(ctx, fbEid)
       continue
     }
 
@@ -162,10 +159,7 @@ export function projectileCollisionSystem(ctx: SimCtx): void {
       })
 
       removedThisTick.add(fbEid)
-      fireballRemovedIds.push(fbEid)
-      fireballOwnerMap.delete(fbEid)
-      fireballCreatedAtTickMap.delete(fbEid)
-      commandBuffer.enqueue({ type: "removeEntity", eid: fbEid })
+      removeFireballProjectile(ctx, fbEid)
       break // fireball consumed
     }
   }
