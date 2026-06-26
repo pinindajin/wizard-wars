@@ -70,6 +70,7 @@ describe("package.json dev scripts", () => {
     expect(pkg.scripts?.["start:realtime"]).toBe(
       "NODE_ENV=production WW_SERVER_MODE=realtime bun src/server/colyseus/realtime-server.ts",
     )
+    expect(pkg.scripts?.["start:split"]).toBe("NODE_ENV=production bun src/server/split-runtime.ts")
   })
 
   it("loads .env.docker for full Docker app stack scripts", () => {
@@ -88,8 +89,10 @@ describe("Docker runtime packaging", () => {
 
     expect(dockerfile).toContain('CMD ["sh", "-c", "set -e;')
     expect(dockerfile).toContain('if [ \\"${RUN_MIGRATIONS:-false}\\" = \\"true\\" ]; then bunx prisma migrate deploy; fi;')
+    expect(dockerfile).toContain('case \\"${WW_SERVER_MODE:-split}\\" in')
     expect(dockerfile).toContain("exec bun run start:web")
     expect(dockerfile).toContain("exec bun run start:realtime")
+    expect(dockerfile).toContain("exec bun run start:split")
     expect(dockerfile).toContain("exec bun run start")
   })
 

@@ -9,6 +9,13 @@ import { createColyseusServer, getColyseusWss } from "./src/server/colyseus/app.
 import { createPostgresChatStore } from "./src/server/store/postgres"
 import { prisma } from "./src/server/db"
 import { applyDbLogLevelOverride, logger, resolveEnvLogLevel } from "./src/server/logger"
+import {
+  installRealtimeHttpProxy,
+  isRealtimeWebSocketProxyPath,
+  proxyRealtimeWebSocketUpgrade,
+  resolveRealtimeProxyConfig,
+  type RealtimeProxyConfig,
+} from "./src/server/realtime/realtimeProxy"
 import { resolveServerMode, type ServerMode } from "./src/server/runtimeConfig"
 
 const dev = process.env.NODE_ENV !== "production"
@@ -54,7 +61,9 @@ function logStartup(role: ServerMode): void {
  *
  * @returns Prepared Next app, Express app, and HTTP server.
  */
-async function createWebHttpServer(): Promise<{
+async function createWebHttpServer(options: {
+  readonly realtimeProxy?: RealtimeProxyConfig | null
+} = {}): Promise<{
   readonly nextApp: ReturnType<typeof next>
   readonly expressApp: Express
   readonly httpServer: HttpServer
@@ -65,6 +74,9 @@ async function createWebHttpServer(): Promise<{
   await nextApp.prepare()
 
   const expressApp = express()
+  if (options.realtimeProxy) {
+    installRealtimeHttpProxy(expressApp, options.realtimeProxy)
+  }
   expressApp.use((req, res) => {
     handle(req, res, parse(req.url ?? "/", true))
   })
@@ -97,14 +109,24 @@ async function bootstrapWebOnly(): Promise<void> {
   assertAuthSecret(role)
   await applyDbLogLevelOverride(prisma)
 
-  const { nextApp, httpServer } = await createWebHttpServer()
+  const realtimeProxy = resolveRealtimeProxyConfig()
+  const { nextApp, httpServer } = await createWebHttpServer({ realtimeProxy })
   const nextUpgradeHandler = dev ? nextApp.getUpgradeHandler() : null
-  if (dev && nextUpgradeHandler) {
+  if ((dev && nextUpgradeHandler) || realtimeProxy) {
     httpServer.on("upgrade", (req, socket, head) => {
-      nextUpgradeHandler(req, socket as Duplex, head as Buffer).catch((err: unknown) => {
-        logger.error({ event: "ws.upgrade.failed", role, area: "web", side: "server", err }, "WebSocket upgrade failed")
-        socket.destroy()
-      })
+      const pathname = req.url?.split("?")[0] ?? "/"
+      if (dev && nextUpgradeHandler && pathname.startsWith("/_next/")) {
+        nextUpgradeHandler(req, socket as Duplex, head as Buffer).catch((err: unknown) => {
+          logger.error({ event: "ws.upgrade.failed", role, area: "web", side: "server", err }, "WebSocket upgrade failed")
+          socket.destroy()
+        })
+        return
+      }
+      if (realtimeProxy && isRealtimeWebSocketProxyPath(req.url)) {
+        proxyRealtimeWebSocketUpgrade(req, socket as Duplex, head as Buffer, realtimeProxy)
+        return
+      }
+      socket.destroy()
     })
   }
 

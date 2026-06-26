@@ -38,4 +38,4 @@ COPY --from=builder /app/middleware.ts ./
 EXPOSE 3000 3001
 
 # Only the configured migration owner should run Prisma migrations.
-CMD ["sh", "-c", "set -e; if [ -n \"${WW_REALTIME_ADMIN_TOKEN_FROM_COMPOSE:-}\" ]; then export WW_REALTIME_ADMIN_TOKEN=\"${WW_REALTIME_ADMIN_TOKEN_FROM_COMPOSE}\"; fi; if [ \"${RUN_MIGRATIONS:-false}\" = \"true\" ]; then bunx prisma migrate deploy; fi; case \"${WW_SERVER_MODE:-single}\" in web) exec bun run start:web ;; realtime) exec bun run start:realtime ;; *) exec bun run start ;; esac"]
+CMD ["sh", "-c", "set -e; if [ -n \"${WW_REALTIME_ADMIN_TOKEN_FROM_COMPOSE:-}\" ]; then export WW_REALTIME_ADMIN_TOKEN=\"${WW_REALTIME_ADMIN_TOKEN_FROM_COMPOSE}\"; fi; if [ \"${RUN_MIGRATIONS:-false}\" = \"true\" ]; then bunx prisma migrate deploy; fi; case \"${WW_SERVER_MODE:-split}\" in web) exec bun run start:web ;; realtime) exec bun run start:realtime ;; single) exec bun run start ;; split) exec bun run start:split ;; *) exec bun run start:split ;; esac"]

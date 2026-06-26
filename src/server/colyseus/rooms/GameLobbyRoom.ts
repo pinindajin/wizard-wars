@@ -98,6 +98,24 @@ export const CLOSE_CODE_LOBBY_DISSOLVED = 4012
 
 const activeGameLoopRoomIds = new Set<string>()
 
+/**
+ * Computes a nearest-rank percentile for a small finite sample set.
+ *
+ * @param values - Sample values for the current aggregation window.
+ * @param percentile - Percentile ratio from 0 to 1.
+ * @returns Percentile value, or zero when no finite samples are present.
+ */
+function percentileValue(values: readonly number[], percentile: number): number {
+  const finite = values.filter(Number.isFinite)
+  if (finite.length === 0) return 0
+  finite.sort((a, b) => a - b)
+  const index = Math.min(
+    finite.length - 1,
+    Math.max(0, Math.ceil(finite.length * percentile) - 1),
+  )
+  return finite[index]!
+}
+
 export type AdminCloseLobbyInput = {
   readonly adminUserId: string
   readonly adminUsername: string
@@ -508,7 +526,8 @@ export class GameLobbyRoom extends Room {
   private performanceVisualBudgetDroppedVisuals = 0
   private performanceCriticalSendFailures = 0
   private performanceEventLoopLagMs = 0
-  private lastPerformanceStatusKey = "nominal"
+  private readonly performanceEventLoopLagSamplesMs: number[] = []
+  private lastPerformanceStatusKey: string | null = null
   private lastPerformanceStatusBroadcastAtMs = 0
   private lastServerPerfLogAtMs = 0
 
@@ -2428,6 +2447,7 @@ export class GameLobbyRoom extends Room {
     this.performanceVisualBudgetDroppedVisuals = 0
     this.performanceCriticalSendFailures = 0
     this.performanceEventLoopLagMs = 0
+    this.performanceEventLoopLagSamplesMs.length = 0
   }
 
   /**
@@ -2439,6 +2459,7 @@ export class GameLobbyRoom extends Room {
     if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) return
     const lagMs = Math.max(0, elapsedMs - TICK_MS)
     this.performanceEventLoopLagMs = Math.max(this.performanceEventLoopLagMs, lagMs)
+    this.performanceEventLoopLagSamplesMs.push(lagMs)
   }
 
   /**
@@ -2576,6 +2597,20 @@ export class GameLobbyRoom extends Room {
       if (critical) this.performanceCriticalSendFailures++
       throw err
     }
+  }
+
+  /**
+   * Broadcasts an empty room-wide player batch as a visual heartbeat.
+   *
+   * @param serverTimeMs - Current server wall-clock time.
+   */
+  private broadcastPlayerBatchHeartbeat(serverTimeMs: number): void {
+    this.broadcast(RoomEvent.PlayerBatchUpdate, {
+      deltas: [],
+      removedIds: [],
+      seq: this.playerBatchSeq++,
+      serverTimeMs,
+    })
   }
 
   /**
@@ -2786,6 +2821,10 @@ export class GameLobbyRoom extends Room {
       criticalSendFailures: this.performanceCriticalSendFailures,
       ...processMetricFields,
       eventLoopLagMs: this.performanceEventLoopLagMs,
+      eventLoopLagP95Ms: percentileValue(
+        this.performanceEventLoopLagSamplesMs,
+        0.95,
+      ),
       processCpuPercent: ((cpu.user + cpu.system) / 1000 / windowMs) * 100,
       heapUsedBytes: memory.heapUsed,
       rssBytes: memory.rss,
@@ -2847,6 +2886,7 @@ export class GameLobbyRoom extends Room {
   ): void {
     if (!this.performanceConfig.serverPerfLogsEnabled) return
     if (
+      !classification.degraded &&
       serverTimeMs - this.lastServerPerfLogAtMs <
       this.performanceConfig.serverPerfLogIntervalMs
     ) {
@@ -3029,6 +3069,14 @@ export class GameLobbyRoom extends Room {
         this.shouldFlushVisualBatches(serverTimeMs)
       ) {
         this.flushPendingVisualBatches(serverTimeMs)
+      }
+      if (
+        !this.hasPendingVisualBatches() &&
+        this.clients.length > 0 &&
+        this.shouldFlushVisualBatches(serverTimeMs)
+      ) {
+        this.broadcastPlayerBatchHeartbeat(serverTimeMs)
+        this.lastNetworkFlushAtMs = serverTimeMs
       }
       this.performanceBroadcastDurationMs += performance.now() - broadcastStartedAtPerfMs
       recordRoomTickDuration()

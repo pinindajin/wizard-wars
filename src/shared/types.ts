@@ -376,6 +376,7 @@ export type ServerPerformanceStatusPayload = {
     readonly processEventLoopDelayP95Ms?: number
     readonly eventLoopUtilization?: number
     readonly gcPauseMs?: number
+    readonly eventLoopLagP95Ms?: number
     readonly eventLoopLagMs: number
     readonly processCpuPercent: number
     readonly heapUsedBytes: number
