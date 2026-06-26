@@ -71,6 +71,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
     const rawLastProcessedInputSeq = lastProcessedInputSeqByPlayer.get(userId)
     const hasProcessedInputSeq = rawLastProcessedInputSeq !== -1
     const lastProcessedInputSeq = Math.max(0, rawLastProcessedInputSeq ?? 0)
+    const storedLastProcessedInputSeq = hasProcessedInputSeq ? lastProcessedInputSeq : -1
 
     if (!prev) {
       const fullDelta: MutablePlayerDelta = {
@@ -115,7 +116,7 @@ export function playerDeltaSystem(ctx: SimCtx): void {
         hasSwiftBoots,
         terrainState,
         abilityStates,
-        lastProcessedInputSeq,
+        lastProcessedInputSeq: storedLastProcessedInputSeq,
       })
       continue
     }

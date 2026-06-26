@@ -211,6 +211,12 @@ describe("playerDeltaSystem sparse delta contract", () => {
     expect(ctx.playerDeltas[0]).not.toHaveProperty("lastProcessedInputSeq")
 
     ctx.playerDeltas.length = 0
+    ctx.lastProcessedInputSeqByPlayer.set("player-1", 0)
+    playerDeltaSystem(ctx)
+
+    expect(ctx.playerDeltas).toEqual([{ id: eid, lastProcessedInputSeq: 0 }])
+
+    ctx.playerDeltas.length = 0
     ctx.lastProcessedInputSeqByPlayer.set("player-1", 1)
     playerDeltaSystem(ctx)
 

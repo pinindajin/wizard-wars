@@ -830,7 +830,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       terrainState: "land",
       hasSwiftBoots: false,
       abilityStates: abilityRuntimeStatesForPlayer(eid, currentTick),
-      lastProcessedInputSeq: 0,
+      lastProcessedInputSeq: -1,
     })
     // `-1`: no input processed yet; first client `seq: 0` is accepted in `tick`.
     lastProcessedInputSeqByPlayer.set(userId, -1)
