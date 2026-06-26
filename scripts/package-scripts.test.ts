@@ -127,3 +127,19 @@ describe("Docker runtime packaging", () => {
     expect(dockerEnvSample).toContain('WW_REALTIME_ADMIN_TOKEN="replace-with-shared-service-token"')
   })
 })
+
+describe("production image publish workflow", () => {
+  it("runs E2E in a fresh gate before publishing the Docker image", () => {
+    const workflow = readRepoText(".github/workflows/publish-prod-image.yml")
+
+    expect(workflow).toContain("  quality:")
+    expect(workflow).toContain("    name: Quality Gate")
+    expect(workflow).toContain("  e2e:")
+    expect(workflow).toContain("    name: E2E Gate")
+    expect(workflow).toContain("  publish:")
+    expect(workflow).toContain("    name: Build, Publish, Deploy")
+    expect(workflow).toContain("    needs: [quality, e2e]")
+    expect(workflow).toContain("      - name: Upload Playwright traces on failure")
+    expect(workflow).toContain("          path: test-results/")
+  })
+})
