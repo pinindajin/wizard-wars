@@ -99,7 +99,7 @@ describe("Docker runtime packaging", () => {
     const alignedPublicUrl =
       'NEXT_PUBLIC_COLYSEUS_URL: "${NEXT_PUBLIC_COLYSEUS_URL:-http://127.0.0.1:${WW_REALTIME_HOST_PORT:-3001}}"'
     const alignedWebOrigin =
-      'WW_WEB_ORIGIN: "${WW_WEB_ORIGIN:-http://127.0.0.1:${WW_APP_HOST_PORT:-3000}}"'
+      'WW_WEB_ORIGIN: "${WW_WEB_ORIGIN:-http://127.0.0.1:${WW_APP_HOST_PORT:-3000},http://localhost:${WW_APP_HOST_PORT:-3000}}"'
 
     expect(dockerfile).toContain("ARG NEXT_PUBLIC_COLYSEUS_URL")
     expect(dockerfile).toContain("ENV NEXT_PUBLIC_COLYSEUS_URL=${NEXT_PUBLIC_COLYSEUS_URL}")

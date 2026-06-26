@@ -10,16 +10,33 @@ import { prisma } from "../db"
 import { applyDbLogLevelOverride, logger, resolveEnvLogLevel } from "../logger"
 
 /**
+ * Parses a comma-delimited realtime CORS origin setting.
+ *
+ * @param allowedOrigin - Optional origin or comma-delimited origin list.
+ * @returns Set of non-empty allowed origin strings.
+ */
+function parseAllowedCorsOrigins(allowedOrigin: string | undefined): Set<string> {
+  return new Set(
+    allowedOrigin
+      ?.split(",")
+      .map((origin) => origin.trim())
+      .filter(Boolean) ?? [],
+  )
+}
+
+/**
  * Installs lightweight CORS headers for browser-facing realtime HTTP requests.
  *
  * @param app - Express application.
- * @param allowedOrigin - Optional allowed web origin.
+ * @param allowedOrigin - Optional allowed web origin or comma-delimited origin list.
  */
 export function installRealtimeCors(app: Express, allowedOrigin = process.env.WW_WEB_ORIGIN?.trim()): void {
+  const allowedOrigins = parseAllowedCorsOrigins(allowedOrigin)
+
   app.use((req, res, next) => {
     const origin = req.header("origin")
-    if (allowedOrigin && origin === allowedOrigin) {
-      res.header("access-control-allow-origin", allowedOrigin)
+    if (origin && allowedOrigins.has(origin)) {
+      res.header("access-control-allow-origin", origin)
       res.header("access-control-allow-credentials", "true")
       res.header("access-control-allow-headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization")
       res.header("access-control-allow-methods", "GET,HEAD,POST,OPTIONS")
