@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import { Position } from "@/server/game/components"
+import { PlayerInputQueue } from "@/server/game/playerInputQueue"
 import { createGameSimulation } from "@/server/game/simulation"
 import { ARENA_SPAWN_POINTS } from "@/shared/balance-config"
 import type { PlayerInputPayload } from "@/shared/types"
@@ -49,7 +50,9 @@ describe("spatial-index-backed simulation paths", () => {
     const output = sim.tick(
       new Map([[
         "p0",
-        [input(0, { right: true, weaponTargetX: beforeX + 200, weaponTargetY: Position.y[eid] })],
+        new PlayerInputQueue([
+          input(0, { right: true, weaponTargetX: beforeX + 200, weaponTargetY: Position.y[eid] }),
+        ]),
       ]]),
       1,
     )
