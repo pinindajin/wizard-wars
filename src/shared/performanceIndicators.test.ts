@@ -2,13 +2,43 @@ import { describe, expect, it } from "vitest"
 
 import {
   PERFORMANCE_ISSUE_ORDER,
+  SERVER_DROPPED_DEBT_DIAGNOSTIC_THRESHOLD_MS,
+  SERVER_EVENT_LOOP_LAG_DIAGNOSTIC_THRESHOLD_MS,
   classifyServerPerformance,
   createRubberbandState,
   isAuthoritativeMessageStale,
   isRubberbanding,
   recordRubberbandCorrection,
   serverPerformanceStatusKey,
+  type ServerPerformanceMetrics,
 } from "./performanceIndicators"
+
+function serverMetrics(
+  overrides: Partial<ServerPerformanceMetrics> = {},
+): ServerPerformanceMetrics {
+  return {
+    windowMs: 1_000,
+    droppedDebtMs: 0,
+    catchUpCallbacks: 0,
+    inputQueueDrops: 0,
+    simDurationMs: 35,
+    broadcastDurationMs: 8,
+    roomTickDurationMs: 40,
+    visualFlushDurationMs: 4,
+    ownerAckSendDurationMs: 4,
+    immediateBroadcastDurationMs: 1,
+    processEventLoopDelayMs: 12,
+    processEventLoopDelayP95Ms: 4,
+    eventLoopLagMs: 4,
+    eventLoopLagP95Ms: 4,
+    processCpuPercent: 18,
+    heapUsedBytes: 1024,
+    rssBytes: 2048,
+    activeRooms: 1,
+    connectedClients: 8,
+    ...overrides,
+  }
+}
 
 describe("performance indicator helpers", () => {
   it("keeps the Seas warning icon priority order", () => {
@@ -69,6 +99,7 @@ describe("performance indicator helpers", () => {
       eventLoopUtilization: 0.5,
       gcPauseMs: 3,
       eventLoopLagMs: 25,
+      eventLoopLagP95Ms: 20,
       processCpuPercent: 95,
       heapUsedBytes: 1024,
       rssBytes: 2048,
@@ -89,6 +120,88 @@ describe("performance indicator helpers", () => {
     expect(serverPerformanceStatusKey(overloaded)).toBe(
       "dropped_debt|catch_up|input_queue_drops|event_loop_lag|broadcast_slow",
     )
+  })
+
+  it("ignores isolated max loop-lag spikes when the sustained p95 lag is healthy", () => {
+    expect(
+      classifyServerPerformance(serverMetrics({
+        eventLoopLagMs: 25,
+        eventLoopLagP95Ms: 8,
+      })),
+    ).toEqual({
+      degraded: false,
+      reasons: [],
+    })
+  })
+
+  it("falls back to max loop lag when p95 lag is unavailable", () => {
+    expect(
+      classifyServerPerformance(serverMetrics({
+        eventLoopLagMs: 25,
+        eventLoopLagP95Ms: undefined,
+      })),
+    ).toEqual({
+      degraded: true,
+      reasons: ["event_loop_lag"],
+    })
+  })
+
+  it("ignores sub-frame dropped debt when catch-up remains bounded", () => {
+    expect(
+      classifyServerPerformance(serverMetrics({
+        droppedDebtMs: 1.5,
+        catchUpCallbacks: 9,
+        eventLoopLagMs: 51,
+        eventLoopLagP95Ms: 8,
+      })),
+    ).toEqual({
+      degraded: false,
+      reasons: [],
+    })
+  })
+
+  it("classifies dropped debt only at the diagnostic threshold", () => {
+    expect(
+      classifyServerPerformance(serverMetrics({
+        droppedDebtMs: SERVER_DROPPED_DEBT_DIAGNOSTIC_THRESHOLD_MS - 0.001,
+        catchUpCallbacks: 2,
+      })),
+    ).toEqual({
+      degraded: false,
+      reasons: [],
+    })
+
+    expect(
+      classifyServerPerformance(serverMetrics({
+        droppedDebtMs: SERVER_DROPPED_DEBT_DIAGNOSTIC_THRESHOLD_MS,
+        catchUpCallbacks: 2,
+      })),
+    ).toEqual({
+      degraded: true,
+      reasons: ["dropped_debt", "catch_up"],
+    })
+  })
+
+  it("classifies sustained loop lag only at the p95 diagnostic threshold", () => {
+    expect(
+      classifyServerPerformance(serverMetrics({
+        eventLoopLagMs: 80,
+        eventLoopLagP95Ms: SERVER_EVENT_LOOP_LAG_DIAGNOSTIC_THRESHOLD_MS - 0.001,
+      })),
+    ).toEqual({
+      degraded: false,
+      reasons: [],
+    })
+
+    expect(
+      classifyServerPerformance(serverMetrics({
+        eventLoopLagMs: 80,
+        eventLoopLagP95Ms: SERVER_EVENT_LOOP_LAG_DIAGNOSTIC_THRESHOLD_MS,
+      })),
+    ).toEqual({
+      degraded: true,
+      reasons: ["event_loop_lag"],
+    })
   })
 
   it("does not flag normal 8-client aggregate broadcast cost without loop debt", () => {

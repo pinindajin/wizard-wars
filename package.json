@@ -9,6 +9,7 @@
     "start": "NODE_ENV=production bun server.ts",
     "start:web": "NODE_ENV=production WW_SERVER_MODE=web bun server.ts",
     "start:realtime": "NODE_ENV=production WW_SERVER_MODE=realtime bun src/server/colyseus/realtime-server.ts",
+    "start:split": "NODE_ENV=production bun src/server/split-runtime.ts",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

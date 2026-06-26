@@ -25,6 +25,7 @@ export const RUBBERBAND_SMOOTH_THRESHOLD = 3
 export const LOST_CONNECTION_STALE_MS = 5_000
 export const SERVER_PERFORMANCE_STATUS_STALE_MS = 3_000
 export const SERVER_PERFORMANCE_STATUS_MIN_INTERVAL_MS = 1_000
+export const SERVER_DROPPED_DEBT_DIAGNOSTIC_THRESHOLD_MS = 8
 export const SERVER_CATCH_UP_DIAGNOSTIC_THRESHOLD = 2
 export const SERVER_EVENT_LOOP_LAG_DIAGNOSTIC_THRESHOLD_MS = 16
 export const SERVER_BROADCAST_DIAGNOSTIC_THRESHOLD_MS = 50
@@ -57,6 +58,7 @@ export type ServerPerformanceMetrics = {
   readonly eventLoopUtilization?: number
   readonly gcPauseMs?: number
   readonly eventLoopLagMs: number
+  readonly eventLoopLagP95Ms?: number
   readonly processCpuPercent: number
   readonly heapUsedBytes: number
   readonly rssBytes: number
@@ -161,15 +163,19 @@ export function classifyServerPerformance(
   metrics: ServerPerformanceMetrics,
 ): ServerPerformanceClassification {
   const reasons: ServerPerformanceStatusReason[] = []
-  if (metrics.droppedDebtMs > 0) reasons.push("dropped_debt")
+  const droppedDebtIsDiagnostic =
+    metrics.droppedDebtMs >= SERVER_DROPPED_DEBT_DIAGNOSTIC_THRESHOLD_MS
+  if (droppedDebtIsDiagnostic) reasons.push("dropped_debt")
   if (
-    (metrics.droppedDebtMs > 0 || metrics.inputQueueDrops > 0) &&
+    (droppedDebtIsDiagnostic || metrics.inputQueueDrops > 0) &&
     metrics.catchUpCallbacks >= SERVER_CATCH_UP_DIAGNOSTIC_THRESHOLD
   ) {
     reasons.push("catch_up")
   }
   if (metrics.inputQueueDrops > 0) reasons.push("input_queue_drops")
-  if (metrics.eventLoopLagMs >= SERVER_EVENT_LOOP_LAG_DIAGNOSTIC_THRESHOLD_MS) {
+  const sustainedEventLoopLagMs =
+    metrics.eventLoopLagP95Ms ?? metrics.eventLoopLagMs
+  if (sustainedEventLoopLagMs >= SERVER_EVENT_LOOP_LAG_DIAGNOSTIC_THRESHOLD_MS) {
     reasons.push("event_loop_lag")
   }
   if (metrics.broadcastDurationMs >= SERVER_BROADCAST_DIAGNOSTIC_THRESHOLD_MS) {

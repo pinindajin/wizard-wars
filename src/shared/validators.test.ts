@@ -244,6 +244,7 @@ describe("ServerPerformanceStatus protocol", () => {
       processEventLoopDelayP95Ms: 7,
       eventLoopUtilization: 0.6,
       gcPauseMs: 9,
+      eventLoopLagP95Ms: 12,
       eventLoopLagMs: 20,
       processCpuPercent: 85,
       heapUsedBytes: 1024,
@@ -263,6 +264,16 @@ describe("ServerPerformanceStatus protocol", () => {
 
   it("parses valid server performance status payloads", () => {
     expect(parseServerPerformanceStatusPayload(validStatus)).toEqual(validStatus)
+  })
+
+  it("accepts server performance payloads from before event-loop p95 metrics", () => {
+    const { eventLoopLagP95Ms: _omitted, ...legacyMetrics } = validStatus.metrics
+    const legacyStatus = {
+      ...validStatus,
+      metrics: legacyMetrics,
+    }
+
+    expect(parseServerPerformanceStatusPayload(legacyStatus)).toEqual(legacyStatus)
   })
 
   it("rejects unknown server performance status reasons", () => {

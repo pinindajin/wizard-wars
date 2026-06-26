@@ -15,7 +15,7 @@ Own HTTP server platform behavior: the custom Bun/Express/Next host, API routes,
 
 ## Key Flows
 
-- Server bootstrap resolves log level, validates `AUTH_SECRET`, applies DB log-level override, prepares Next, then either runs web-only mode (`WW_SERVER_MODE=web`) or the legacy single-process fallback (`WW_SERVER_MODE` unset/`single`).
+- Server bootstrap resolves log level, validates `AUTH_SECRET`, applies DB log-level override, prepares Next, then either runs web-only mode (`WW_SERVER_MODE=web`) or the legacy single-process fallback (`WW_SERVER_MODE` unset/`single`). Web-only mode can proxy Colyseus matchmake HTTP and websocket upgrades to `WW_REALTIME_PROXY_URL` for single-container split deployments.
 - Auth/signup/login create a `ww-token` JWT cookie; protected routes verify it and optionally check the DB row when `VERIFY_USER_ON_PROTECTED=true`.
 - `/api/auth/ws-token` gives browser code a token path for Colyseus joins without exposing the HttpOnly cookie directly.
 - Web-only admin/lobby routes call the realtime process through `WW_REALTIME_ADMIN_URL` with `WW_REALTIME_ADMIN_TOKEN`; missing/unreachable realtime maps to explicit 503/504 responses.

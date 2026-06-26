@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { RoomEvent } from "@/shared/roomEvents"
+import { TICK_MS } from "@/shared/balance-config/rendering"
 import { createGameSimulation, type SimOutput } from "@/server/game/simulation"
 import {
   FireballVisualBatchCoalescer,
@@ -427,7 +428,7 @@ describe("GameLobbyRoom network batching", () => {
     ).toThrow("cannot build GameStateSync without an active simulation")
   })
 
-  it("unicasts dedicated owner ACKs from sparse seq-only deltas without ever flushing visuals", () => {
+  it("unicasts dedicated owner ACKs without leaking ACK cursors into visual heartbeats", () => {
     vi.useFakeTimers()
     vi.setSystemTime(1_010)
 
@@ -440,6 +441,7 @@ describe("GameLobbyRoom network batching", () => {
       userData: { playerId: "player-2" },
       send: vi.fn(),
     }
+    const broadcast = vi.fn()
     const buildPlayerOwnerAckPayload = vi.fn(
       (id: number, lastProcessedInputSeq: number, serverTimeMs: number) => ({
         id,
@@ -466,7 +468,7 @@ describe("GameLobbyRoom network batching", () => {
       value: [p1, p2],
     })
     Object.assign(room as object, {
-      broadcast: vi.fn(),
+      broadcast,
       lobbyPhase: "IN_PROGRESS",
       lastNetworkFlushAtMs: 1_000,
       simulation: {
@@ -534,7 +536,7 @@ describe("GameLobbyRoom network batching", () => {
       RoomEvent.PlayerOwnerAck,
       expect.objectContaining({ playerId: "player-1" }),
     )
-    expect((room as unknown as { broadcast: ReturnType<typeof vi.fn> }).broadcast).not.toHaveBeenCalledWith(
+    expect(broadcast).not.toHaveBeenCalledWith(
       RoomEvent.PlayerBatchUpdate,
       expect.anything(),
     )
@@ -542,11 +544,18 @@ describe("GameLobbyRoom network batching", () => {
     vi.setSystemTime(1_040)
     ;(room as unknown as { runGameTick: () => void }).runGameTick()
 
-    expect((room as unknown as { broadcast: ReturnType<typeof vi.fn> }).broadcast).not.toHaveBeenCalledWith(
-      RoomEvent.PlayerBatchUpdate,
-      expect.anything(),
-    )
-    expect((room as unknown as { lastNetworkFlushAtMs: number }).lastNetworkFlushAtMs).toBe(1_000)
+    const playerBatchPayloads = broadcast.mock.calls
+      .filter(([event]) => event === RoomEvent.PlayerBatchUpdate)
+      .map(([, payload]) => payload)
+    expect(playerBatchPayloads).toEqual([
+      {
+        deltas: [],
+        removedIds: [],
+        seq: 0,
+        serverTimeMs: 1_040,
+      },
+    ])
+    expect((room as unknown as { lastNetworkFlushAtMs: number }).lastNetworkFlushAtMs).toBe(1_040)
   })
 
   it("sends owner ACKs before visual coalescing handles player deltas", () => {
@@ -1922,7 +1931,7 @@ describe("GameLobbyRoom network batching", () => {
     Object.assign(room as object, {
       performanceWindowStartedAtPerfMs: performance.now() - 1_100,
       performanceWindowCpuStart: process.cpuUsage(),
-      performanceDroppedDebtMs: 1,
+      performanceDroppedDebtMs: 16,
       performanceCatchUpCallbacks: 2,
       performanceBroadcastDurationMs: 12,
       performanceRoomTickDurationMs: 9,
@@ -1952,7 +1961,7 @@ describe("GameLobbyRoom network batching", () => {
         degraded: true,
         reasons: expect.arrayContaining(["dropped_debt", "catch_up"]),
         metrics: expect.objectContaining({
-          droppedDebtMs: 1,
+          droppedDebtMs: 16,
           catchUpCallbacks: 2,
           broadcastDurationMs: 7,
           roomTickDurationMs: 9,
@@ -1988,7 +1997,135 @@ describe("GameLobbyRoom network batching", () => {
       }
     ).maybeBroadcastServerPerformanceStatus(5_500)
 
+    expect(broadcast).toHaveBeenCalledWith(
+      RoomEvent.ServerPerformanceStatus,
+      expect.objectContaining({
+        degraded: false,
+        reasons: [],
+        metrics: expect.objectContaining({
+          broadcastDurationMs: 0,
+          droppedDebtMs: 1,
+        }),
+      }),
+    )
+  })
+
+  it("broadcasts one initial nominal server performance status for evidence", () => {
+    const room = new GameLobbyRoom()
+    const broadcast = vi.fn()
+    Object.defineProperty(room, "clients", {
+      configurable: true,
+      value: [{ userData: { playerId: "player-1" } }],
+    })
+    Object.assign(room as object, {
+      broadcast,
+      performanceWindowStartedAtPerfMs: performance.now() - 1_100,
+      performanceWindowCpuStart: process.cpuUsage(),
+      performanceDroppedDebtMs: 0,
+      performanceCatchUpCallbacks: 0,
+      performanceInputQueueDrops: 0,
+      performanceSimDurationMs: 1,
+      performanceBroadcastDurationMs: 2,
+      performanceRoomTickDurationMs: 3,
+      performanceVisualFlushDurationMs: 4,
+      performanceOwnerAckSendDurationMs: 5,
+      performanceImmediateBroadcastDurationMs: 6,
+      performanceVisualBudgetDeferrals: 0,
+      performanceVisualBudgetDeferredEntities: 0,
+      performanceVisualBudgetMaxDeferralAgeMs: 0,
+      performanceVisualBudgetDroppedVisuals: 0,
+      performanceCriticalSendFailures: 0,
+      performanceEventLoopLagMs: 20,
+      performanceEventLoopLagSamplesMs: [0, 0, 1, 2, 3],
+      processEventLoopMonitor: {
+        snapshot: vi.fn(() => ({})),
+      },
+    })
+
+    ;(
+      room as unknown as {
+        maybeBroadcastServerPerformanceStatus: (serverTimeMs: number) => void
+      }
+    ).maybeBroadcastServerPerformanceStatus(6_000)
+
+    expect(broadcast).toHaveBeenCalledWith(
+      RoomEvent.ServerPerformanceStatus,
+      expect.objectContaining({
+        degraded: false,
+        reasons: [],
+        metrics: expect.objectContaining({
+          eventLoopLagMs: 20,
+          eventLoopLagP95Ms: 3,
+        }),
+      }),
+    )
+
+    broadcast.mockClear()
+    Object.assign(room as object, {
+      performanceWindowStartedAtPerfMs: performance.now() - 1_100,
+      performanceWindowCpuStart: process.cpuUsage(),
+      performanceEventLoopLagMs: 0,
+      performanceEventLoopLagSamplesMs: [0],
+    })
+    ;(
+      room as unknown as {
+        maybeBroadcastServerPerformanceStatus: (serverTimeMs: number) => void
+      }
+    ).maybeBroadcastServerPerformanceStatus(7_000)
+
     expect(broadcast).not.toHaveBeenCalled()
+  })
+
+  it("records loop timing samples and reports p95 lag separately from max lag", () => {
+    const room = new GameLobbyRoom()
+    const broadcast = vi.fn()
+    Object.defineProperty(room, "clients", {
+      configurable: true,
+      value: [{ userData: { playerId: "player-1" } }],
+    })
+    Object.assign(room as object, {
+      broadcast,
+      performanceWindowStartedAtPerfMs: performance.now() - 1_100,
+      performanceWindowCpuStart: process.cpuUsage(),
+      performanceDroppedDebtMs: 0,
+      performanceCatchUpCallbacks: 0,
+      performanceInputQueueDrops: 0,
+      performanceSimDurationMs: 1,
+      performanceBroadcastDurationMs: 2,
+      performanceRoomTickDurationMs: 3,
+      performanceVisualFlushDurationMs: 4,
+      performanceOwnerAckSendDurationMs: 5,
+      performanceImmediateBroadcastDurationMs: 6,
+      performanceVisualBudgetDeferrals: 0,
+      performanceVisualBudgetDeferredEntities: 0,
+      performanceVisualBudgetMaxDeferralAgeMs: 0,
+      performanceVisualBudgetDroppedVisuals: 0,
+      performanceCriticalSendFailures: 0,
+      processEventLoopMonitor: {
+        snapshot: vi.fn(() => ({})),
+      },
+    })
+
+    const privateRoom = room as unknown as {
+      recordLoopTiming: (elapsedMs: number) => void
+      maybeBroadcastServerPerformanceStatus: (serverTimeMs: number) => void
+    }
+    for (let index = 0; index < 19; index += 1) {
+      privateRoom.recordLoopTiming(TICK_MS)
+    }
+    privateRoom.recordLoopTiming(TICK_MS + 20)
+    privateRoom.maybeBroadcastServerPerformanceStatus(6_000)
+
+    const payload = broadcast.mock.calls[0]?.[1]
+    expect(broadcast.mock.calls[0]?.[0]).toBe(RoomEvent.ServerPerformanceStatus)
+    expect(payload).toMatchObject({
+      degraded: false,
+      reasons: [],
+      metrics: {
+        eventLoopLagP95Ms: 0,
+      },
+    })
+    expect(payload.metrics.eventLoopLagMs).toBeCloseTo(20)
   })
 
   it("broadcasts nominal server performance status when visual budget telemetry is present", () => {
@@ -2044,7 +2181,7 @@ describe("GameLobbyRoom network batching", () => {
     )
   })
 
-  it("logs server performance windows only when the opt-in cadence allows it", () => {
+  it("logs nominal server performance windows by cadence and degraded windows immediately", () => {
     const logSpy = vi.spyOn(logger, "info").mockImplementation(() => undefined)
     const room = new GameLobbyRoom()
     const perfMetrics = {
@@ -2102,7 +2239,7 @@ describe("GameLobbyRoom network batching", () => {
         ) => void
       }
     ).maybeLogServerPerformanceWindow(
-      2_000,
+      1_500,
       { degraded: true, reasons: ["event_loop_lag"] },
       perfMetrics,
       "monitorEventLoopDelay unavailable",
