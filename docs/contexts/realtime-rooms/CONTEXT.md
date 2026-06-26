@@ -17,9 +17,10 @@ Own Colyseus room lifecycle, realtime session orchestration, lobby/match phase t
 ## Key Flows
 
 - Browser clients join a `game_lobby` room with a verified token and become lobby roster entries.
-- In split-process deployments, browser clients obtain JWTs from the web process and connect directly to the realtime origin configured by `NEXT_PUBLIC_COLYSEUS_URL`; set it before Next/Docker build and at runtime.
+- In split-process deployments, browser clients obtain JWTs from the web process and either connect directly to the realtime origin configured by `NEXT_PUBLIC_COLYSEUS_URL` or, for single-container split runtime, use the web origin while `/matchmake/*` and websocket upgrades proxy to the sibling realtime process through `WW_REALTIME_PROXY_URL`. Single-container split builds must leave `NEXT_PUBLIC_COLYSEUS_URL` unset so the browser does not bypass the proxy.
 - Host starts the match, which moves the room through `LOBBY`, `WAITING_FOR_CLIENTS`, `COUNTDOWN`, `IN_PROGRESS`, `SCOREBOARD`, and back to `LOBBY`.
 - During `IN_PROGRESS`, the room runs the simulation interval and broadcasts simulation output through `RoomEvent` payloads.
+- Empty in-progress player-batch heartbeats keep visual `serverTimeMs` fresh at the configured visual cadence when no player deltas are pending; they must not include owner-only ACK cursors.
 - Reconnect/drop paths preserve roster state during the reconnect window and clean up indexes when players truly leave.
 - Room hydration sends lobby state, shop state, and full game state when clients request resync or join in progress.
 - The web process calls realtime internal endpoints with `WW_REALTIME_ADMIN_TOKEN`; browser JWTs are not reused for service auth.

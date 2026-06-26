@@ -364,6 +364,7 @@ export const serverPerformanceStatusPayloadSchema = z.object({
     processEventLoopDelayP95Ms: z.number().finite().nonnegative().optional(),
     eventLoopUtilization: z.number().finite().min(0).max(1).optional(),
     gcPauseMs: z.number().finite().nonnegative().optional(),
+    eventLoopLagP95Ms: z.number().finite().nonnegative().optional(),
     eventLoopLagMs: z.number().finite().nonnegative(),
     processCpuPercent: z.number().finite().nonnegative(),
     heapUsedBytes: z.number().int().nonnegative(),
