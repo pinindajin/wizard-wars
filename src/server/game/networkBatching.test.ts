@@ -45,6 +45,7 @@ describe("server network batching", () => {
     ])
 
     expect(coalescer.hasPending()).toBe(false)
+    expect(coalescer.peek(1)).toBeNull()
     expect(coalescer.flush()).toEqual([])
   })
 
@@ -339,6 +340,35 @@ describe("server network batching", () => {
         facingAngle: 0.25,
         moveFacingAngle: 0.5,
       },
+    })
+  })
+
+  it("sends mouse-aim facing immediately with the paired movement sample", () => {
+    const split = splitPlayerDeltaForVisualBudget({
+      id: 7,
+      x: 10,
+      y: 20,
+      vx: 1,
+      vy: 2,
+      facingAngle: 0.25,
+      moveFacingAngle: 0.5,
+      animState: "light_cast",
+      castingAbilityId: "fireball",
+    })
+
+    expect(split).toEqual({
+      critical: {
+        id: 7,
+        x: 10,
+        y: 20,
+        vx: 1,
+        vy: 2,
+        facingAngle: 0.25,
+        moveFacingAngle: 0.5,
+        animState: "light_cast",
+        castingAbilityId: "fireball",
+      },
+      visual: null,
     })
   })
 

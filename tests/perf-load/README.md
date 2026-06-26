@@ -52,7 +52,9 @@ input drops.
 
 `activeRoomsAfterCleanup` is captured after clients leave but before the
 60-second in-progress reconnect grace necessarily expires. Treat nonzero values
-as a follow-up signal, not as a hard pass/fail gate.
+as a follow-up signal, not as a hard pass/fail gate. The compatibility
+`activeRoomLeakDetected` report field stays false for this immediate sample;
+confirm suspected room leaks with a delayed check after reconnect grace.
 
 Use `WW_PERF_LOAD_TEST_TIMEOUT_MS` only when a slow host needs a larger Vitest
 timeout than `WW_PERF_LOAD_SECONDS + 180s`. Use

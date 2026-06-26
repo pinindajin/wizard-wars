@@ -536,6 +536,43 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     expect(ClientRenderPos[1].x).toBeCloseTo(50, 5)
   })
 
+  it("keeps facing-only remote updates visible over older interpolation samples", () => {
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    sys.localPlayerId = "local-player"
+
+    const now = Date.now()
+    sys.applyFullSync({
+      players: [snap({
+        id: 1,
+        playerId: "remote",
+        x: 0,
+        y: 0,
+        facingAngle: 0,
+        moveFacingAngle: 0,
+      })],
+      fireballs: [],
+      seq: 0,
+      serverTimeMs: now,
+    })
+
+    ClientPlayerState[1]!.animState = "light_cast"
+    ClientPlayerState[1]!.facingAngle = Math.PI
+    ClientPlayerState[1]!.moveFacingAngle = Math.PI
+
+    vi.setSystemTime(new Date(now + 134))
+    sys.update(0, { up: false, down: false, left: false, right: false })
+
+    const sprite = scene.add.sprite.mock.results[0]?.value as {
+      play: ReturnType<typeof vi.fn>
+    }
+    expect(ClientPlayerState[1]!.facingAngle).toBe(Math.PI)
+    expect(sprite.play).toHaveBeenCalledWith(
+      getAnimKey("light_cast", getDirectionFromAngle(Math.PI)),
+      true,
+    )
+  })
+
   it("keeps the legacy batch-received compatibility hook as a no-op", () => {
     const { scene, group } = mockSceneAndGroup()
     const sys = new PlayerRenderSystem(scene as never, group as never)

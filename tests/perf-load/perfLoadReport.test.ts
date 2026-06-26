@@ -99,6 +99,62 @@ describe("perf-load report helpers", () => {
     expect(stats.diagnosticOnly).toBe(false)
   })
 
+  it("summarizes long soak sample arrays without spreading them onto the stack", () => {
+    const samples = Array.from({ length: 200_000 }, (_, index) => index % 10_000)
+
+    const stats = summarizePerfLoadRun({
+      runId: "long-soak",
+      scenarioId: "compact8",
+      startedAtIso: "2026-06-25T00:00:00.000Z",
+      endedAtIso: "2026-06-25T05:00:00.000Z",
+      clientCount: 8,
+      seconds: 18_000,
+      inputRateHz: 60,
+      transport: "compact",
+      sentInputs: 100,
+      ownerAcks: 90,
+      playerBatches: 80,
+      roomWideAckCursorLeaks: 0,
+      wrongOwnerAckCount: 0,
+      clientsWithoutOwnerAcks: 0,
+      minOwnerAcksPerClient: 9,
+      ackGapsMs: samples,
+      playerBatchGapsMs: samples,
+      statuses: [],
+      activeRoomsAfterCleanup: 0,
+    })
+
+    expect(stats.maxAckGapMs).toBe(9999)
+    expect(stats.maxPlayerBatchGapMs).toBe(9999)
+  })
+
+  it("keeps reconnect-grace active room counts report-only instead of marking leaks", () => {
+    const stats = summarizePerfLoadRun({
+      runId: "reconnect-grace",
+      scenarioId: "compact8",
+      startedAtIso: "2026-06-25T00:00:00.000Z",
+      endedAtIso: "2026-06-25T00:10:00.000Z",
+      clientCount: 8,
+      seconds: 600,
+      inputRateHz: 60,
+      transport: "compact",
+      sentInputs: 100,
+      ownerAcks: 90,
+      playerBatches: 80,
+      roomWideAckCursorLeaks: 0,
+      wrongOwnerAckCount: 0,
+      clientsWithoutOwnerAcks: 0,
+      minOwnerAcksPerClient: 9,
+      ackGapsMs: [],
+      playerBatchGapsMs: [],
+      statuses: [],
+      activeRoomsAfterCleanup: 1,
+    })
+
+    expect(stats.activeRoomsAfterCleanup).toBe(1)
+    expect(stats.activeRoomLeakDetected).toBe(false)
+  })
+
   it("uses strict scenario degradation budgets for long gates unless diagnostic-only is requested", () => {
     expect(
       degradedStatusBudget({

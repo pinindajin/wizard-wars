@@ -2598,13 +2598,34 @@ export class GameLobbyRoom extends Room {
 
     const criticalDeltas: PlayerDelta[] = []
     const visualDeltas: PlayerDelta[] = []
+    const supersededVisualIds: number[] = []
     for (const delta of playerDeltas) {
       const split = splitPlayerDeltaForVisualBudget(delta)
-      if (split.critical) criticalDeltas.push(split.critical)
+      if (split.critical) {
+        let critical = split.critical
+        if (
+          critical.x !== undefined ||
+          critical.y !== undefined ||
+          critical.vx !== undefined ||
+          critical.vy !== undefined ||
+          critical.facingAngle !== undefined ||
+          critical.moveFacingAngle !== undefined
+        ) {
+          const pendingVisual = this.playerVisualBatchCoalescer.peek(critical.id)
+          if (pendingVisual) {
+            critical = { ...pendingVisual, ...critical }
+          }
+          supersededVisualIds.push(critical.id)
+        }
+        criticalDeltas.push(critical)
+      }
       if (split.visual) visualDeltas.push(split.visual)
     }
 
     this.broadcastPlayerBatchUpdate(criticalDeltas, serverTimeMs, true)
+    for (const id of supersededVisualIds) {
+      this.playerVisualBatchCoalescer.drop(id)
+    }
     this.playerVisualBatchCoalescer.ingest(visualDeltas, serverTimeMs)
   }
 
