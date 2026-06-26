@@ -998,6 +998,70 @@ describe("GameLobbyRoom network batching", () => {
     })
   })
 
+  it("flushes snapshotted Homing Orb visual batches after a quiet cadence tick", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(1_000)
+
+    const room = new GameLobbyRoom()
+    const broadcast = vi.fn()
+    const homingOrbDelta = {
+      id: 77,
+      x: 10,
+      y: 20,
+      vx: 1,
+      vy: 2,
+      headingRad: 0.5,
+      targetId: "player-2",
+    }
+    const firstOutput = simOutput({
+      homingOrbDeltas: [homingOrbDelta],
+      homingOrbRemovedIds: [88],
+    })
+    const tick = vi
+      .fn()
+      .mockReturnValueOnce(firstOutput)
+      .mockReturnValueOnce(simOutput())
+
+    Object.assign(room as object, {
+      broadcast,
+      lobbyPhase: "IN_PROGRESS",
+      lastNetworkFlushAtMs: 1_000,
+      simulation: {
+        tick,
+        entityPlayerMap: new Map(),
+      },
+    })
+
+    ;(room as unknown as { runGameTick: () => void }).runGameTick()
+    homingOrbDelta.x = 999
+    homingOrbDelta.targetId = "wrong-target"
+    firstOutput.homingOrbRemovedIds[0] = 999
+    expect(broadcast).not.toHaveBeenCalledWith(
+      RoomEvent.HomingOrbBatchUpdate,
+      expect.anything(),
+    )
+
+    vi.setSystemTime(1_040)
+    ;(room as unknown as { runGameTick: () => void }).runGameTick()
+
+    expect(broadcast).toHaveBeenCalledWith(RoomEvent.HomingOrbBatchUpdate, {
+      deltas: [
+        {
+          id: 77,
+          x: 10,
+          y: 20,
+          vx: 1,
+          vy: 2,
+          headingRad: 0.5,
+          targetId: "player-2",
+        },
+      ],
+      removedIds: [88],
+      seq: 0,
+      serverTimeMs: 1_000,
+    })
+  })
+
   it("clears pending coalescer state with match runtime cleanup", () => {
     const room = new GameLobbyRoom()
     const broadcast = vi.fn()

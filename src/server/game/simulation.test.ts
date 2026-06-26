@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest"
 import {
   HELD_INPUT_STALE_TICKS,
   createGameSimulation,
+  type SimOutput,
   type SimCtx,
 } from "@/server/game/simulation"
 import {
@@ -108,9 +109,39 @@ function advanceTicks(sim: ReturnType<typeof createGameSimulation>, n: number): 
   for (let i = 0; i < n; i++) sim.tick(new Map(), Date.now())
 }
 
+/** Reads the current tick's ACK cursor for a player output row. */
+function ackSeqFromOutput(
+  sim: ReturnType<typeof createGameSimulation>,
+  output: SimOutput,
+  userId = "user1",
+): number | undefined {
+  return output.playerDeltas.find((d) => d.id === sim.playerEntityMap.get(userId))
+    ?.lastProcessedInputSeq
+}
+
 /** Number of ticks needed to clear the dangerous window for the cleaver attack. */
 const TICKS_PAST_DANGEROUS_WINDOW =
   Math.ceil(PRIMARY_MELEE_ATTACK_CONFIGS.red_wizard_cleaver.dangerousWindowEndMs / TICK_MS) + 1
+const SIM_OUTPUT_COLLECTION_KEYS = [
+  "playerDeltas",
+  "fireballDeltas",
+  "fireballRemovedIds",
+  "homingOrbDeltas",
+  "homingOrbRemovedIds",
+  "playerDeaths",
+  "playerRespawns",
+  "fireballLaunches",
+  "fireballImpacts",
+  "homingOrbLaunches",
+  "homingOrbImpacts",
+  "lightningBolts",
+  "primaryMeleeAttacks",
+  "combatTelegraphStarts",
+  "combatTelegraphEnds",
+  "damageFloats",
+  "goldUpdates",
+  "abilitySfxEvents",
+] as const satisfies ReadonlyArray<keyof SimOutput>
 
 describe("createGameSimulation", () => {
   it("creates a simulation with correct match start time", () => {
@@ -239,14 +270,11 @@ describe("movement system", () => {
       { ...emptyInput({ up: true }), seq: 102 },
     ])
 
-    const out1 = sim.tick(queues, Date.now())
-    const out2 = sim.tick(queues, Date.now() + 17)
-    const out3 = sim.tick(queues, Date.now() + 34)
-
-    const acks = [out1, out2, out3].map((o) =>
-      o.playerDeltas.find((d) => d.id === sim.playerEntityMap.get("user1"))
-        ?.lastProcessedInputSeq,
-    )
+    const acks = [
+      ackSeqFromOutput(sim, sim.tick(queues, Date.now())),
+      ackSeqFromOutput(sim, sim.tick(queues, Date.now() + 17)),
+      ackSeqFromOutput(sim, sim.tick(queues, Date.now() + 34)),
+    ]
     expect(acks).toEqual([100, 101, 102])
   })
 
@@ -262,17 +290,15 @@ describe("movement system", () => {
       { ...emptyInput({ up: true }), seq: 203 },
     ])
 
-    const out1 = sim.tick(queues, Date.now())
+    const ack1 = ackSeqFromOutput(sim, sim.tick(queues, Date.now()))
     expect(queues.get("user1")).toHaveLength(0)
 
-    const out2 = sim.tick(queues, Date.now() + 17)
-    const out3 = sim.tick(queues, Date.now() + 34)
-    const out4 = sim.tick(queues, Date.now() + 51)
-
-    const acks = [out1, out2, out3, out4].map((o) =>
-      o.playerDeltas.find((d) => d.id === sim.playerEntityMap.get("user1"))
-        ?.lastProcessedInputSeq,
-    )
+    const acks = [
+      ack1,
+      ackSeqFromOutput(sim, sim.tick(queues, Date.now() + 17)),
+      ackSeqFromOutput(sim, sim.tick(queues, Date.now() + 34)),
+      ackSeqFromOutput(sim, sim.tick(queues, Date.now() + 51)),
+    ]
     expect(acks).toEqual([200, 201, 202, 203])
   })
 
@@ -305,12 +331,13 @@ describe("movement system", () => {
       { ...emptyInput(first), seq: first.seq },
       { ...emptyInput(second), seq: second.seq },
     ]
-    const out1 = sim.tick(new Map([["user1", queue]]), Date.now())
-    const out2 = sim.tick(new Map([["user1", queue]]), Date.now() + 17)
-    const acks = [out1, out2].map((o) =>
-      o.playerDeltas.find((d) => d.id === sim.playerEntityMap.get("user1"))
-        ?.lastProcessedInputSeq,
-    )
+    const acks = [
+      ackSeqFromOutput(sim, sim.tick(new Map([["user1", queue]]), Date.now())),
+      ackSeqFromOutput(
+        sim,
+        sim.tick(new Map([["user1", queue]]), Date.now() + 17),
+      ),
+    ]
 
     expect(acks).toEqual([first.seq, second.seq])
   })
@@ -326,7 +353,10 @@ describe("movement system", () => {
       { ...emptyInput({ up: true }), seq: 403 },
     ]
 
-    const out1 = sim.tick(new Map([["user1", queue]]), Date.now())
+    const ack1 = ackSeqFromOutput(
+      sim,
+      sim.tick(new Map([["user1", queue]]), Date.now()),
+    )
     expect(queue).toHaveLength(0)
     queue.push(
       emptyInput({
@@ -338,11 +368,13 @@ describe("movement system", () => {
       }),
     )
 
-    const out2 = sim.tick(new Map([["user1", queue]]), Date.now() + 17)
-    const acks = [out1, out2].map((o) =>
-      o.playerDeltas.find((d) => d.id === sim.playerEntityMap.get("user1"))
-        ?.lastProcessedInputSeq,
-    )
+    const acks = [
+      ack1,
+      ackSeqFromOutput(
+        sim,
+        sim.tick(new Map([["user1", queue]]), Date.now() + 17),
+      ),
+    ]
 
     expect(acks).toEqual([400, 404])
   })
@@ -979,6 +1011,23 @@ describe("match end", () => {
     const output = sim.tick(new Map(), Date.now())
     expect(output.matchEnded).not.toBe(null)
     expect(output.matchEnded?.reason).toBe("host_ended")
+  })
+
+  it("reuses scratch output and clears tick-local collections on the next tick", () => {
+    const sim = createGameSimulation(1_000)
+    sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    sim.requestHostEnd()
+
+    const endedOutput = sim.tick(new Map(), 1_000)
+    expect(endedOutput.matchEnded?.reason).toBe("host_ended")
+
+    const nextOutput = sim.tick(new Map(), 1_000 + TICK_MS)
+
+    expect(nextOutput).toBe(endedOutput)
+    expect(endedOutput.matchEnded).toBeNull()
+    for (const key of SIM_OUTPUT_COLLECTION_KEYS) {
+      expect(endedOutput[key]).toHaveLength(0)
+    }
   })
 
   it("scoreboard entries include the player", () => {
