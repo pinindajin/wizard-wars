@@ -279,6 +279,29 @@ describe("NetworkSyncSystem.applyBatchUpdate", () => {
     expect(ClientPlayerState[1]!.abilityStates.jump.cooldownEndsAtServerTimeMs).toBe(6_000)
   })
 
+  it("does not route semantic-only remote deltas as interpolation samples", () => {
+    const onRemoteSnapshot = vi.fn()
+    const system = new NetworkSyncSystem({ onRemoteSnapshot })
+
+    system.applyFullSync({
+      players: [baseSnapshot({ id: 1, playerId: "p1", x: 10, y: 20 })],
+      fireballs: [],
+      seq: 0,
+      serverTimeMs: 1,
+    })
+
+    system.applyBatchUpdate({
+      deltas: [{ id: 1, health: 80, terrainState: "lava" }],
+      removedIds: [],
+      seq: 1,
+      serverTimeMs: 2,
+    })
+
+    expect(ClientPlayerState[1]!.health).toBe(80)
+    expect(ClientPlayerState[1]!.terrainState).toBe("lava")
+    expect(onRemoteSnapshot).not.toHaveBeenCalled()
+  })
+
   it("keeps legacy visual batch ACK fallback for the local player", () => {
     const onLocalAck = vi.fn()
     const system = new NetworkSyncSystem({ onLocalAck })

@@ -12,6 +12,27 @@ import {
 import { addEntity, hasEntity, clientEntities, removeEntity } from "../world"
 
 type AuthoritativePositionReason = "full_sync" | "batch_update"
+type PlayerDelta = PlayerBatchUpdatePayload["deltas"][number]
+
+/**
+ * Returns true when a player delta carries fields used by remote interpolation.
+ *
+ * Semantic-only deltas may still update ECS state, but they should not enqueue
+ * a duplicate render sample at the previous position.
+ *
+ * @param delta - Player batch delta from the server.
+ * @returns Whether the delta contains visual sample data.
+ */
+function hasRemoteVisualSample(delta: PlayerDelta): boolean {
+  return (
+    delta.x !== undefined ||
+    delta.y !== undefined ||
+    delta.vx !== undefined ||
+    delta.vy !== undefined ||
+    delta.facingAngle !== undefined ||
+    delta.moveFacingAngle !== undefined
+  )
+}
 
 /**
  * Opaque sample passed to {@link NetworkSyncHooks.onRemoteSnapshot} when a
@@ -242,6 +263,7 @@ export class NetworkSyncSystem {
 
       if (
         !isLocal &&
+        hasRemoteVisualSample(delta) &&
         nextX !== undefined &&
         nextY !== undefined &&
         state !== undefined

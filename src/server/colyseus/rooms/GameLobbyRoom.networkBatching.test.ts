@@ -20,6 +20,7 @@ import {
   GameLobbyRoom,
   getActiveGameLoopRoomCountForDiagnostics,
 } from "./GameLobbyRoom"
+import { resolveGamePerformanceConfig } from "@/server/game/performanceConfig"
 
 function simOutput(overrides: Partial<SimOutput> = {}): SimOutput {
   return {
@@ -615,6 +616,133 @@ describe("GameLobbyRoom network batching", () => {
     )
   })
 
+  it("records critical send failures for owner ACK send errors", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(2_020)
+
+    const room = new GameLobbyRoom()
+    const client = {
+      userData: { playerId: "player-1" },
+      send: vi.fn(() => {
+        throw new Error("owner ack send failed")
+      }),
+    }
+    Object.defineProperty(room, "clients", {
+      configurable: true,
+      value: [client],
+    })
+    Object.assign(room as object, {
+      broadcast: vi.fn(),
+      lobbyPhase: "IN_PROGRESS",
+      simulation: {
+        tick: vi.fn().mockReturnValue(
+          simOutput({
+            playerDeltas: [{ id: 1, x: 10, lastProcessedInputSeq: 9 }],
+          }),
+        ),
+        entityPlayerMap: new Map([[1, "player-1"]]),
+        buildPlayerOwnerAckPayload: vi.fn(() => ({
+          id: 1,
+          playerId: "player-1",
+          x: 10,
+          y: 20,
+          vx: 1,
+          vy: 2,
+          lastProcessedInputSeq: 9,
+          serverTimeMs: 2_020,
+          replayContext: {
+            moveState: "moving",
+            terrainState: "land",
+            castingAbilityId: null,
+            jumpZ: 0,
+            jumpStartedInLava: false,
+            isSwinging: false,
+            hasSwiftBoots: false,
+          },
+        })),
+      },
+    })
+
+    expect(() =>
+      (room as unknown as { runGameTick: () => void }).runGameTick(),
+    ).toThrow("owner ack send failed")
+    expect(
+      (room as unknown as { performanceCriticalSendFailures: number })
+        .performanceCriticalSendFailures,
+    ).toBe(1)
+  })
+
+  it("records critical send failures for immediate broadcast errors", () => {
+    const room = new GameLobbyRoom()
+    const damageFloat = {
+      targetId: "player-2",
+      attackerUserId: "player-1",
+      amount: 8,
+      x: 100,
+      y: 120,
+    }
+    const broadcast = vi.fn((event: string) => {
+      if (event === RoomEvent.DamageFloat) {
+        throw new Error("damage float broadcast failed")
+      }
+    })
+    Object.assign(room as object, {
+      broadcast,
+      lobbyPhase: "IN_PROGRESS",
+      simulation: {
+        tick: vi.fn().mockReturnValue(
+          simOutput({
+            damageFloats: [damageFloat],
+          }),
+        ),
+        entityPlayerMap: new Map(),
+      },
+    })
+
+    expect(() =>
+      (room as unknown as { runGameTick: () => void }).runGameTick(),
+    ).toThrow("damage float broadcast failed")
+    expect(
+      (room as unknown as { performanceCriticalSendFailures: number })
+        .performanceCriticalSendFailures,
+    ).toBe(1)
+  })
+
+  it("records critical send failures for semantic player budget broadcasts", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(2_040)
+
+    const room = new GameLobbyRoom()
+    const broadcast = vi.fn((event: string) => {
+      if (event === RoomEvent.PlayerBatchUpdate) {
+        throw new Error("semantic batch broadcast failed")
+      }
+    })
+    Object.assign(room as object, {
+      broadcast,
+      lobbyPhase: "IN_PROGRESS",
+      performanceConfig: resolveGamePerformanceConfig({
+        WW_NET_SEND_BUDGET_ENABLED: "true",
+      }),
+      simulation: {
+        tick: vi.fn().mockReturnValue(
+          simOutput({
+            playerDeltas: [{ id: 1, health: 70 }],
+          }),
+        ),
+        entityPlayerMap: new Map(),
+      },
+    })
+
+    expect(() =>
+      (room as unknown as { runGameTick: () => void }).runGameTick(),
+    ).toThrow("semantic batch broadcast failed")
+    expect(
+      (room as unknown as { performanceCriticalSendFailures: number })
+        .performanceCriticalSendFailures,
+    ).toBe(1)
+  })
+
   it("skips owner ACK deltas without an ACK cursor or sample payload", () => {
     const room = new GameLobbyRoom()
     const client = {
@@ -1168,6 +1296,371 @@ describe("GameLobbyRoom network batching", () => {
     ).toBeGreaterThanOrEqual(0)
   })
 
+  it("sends critical semantic player deltas before budgeted visual deltas", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(2_000)
+
+    const room = new GameLobbyRoom()
+    const broadcast = vi.fn()
+    Object.assign(room as object, {
+      broadcast,
+      lobbyPhase: "IN_PROGRESS",
+      lastNetworkFlushAtMs: 1_000,
+      performanceConfig: resolveGamePerformanceConfig({
+        WW_NET_SEND_BUDGET_ENABLED: "true",
+        WW_NET_SEND_BUDGET_MAX_PLAYER_DELTAS: "1",
+      }),
+      simulation: {
+        tick: vi.fn().mockReturnValue(
+          simOutput({
+            playerDeltas: [
+              {
+                id: 1,
+                x: 10,
+                y: 20,
+                health: 80,
+                terrainState: "lava",
+              },
+            ],
+          }),
+        ),
+        entityPlayerMap: new Map(),
+      },
+    })
+
+    ;(room as unknown as { runGameTick: () => void }).runGameTick()
+
+    const playerBatches = broadcast.mock.calls.filter(
+      ([event]) => event === RoomEvent.PlayerBatchUpdate,
+    )
+    expect(playerBatches).toEqual([
+      [
+        RoomEvent.PlayerBatchUpdate,
+        {
+          deltas: [{ id: 1, health: 80, terrainState: "lava" }],
+          removedIds: [],
+          seq: 0,
+          serverTimeMs: 2_000,
+        },
+      ],
+      [
+        RoomEvent.PlayerBatchUpdate,
+        {
+          deltas: [{ id: 1, x: 10, y: 20 }],
+          removedIds: [],
+          seq: 1,
+          serverTimeMs: 2_000,
+        },
+      ],
+    ])
+  })
+
+  it("keeps legacy visual flush ordering when send budget is disabled", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(2_200)
+
+    const room = new GameLobbyRoom()
+    const broadcast = vi.fn()
+    const damageFloat = {
+      targetId: "player-2",
+      attackerUserId: "player-1",
+      amount: 8,
+      x: 100,
+      y: 120,
+    }
+    Object.assign(room as object, {
+      broadcast,
+      lobbyPhase: "IN_PROGRESS",
+      lastNetworkFlushAtMs: 1_000,
+      simulation: {
+        tick: vi.fn().mockReturnValue(
+          simOutput({
+            playerDeltas: [{ id: 1, x: 10 }],
+            damageFloats: [damageFloat],
+          }),
+        ),
+        entityPlayerMap: new Map(),
+      },
+    })
+
+    ;(room as unknown as { runGameTick: () => void }).runGameTick()
+
+    const visualBatchOrder = broadcast.mock.invocationCallOrder[
+      broadcast.mock.calls.findIndex(([event]) => event === RoomEvent.PlayerBatchUpdate)
+    ]!
+    const damageFloatOrder = broadcast.mock.invocationCallOrder[
+      broadcast.mock.calls.findIndex(([event]) => event === RoomEvent.DamageFloat)
+    ]!
+    expect(visualBatchOrder).toBeLessThan(damageFloatOrder)
+  })
+
+  it("sends immediate critical events before enabled-budget visual flushes", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(2_500)
+
+    const room = new GameLobbyRoom()
+    const broadcast = vi.fn()
+    const damageFloat = {
+      targetId: "player-2",
+      attackerUserId: "player-1",
+      amount: 8,
+      x: 100,
+      y: 120,
+    }
+    Object.assign(room as object, {
+      broadcast,
+      lobbyPhase: "IN_PROGRESS",
+      lastNetworkFlushAtMs: 2_000,
+      performanceConfig: resolveGamePerformanceConfig({
+        WW_NET_SEND_BUDGET_ENABLED: "true",
+        WW_NET_SEND_BUDGET_MAX_PLAYER_DELTAS: "1",
+      }),
+      simulation: {
+        tick: vi.fn().mockReturnValue(
+          simOutput({
+            playerDeltas: [{ id: 1, x: 10 }],
+            damageFloats: [damageFloat],
+          }),
+        ),
+        entityPlayerMap: new Map(),
+      },
+    })
+
+    ;(room as unknown as { runGameTick: () => void }).runGameTick()
+
+    const damageFloatOrder = broadcast.mock.invocationCallOrder[
+      broadcast.mock.calls.findIndex(([event]) => event === RoomEvent.DamageFloat)
+    ]!
+    const visualBatchOrder = broadcast.mock.invocationCallOrder[
+      broadcast.mock.calls.findIndex(([event]) => event === RoomEvent.PlayerBatchUpdate)
+    ]!
+    expect(damageFloatOrder).toBeLessThan(visualBatchOrder)
+  })
+
+  it("defers player visuals over budget and force-flushes by max deferral age", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(3_000)
+
+    const room = new GameLobbyRoom()
+    const broadcast = vi.fn()
+    const tick = vi
+      .fn()
+      .mockReturnValueOnce(
+        simOutput({
+          playerDeltas: [
+            { id: 1, x: 10 },
+            { id: 2, x: 20 },
+            { id: 3, x: 30 },
+          ],
+        }),
+      )
+      .mockReturnValueOnce(simOutput())
+    Object.assign(room as object, {
+      broadcast,
+      lobbyPhase: "IN_PROGRESS",
+      lastNetworkFlushAtMs: 2_000,
+      performanceConfig: resolveGamePerformanceConfig({
+        WW_NET_SEND_BUDGET_ENABLED: "true",
+        WW_NET_SEND_BUDGET_MAX_PLAYER_DELTAS: "1",
+        WW_NET_SEND_BUDGET_MAX_DEFERRAL_MS: "250",
+      }),
+      simulation: {
+        tick,
+        entityPlayerMap: new Map(),
+      },
+    })
+
+    ;(room as unknown as { runGameTick: () => void }).runGameTick()
+
+    expect(
+      broadcast.mock.calls.filter(([event]) => event === RoomEvent.PlayerBatchUpdate),
+    ).toEqual([
+      [
+        RoomEvent.PlayerBatchUpdate,
+        {
+          deltas: [{ id: 1, x: 10 }],
+          removedIds: [],
+          seq: 0,
+          serverTimeMs: 3_000,
+        },
+      ],
+    ])
+    expect(
+      (room as unknown as { performanceVisualBudgetDeferrals: number })
+        .performanceVisualBudgetDeferrals,
+    ).toBe(1)
+    expect(
+      (room as unknown as { performanceVisualBudgetDeferredEntities: number })
+        .performanceVisualBudgetDeferredEntities,
+    ).toBe(2)
+
+    vi.setSystemTime(3_300)
+    ;(room as unknown as { runGameTick: () => void }).runGameTick()
+
+    expect(
+      broadcast.mock.calls.filter(([event]) => event === RoomEvent.PlayerBatchUpdate),
+    ).toEqual([
+      [
+        RoomEvent.PlayerBatchUpdate,
+        {
+          deltas: [{ id: 1, x: 10 }],
+          removedIds: [],
+          seq: 0,
+          serverTimeMs: 3_000,
+        },
+      ],
+      [
+        RoomEvent.PlayerBatchUpdate,
+        {
+          deltas: [
+            { id: 2, x: 20 },
+            { id: 3, x: 30 },
+          ],
+          removedIds: [],
+          seq: 1,
+          serverTimeMs: 3_300,
+        },
+      ],
+    ])
+    expect(
+      (room as unknown as { performanceVisualBudgetMaxDeferralAgeMs: number })
+        .performanceVisualBudgetMaxDeferralAgeMs,
+    ).toBe(300)
+  })
+
+  it("applies the projectile visual budget to Fireball and Homing Orb room flushes", () => {
+    const room = new GameLobbyRoom()
+    const broadcast = vi.fn()
+    Object.assign(room as object, {
+      broadcast,
+      performanceConfig: resolveGamePerformanceConfig({
+        WW_NET_SEND_BUDGET_ENABLED: "true",
+        WW_NET_SEND_BUDGET_MAX_PROJECTILE_DELTAS: "1",
+        WW_NET_SEND_BUDGET_MAX_REMOVALS: "1",
+        WW_NET_SEND_BUDGET_MAX_DEFERRAL_MS: "250",
+      }),
+    })
+    ;(
+      room as unknown as {
+        fireballVisualBatchCoalescer: FireballVisualBatchCoalescer
+      }
+    ).fireballVisualBatchCoalescer.ingest({
+      deltas: [
+        { id: 10, x: 100, y: 200 },
+        { id: 11, x: 110, y: 210 },
+      ],
+      removedIds: [98, 99],
+      serverTimeMs: 4_000,
+    })
+    ;(
+      room as unknown as {
+        homingOrbVisualBatchCoalescer: HomingOrbVisualBatchCoalescer
+      }
+    ).homingOrbVisualBatchCoalescer.ingest({
+      deltas: [
+        { id: 20, x: 300, y: 400, targetId: "player-1" },
+        { id: 21, x: 310, y: 410, targetId: "player-2" },
+      ],
+      removedIds: [88, 89],
+      serverTimeMs: 4_000,
+    })
+
+    ;(room as unknown as { flushPendingVisualBatches: (serverTimeMs: number) => void })
+      .flushPendingVisualBatches(4_100)
+
+    expect(broadcast).toHaveBeenCalledWith(RoomEvent.FireballBatchUpdate, {
+      deltas: [{ id: 10, x: 100, y: 200 }],
+      removedIds: [98],
+      seq: 0,
+      serverTimeMs: 4_000,
+    })
+    expect(broadcast).toHaveBeenCalledWith(RoomEvent.HomingOrbBatchUpdate, {
+      deltas: [{ id: 20, x: 300, y: 400, targetId: "player-1" }],
+      removedIds: [88],
+      seq: 0,
+      serverTimeMs: 4_000,
+    })
+    expect(
+      (room as unknown as { performanceVisualBudgetDeferrals: number })
+        .performanceVisualBudgetDeferrals,
+    ).toBe(2)
+    expect(
+      (room as unknown as { performanceVisualBudgetDeferredEntities: number })
+        .performanceVisualBudgetDeferredEntities,
+    ).toBe(4)
+    expect(
+      (room as unknown as { performanceVisualBudgetMaxDeferralAgeMs: number })
+        .performanceVisualBudgetMaxDeferralAgeMs,
+    ).toBe(100)
+  })
+
+  it("force-flushes budgeted visuals before match-end cleanup", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(3_500)
+
+    const room = new GameLobbyRoom()
+    const broadcast = vi.fn()
+    Object.assign(room as object, {
+      broadcast,
+      setMetadata: vi.fn(),
+      lobbyPhase: "IN_PROGRESS",
+      lastNetworkFlushAtMs: 3_000,
+      performanceConfig: resolveGamePerformanceConfig({
+        WW_NET_SEND_BUDGET_ENABLED: "true",
+        WW_NET_SEND_BUDGET_MAX_PLAYER_DELTAS: "1",
+        WW_NET_SEND_BUDGET_MAX_PROJECTILE_DELTAS: "1",
+        WW_NET_SEND_BUDGET_MAX_REMOVALS: "1",
+      }),
+      simulation: {
+        tick: vi.fn().mockReturnValue(
+          simOutput({
+            playerDeltas: [
+              { id: 1, x: 10 },
+              { id: 2, x: 20 },
+            ],
+            fireballDeltas: [
+              { id: 10, x: 100, y: 200 },
+              { id: 11, x: 110, y: 210 },
+            ],
+            matchEnded: {
+              reason: "time_cap",
+              entries: [],
+            },
+          }),
+        ),
+        entityPlayerMap: new Map(),
+      },
+    })
+
+    ;(room as unknown as { runGameTick: () => boolean }).runGameTick()
+
+    expect(broadcast).toHaveBeenCalledWith(RoomEvent.PlayerBatchUpdate, {
+      deltas: [
+        { id: 1, x: 10 },
+        { id: 2, x: 20 },
+      ],
+      removedIds: [],
+      seq: 0,
+      serverTimeMs: 3_500,
+    })
+    expect(broadcast).toHaveBeenCalledWith(RoomEvent.FireballBatchUpdate, {
+      deltas: [
+        { id: 10, x: 100, y: 200 },
+        { id: 11, x: 110, y: 210 },
+      ],
+      removedIds: [],
+      seq: 0,
+      serverTimeMs: 3_500,
+    })
+    const playerBatchOrder = broadcast.mock.invocationCallOrder[
+      broadcast.mock.calls.findIndex(([event]) => event === RoomEvent.PlayerBatchUpdate)
+    ]!
+    const scoreboardOrder = broadcast.mock.invocationCallOrder[
+      broadcast.mock.calls.findIndex(([event]) => event === RoomEvent.LobbyScoreboard)
+    ]!
+    expect(playerBatchOrder).toBeLessThan(scoreboardOrder)
+  })
+
   it("queues Homing Orb visual batches from tick output", () => {
     vi.useFakeTimers()
     vi.setSystemTime(2_000)
@@ -1293,6 +1786,7 @@ describe("GameLobbyRoom network batching", () => {
       performanceWindowCpuStart: process.cpuUsage(),
       performanceDroppedDebtMs: 1,
       performanceCatchUpCallbacks: 2,
+      performanceBroadcastDurationMs: 12,
       performanceRoomTickDurationMs: 9,
       performanceVisualFlushDurationMs: 2,
       performanceOwnerAckSendDurationMs: 1,
@@ -1322,6 +1816,7 @@ describe("GameLobbyRoom network batching", () => {
         metrics: expect.objectContaining({
           droppedDebtMs: 1,
           catchUpCallbacks: 2,
+          broadcastDurationMs: 7,
           roomTickDurationMs: 9,
           visualFlushDurationMs: 2,
           ownerAckSendDurationMs: 1,
@@ -1341,6 +1836,9 @@ describe("GameLobbyRoom network batching", () => {
       performanceWindowCpuStart: process.cpuUsage(),
       performanceDroppedDebtMs: 1,
       performanceCatchUpCallbacks: 2,
+      performanceBroadcastDurationMs: 4,
+      performanceOwnerAckSendDurationMs: 6,
+      performanceImmediateBroadcastDurationMs: 3,
       processEventLoopMonitor: {
         snapshot: vi.fn(() => ({})),
       },
@@ -1353,6 +1851,59 @@ describe("GameLobbyRoom network batching", () => {
     ).maybeBroadcastServerPerformanceStatus(5_500)
 
     expect(broadcast).not.toHaveBeenCalled()
+  })
+
+  it("broadcasts nominal server performance status when visual budget telemetry is present", () => {
+    const room = new GameLobbyRoom()
+    const broadcast = vi.fn()
+    Object.defineProperty(room, "clients", {
+      configurable: true,
+      value: [{ userData: { playerId: "player-1" } }],
+    })
+    Object.assign(room as object, {
+      broadcast,
+      performanceWindowStartedAtPerfMs: performance.now() - 1_100,
+      performanceWindowCpuStart: process.cpuUsage(),
+      performanceDroppedDebtMs: 0,
+      performanceCatchUpCallbacks: 0,
+      performanceInputQueueDrops: 0,
+      performanceSimDurationMs: 1,
+      performanceBroadcastDurationMs: 2,
+      performanceRoomTickDurationMs: 3,
+      performanceVisualFlushDurationMs: 4,
+      performanceOwnerAckSendDurationMs: 5,
+      performanceImmediateBroadcastDurationMs: 6,
+      performanceVisualBudgetDeferrals: 1,
+      performanceVisualBudgetDeferredEntities: 2,
+      performanceVisualBudgetMaxDeferralAgeMs: 125,
+      performanceVisualBudgetDroppedVisuals: 0,
+      performanceCriticalSendFailures: 0,
+      performanceEventLoopLagMs: 0,
+      processEventLoopMonitor: {
+        snapshot: vi.fn(() => ({})),
+      },
+    })
+
+    ;(
+      room as unknown as {
+        maybeBroadcastServerPerformanceStatus: (serverTimeMs: number) => void
+      }
+    ).maybeBroadcastServerPerformanceStatus(6_000)
+
+    expect(broadcast).toHaveBeenCalledWith(
+      RoomEvent.ServerPerformanceStatus,
+      expect.objectContaining({
+        degraded: false,
+        reasons: [],
+        metrics: expect.objectContaining({
+          visualBudgetDeferrals: 1,
+          visualBudgetDeferredEntities: 2,
+          visualBudgetMaxDeferralAgeMs: 125,
+          visualBudgetDroppedVisuals: 0,
+          criticalSendFailures: 0,
+        }),
+      }),
+    )
   })
 
   it("logs server performance windows only when the opt-in cadence allows it", () => {

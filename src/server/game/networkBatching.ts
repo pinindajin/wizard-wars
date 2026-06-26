@@ -21,6 +21,92 @@ type Mutable<T> = {
 
 type FireballDelta = FireballBatchUpdatePayload["deltas"][number]
 type HomingOrbDelta = HomingOrbBatchUpdatePayload["deltas"][number]
+type PendingRow<T> = {
+  readonly row: Mutable<T>
+  readonly firstQueuedAtMs: number | undefined
+}
+
+export type VisualBudgetOptions = {
+  readonly maxDeltas: number
+  readonly maxRemovals: number
+  readonly maxBytes: number
+  readonly maxDeferralMs: number
+  readonly serverTimeMs: number
+}
+
+export type VisualBudgetFlushStats = {
+  readonly deferredEntities: number
+  readonly maxDeferredAgeMs: number
+}
+
+export type PlayerBudgetedFlush = VisualBudgetFlushStats & {
+  readonly deltas: readonly PlayerDelta[]
+}
+
+export type ProjectileBudgetedFlush<TBatch> = VisualBudgetFlushStats & {
+  readonly batch: TBatch
+}
+
+export type SplitPlayerDeltaForVisualBudget = {
+  readonly critical: PlayerDelta | null
+  readonly visual: PlayerDelta | null
+}
+
+/**
+ * Estimates serialized row size without JSON stringification in the hot path.
+ *
+ * @param row - Batch row to estimate.
+ * @returns Approximate byte count for budget comparisons.
+ */
+function estimateRowBytes(row: Readonly<Record<string, unknown>>): number {
+  let bytes = 2
+  for (const [key, value] of Object.entries(row)) {
+    bytes += key.length + 4
+    if (typeof value === "number") {
+      bytes += 8
+    } else if (typeof value === "string") {
+      bytes += value.length
+    } else if (typeof value === "boolean") {
+      bytes += 1
+    } else if (value === null) {
+      bytes += 4
+    } else if (value !== undefined) {
+      bytes += 24
+    }
+  }
+  return bytes
+}
+
+/**
+ * Calculates how long a pending visual row has waited.
+ *
+ * @param pending - Pending row metadata.
+ * @param serverTimeMs - Current server wall-clock time.
+ * @returns Non-negative deferral age in milliseconds.
+ */
+function pendingAgeMs<T>(
+  pending: PendingRow<T>,
+  serverTimeMs: number,
+): number {
+  if (pending.firstQueuedAtMs === undefined) return 0
+  return Math.max(0, serverTimeMs - pending.firstQueuedAtMs)
+}
+
+/**
+ * Returns whether adding a row would exceed a finite byte budget.
+ *
+ * @param maxBytes - Configured byte cap, or zero for unlimited.
+ * @param usedBytes - Bytes already selected for this flush.
+ * @param rowBytes - Estimated bytes for the candidate row.
+ * @returns True when the row should be deferred for byte budget.
+ */
+function exceedsByteBudget(
+  maxBytes: number,
+  usedBytes: number,
+  rowBytes: number,
+): boolean {
+  return maxBytes > 0 && usedBytes + rowBytes > maxBytes
+}
 
 /**
  * Copies ability HUD state so queued visual deltas cannot observe later mutation.
@@ -123,6 +209,98 @@ function copyPlayerVisualDeltaInto(
 }
 
 /**
+ * Splits one player delta into immediate semantic fields and budgetable visuals.
+ *
+ * Owner ACK cursors intentionally stay owner-only and are not returned in either
+ * room-wide split.
+ *
+ * @param delta - Player delta from the authoritative simulation.
+ * @returns Critical semantic fields and visual-only movement fields.
+ */
+export function splitPlayerDeltaForVisualBudget(
+  delta: PlayerDelta,
+): SplitPlayerDeltaForVisualBudget {
+  const critical: Mutable<PlayerDelta> = { id: delta.id }
+  const visual: Mutable<PlayerDelta> = { id: delta.id }
+  let hasCritical = false
+  let hasVisual = false
+
+  if (delta.x !== undefined) {
+    visual.x = delta.x
+    hasVisual = true
+  }
+  if (delta.y !== undefined) {
+    visual.y = delta.y
+    hasVisual = true
+  }
+  if (delta.vx !== undefined) {
+    visual.vx = delta.vx
+    hasVisual = true
+  }
+  if (delta.vy !== undefined) {
+    visual.vy = delta.vy
+    hasVisual = true
+  }
+  if (delta.facingAngle !== undefined) {
+    visual.facingAngle = delta.facingAngle
+    hasVisual = true
+  }
+  if (delta.moveFacingAngle !== undefined) {
+    visual.moveFacingAngle = delta.moveFacingAngle
+    hasVisual = true
+  }
+  if (delta.health !== undefined) {
+    critical.health = delta.health
+    hasCritical = true
+  }
+  if (delta.lives !== undefined) {
+    critical.lives = delta.lives
+    hasCritical = true
+  }
+  if (delta.animState !== undefined) {
+    critical.animState = delta.animState
+    hasCritical = true
+  }
+  if (delta.moveState !== undefined) {
+    critical.moveState = delta.moveState
+    hasCritical = true
+  }
+  if (delta.terrainState !== undefined) {
+    critical.terrainState = delta.terrainState
+    hasCritical = true
+  }
+  if (delta.castingAbilityId !== undefined) {
+    critical.castingAbilityId = delta.castingAbilityId
+    hasCritical = true
+  }
+  if (delta.invulnerable !== undefined) {
+    critical.invulnerable = delta.invulnerable
+    hasCritical = true
+  }
+  if (delta.jumpZ !== undefined) {
+    critical.jumpZ = delta.jumpZ
+    hasCritical = true
+  }
+  if (delta.jumpStartedInLava !== undefined) {
+    critical.jumpStartedInLava = delta.jumpStartedInLava
+    hasCritical = true
+  }
+  if (delta.hasSwiftBoots !== undefined) {
+    critical.hasSwiftBoots = delta.hasSwiftBoots
+    hasCritical = true
+  }
+  if (delta.abilityStates !== undefined) {
+    critical.abilityStates = cloneAbilityRuntimeStates(delta.abilityStates)
+    hasCritical = true
+  }
+
+  return {
+    critical: hasCritical ? critical : null,
+    visual: hasVisual ? visual : null,
+  }
+}
+
+/**
  * Copies one fireball movement delta row.
  *
  * @param delta - Fireball movement row to snapshot.
@@ -171,21 +349,23 @@ function copyHomingOrbDeltaInto(
  * matching the legacy flush-time merge behavior.
  */
 export class PlayerVisualBatchCoalescer {
-  private readonly deltas = new Map<number, Mutable<PlayerDelta>>()
+  private readonly deltas = new Map<number, PendingRow<PlayerDelta>>()
 
   /**
    * Adds tick-local player deltas to the pending visual payload.
    *
    * @param deltas - Player delta rows from one simulation tick.
+   * @param queuedAtMs - Optional server wall-clock time when rows entered the queue.
    */
-  ingest(deltas: readonly PlayerDelta[]): void {
+  ingest(deltas: readonly PlayerDelta[], queuedAtMs?: number): void {
     for (const delta of deltas) {
-      let snapshot = this.deltas.get(delta.id)
-      if (!snapshot) {
-        snapshot = { id: delta.id }
-      }
+      const pending = this.deltas.get(delta.id)
+      const snapshot = pending?.row ?? { id: delta.id }
       if (!copyPlayerVisualDeltaInto(snapshot, delta)) continue
-      this.deltas.set(delta.id, snapshot)
+      this.deltas.set(delta.id, {
+        row: snapshot,
+        firstQueuedAtMs: pending?.firstQueuedAtMs ?? queuedAtMs,
+      })
     }
   }
 
@@ -204,9 +384,70 @@ export class PlayerVisualBatchCoalescer {
    * @returns Coalesced player deltas ready for `PlayerBatchUpdate`.
    */
   flush(): readonly PlayerDelta[] {
-    const deltas = [...this.deltas.values()]
+    const deltas = [...this.deltas.values()].map((pending) => pending.row)
     this.clear()
     return deltas
+  }
+
+  /**
+   * Emits a budgeted subset while retaining deferred player rows.
+   *
+   * @param options - Visual send-budget limits for this flush.
+   * @returns Selected player deltas and deferred-row stats.
+   */
+  flushBudgeted(options: VisualBudgetOptions): PlayerBudgetedFlush {
+    const selected: PlayerDelta[] = []
+    const selectedIds: number[] = []
+    let usedBytes = 0
+    let maxAgeMs = 0
+
+    for (const [id, pending] of this.deltas) {
+      const rowBytes = estimateRowBytes(pending.row)
+      const ageMs = pendingAgeMs(pending, options.serverTimeMs)
+      maxAgeMs = Math.max(maxAgeMs, ageMs)
+      const maxDeltasReached =
+        options.maxDeltas > 0 && selected.length >= options.maxDeltas
+      const forcedByAge = ageMs >= options.maxDeferralMs
+      if (
+        !forcedByAge &&
+        (maxDeltasReached ||
+          exceedsByteBudget(options.maxBytes, usedBytes, rowBytes))
+      ) {
+        continue
+      }
+      selected.push(pending.row)
+      selectedIds.push(id)
+      usedBytes += rowBytes
+    }
+
+    for (const id of selectedIds) {
+      this.deltas.delete(id)
+    }
+
+    return {
+      deltas: selected,
+      ...this.deferredStats(options.serverTimeMs, maxAgeMs),
+    }
+  }
+
+  /**
+   * Summarizes rows left pending after a budgeted flush.
+   *
+   * @param serverTimeMs - Current server wall-clock time.
+   * @returns Deferred entity count and maximum age.
+   */
+  private deferredStats(
+    serverTimeMs: number,
+    initialMaxAgeMs = 0,
+  ): VisualBudgetFlushStats {
+    let maxDeferredAgeMs = initialMaxAgeMs
+    for (const pending of this.deltas.values()) {
+      maxDeferredAgeMs = Math.max(maxDeferredAgeMs, pendingAgeMs(pending, serverTimeMs))
+    }
+    return {
+      deferredEntities: this.deltas.size,
+      maxDeferredAgeMs,
+    }
   }
 
   /**
@@ -221,8 +462,8 @@ export class PlayerVisualBatchCoalescer {
  * Incrementally coalesces cadence-limited fireball movement and removals.
  */
 export class FireballVisualBatchCoalescer {
-  private readonly deltas = new Map<number, Mutable<FireballDelta>>()
-  private readonly removedIds = new Set<number>()
+  private readonly deltas = new Map<number, PendingRow<FireballDelta>>()
+  private readonly removedIds = new Map<number, number | undefined>()
   private serverTimeMs: number | undefined
 
   /**
@@ -235,15 +476,18 @@ export class FireballVisualBatchCoalescer {
     if (batch.serverTimeMs !== undefined) this.serverTimeMs = batch.serverTimeMs
     for (const delta of batch.deltas) {
       this.removedIds.delete(delta.id)
-      const snapshot = this.deltas.get(delta.id)
-      if (snapshot) {
-        copyFireballDeltaInto(snapshot, delta)
+      const pending = this.deltas.get(delta.id)
+      if (pending) {
+        copyFireballDeltaInto(pending.row, delta)
       } else {
-        this.deltas.set(delta.id, cloneFireballDelta(delta))
+        this.deltas.set(delta.id, {
+          row: cloneFireballDelta(delta),
+          firstQueuedAtMs: batch.serverTimeMs,
+        })
       }
     }
     for (const id of batch.removedIds) {
-      this.removedIds.add(id)
+      this.removedIds.set(id, batch.serverTimeMs)
       this.deltas.delete(id)
     }
   }
@@ -264,12 +508,109 @@ export class FireballVisualBatchCoalescer {
    */
   flush(): FireballVisualBatch {
     const batch = {
-      deltas: [...this.deltas.values()],
-      removedIds: [...this.removedIds.values()],
+      deltas: [...this.deltas.values()].map((pending) => pending.row),
+      removedIds: [...this.removedIds.keys()],
       ...(this.serverTimeMs !== undefined ? { serverTimeMs: this.serverTimeMs } : {}),
     }
     this.clear()
     return batch
+  }
+
+  /**
+   * Emits a budgeted subset while retaining deferred fireball rows/removals.
+   *
+   * @param options - Visual send-budget limits for this flush.
+   * @returns Selected fireball batch and deferred-row stats.
+   */
+  flushBudgeted(
+    options: VisualBudgetOptions,
+  ): ProjectileBudgetedFlush<FireballVisualBatch> {
+    const deltas: FireballDelta[] = []
+    const removedIds: number[] = []
+    const selectedDeltaIds: number[] = []
+    const selectedRemovalIds: number[] = []
+    let usedBytes = 0
+    let maxAgeMs = 0
+
+    for (const [id, queuedAtMs] of this.removedIds) {
+      const rowBytes = estimateRowBytes({ id })
+      const ageMs = Math.max(0, options.serverTimeMs - (queuedAtMs ?? options.serverTimeMs))
+      maxAgeMs = Math.max(maxAgeMs, ageMs)
+      const maxRemovalsReached =
+        options.maxRemovals > 0 && removedIds.length >= options.maxRemovals
+      const forcedByAge = ageMs >= options.maxDeferralMs
+      if (
+        !forcedByAge &&
+        (maxRemovalsReached ||
+          exceedsByteBudget(options.maxBytes, usedBytes, rowBytes))
+      ) {
+        continue
+      }
+      removedIds.push(id)
+      selectedRemovalIds.push(id)
+      usedBytes += rowBytes
+    }
+
+    for (const [id, pending] of this.deltas) {
+      const rowBytes = estimateRowBytes(pending.row)
+      const ageMs = pendingAgeMs(pending, options.serverTimeMs)
+      maxAgeMs = Math.max(maxAgeMs, ageMs)
+      const maxDeltasReached =
+        options.maxDeltas > 0 && deltas.length >= options.maxDeltas
+      const forcedByAge = ageMs >= options.maxDeferralMs
+      if (
+        !forcedByAge &&
+        (maxDeltasReached ||
+          exceedsByteBudget(options.maxBytes, usedBytes, rowBytes))
+      ) {
+        continue
+      }
+      deltas.push(pending.row)
+      selectedDeltaIds.push(id)
+      usedBytes += rowBytes
+    }
+
+    for (const id of selectedRemovalIds) {
+      this.removedIds.delete(id)
+    }
+    for (const id of selectedDeltaIds) {
+      this.deltas.delete(id)
+    }
+
+    return {
+      batch: {
+        deltas,
+        removedIds,
+        ...(this.serverTimeMs !== undefined ? { serverTimeMs: this.serverTimeMs } : {}),
+      },
+      ...this.deferredStats(options.serverTimeMs, maxAgeMs),
+    }
+  }
+
+  /**
+   * Summarizes fireball rows/removals left pending after a budgeted flush.
+   *
+   * @param serverTimeMs - Current server wall-clock time.
+   * @returns Deferred entity count and maximum age.
+   */
+  private deferredStats(
+    serverTimeMs: number,
+    initialMaxAgeMs = 0,
+  ): VisualBudgetFlushStats {
+    let maxDeferredAgeMs = initialMaxAgeMs
+    for (const pending of this.deltas.values()) {
+      maxDeferredAgeMs = Math.max(maxDeferredAgeMs, pendingAgeMs(pending, serverTimeMs))
+    }
+    for (const queuedAtMs of this.removedIds.values()) {
+      maxDeferredAgeMs = Math.max(
+        maxDeferredAgeMs,
+        Math.max(0, serverTimeMs - (queuedAtMs ?? serverTimeMs)),
+      )
+    }
+    return {
+      deferredEntities: this.deltas.size + this.removedIds.size,
+      maxDeferredAgeMs,
+    }
   }
 
   /**
@@ -286,8 +627,8 @@ export class FireballVisualBatchCoalescer {
  * Incrementally coalesces cadence-limited Homing Orb movement and removals.
  */
 export class HomingOrbVisualBatchCoalescer {
-  private readonly deltas = new Map<number, Mutable<HomingOrbDelta>>()
-  private readonly removedIds = new Set<number>()
+  private readonly deltas = new Map<number, PendingRow<HomingOrbDelta>>()
+  private readonly removedIds = new Map<number, number | undefined>()
   private serverTimeMs: number | undefined
 
   /**
@@ -300,15 +641,18 @@ export class HomingOrbVisualBatchCoalescer {
     if (batch.serverTimeMs !== undefined) this.serverTimeMs = batch.serverTimeMs
     for (const delta of batch.deltas) {
       this.removedIds.delete(delta.id)
-      let snapshot = this.deltas.get(delta.id)
-      if (!snapshot) {
-        snapshot = { id: delta.id }
-        this.deltas.set(delta.id, snapshot)
+      let pending = this.deltas.get(delta.id)
+      if (!pending) {
+        pending = {
+          row: { id: delta.id },
+          firstQueuedAtMs: batch.serverTimeMs,
+        }
+        this.deltas.set(delta.id, pending)
       }
-      copyHomingOrbDeltaInto(snapshot, delta)
+      copyHomingOrbDeltaInto(pending.row, delta)
     }
     for (const id of batch.removedIds) {
-      this.removedIds.add(id)
+      this.removedIds.set(id, batch.serverTimeMs)
       this.deltas.delete(id)
     }
   }
@@ -329,12 +673,109 @@ export class HomingOrbVisualBatchCoalescer {
    */
   flush(): HomingOrbVisualBatch {
     const batch = {
-      deltas: [...this.deltas.values()],
-      removedIds: [...this.removedIds.values()],
+      deltas: [...this.deltas.values()].map((pending) => pending.row),
+      removedIds: [...this.removedIds.keys()],
       ...(this.serverTimeMs !== undefined ? { serverTimeMs: this.serverTimeMs } : {}),
     }
     this.clear()
     return batch
+  }
+
+  /**
+   * Emits a budgeted subset while retaining deferred Homing Orb rows/removals.
+   *
+   * @param options - Visual send-budget limits for this flush.
+   * @returns Selected Homing Orb batch and deferred-row stats.
+   */
+  flushBudgeted(
+    options: VisualBudgetOptions,
+  ): ProjectileBudgetedFlush<HomingOrbVisualBatch> {
+    const deltas: HomingOrbDelta[] = []
+    const removedIds: number[] = []
+    const selectedDeltaIds: number[] = []
+    const selectedRemovalIds: number[] = []
+    let usedBytes = 0
+    let maxAgeMs = 0
+
+    for (const [id, queuedAtMs] of this.removedIds) {
+      const rowBytes = estimateRowBytes({ id })
+      const ageMs = Math.max(0, options.serverTimeMs - (queuedAtMs ?? options.serverTimeMs))
+      maxAgeMs = Math.max(maxAgeMs, ageMs)
+      const maxRemovalsReached =
+        options.maxRemovals > 0 && removedIds.length >= options.maxRemovals
+      const forcedByAge = ageMs >= options.maxDeferralMs
+      if (
+        !forcedByAge &&
+        (maxRemovalsReached ||
+          exceedsByteBudget(options.maxBytes, usedBytes, rowBytes))
+      ) {
+        continue
+      }
+      removedIds.push(id)
+      selectedRemovalIds.push(id)
+      usedBytes += rowBytes
+    }
+
+    for (const [id, pending] of this.deltas) {
+      const rowBytes = estimateRowBytes(pending.row)
+      const ageMs = pendingAgeMs(pending, options.serverTimeMs)
+      maxAgeMs = Math.max(maxAgeMs, ageMs)
+      const maxDeltasReached =
+        options.maxDeltas > 0 && deltas.length >= options.maxDeltas
+      const forcedByAge = ageMs >= options.maxDeferralMs
+      if (
+        !forcedByAge &&
+        (maxDeltasReached ||
+          exceedsByteBudget(options.maxBytes, usedBytes, rowBytes))
+      ) {
+        continue
+      }
+      deltas.push(pending.row)
+      selectedDeltaIds.push(id)
+      usedBytes += rowBytes
+    }
+
+    for (const id of selectedRemovalIds) {
+      this.removedIds.delete(id)
+    }
+    for (const id of selectedDeltaIds) {
+      this.deltas.delete(id)
+    }
+
+    return {
+      batch: {
+        deltas,
+        removedIds,
+        ...(this.serverTimeMs !== undefined ? { serverTimeMs: this.serverTimeMs } : {}),
+      },
+      ...this.deferredStats(options.serverTimeMs, maxAgeMs),
+    }
+  }
+
+  /**
+   * Summarizes Homing Orb rows/removals left pending after a budgeted flush.
+   *
+   * @param serverTimeMs - Current server wall-clock time.
+   * @returns Deferred entity count and maximum age.
+   */
+  private deferredStats(
+    serverTimeMs: number,
+    initialMaxAgeMs = 0,
+  ): VisualBudgetFlushStats {
+    let maxDeferredAgeMs = initialMaxAgeMs
+    for (const pending of this.deltas.values()) {
+      maxDeferredAgeMs = Math.max(maxDeferredAgeMs, pendingAgeMs(pending, serverTimeMs))
+    }
+    for (const queuedAtMs of this.removedIds.values()) {
+      maxDeferredAgeMs = Math.max(
+        maxDeferredAgeMs,
+        Math.max(0, serverTimeMs - (queuedAtMs ?? serverTimeMs)),
+      )
+    }
+    return {
+      deferredEntities: this.deltas.size + this.removedIds.size,
+      maxDeferredAgeMs,
+    }
   }
 
   /**

@@ -8,8 +8,8 @@ Record production evidence for the Wizard Wars solo rubber-banding/high-CPU inve
 
 - Client catch-up prediction sends a fresh full input with a unique sequence number for every committed fixed simulation step.
 - React HUD state ignores position-only and ACK-only player batches; Phaser still receives authoritative batches directly.
-- The room reports server loop degradation through `server_performance_status` using loop debt, catch-up callbacks, input queue drops, event-loop lag, room tick time, simulation time, visual flush enqueue cost, owner ACK enqueue cost, immediate broadcast enqueue cost, process event-loop delay/utilization when supported, CPU, memory, active rooms, and client count. Bun currently treats event-loop utilization as unavailable instead of publishing zeroed readings.
-- Visual player/fireball deltas are cadence-limited by `WW_NET_SEND_RATE_HZ` while owner ACKs and critical discrete events remain immediate.
+- The room reports server loop degradation through `server_performance_status` using loop debt, catch-up callbacks, input queue drops, event-loop lag, room tick time, simulation time, visual flush enqueue cost, owner ACK enqueue cost, immediate broadcast enqueue cost, visual-budget deferrals/deferred entities/max deferral age/dropped visuals, critical send failures, process event-loop delay/utilization when supported, CPU, memory, active rooms, and client count. Bun currently treats event-loop utilization as unavailable instead of publishing zeroed readings.
+- Visual player/fireball/Homing Orb deltas are cadence-limited by `WW_NET_SEND_RATE_HZ` while owner ACKs and critical discrete events remain immediate. The opt-in `WW_NET_SEND_BUDGET_ENABLED` layer can defer visual-only movement/projectile rows under explicit caps; leave it false unless a bounded perf/prod capture is planned.
 - Held movement inputs expire after 250ms without accepted input, and empty in-progress rooms clean up after reconnect grace.
 - The server coalesces repeated held inputs while advancing ACKs one sequence per tick, matching Seas of Aleryn's transition-preserving queue pressure reduction without skipping client replay history.
 - The default fixed-step catch-up budget is `4` ticks to reduce long catch-up bursts under host stalls; `WW_SIM_MAX_CATCH_UP_TICKS` remains the rollback knob.
@@ -73,7 +73,15 @@ When web and realtime are deployed separately, record both service roles:
 - Shared secret presence only: confirm `WW_REALTIME_ADMIN_TOKEN` is set on both services without recording its value.
 - Replica policy: keep realtime at one replica until sticky routing and shared Colyseus Presence/Driver design land.
 
-Normal local perf-load gates require ACK max gap `<=250ms`, player batch max gap `<=300ms`, degraded status count `<=1`, and input drops `0`. The active-room cleanup field is report-only because in-progress rooms intentionally remain eligible for reconnect during `RECONNECT_WINDOW_MS`. `WW_PERF_LOAD_DIAGNOSTIC_ONLY=true` with `WW_PERF_LOAD_DIAGNOSTIC_REASON` is reserved for non-gating investigations and must be called out as diagnostic-only in PR evidence.
+Normal local perf-load gates require ACK max gap `<=250ms`, player batch max gap `<=300ms`, degraded status count `<=1`, input drops `0`, `criticalSendFailures=0`, and `visualBudgetDroppedVisuals=0`. `server_performance_status.metrics.broadcastDurationMs` excludes the separately reported `ownerAckSendDurationMs` and `immediateBroadcastDurationMs`, so `broadcast_slow` reflects room-wide batch pressure rather than double-counted critical sends. The active-room cleanup field is report-only because in-progress rooms intentionally remain eligible for reconnect during `RECONNECT_WINDOW_MS`. `WW_PERF_LOAD_DIAGNOSTIC_ONLY=true` with `WW_PERF_LOAD_DIAGNOSTIC_REASON` is reserved for non-gating investigations and must be called out as diagnostic-only in PR evidence.
+
+For a bounded visual send-budget comparison, keep the feature disabled for the baseline run, then rerun with explicit caps:
+
+```sh
+WW_PERF_RUN_ID=local-budget-compact8 WW_NET_SEND_BUDGET_ENABLED=true WW_NET_SEND_BUDGET_MAX_PLAYER_DELTAS=16 WW_NET_SEND_BUDGET_MAX_PROJECTILE_DELTAS=64 WW_NET_SEND_BUDGET_MAX_REMOVALS=64 WW_NET_SEND_BUDGET_MAX_DEFERRAL_MS=250 WW_PERF_LOAD_SCENARIOS=compact8 WW_PERF_LOAD_SECONDS=600 bun run test:perf-load
+```
+
+The budget-on report should show bounded `visualBudgetMaxDeferralAgeMs`, zero `criticalSendFailures`, zero `visualBudgetDroppedVisuals`, no room-wide ACK cursor leaks, and ACK/player-batch gaps within the normal gate thresholds. Production enablement should use the same run id family in server logs and `ops:capture-prod-rubberbanding`, then compare cgroup throttling and `server_performance_status` counters before drawing conclusions.
 
 ## 2026-06-23 Live Solo Evidence
 
@@ -84,6 +92,7 @@ Public browser playtest against `https://wizard-wars.pinindajin.online` entered 
 - `room.player_input.queue_cap_drop` warning counts during solo movement.
 - `server_performance_status` payloads where `degraded=true`, especially `reasons`.
 - Loop debt/catch-up summaries from app logs, especially `room.performance.window` when `WW_SERVER_PERF_LOGS=true`.
+- Visual-budget counters from `server_performance_status` and perf-load reports: `visualBudgetDeferrals`, `visualBudgetDeferredEntities`, `visualBudgetMaxDeferralAgeMs`, `visualBudgetDroppedVisuals`, and `criticalSendFailures`.
 - Docker CPU and memory samples while moving and while idle.
 - Cgroup v2 `cpu.stat`, `cpu.max`, `memory.current`, `memory.max`, and `memory.events` before/after deltas.
 
@@ -97,6 +106,7 @@ Public browser playtest against `https://wizard-wars.pinindajin.online` entered 
 ## Rollback Levers
 
 - Set `WW_NET_SEND_RATE_HZ=60` to restore previous visual batch cadence.
+- Set `WW_NET_SEND_BUDGET_ENABLED=false` or unset it, then restart/redeploy realtime room processes to disable visual send budgeting.
 - Set `WW_SERVER_PERF_LOGS=false` and restart/redeploy to disable opt-in server performance logs.
 - Revert the production event-loop instrumentation PR if the always-initialized room monitor itself becomes suspect.
 - Hide the player-facing overlay hook if the indicators themselves cause unexpected UI issues.

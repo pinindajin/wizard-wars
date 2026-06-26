@@ -123,4 +123,55 @@ describe("game performance config", () => {
 
     expect(resolveGamePerformanceConfig({ WW_PERF_RUN_ID: "!!!" }).perfRunId).toBeNull()
   })
+
+  it("defaults send budget off with unlimited visual caps and bounded deferral", () => {
+    expect(resolveGamePerformanceConfig({})).toMatchObject({
+      netSendBudget: {
+        enabled: false,
+        maxPlayerDeltas: 0,
+        maxProjectileDeltas: 0,
+        maxRemovals: 0,
+        maxBytes: 0,
+        maxDeferralMs: 250,
+      },
+    })
+  })
+
+  it("parses send budget env knobs with zero as unlimited and deferral clamped", () => {
+    expect(
+      resolveGamePerformanceConfig({
+        WW_NET_SEND_BUDGET_ENABLED: "on",
+        WW_NET_SEND_BUDGET_MAX_PLAYER_DELTAS: "3",
+        WW_NET_SEND_BUDGET_MAX_PROJECTILE_DELTAS: "4",
+        WW_NET_SEND_BUDGET_MAX_REMOVALS: "5",
+        WW_NET_SEND_BUDGET_MAX_BYTES: "1024",
+        WW_NET_SEND_BUDGET_MAX_DEFERRAL_MS: "1",
+      }).netSendBudget,
+    ).toEqual({
+      enabled: true,
+      maxPlayerDeltas: 3,
+      maxProjectileDeltas: 4,
+      maxRemovals: 5,
+      maxBytes: 1024,
+      maxDeferralMs: 16,
+    })
+
+    expect(
+      resolveGamePerformanceConfig({
+        WW_NET_SEND_BUDGET_ENABLED: "unexpected",
+        WW_NET_SEND_BUDGET_MAX_PLAYER_DELTAS: "-1",
+        WW_NET_SEND_BUDGET_MAX_PROJECTILE_DELTAS: "0",
+        WW_NET_SEND_BUDGET_MAX_REMOVALS: "nope",
+        WW_NET_SEND_BUDGET_MAX_BYTES: "0",
+        WW_NET_SEND_BUDGET_MAX_DEFERRAL_MS: "9999",
+      }).netSendBudget,
+    ).toEqual({
+      enabled: false,
+      maxPlayerDeltas: 0,
+      maxProjectileDeltas: 0,
+      maxRemovals: 0,
+      maxBytes: 0,
+      maxDeferralMs: 1_000,
+    })
+  })
 })

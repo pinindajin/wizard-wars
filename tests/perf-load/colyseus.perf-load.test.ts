@@ -135,6 +135,8 @@ describe("Colyseus perf load", () => {
             scenario.maxPlayerBatchGapMs,
           )
           expect(stats.inputQueueDrops).toBe(0)
+          expect(stats.criticalSendFailures).toBe(0)
+          expect(stats.visualBudgetDroppedVisuals).toBe(0)
         } finally {
           if (!leftRooms) await leaveRoomsBestEffort(rooms)
         }

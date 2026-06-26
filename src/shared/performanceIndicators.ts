@@ -47,6 +47,11 @@ export type ServerPerformanceMetrics = {
   readonly visualFlushDurationMs?: number
   readonly ownerAckSendDurationMs?: number
   readonly immediateBroadcastDurationMs?: number
+  readonly visualBudgetDeferrals?: number
+  readonly visualBudgetDeferredEntities?: number
+  readonly visualBudgetMaxDeferralAgeMs?: number
+  readonly visualBudgetDroppedVisuals?: number
+  readonly criticalSendFailures?: number
   readonly processEventLoopDelayMs?: number
   readonly processEventLoopDelayP95Ms?: number
   readonly eventLoopUtilization?: number
