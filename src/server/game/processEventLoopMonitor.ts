@@ -80,12 +80,16 @@ export function createProcessEventLoopMonitor(
 ): ProcessEventLoopMonitor {
   const unavailableReasons: string[] = []
   const sampleIntervalMs = options.sampleIntervalMs ?? DEFAULT_SAMPLE_INTERVAL_MS
-  const histogram = deps.createDelayHistogram?.({
-    resolution: options.resolutionMs,
-  })
-  if (histogram) {
-    histogram.enable()
-  } else {
+  let histogram: DelayHistogram | undefined
+  try {
+    histogram = deps.createDelayHistogram?.({
+      resolution: options.resolutionMs,
+    })
+    histogram?.enable()
+  } catch {
+    histogram = undefined
+  }
+  if (!histogram) {
     unavailableReasons.push("event_loop_delay_unavailable")
   }
 
