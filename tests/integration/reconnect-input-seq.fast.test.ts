@@ -6,8 +6,8 @@ import type {
   LobbyStatePayload,
   PlayerBatchUpdatePayload,
   PlayerInputPayload,
+  PlayerOwnerAckPayload,
 } from "@/shared/types"
-import type { Room } from "@colyseus/sdk"
 
 import {
   bootTestServer,
@@ -97,29 +97,31 @@ describe("Reconnect resets input seq (refresh)", { timeout: 30_000 }, () => {
 
     let guestEid: number | null = null
     let sawAck0 = false
+    const roomWideAckCursorLeaks: number[] = []
     const guest2 = await server.sdk.joinById(hostRoom.roomId, { token: guestToken })
     guest2.onMessage(RoomEvent.GameStateSync, (p: GameStateSyncPayload) => {
       const me = p.players.find((pl) => pl.playerId === GUEST_SUB)
       if (me) guestEid = me.id
     })
+    guest2.onMessage(RoomEvent.PlayerOwnerAck, (p: PlayerOwnerAckPayload) => {
+      if (p.playerId === GUEST_SUB && p.lastProcessedInputSeq === 0) {
+        sawAck0 = true
+      }
+    })
     guest2.onMessage(RoomEvent.PlayerBatchUpdate, (p: PlayerBatchUpdatePayload) => {
       for (const d of p.deltas) {
-        if (
-          guestEid != null &&
-          d.id === guestEid &&
-          d.lastProcessedInputSeq !== undefined &&
-          d.lastProcessedInputSeq === 0
-        ) {
-          sawAck0 = true
-        }
+        if (d.lastProcessedInputSeq !== undefined) roomWideAckCursorLeaks.push(d.lastProcessedInputSeq)
       }
     })
     guest2.send(RoomEvent.RequestResync, {})
     await waitFor(() => guestEid != null, { timeout: 5000 })
+    await delay(200)
+    expect(sawAck0).toBe(false)
 
     guest2.send(RoomEvent.PlayerInput, { ...baseInput(0), up: true })
     await delay(200)
     await waitFor(() => sawAck0, { timeout: 10_000 })
+    expect(roomWideAckCursorLeaks).toEqual([])
 
     await guest2.leave().catch(() => {})
     await hostRoom.leave().catch(() => {})

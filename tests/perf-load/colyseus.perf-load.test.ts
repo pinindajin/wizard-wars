@@ -14,7 +14,9 @@ import { sanitizePerfRunId } from "@/server/game/performanceConfig"
 import { RoomEvent } from "@/shared/roomEvents"
 import type {
   LobbyStatePayload,
+  PlayerBatchUpdatePayload,
   PlayerInputPayload,
+  PlayerOwnerAckPayload,
   ServerPerformanceStatusPayload,
 } from "@/shared/types"
 
@@ -54,6 +56,10 @@ type PerfLoadStats = {
   readonly sentInputs: number
   readonly ownerAcks: number
   readonly playerBatches: number
+  readonly roomWideAckCursorLeaks: number
+  readonly wrongOwnerAckCount: number
+  readonly clientsWithoutOwnerAcks: number
+  readonly minOwnerAcksPerClient: number
   readonly ackGapsMs: readonly number[]
   readonly playerBatchGapsMs: readonly number[]
   readonly statuses: readonly ServerPerformanceStatusPayload[]
@@ -116,7 +122,11 @@ describe("Colyseus perf load", () => {
 
           expect(stats.sentInputs).toBeGreaterThan(0)
           expect(stats.ownerAcks).toBeGreaterThan(0)
+          expect(stats.clientsWithoutOwnerAcks).toBe(0)
+          expect(stats.minOwnerAcksPerClient).toBeGreaterThan(0)
           expect(stats.playerBatches).toBeGreaterThan(0)
+          expect(stats.roomWideAckCursorLeaks).toBe(0)
+          expect(stats.wrongOwnerAckCount).toBe(0)
           expect(stats.degradedStatusCount).toBeLessThanOrEqual(
             stats.degradedStatusBudget,
           )
@@ -221,23 +231,34 @@ async function runScenario(
   const ackGapsMs: number[] = []
   const playerBatchGapsMs: number[] = []
   const statusesByServerTimeMs = new Map<number, ServerPerformanceStatusPayload>()
+  let roomWideAckCursorLeaks = 0
+  let wrongOwnerAckCount = 0
 
   rooms.forEach((room, index) => {
-    room.onMessage(RoomEvent.PlayerOwnerAck, () => {
+    const expectedPlayerId = `perf-user-${index + 1}`
+    room.onMessage(RoomEvent.PlayerOwnerAck, (payload: PlayerOwnerAckPayload) => {
       const now = performance.now()
       if (lastAckAtMs[index] > 0) {
         ackGapsMs.push(now - lastAckAtMs[index])
       }
       lastAckAtMs[index] = now
       ownerAckCounts[index] += 1
+      if (payload.playerId !== expectedPlayerId) {
+        wrongOwnerAckCount += 1
+      }
     })
-    room.onMessage(RoomEvent.PlayerBatchUpdate, () => {
+    room.onMessage(RoomEvent.PlayerBatchUpdate, (payload: PlayerBatchUpdatePayload) => {
       const now = performance.now()
       if (lastPlayerBatchAtMs[index] > 0) {
         playerBatchGapsMs.push(now - lastPlayerBatchAtMs[index])
       }
       lastPlayerBatchAtMs[index] = now
       playerBatchCounts[index] += 1
+      for (const delta of payload.deltas) {
+        if (delta.lastProcessedInputSeq !== undefined) {
+          roomWideAckCursorLeaks += 1
+        }
+      }
     })
     room.onMessage(
       RoomEvent.ServerPerformanceStatus,
@@ -293,6 +314,10 @@ async function runScenario(
     sentInputs,
     ownerAcks: ownerAckCounts.reduce((sum, count) => sum + count, 0),
     playerBatches: playerBatchCounts.reduce((sum, count) => sum + count, 0),
+    roomWideAckCursorLeaks,
+    wrongOwnerAckCount,
+    clientsWithoutOwnerAcks: ownerAckCounts.filter((count) => count === 0).length,
+    minOwnerAcksPerClient: Math.min(...ownerAckCounts),
     ackGapsMs,
     playerBatchGapsMs,
     statuses,

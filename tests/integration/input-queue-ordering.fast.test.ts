@@ -6,6 +6,7 @@ import type {
   LobbyStatePayload,
   PlayerBatchUpdatePayload,
   PlayerInputPayload,
+  PlayerOwnerAckPayload,
 } from "@/shared/types"
 import type { Room } from "@colyseus/sdk"
 
@@ -82,12 +83,16 @@ describe(
         })
 
         const acks: number[] = []
+        const roomWideAckCursorLeaks: number[] = []
+        hostRoom.onMessage(RoomEvent.PlayerOwnerAck, (p: PlayerOwnerAckPayload) => {
+          acks.push(p.lastProcessedInputSeq)
+        })
         hostRoom.onMessage(
           RoomEvent.PlayerBatchUpdate,
           (p: PlayerBatchUpdatePayload) => {
             for (const d of p.deltas) {
               if (d.lastProcessedInputSeq !== undefined) {
-                acks.push(d.lastProcessedInputSeq)
+                roomWideAckCursorLeaks.push(d.lastProcessedInputSeq)
               }
             }
           },
@@ -117,6 +122,7 @@ describe(
           expect(acks[i]).toBeGreaterThanOrEqual(acks[i - 1]!)
         }
         expect(Math.max(...acks)).toBe(5)
+        expect(roomWideAckCursorLeaks).toEqual([])
       },
     )
 
@@ -135,9 +141,15 @@ describe(
       })
 
       const acks: number[] = []
+      const roomWideAckCursorLeaks: number[] = []
+      room2.onMessage(RoomEvent.PlayerOwnerAck, (p: PlayerOwnerAckPayload) => {
+        acks.push(p.lastProcessedInputSeq)
+      })
       room2.onMessage(RoomEvent.PlayerBatchUpdate, (p: PlayerBatchUpdatePayload) => {
         for (const d of p.deltas) {
-          if (d.lastProcessedInputSeq !== undefined) acks.push(d.lastProcessedInputSeq)
+          if (d.lastProcessedInputSeq !== undefined) {
+            roomWideAckCursorLeaks.push(d.lastProcessedInputSeq)
+          }
         }
       })
 
@@ -159,6 +171,7 @@ describe(
 
       expect(Math.max(...acks)).toBe(11)
       expect(acks.some((v) => v < 10)).toBe(false)
+      expect(roomWideAckCursorLeaks).toEqual([])
     })
   },
 )

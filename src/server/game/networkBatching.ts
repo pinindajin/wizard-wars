@@ -40,43 +40,86 @@ function cloneAbilityRuntimeStates(
 }
 
 /**
- * Copies player delta fields into a detached pending row.
+ * Copies player visual delta fields into a detached pending row.
  *
  * @param target - Pending coalesced player delta row.
  * @param delta - Player delta row to snapshot.
+ * @returns True when at least one room-wide visual field was copied.
  */
-function copyPlayerDeltaInto(
+function copyPlayerVisualDeltaInto(
   target: Mutable<PlayerDelta>,
   delta: PlayerDelta,
-): void {
-  if (delta.x !== undefined) target.x = delta.x
-  if (delta.y !== undefined) target.y = delta.y
-  if (delta.vx !== undefined) target.vx = delta.vx
-  if (delta.vy !== undefined) target.vy = delta.vy
-  if (delta.facingAngle !== undefined) target.facingAngle = delta.facingAngle
+): boolean {
+  let copied = false
+  if (delta.x !== undefined) {
+    target.x = delta.x
+    copied = true
+  }
+  if (delta.y !== undefined) {
+    target.y = delta.y
+    copied = true
+  }
+  if (delta.vx !== undefined) {
+    target.vx = delta.vx
+    copied = true
+  }
+  if (delta.vy !== undefined) {
+    target.vy = delta.vy
+    copied = true
+  }
+  if (delta.facingAngle !== undefined) {
+    target.facingAngle = delta.facingAngle
+    copied = true
+  }
   if (delta.moveFacingAngle !== undefined) {
     target.moveFacingAngle = delta.moveFacingAngle
+    copied = true
   }
-  if (delta.health !== undefined) target.health = delta.health
-  if (delta.lives !== undefined) target.lives = delta.lives
-  if (delta.animState !== undefined) target.animState = delta.animState
-  if (delta.moveState !== undefined) target.moveState = delta.moveState
-  if (delta.terrainState !== undefined) target.terrainState = delta.terrainState
+  if (delta.health !== undefined) {
+    target.health = delta.health
+    copied = true
+  }
+  if (delta.lives !== undefined) {
+    target.lives = delta.lives
+    copied = true
+  }
+  if (delta.animState !== undefined) {
+    target.animState = delta.animState
+    copied = true
+  }
+  if (delta.moveState !== undefined) {
+    target.moveState = delta.moveState
+    copied = true
+  }
+  if (delta.terrainState !== undefined) {
+    target.terrainState = delta.terrainState
+    copied = true
+  }
   if (delta.castingAbilityId !== undefined) {
     target.castingAbilityId = delta.castingAbilityId
+    copied = true
   }
-  if (delta.invulnerable !== undefined) target.invulnerable = delta.invulnerable
-  if (delta.jumpZ !== undefined) target.jumpZ = delta.jumpZ
+  if (delta.invulnerable !== undefined) {
+    target.invulnerable = delta.invulnerable
+    copied = true
+  }
+  if (delta.jumpZ !== undefined) {
+    target.jumpZ = delta.jumpZ
+    copied = true
+  }
   if (delta.jumpStartedInLava !== undefined) {
     target.jumpStartedInLava = delta.jumpStartedInLava
+    copied = true
   }
-  if (delta.hasSwiftBoots !== undefined) target.hasSwiftBoots = delta.hasSwiftBoots
+  if (delta.hasSwiftBoots !== undefined) {
+    target.hasSwiftBoots = delta.hasSwiftBoots
+    copied = true
+  }
   if (delta.abilityStates !== undefined) {
     target.abilityStates = cloneAbilityRuntimeStates(delta.abilityStates)
+    copied = true
   }
-  if (delta.lastProcessedInputSeq !== undefined) {
-    target.lastProcessedInputSeq = delta.lastProcessedInputSeq
-  }
+  return copied
 }
 
 /**
@@ -140,9 +183,9 @@ export class PlayerVisualBatchCoalescer {
       let snapshot = this.deltas.get(delta.id)
       if (!snapshot) {
         snapshot = { id: delta.id }
-        this.deltas.set(delta.id, snapshot)
       }
-      copyPlayerDeltaInto(snapshot, delta)
+      if (!copyPlayerVisualDeltaInto(snapshot, delta)) continue
+      this.deltas.set(delta.id, snapshot)
     }
   }
 

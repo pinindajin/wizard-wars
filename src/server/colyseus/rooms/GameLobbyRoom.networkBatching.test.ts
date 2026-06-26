@@ -426,7 +426,7 @@ describe("GameLobbyRoom network batching", () => {
     ).toThrow("cannot build GameStateSync without an active simulation")
   })
 
-  it("unicasts dedicated owner ACKs from sparse seq-only deltas without flushing visuals", () => {
+  it("unicasts dedicated owner ACKs from sparse seq-only deltas without ever flushing visuals", () => {
     vi.useFakeTimers()
     vi.setSystemTime(1_010)
 
@@ -536,6 +536,82 @@ describe("GameLobbyRoom network batching", () => {
     expect((room as unknown as { broadcast: ReturnType<typeof vi.fn> }).broadcast).not.toHaveBeenCalledWith(
       RoomEvent.PlayerBatchUpdate,
       expect.anything(),
+    )
+
+    vi.setSystemTime(1_040)
+    ;(room as unknown as { runGameTick: () => void }).runGameTick()
+
+    expect((room as unknown as { broadcast: ReturnType<typeof vi.fn> }).broadcast).not.toHaveBeenCalledWith(
+      RoomEvent.PlayerBatchUpdate,
+      expect.anything(),
+    )
+    expect((room as unknown as { lastNetworkFlushAtMs: number }).lastNetworkFlushAtMs).toBe(1_000)
+  })
+
+  it("sends owner ACKs before visual coalescing handles player deltas", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(2_010)
+
+    const room = new GameLobbyRoom()
+    const client = {
+      userData: { playerId: "player-1" },
+      send: vi.fn(),
+    }
+    const ingestPlayerVisuals = vi.fn()
+    const buildPlayerOwnerAckPayload = vi.fn(
+      (id: number, lastProcessedInputSeq: number, serverTimeMs: number) => ({
+        id,
+        playerId: "player-1",
+        x: 10,
+        y: 20,
+        vx: 1,
+        vy: 2,
+        lastProcessedInputSeq,
+        serverTimeMs,
+        replayContext: {
+          moveState: "moving",
+          terrainState: "land",
+          castingAbilityId: null,
+          jumpZ: 0,
+          jumpStartedInLava: false,
+          isSwinging: false,
+          hasSwiftBoots: false,
+        },
+      }),
+    )
+    Object.defineProperty(room, "clients", {
+      configurable: true,
+      value: [client],
+    })
+    Object.assign(room as object, {
+      broadcast: vi.fn(),
+      lobbyPhase: "IN_PROGRESS",
+      lastNetworkFlushAtMs: 2_000,
+      playerVisualBatchCoalescer: {
+        ingest: ingestPlayerVisuals,
+        hasPending: () => false,
+        flush: () => [],
+        clear: () => undefined,
+      },
+      simulation: {
+        tick: vi.fn().mockReturnValue(
+          simOutput({
+            playerDeltas: [{ id: 1, x: 10, lastProcessedInputSeq: 9 }],
+          }),
+        ),
+        entityPlayerMap: new Map([[1, "player-1"]]),
+        buildPlayerOwnerAckPayload,
+      },
+    })
+
+    ;(room as unknown as { runGameTick: () => void }).runGameTick()
+
+    expect(client.send).toHaveBeenCalledWith(
+      RoomEvent.PlayerOwnerAck,
+      expect.objectContaining({ lastProcessedInputSeq: 9 }),
+    )
+    expect(buildPlayerOwnerAckPayload.mock.invocationCallOrder[0]).toBeLessThan(
+      ingestPlayerVisuals.mock.invocationCallOrder[0]!,
     )
   })
 
@@ -743,7 +819,6 @@ describe("GameLobbyRoom network batching", () => {
           id: 1,
           x: 10,
           abilityStates: abilityStates(2),
-          lastProcessedInputSeq: 7,
         },
       ],
       removedIds: [],

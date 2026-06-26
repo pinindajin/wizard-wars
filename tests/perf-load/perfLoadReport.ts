@@ -15,6 +15,10 @@ export type PerfLoadReportInput = {
   readonly sentInputs: number
   readonly ownerAcks: number
   readonly playerBatches: number
+  readonly roomWideAckCursorLeaks: number
+  readonly wrongOwnerAckCount: number
+  readonly clientsWithoutOwnerAcks: number
+  readonly minOwnerAcksPerClient: number
   readonly ackGapsMs: readonly number[]
   readonly playerBatchGapsMs: readonly number[]
   readonly statuses: readonly ServerPerformanceStatusPayload[]
@@ -36,6 +40,10 @@ export type PerfLoadReport = {
   readonly sentInputs: number
   readonly ownerAcks: number
   readonly playerBatches: number
+  readonly roomWideAckCursorLeaks: number
+  readonly wrongOwnerAckCount: number
+  readonly clientsWithoutOwnerAcks: number
+  readonly minOwnerAcksPerClient: number
   readonly maxAckGapMs: number
   readonly ackGapP95Ms: number
   readonly ackGapP99Ms: number
@@ -150,6 +158,10 @@ export function summarizePerfLoadRun(input: PerfLoadReportInput): PerfLoadReport
     sentInputs: input.sentInputs,
     ownerAcks: input.ownerAcks,
     playerBatches: input.playerBatches,
+    roomWideAckCursorLeaks: input.roomWideAckCursorLeaks,
+    wrongOwnerAckCount: input.wrongOwnerAckCount,
+    clientsWithoutOwnerAcks: input.clientsWithoutOwnerAcks,
+    minOwnerAcksPerClient: input.minOwnerAcksPerClient,
     maxAckGapMs: maxSample(input.ackGapsMs),
     ackGapP95Ms: percentile(input.ackGapsMs, 95),
     ackGapP99Ms: percentile(input.ackGapsMs, 99),

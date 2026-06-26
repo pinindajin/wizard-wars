@@ -2699,6 +2699,10 @@ export class GameLobbyRoom extends Room {
 
       const broadcastStartedAtPerfMs = performance.now()
       if (output.playerDeltas.length > 0) {
+        this.sendOwnerAckDeltas(output.playerDeltas, serverTimeMs)
+      }
+
+      if (output.playerDeltas.length > 0) {
         this.playerVisualBatchCoalescer.ingest(output.playerDeltas)
       }
       if (output.fireballDeltas.length > 0 || output.fireballRemovedIds.length > 0) {
@@ -2714,10 +2718,6 @@ export class GameLobbyRoom extends Room {
           removedIds: output.homingOrbRemovedIds,
           serverTimeMs,
         })
-      }
-
-      if (output.playerDeltas.length > 0) {
-        this.sendOwnerAckDeltas(output.playerDeltas, serverTimeMs)
       }
 
       if (
