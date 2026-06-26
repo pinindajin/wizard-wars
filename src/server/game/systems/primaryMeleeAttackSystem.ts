@@ -25,7 +25,6 @@ import {
   DyingTag,
   DeadTag,
   SpectatorTag,
-  InvulnerableTag,
   JumpArc,
 } from "../components"
 import type { DamageRequest, SimCtx } from "../simulation"
@@ -37,7 +36,7 @@ import {
 import { getPrimaryAttackAnimationConfigByAttackId } from "../../../shared/balance-config/animationConfig"
 import { TICK_MS } from "../../../shared/balance-config"
 import { JUMP_AIRBORNE_COLLIDER_EPSILON_PX } from "../../../shared/balance-config/combat"
-import { characterHitboxForCenter } from "../../../shared/collision/characterHitbox"
+import { getDamageablePlayerTargets } from "../damageablePlayerCache"
 import { swingConeIntersectsCharacterHitbox } from "./swingConeGeometry"
 import {
   combatTelegraphId,
@@ -189,15 +188,9 @@ function resolveActiveSwings(ctx: SimCtx): void {
     const cx = Position.x[casterEid]
     const cy = Position.y[casterEid]
 
-    for (const target of query(world, [PlayerTag])) {
-      if (target === casterEid) continue
-      if (atk.hitTargets.has(target)) continue
-      if (hasComponent(world, target, DyingTag)) continue
-      if (hasComponent(world, target, DeadTag)) continue
-      if (hasComponent(world, target, SpectatorTag)) continue
-      if (hasComponent(world, target, InvulnerableTag)) continue
-
-      const targetHitbox = characterHitboxForCenter(Position.x[target], Position.y[target])
+    for (const target of getDamageablePlayerTargets(ctx)) {
+      if (target.eid === casterEid) continue
+      if (atk.hitTargets.has(target.eid)) continue
       if (
         !swingConeIntersectsCharacterHitbox(
           cx,
@@ -205,16 +198,16 @@ function resolveActiveSwings(ctx: SimCtx): void {
           atk.facingAngle,
           cfg.hurtboxRadiusPx,
           cfg.hurtboxArcDeg,
-          targetHitbox,
+          target.hitbox,
         )
       ) {
         continue
       }
 
-      atk.hitTargets.add(target)
+      atk.hitTargets.add(target.eid)
 
       const req: DamageRequest = {
-        targetEid: target,
+        targetEid: target.eid,
         damage: cfg.damage,
         killerUserId: atk.casterUserId,
         killerAbilityId: atk.attackId,

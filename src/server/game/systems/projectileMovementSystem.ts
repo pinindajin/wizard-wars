@@ -17,7 +17,7 @@ import {
   Velocity,
 } from "../components"
 import type { DamageRequest, SimCtx } from "../simulation"
-import { getHomingOrbDamageableTargets } from "../homingOrbTargetCache"
+import { getHomingOrbDamageableTargets } from "../damageablePlayerCache"
 import {
   ARENA_WIDTH,
   ARENA_HEIGHT,
