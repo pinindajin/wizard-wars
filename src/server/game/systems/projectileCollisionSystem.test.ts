@@ -166,6 +166,24 @@ describe("projectileCollisionSystem", () => {
     expect(ctx.fireballImpacts[0]!.targetId).toBe("target")
   })
 
+  it("preserves first overlapping fireball hit order when the first target is unmapped", () => {
+    const world = createWorld()
+    const unmappedTarget = addPlayer(world, 100, 100)
+    const mappedTarget = addPlayer(world, 100, 100)
+    const fireball = addFireball(world, 100, 75)
+    const ctx = emptyCtx({
+      world,
+      entityPlayerMap: new Map([[mappedTarget, "mapped"]]),
+      fireballOwnerMap: new Map([[fireball, "caster"]]),
+    })
+
+    projectileCollisionSystem(ctx)
+
+    expect(ctx.damageRequests).toHaveLength(1)
+    expect(ctx.damageRequests[0]!.targetEid).toBe(unmappedTarget)
+    expect(ctx.fireballImpacts[0]!.targetId).toBeUndefined()
+  })
+
   it("damages the fireball owner after the launch grace window expires", () => {
     const world = createWorld()
     const owner = addPlayer(world, 100, 100)

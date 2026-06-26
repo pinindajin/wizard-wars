@@ -5,7 +5,7 @@
  * Fireballs deal self-damage (caster can be hit by their own fireball).
  * Each fireball is removed on first hit.
  */
-import { query, hasComponent } from "bitecs"
+import { query } from "bitecs"
 
 import {
   Position,
@@ -13,17 +13,13 @@ import {
   FireballTag,
   HomingOrbTag,
   Ownership,
-  PlayerTag,
-  DyingTag,
-  DeadTag,
-  SpectatorTag,
-  InvulnerableTag,
 } from "../components"
 import type { SimCtx, DamageRequest } from "../simulation"
 import {
+  getDamageablePlayerTargets,
   getHomingOrbDamageableTargets,
   type HomingOrbDamageableTarget,
-} from "../homingOrbTargetCache"
+} from "../damageablePlayerCache"
 import {
   FIREBALL_BLOCKED_BY_PROPS,
   FIREBALL_DAMAGE,
@@ -36,7 +32,6 @@ import {
 } from "../../../shared/balance-config"
 import { ARENA_PROP_COLLIDER_SET } from "../../../shared/collision/arenaSpatialIndexes"
 import {
-  characterHitboxForCenter,
   circleIntersectsRect,
 } from "../../../shared/collision/characterHitbox"
 import { queryAabbIds } from "../../../shared/collision/spatialIndex"
@@ -97,7 +92,6 @@ export function projectileCollisionSystem(ctx: SimCtx): void {
     world,
     currentTick,
     commandBuffer,
-    entityPlayerMap,
     fireballOwnerMap,
     fireballCreatedAtTickMap,
     fireballRemovedIds,
@@ -134,17 +128,11 @@ export function projectileCollisionSystem(ctx: SimCtx): void {
       continue
     }
 
-    for (const playerEid of query(world, [PlayerTag])) {
-      if (hasComponent(world, playerEid, DyingTag)) continue
-      if (hasComponent(world, playerEid, DeadTag)) continue
-      if (hasComponent(world, playerEid, SpectatorTag)) continue
-      if (hasComponent(world, playerEid, InvulnerableTag)) continue
-
-      const targetUserId = entityPlayerMap.get(playerEid) ?? null
+    for (const target of getDamageablePlayerTargets(ctx)) {
+      const targetUserId = target.userId ?? null
       if (ownerInGrace && ownerUserId !== null && targetUserId === ownerUserId) continue
 
-      const hitbox = characterHitboxForCenter(Position.x[playerEid], Position.y[playerEid])
-      if (!circleIntersectsRect(fbX, fbY, FIREBALL_HIT_RADIUS_PX, hitbox)) continue
+      if (!circleIntersectsRect(fbX, fbY, FIREBALL_HIT_RADIUS_PX, target.hitbox)) continue
 
       // Hit!
       // Knockback direction: away from fireball origin
@@ -153,7 +141,7 @@ export function projectileCollisionSystem(ctx: SimCtx): void {
       const speed = Math.sqrt(vx * vx + vy * vy) || 1
 
       const req: DamageRequest = {
-        targetEid: playerEid,
+        targetEid: target.eid,
         damage: FIREBALL_DAMAGE,
         killerUserId: ownerUserId,
         killerAbilityId: "fireball",

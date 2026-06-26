@@ -86,6 +86,22 @@ describe("lightningBoltSystem", () => {
     expect(ctx.lightningBolts[0]!.hitPlayerIds).toEqual(["target"])
   })
 
+  it("damages unmapped players without adding them to hitPlayerIds", () => {
+    const world = createWorld()
+    const caster = addPlayer(world, 0, 0)
+    const unmappedTarget = addPlayer(world, 100, 80)
+    const ctx = emptyCtx({
+      world,
+      pendingLightningBolts: [{ casterEid: caster, casterUserId: "caster", directionRad: 0 }],
+    })
+
+    lightningBoltSystem(ctx)
+
+    expect(ctx.damageRequests).toHaveLength(1)
+    expect(ctx.damageRequests[0]!.targetEid).toBe(unmappedTarget)
+    expect(ctx.lightningBolts[0]!.hitPlayerIds).toEqual([])
+  })
+
   it("misses when the lightning capsule does not reach the character hitbox", () => {
     const world = createWorld()
     const caster = addPlayer(world, 0, 0)

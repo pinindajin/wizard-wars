@@ -81,7 +81,12 @@ import type {
   AbilityRuntimeStates,
   PlayerOwnerAckPayload,
 } from "../../shared/types"
-import type { HomingOrbDamageableTarget } from "./homingOrbTargetCache"
+import {
+  rebuildDamageablePlayerTargets,
+  resetDamageablePlayerTargetCaches,
+  type DamageablePlayerTarget,
+  type HomingOrbDamageableTarget,
+} from "./damageablePlayerCache"
 
 import { inputSystem } from "./systems/inputSystem"
 import { castingSystem } from "./systems/castingSystem"
@@ -375,7 +380,9 @@ export type SimCtx = {
   activeCombatTelegraphs: Map<string, CombatTelegraphStartPayload>
   /** Respawn invulnerability expiry tick keyed by player eid for this simulation world. */
   invulnerableExpiresAtTickByEntity: Map<number, number>
-  /** Tick-local cache of live player hitboxes used by Homing Orb systems. */
+  /** Tick-local cache of live player hitboxes used by combat systems. */
+  damageablePlayerTargetCache?: DamageablePlayerTarget[]
+  /** Tick-local mapped-player view of damageable targets used by Homing Orb systems. */
   homingOrbDamageableTargetCache?: HomingOrbDamageableTarget[]
 
   // ── Written by playerDeltaSystem and projectileDeltaSystem ──
@@ -1051,7 +1058,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     ctx.serverTimeMs = serverTimeMs
     ctx.matchEnded = null
     ctx.hostEndSignal = hostEndSignal
-    ctx.homingOrbDamageableTargetCache = undefined
+    resetDamageablePlayerTargetCaches(ctx)
 
     const inputMap = scratch.inputMap
     const freshestWeaponAimByPlayer = scratch.freshestWeaponAimByPlayer
@@ -1151,6 +1158,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     worldCollisionSystem(ctx)
     jumpPhysicsSystem(ctx)
     terrainHazardSystem(ctx)
+    rebuildDamageablePlayerTargets(ctx)
     projectileMovementSystem(ctx)
     primaryMeleeAttackSystem(ctx)
     lightningBoltSystem(ctx)
