@@ -73,6 +73,24 @@ describe("process event-loop monitor", () => {
     })
   })
 
+  it("reports event-loop delay unavailable when the runtime exposes a throwing delay monitor stub", () => {
+    const monitor = createProcessEventLoopMonitor(
+      { resolutionMs: 20, gcMetricsEnabled: false },
+      {
+        createDelayHistogram: vi.fn(() => {
+          throw new Error("perf_hooks.monitorEventLoopDelay is not yet implemented in Bun.")
+        }),
+        nowEventLoopUtilization: undefined,
+        createGcObserver: undefined,
+        nowPerfMs: () => 1_000,
+      },
+    )
+
+    expect(monitor.snapshot()).toEqual({
+      unavailableReason: "event_loop_delay_unavailable,event_loop_utilization_unavailable",
+    })
+  })
+
   it("publishes one stable process sample during the sample interval", () => {
     const histogram = {
       enable: vi.fn(),
