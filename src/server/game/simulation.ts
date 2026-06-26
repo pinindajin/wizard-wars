@@ -411,6 +411,138 @@ export type SimOutput = {
   } | null
 }
 
+type SimScratch = {
+  readonly inputMap: Map<string, PlayerInputPayload>
+  readonly freshestWeaponAimByPlayer: Map<string, FreshestWeaponAim>
+  readonly damageRequests: DamageRequest[]
+  readonly deathEvents: DeathEvent[]
+  readonly pendingLightningBolts: PendingLightningBolt[]
+  readonly playerDeaths: PlayerDeathPayload[]
+  readonly playerRespawns: PlayerRespawnPayload[]
+  readonly fireballLaunches: FireballLaunchPayload[]
+  readonly fireballImpacts: FireballImpactPayload[]
+  readonly fireballRemovedIds: number[]
+  readonly homingOrbLaunches: HomingOrbLaunchPayload[]
+  readonly homingOrbImpacts: HomingOrbImpactPayload[]
+  readonly homingOrbRemovedIds: number[]
+  readonly lightningBolts: LightningBoltPayload[]
+  readonly primaryMeleeAttacks: PrimaryMeleeAttackPayload[]
+  readonly combatTelegraphStarts: CombatTelegraphStartPayload[]
+  readonly combatTelegraphEnds: CombatTelegraphEndPayload[]
+  readonly damageFloats: DamageFloatPayload[]
+  readonly goldUpdates: { userId: string; gold: number }[]
+  readonly abilitySfxEvents: AbilitySfxPayload[]
+  readonly playerDeltas: PlayerDelta[]
+  readonly fireballDeltas: { id: number; x: number; y: number }[]
+  readonly homingOrbDeltas: HomingOrbDelta[]
+  readonly output: SimOutput
+}
+
+/**
+ * Creates the reusable per-simulation tick scratch storage.
+ *
+ * @returns Mutable maps/arrays owned by one simulation instance.
+ */
+function createSimScratch(): SimScratch {
+  const playerDeltas: PlayerDelta[] = []
+  const fireballDeltas: { id: number; x: number; y: number }[] = []
+  const fireballRemovedIds: number[] = []
+  const homingOrbDeltas: HomingOrbDelta[] = []
+  const homingOrbRemovedIds: number[] = []
+  const playerDeaths: PlayerDeathPayload[] = []
+  const playerRespawns: PlayerRespawnPayload[] = []
+  const fireballLaunches: FireballLaunchPayload[] = []
+  const fireballImpacts: FireballImpactPayload[] = []
+  const homingOrbLaunches: HomingOrbLaunchPayload[] = []
+  const homingOrbImpacts: HomingOrbImpactPayload[] = []
+  const lightningBolts: LightningBoltPayload[] = []
+  const primaryMeleeAttacks: PrimaryMeleeAttackPayload[] = []
+  const combatTelegraphStarts: CombatTelegraphStartPayload[] = []
+  const combatTelegraphEnds: CombatTelegraphEndPayload[] = []
+  const damageFloats: DamageFloatPayload[] = []
+  const goldUpdates: { userId: string; gold: number }[] = []
+  const abilitySfxEvents: AbilitySfxPayload[] = []
+
+  return {
+    inputMap: new Map(),
+    freshestWeaponAimByPlayer: new Map(),
+    damageRequests: [],
+    deathEvents: [],
+    pendingLightningBolts: [],
+    playerDeaths,
+    playerRespawns,
+    fireballLaunches,
+    fireballImpacts,
+    fireballRemovedIds,
+    homingOrbLaunches,
+    homingOrbImpacts,
+    homingOrbRemovedIds,
+    lightningBolts,
+    primaryMeleeAttacks,
+    combatTelegraphStarts,
+    combatTelegraphEnds,
+    damageFloats,
+    goldUpdates,
+    abilitySfxEvents,
+    playerDeltas,
+    fireballDeltas,
+    homingOrbDeltas,
+    output: {
+      playerDeltas,
+      fireballDeltas,
+      fireballRemovedIds,
+      homingOrbDeltas,
+      homingOrbRemovedIds,
+      playerDeaths,
+      playerRespawns,
+      fireballLaunches,
+      fireballImpacts,
+      homingOrbLaunches,
+      homingOrbImpacts,
+      lightningBolts,
+      primaryMeleeAttacks,
+      combatTelegraphStarts,
+      combatTelegraphEnds,
+      damageFloats,
+      goldUpdates,
+      abilitySfxEvents,
+      matchEnded: null,
+    },
+  }
+}
+
+/**
+ * Clears every tick-local scratch collection before a simulation step.
+ *
+ * @param scratch - Simulation-owned scratch storage.
+ */
+function resetScratchForTick(scratch: SimScratch): void {
+  scratch.inputMap.clear()
+  scratch.freshestWeaponAimByPlayer.clear()
+  scratch.damageRequests.length = 0
+  scratch.deathEvents.length = 0
+  scratch.pendingLightningBolts.length = 0
+  scratch.playerDeaths.length = 0
+  scratch.playerRespawns.length = 0
+  scratch.fireballLaunches.length = 0
+  scratch.fireballImpacts.length = 0
+  scratch.fireballRemovedIds.length = 0
+  scratch.homingOrbLaunches.length = 0
+  scratch.homingOrbImpacts.length = 0
+  scratch.homingOrbRemovedIds.length = 0
+  scratch.lightningBolts.length = 0
+  scratch.primaryMeleeAttacks.length = 0
+  scratch.combatTelegraphStarts.length = 0
+  scratch.combatTelegraphEnds.length = 0
+  scratch.damageFloats.length = 0
+  scratch.goldUpdates.length = 0
+  scratch.abilitySfxEvents.length = 0
+  scratch.playerDeltas.length = 0
+  scratch.fireballDeltas.length = 0
+  scratch.homingOrbDeltas.length = 0
+  scratch.output.matchEnded = null
+}
+
 // ─── GameSimulation ───────────────────────────────────────────────────────
 
 export type GameSimulation = {
@@ -431,6 +563,10 @@ export type GameSimulation = {
    * `lastProcessedInputSeqByPlayer` is updated accordingly. Extra inputs in
    * the queue carry over to subsequent ticks, one per tick, preserving their
    * original `seq` ordering.
+   *
+   * The returned `SimOutput` is scratch-owned by this simulation instance and
+   * is invalid after the next `tick` call. Rooms must copy, broadcast, or
+   * coalesce output before advancing the simulation again.
    */
   tick: (
     perPlayerInputs: Map<string, PlayerInputPayload[]>,
@@ -494,6 +630,57 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
 
   let currentTick = 0
   let hostEndSignal = false
+  const scratch = createSimScratch()
+  const ctx: SimCtx = {
+    world,
+    currentTick,
+    serverTimeMs: matchStartedAtMs,
+    playerEntityMap,
+    entityPlayerMap,
+    playerUsernameMap,
+    entityUsernameMap,
+    playerHeroIdMap,
+    fireballOwnerMap,
+    fireballCreatedAtTickMap,
+    homingOrbOwnerMap,
+    homingOrbTargetPlayerMap,
+    homingOrbCastTargetPlayerMap,
+    inputMap: scratch.inputMap,
+    freshestWeaponAimByPlayer: scratch.freshestWeaponAimByPlayer,
+    lastProcessedInputSeqByPlayer,
+    commandBuffer,
+    matchStartedAtMs,
+    damageRequests: scratch.damageRequests,
+    deathEvents: scratch.deathEvents,
+    pendingLightningBolts: scratch.pendingLightningBolts,
+    playerDeaths: scratch.playerDeaths,
+    playerRespawns: scratch.playerRespawns,
+    fireballLaunches: scratch.fireballLaunches,
+    fireballImpacts: scratch.fireballImpacts,
+    fireballRemovedIds: scratch.fireballRemovedIds,
+    homingOrbLaunches: scratch.homingOrbLaunches,
+    homingOrbImpacts: scratch.homingOrbImpacts,
+    homingOrbRemovedIds: scratch.homingOrbRemovedIds,
+    lightningBolts: scratch.lightningBolts,
+    primaryMeleeAttacks: scratch.primaryMeleeAttacks,
+    combatTelegraphStarts: scratch.combatTelegraphStarts,
+    combatTelegraphEnds: scratch.combatTelegraphEnds,
+    damageFloats: scratch.damageFloats,
+    goldUpdates: scratch.goldUpdates,
+    abilitySfxEvents: scratch.abilitySfxEvents,
+    matchEnded: null,
+    hostEndSignal,
+    prevPlayerStates,
+    prevFireballStates,
+    prevHomingOrbStates,
+    killStats,
+    activeMeleeAttacks,
+    activeCombatTelegraphs,
+    invulnerableExpiresAtTickByEntity,
+    playerDeltas: scratch.playerDeltas,
+    fireballDeltas: scratch.fireballDeltas,
+    homingOrbDeltas: scratch.homingOrbDeltas,
+  }
 
   // ── addPlayer ────────────────────────────────────────────────────────
 
@@ -861,9 +1048,15 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     serverTimeMs: number,
   ): SimOutput {
     currentTick++
+    resetScratchForTick(scratch)
+    ctx.currentTick = currentTick
+    ctx.serverTimeMs = serverTimeMs
+    ctx.matchEnded = null
+    ctx.hostEndSignal = hostEndSignal
+    ctx.homingOrbDamageableTargetCache = undefined
 
-    const inputMap = new Map<string, PlayerInputPayload>()
-    const freshestWeaponAimByPlayer = new Map<string, FreshestWeaponAim>()
+    const inputMap = scratch.inputMap
+    const freshestWeaponAimByPlayer = scratch.freshestWeaponAimByPlayer
     for (const [userId, queue] of perPlayerInputs) {
       const lastSeq = lastProcessedInputSeqByPlayer.get(userId) ?? 0
       const coalescedHeld = coalescedHeldInputByPlayer.get(userId)
@@ -951,57 +1144,6 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       })
     }
 
-    const ctx: SimCtx = {
-      world,
-      currentTick,
-      serverTimeMs,
-      playerEntityMap,
-      entityPlayerMap,
-      playerUsernameMap,
-      entityUsernameMap,
-      playerHeroIdMap,
-      fireballOwnerMap,
-      fireballCreatedAtTickMap,
-      homingOrbOwnerMap,
-      homingOrbTargetPlayerMap,
-      homingOrbCastTargetPlayerMap,
-      inputMap,
-      freshestWeaponAimByPlayer,
-      lastProcessedInputSeqByPlayer,
-      commandBuffer,
-      matchStartedAtMs,
-      damageRequests: [],
-      deathEvents: [],
-      pendingLightningBolts: [],
-      playerDeaths: [],
-      playerRespawns: [],
-      fireballLaunches: [],
-      fireballImpacts: [],
-      fireballRemovedIds: [],
-      homingOrbLaunches: [],
-      homingOrbImpacts: [],
-      homingOrbRemovedIds: [],
-      lightningBolts: [],
-      primaryMeleeAttacks: [],
-      combatTelegraphStarts: [],
-      combatTelegraphEnds: [],
-      damageFloats: [],
-      goldUpdates: [],
-      abilitySfxEvents: [],
-      matchEnded: null,
-      hostEndSignal,
-      prevPlayerStates,
-      prevFireballStates,
-      prevHomingOrbStates,
-      killStats,
-      activeMeleeAttacks,
-      activeCombatTelegraphs,
-      invulnerableExpiresAtTickByEntity,
-      playerDeltas: [],
-      fireballDeltas: [],
-      homingOrbDeltas: [],
-    }
-
     // ── System pipeline ──────────────────────────────────────────────
     inputSystem(ctx)
     castingSystem(ctx)
@@ -1028,28 +1170,9 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     if (ctx.matchEnded) {
       hostEndSignal = false
     }
+    scratch.output.matchEnded = ctx.matchEnded
 
-    return {
-      playerDeltas: ctx.playerDeltas,
-      fireballDeltas: ctx.fireballDeltas,
-      fireballRemovedIds: ctx.fireballRemovedIds,
-      homingOrbDeltas: ctx.homingOrbDeltas,
-      homingOrbRemovedIds: ctx.homingOrbRemovedIds,
-      playerDeaths: ctx.playerDeaths,
-      playerRespawns: ctx.playerRespawns,
-      fireballLaunches: ctx.fireballLaunches,
-      fireballImpacts: ctx.fireballImpacts,
-      homingOrbLaunches: ctx.homingOrbLaunches,
-      homingOrbImpacts: ctx.homingOrbImpacts,
-      lightningBolts: ctx.lightningBolts,
-      primaryMeleeAttacks: ctx.primaryMeleeAttacks,
-      combatTelegraphStarts: ctx.combatTelegraphStarts,
-      combatTelegraphEnds: ctx.combatTelegraphEnds,
-      damageFloats: ctx.damageFloats,
-      goldUpdates: ctx.goldUpdates,
-      abilitySfxEvents: ctx.abilitySfxEvents,
-      matchEnded: ctx.matchEnded,
-    }
+    return scratch.output
   }
 
   return {
