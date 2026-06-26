@@ -1158,9 +1158,9 @@ export class PlayerRenderSystem {
       renderPos.x = s.x
       renderPos.y = s.y
     }
-    // Prefer the facing from the sampled snapshot when available.
-    state.facingAngle = s.facingAngle
-    state.moveFacingAngle = s.moveFacingAngle
+    // Position is delayed through the interpolation buffer; semantic state
+    // stays at the latest authoritative value so facing-only cast/melee
+    // updates are not rolled back by older buffered motion samples.
   }
 
   /**

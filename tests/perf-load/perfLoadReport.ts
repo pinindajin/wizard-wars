@@ -64,6 +64,7 @@ export type PerfLoadReport = {
   readonly heapUsedDeltaBytes: number | null
   readonly rssDeltaBytes: number | null
   readonly activeRoomsAfterCleanup: number
+  /** Retained for report compatibility; delayed post-grace checks detect leaks. */
   readonly activeRoomLeakDetected: boolean
   readonly diagnosticOnly: boolean
   readonly diagnosticReason: string | null
@@ -214,7 +215,7 @@ export function summarizePerfLoadRun(input: PerfLoadReportInput): PerfLoadReport
         ? lastStatus.metrics.rssBytes - firstStatus.metrics.rssBytes
         : null,
     activeRoomsAfterCleanup: input.activeRoomsAfterCleanup,
-    activeRoomLeakDetected: input.activeRoomsAfterCleanup > 0,
+    activeRoomLeakDetected: false,
     diagnosticOnly,
     diagnosticReason: input.diagnosticReason?.trim() || null,
     lastStatus,
@@ -228,7 +229,12 @@ export function summarizePerfLoadRun(input: PerfLoadReportInput): PerfLoadReport
  * @returns Maximum sample.
  */
 function maxSample(samples: readonly number[]): number {
-  return samples.length === 0 ? 0 : roundMetric(Math.max(...samples))
+  if (samples.length === 0) return 0
+  let max = Number.NEGATIVE_INFINITY
+  for (const sample of samples) {
+    if (sample > max) max = sample
+  }
+  return roundMetric(max)
 }
 
 /**

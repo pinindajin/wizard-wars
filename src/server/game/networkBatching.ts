@@ -1,3 +1,4 @@
+import { animUsesMouseAim } from "@/shared/playerAnimAim"
 import type {
   AbilityRuntimeStates,
   FireballBatchUpdatePayload,
@@ -222,30 +223,52 @@ export function splitPlayerDeltaForVisualBudget(
 ): SplitPlayerDeltaForVisualBudget {
   const critical: Mutable<PlayerDelta> = { id: delta.id }
   const visual: Mutable<PlayerDelta> = { id: delta.id }
+  const criticalNeedsFacing =
+    delta.facingAngle !== undefined &&
+    delta.animState !== undefined &&
+    animUsesMouseAim(delta.animState)
   let hasCritical = false
   let hasVisual = false
 
-  if (delta.x !== undefined) {
+  if (delta.x !== undefined && criticalNeedsFacing) {
+    critical.x = delta.x
+    hasCritical = true
+  } else if (delta.x !== undefined) {
     visual.x = delta.x
     hasVisual = true
   }
-  if (delta.y !== undefined) {
+  if (delta.y !== undefined && criticalNeedsFacing) {
+    critical.y = delta.y
+    hasCritical = true
+  } else if (delta.y !== undefined) {
     visual.y = delta.y
     hasVisual = true
   }
-  if (delta.vx !== undefined) {
+  if (delta.vx !== undefined && criticalNeedsFacing) {
+    critical.vx = delta.vx
+    hasCritical = true
+  } else if (delta.vx !== undefined) {
     visual.vx = delta.vx
     hasVisual = true
   }
-  if (delta.vy !== undefined) {
+  if (delta.vy !== undefined && criticalNeedsFacing) {
+    critical.vy = delta.vy
+    hasCritical = true
+  } else if (delta.vy !== undefined) {
     visual.vy = delta.vy
     hasVisual = true
   }
-  if (delta.facingAngle !== undefined) {
+  if (delta.facingAngle !== undefined && criticalNeedsFacing) {
+    critical.facingAngle = delta.facingAngle
+    hasCritical = true
+  } else if (delta.facingAngle !== undefined) {
     visual.facingAngle = delta.facingAngle
     hasVisual = true
   }
-  if (delta.moveFacingAngle !== undefined) {
+  if (delta.moveFacingAngle !== undefined && criticalNeedsFacing) {
+    critical.moveFacingAngle = delta.moveFacingAngle
+    hasCritical = true
+  } else if (delta.moveFacingAngle !== undefined) {
     visual.moveFacingAngle = delta.moveFacingAngle
     hasVisual = true
   }
@@ -376,6 +399,25 @@ export class PlayerVisualBatchCoalescer {
    */
   hasPending(): boolean {
     return this.deltas.size > 0
+  }
+
+  /**
+   * Reads a pending player visual row without removing it.
+   *
+   * @param id - Player entity id to read from the pending visual payload.
+   * @returns Pending player visual row, or null when none is queued.
+   */
+  peek(id: number): PlayerDelta | null {
+    return this.deltas.get(id)?.row ?? null
+  }
+
+  /**
+   * Drops a pending player visual row superseded by a newer immediate sample.
+   *
+   * @param id - Player entity id to remove from the pending visual payload.
+   */
+  drop(id: number): void {
+    this.deltas.delete(id)
   }
 
   /**
