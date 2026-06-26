@@ -1419,6 +1419,80 @@ describe("GameLobbyRoom network batching", () => {
     ])
   })
 
+  it("merges sparse pending visuals into promoted mouse-aim cast samples", () => {
+    const room = new GameLobbyRoom()
+    const broadcast = vi.fn()
+    Object.assign(room as object, {
+      broadcast,
+      performanceConfig: resolveGamePerformanceConfig({
+        WW_NET_SEND_BUDGET_ENABLED: "true",
+      }),
+    })
+    ;(
+      room as unknown as {
+        playerVisualBatchCoalescer: PlayerVisualBatchCoalescer
+      }
+    ).playerVisualBatchCoalescer.ingest([{ id: 1, y: 6, moveFacingAngle: 0.4 }], 2_400)
+
+    ;(
+      room as unknown as {
+        ingestPlayerDeltasForRoomWideBatches: (
+          deltas: readonly {
+            readonly id: number
+            readonly x: number
+            readonly vx: number
+            readonly vy: number
+            readonly facingAngle: number
+            readonly animState: "light_cast"
+            readonly castingAbilityId: "fireball"
+          }[],
+          serverTimeMs: number,
+        ) => void
+      }
+    ).ingestPlayerDeltasForRoomWideBatches(
+      [
+        {
+          id: 1,
+          x: 10,
+          vx: 1,
+          vy: 2,
+          facingAngle: 0.25,
+          animState: "light_cast",
+          castingAbilityId: "fireball",
+        },
+      ],
+      2_500,
+    )
+    ;(room as unknown as { flushPendingVisualBatches: (serverTimeMs: number) => void })
+      .flushPendingVisualBatches(2_520)
+
+    expect(
+      broadcast.mock.calls.filter(([event]) => event === RoomEvent.PlayerBatchUpdate),
+    ).toEqual([
+      [
+        RoomEvent.PlayerBatchUpdate,
+        {
+          deltas: [
+            {
+              id: 1,
+              x: 10,
+              y: 6,
+              vx: 1,
+              vy: 2,
+              facingAngle: 0.25,
+              moveFacingAngle: 0.4,
+              animState: "light_cast",
+              castingAbilityId: "fireball",
+            },
+          ],
+          removedIds: [],
+          seq: 0,
+          serverTimeMs: 2_500,
+        },
+      ],
+    ])
+  })
+
   it("keeps legacy visual flush ordering when send budget is disabled", () => {
     vi.useFakeTimers()
     vi.setSystemTime(2_200)

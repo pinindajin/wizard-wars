@@ -302,6 +302,72 @@ describe("NetworkSyncSystem.applyBatchUpdate", () => {
     expect(onRemoteSnapshot).not.toHaveBeenCalled()
   })
 
+  it("updates facing-only remote deltas without routing interpolation samples", () => {
+    const onRemoteSnapshot = vi.fn()
+    const system = new NetworkSyncSystem({ onRemoteSnapshot })
+
+    system.applyFullSync({
+      players: [baseSnapshot({ id: 1, playerId: "p1", x: 10, y: 20 })],
+      fireballs: [],
+      seq: 0,
+      serverTimeMs: 1,
+    })
+
+    system.applyBatchUpdate({
+      deltas: [{
+        id: 1,
+        facingAngle: 0.25,
+        moveFacingAngle: 0.5,
+        animState: "light_cast",
+      }],
+      removedIds: [],
+      seq: 1,
+      serverTimeMs: 2,
+    })
+
+    expect(ClientPlayerState[1]!.facingAngle).toBe(0.25)
+    expect(ClientPlayerState[1]!.moveFacingAngle).toBe(0.5)
+    expect(ClientPlayerState[1]!.animState).toBe("light_cast")
+    expect(onRemoteSnapshot).not.toHaveBeenCalled()
+  })
+
+  it("routes velocity-only remote deltas as interpolation samples", () => {
+    const onRemoteSnapshot = vi.fn()
+    const system = new NetworkSyncSystem({ onRemoteSnapshot })
+
+    system.applyFullSync({
+      players: [baseSnapshot({
+        id: 1,
+        playerId: "p1",
+        x: 10,
+        y: 20,
+        facingAngle: 0.25,
+        moveFacingAngle: 0.5,
+      })],
+      fireballs: [],
+      seq: 0,
+      serverTimeMs: 1,
+    })
+
+    system.applyBatchUpdate({
+      deltas: [{ id: 1, vx: 0, vy: 0 }],
+      removedIds: [],
+      seq: 1,
+      serverTimeMs: 2,
+    })
+
+    expect(onRemoteSnapshot).toHaveBeenCalledWith({
+      id: 1,
+      serverTimeMs: 2,
+      x: 10,
+      y: 20,
+      vx: 0,
+      vy: 0,
+      facingAngle: 0.25,
+      moveFacingAngle: 0.5,
+    })
+  })
+
   it("keeps legacy visual batch ACK fallback for the local player", () => {
     const onLocalAck = vi.fn()
     const system = new NetworkSyncSystem({ onLocalAck })
