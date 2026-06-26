@@ -72,7 +72,7 @@ services:
       WW_SERVER_MODE: realtime
       RUN_MIGRATIONS: "false"
       PORT: 3001
-      WW_WEB_ORIGIN: "${WW_WEB_ORIGIN:-http://127.0.0.1:3000}"
+      WW_WEB_ORIGIN: "${WW_WEB_ORIGIN:-http://127.0.0.1:${WW_APP_HOST_PORT:-3000}}"
       # Dockerfile maps this optional shell/CI override onto WW_REALTIME_ADMIN_TOKEN at startup.
       WW_REALTIME_ADMIN_TOKEN_FROM_COMPOSE: "${WW_REALTIME_ADMIN_TOKEN:-}"
     env_file:

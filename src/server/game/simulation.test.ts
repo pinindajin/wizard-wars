@@ -282,6 +282,18 @@ describe("movement system", () => {
     expect(acks).toEqual([100, 101, 102])
   })
 
+  it("emits an owner ACK for the first fresh-match input seq 0", () => {
+    const sim = createGameSimulation(Date.now())
+    sim.addPlayer("user1", "Alice", "red_wizard", 0)
+
+    const out = sim.tick(
+      queueMap([["user1", { ...emptyInput({ up: true }), seq: 0 }]]),
+      Date.now(),
+    )
+
+    expect(ackSeqFromOutput(sim, out)).toBe(0)
+  })
+
   it("coalesces repeated held inputs while advancing ACKs one sequence per tick", () => {
     const sim = createGameSimulation(Date.now())
     sim.addPlayer("user1", "Alice", "red_wizard", 0)

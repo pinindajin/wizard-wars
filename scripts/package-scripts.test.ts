@@ -98,6 +98,8 @@ describe("Docker runtime packaging", () => {
     const compose = readRepoText("docker-compose.yml")
     const alignedPublicUrl =
       'NEXT_PUBLIC_COLYSEUS_URL: "${NEXT_PUBLIC_COLYSEUS_URL:-http://127.0.0.1:${WW_REALTIME_HOST_PORT:-3001}}"'
+    const alignedWebOrigin =
+      'WW_WEB_ORIGIN: "${WW_WEB_ORIGIN:-http://127.0.0.1:${WW_APP_HOST_PORT:-3000}}"'
 
     expect(dockerfile).toContain("ARG NEXT_PUBLIC_COLYSEUS_URL")
     expect(dockerfile).toContain("ENV NEXT_PUBLIC_COLYSEUS_URL=${NEXT_PUBLIC_COLYSEUS_URL}")
@@ -105,6 +107,7 @@ describe("Docker runtime packaging", () => {
     expect(compose).toContain("NEXT_PUBLIC_COLYSEUS_URL:")
     expect(compose).toContain(alignedPublicUrl)
     expect(compose.split(alignedPublicUrl).length - 1).toBe(3)
+    expect(compose).toContain(alignedWebOrigin)
   })
 
   it("does not expose a checked-in realtime admin token fallback", () => {
