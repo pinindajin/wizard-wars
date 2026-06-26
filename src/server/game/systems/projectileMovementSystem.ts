@@ -35,6 +35,7 @@ import {
 import {
   circleIntersectsRect,
 } from "../../../shared/collision/characterHitbox"
+import { removeFireballProjectile } from "../projectileCleanup"
 
 const OVER = FIREBALL_DESPAWN_OVERSHOOT_PX
 const TURN_RATE_RAD_PER_SEC = HOMING_ORB_TURN_RATE_DEG_PER_SEC * Math.PI / 180
@@ -179,10 +180,6 @@ export function projectileMovementSystem(ctx: SimCtx): void {
   const {
     world,
     currentTick,
-    commandBuffer,
-    fireballOwnerMap,
-    fireballCreatedAtTickMap,
-    fireballRemovedIds,
   } = ctx
 
   for (const eid of query(world, [FireballTag])) {
@@ -198,10 +195,7 @@ export function projectileMovementSystem(ctx: SimCtx): void {
       y < -OVER || y > ARENA_HEIGHT + OVER
 
     if (outOfBounds) {
-      fireballRemovedIds.push(eid)
-      fireballOwnerMap.delete(eid)
-      fireballCreatedAtTickMap.delete(eid)
-      commandBuffer.enqueue({ type: "removeEntity", eid })
+      removeFireballProjectile(ctx, eid)
     }
   }
 
