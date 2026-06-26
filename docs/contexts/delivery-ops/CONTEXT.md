@@ -25,6 +25,7 @@ Own local setup, CI, container build/runtime, production image publishing, deplo
 - Docker runtime applies Prisma migrations only when `RUN_MIGRATIONS=true`; realtime defaults false so it does not race the web/migration owner.
 - Render remains represented by `render.yaml` as a fallback host.
 - Runtime netcode sends visual movement/projectile batches at `WW_NET_SEND_RATE_HZ` with default `30` and clamp range `10..60`; set `WW_NET_SEND_RATE_HZ=60` as the first rollback lever for cadence-related smoothness regressions.
+- The visual send budget is disabled by default with `WW_NET_SEND_BUDGET_ENABLED=false`. Controlled enablement must set explicit `WW_NET_SEND_BUDGET_MAX_PLAYER_DELTAS`, `WW_NET_SEND_BUDGET_MAX_PROJECTILE_DELTAS`, `WW_NET_SEND_BUDGET_MAX_REMOVALS`, optional `WW_NET_SEND_BUDGET_MAX_BYTES`, and `WW_NET_SEND_BUDGET_MAX_DEFERRAL_MS` values, then verify `server_performance_status` budget counters and perf-load artifacts show zero `criticalSendFailures` and zero hard-dropped visuals.
 - Production rubber-banding investigations should record image digest, Dokploy image, replica count, resource limits, repeated Docker stats, cgroup throttling deltas, active rooms, and server loop-debt/performance-status logs in `docs/contexts/delivery-ops/prod-rubberbanding-verification.md`.
 - Keep realtime replica count at 1 until sticky routing plus shared Colyseus Presence/Driver are designed and tested.
 

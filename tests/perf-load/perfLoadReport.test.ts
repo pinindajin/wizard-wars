@@ -59,6 +59,11 @@ describe("perf-load report helpers", () => {
           metrics: {
             ...baseStatus.metrics,
             inputQueueDrops: 0,
+            visualBudgetDeferrals: 2,
+            visualBudgetDeferredEntities: 7,
+            visualBudgetMaxDeferralAgeMs: 225,
+            visualBudgetDroppedVisuals: 0,
+            criticalSendFailures: 0,
             heapUsedBytes: 1_500,
             rssBytes: 3_250,
             activeRooms: 1,
@@ -74,6 +79,11 @@ describe("perf-load report helpers", () => {
     expect(stats.playerBatchGapP95Ms).toBe(50)
     expect(stats.playerBatchGapP99Ms).toBe(50)
     expect(stats.inputQueueDrops).toBe(0)
+    expect(stats.visualBudgetDeferrals).toBe(2)
+    expect(stats.visualBudgetDeferredEntities).toBe(7)
+    expect(stats.visualBudgetMaxDeferralAgeMs).toBe(225)
+    expect(stats.visualBudgetDroppedVisuals).toBe(0)
+    expect(stats.criticalSendFailures).toBe(0)
     expect(stats.degradedReasonCounts).toEqual({
       broadcast_slow: 1,
       event_loop_lag: 1,

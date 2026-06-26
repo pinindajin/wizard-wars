@@ -56,6 +56,11 @@ export type PerfLoadReport = {
   readonly degradedReasons: readonly string[]
   readonly degradedReasonCounts: Readonly<Record<string, number>>
   readonly inputQueueDrops: number
+  readonly visualBudgetDeferrals: number
+  readonly visualBudgetDeferredEntities: number
+  readonly visualBudgetMaxDeferralAgeMs: number
+  readonly visualBudgetDroppedVisuals: number
+  readonly criticalSendFailures: number
   readonly heapUsedDeltaBytes: number | null
   readonly rssDeltaBytes: number | null
   readonly activeRoomsAfterCleanup: number
@@ -179,6 +184,25 @@ export function summarizePerfLoadRun(input: PerfLoadReportInput): PerfLoadReport
     degradedReasonCounts,
     inputQueueDrops: statuses.reduce(
       (sum, status) => sum + status.metrics.inputQueueDrops,
+      0,
+    ),
+    visualBudgetDeferrals: statuses.reduce(
+      (sum, status) => sum + (status.metrics.visualBudgetDeferrals ?? 0),
+      0,
+    ),
+    visualBudgetDeferredEntities: statuses.reduce(
+      (sum, status) => sum + (status.metrics.visualBudgetDeferredEntities ?? 0),
+      0,
+    ),
+    visualBudgetMaxDeferralAgeMs: maxSample(
+      statuses.map((status) => status.metrics.visualBudgetMaxDeferralAgeMs ?? 0),
+    ),
+    visualBudgetDroppedVisuals: statuses.reduce(
+      (sum, status) => sum + (status.metrics.visualBudgetDroppedVisuals ?? 0),
+      0,
+    ),
+    criticalSendFailures: statuses.reduce(
+      (sum, status) => sum + (status.metrics.criticalSendFailures ?? 0),
       0,
     ),
     heapUsedDeltaBytes:

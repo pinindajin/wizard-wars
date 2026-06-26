@@ -24,6 +24,18 @@ export const MAX_PROD_CAPTURE_SECONDS = 18_000
 export const DEFAULT_PROD_SAMPLE_INTERVAL_MS = 5_000
 export const MIN_PROD_SAMPLE_INTERVAL_MS = 1_000
 export const MAX_PROD_SAMPLE_INTERVAL_MS = 60_000
+export const DEFAULT_NET_SEND_BUDGET_MAX_DEFERRAL_MS = 250
+export const MIN_NET_SEND_BUDGET_MAX_DEFERRAL_MS = 16
+export const MAX_NET_SEND_BUDGET_MAX_DEFERRAL_MS = 1_000
+
+export type NetSendBudgetConfig = {
+  readonly enabled: boolean
+  readonly maxPlayerDeltas: number
+  readonly maxProjectileDeltas: number
+  readonly maxRemovals: number
+  readonly maxBytes: number
+  readonly maxDeferralMs: number
+}
 
 export type GamePerformanceConfig = {
   readonly simTickRateHz: number
@@ -39,6 +51,7 @@ export type GamePerformanceConfig = {
   readonly perfRunId: string | null
   readonly prodCaptureSeconds: number
   readonly prodSampleIntervalMs: number
+  readonly netSendBudget: NetSendBudgetConfig
 }
 
 /**
@@ -60,6 +73,19 @@ function parseBoundedInt(
   const parsed = Number.parseInt(raw, 10)
   if (!Number.isFinite(parsed)) return fallback
   return Math.min(max, Math.max(min, parsed))
+}
+
+/**
+ * Parses a nonnegative integer env var where `0` means unlimited or disabled.
+ *
+ * @param raw - Raw env string.
+ * @returns Parsed value, or zero when raw is unset or invalid.
+ */
+function parseNonnegativeBudgetLimit(raw: string | undefined): number {
+  if (raw === undefined || raw.trim() === "") return 0
+  const parsed = Number.parseInt(raw, 10)
+  if (!Number.isFinite(parsed) || parsed < 0) return 0
+  return parsed
 }
 
 /**
@@ -111,6 +137,12 @@ export function resolveGamePerformanceConfig(
     readonly WW_PERF_RUN_ID?: string | undefined
     readonly WW_PROD_CAPTURE_SECONDS?: string | undefined
     readonly WW_PROD_SAMPLE_INTERVAL_MS?: string | undefined
+    readonly WW_NET_SEND_BUDGET_ENABLED?: string | undefined
+    readonly WW_NET_SEND_BUDGET_MAX_PLAYER_DELTAS?: string | undefined
+    readonly WW_NET_SEND_BUDGET_MAX_PROJECTILE_DELTAS?: string | undefined
+    readonly WW_NET_SEND_BUDGET_MAX_REMOVALS?: string | undefined
+    readonly WW_NET_SEND_BUDGET_MAX_BYTES?: string | undefined
+    readonly WW_NET_SEND_BUDGET_MAX_DEFERRAL_MS?: string | undefined
     readonly [key: string]: string | undefined
   } = process.env,
 ): GamePerformanceConfig {
@@ -165,5 +197,24 @@ export function resolveGamePerformanceConfig(
       MIN_PROD_SAMPLE_INTERVAL_MS,
       MAX_PROD_SAMPLE_INTERVAL_MS,
     ),
+    netSendBudget: {
+      enabled: parseBooleanSwitch(env.WW_NET_SEND_BUDGET_ENABLED, false),
+      maxPlayerDeltas: parseNonnegativeBudgetLimit(
+        env.WW_NET_SEND_BUDGET_MAX_PLAYER_DELTAS,
+      ),
+      maxProjectileDeltas: parseNonnegativeBudgetLimit(
+        env.WW_NET_SEND_BUDGET_MAX_PROJECTILE_DELTAS,
+      ),
+      maxRemovals: parseNonnegativeBudgetLimit(
+        env.WW_NET_SEND_BUDGET_MAX_REMOVALS,
+      ),
+      maxBytes: parseNonnegativeBudgetLimit(env.WW_NET_SEND_BUDGET_MAX_BYTES),
+      maxDeferralMs: parseBoundedInt(
+        env.WW_NET_SEND_BUDGET_MAX_DEFERRAL_MS,
+        DEFAULT_NET_SEND_BUDGET_MAX_DEFERRAL_MS,
+        MIN_NET_SEND_BUDGET_MAX_DEFERRAL_MS,
+        MAX_NET_SEND_BUDGET_MAX_DEFERRAL_MS,
+      ),
+    },
   }
 }

@@ -82,6 +82,9 @@ import {
   FireballVisualBatchCoalescer,
   HomingOrbVisualBatchCoalescer,
   PlayerVisualBatchCoalescer,
+  splitPlayerDeltaForVisualBudget,
+  type VisualBudgetFlushStats,
+  type VisualBudgetOptions,
 } from "../../game/networkBatching"
 
 // ---------------------------------------------------------------------------
@@ -497,6 +500,11 @@ export class GameLobbyRoom extends Room {
   private performanceVisualFlushDurationMs = 0
   private performanceOwnerAckSendDurationMs = 0
   private performanceImmediateBroadcastDurationMs = 0
+  private performanceVisualBudgetDeferrals = 0
+  private performanceVisualBudgetDeferredEntities = 0
+  private performanceVisualBudgetMaxDeferralAgeMs = 0
+  private performanceVisualBudgetDroppedVisuals = 0
+  private performanceCriticalSendFailures = 0
   private performanceEventLoopLagMs = 0
   private lastPerformanceStatusKey = "nominal"
   private lastPerformanceStatusBroadcastAtMs = 0
@@ -2412,6 +2420,11 @@ export class GameLobbyRoom extends Room {
     this.performanceVisualFlushDurationMs = 0
     this.performanceOwnerAckSendDurationMs = 0
     this.performanceImmediateBroadcastDurationMs = 0
+    this.performanceVisualBudgetDeferrals = 0
+    this.performanceVisualBudgetDeferredEntities = 0
+    this.performanceVisualBudgetMaxDeferralAgeMs = 0
+    this.performanceVisualBudgetDroppedVisuals = 0
+    this.performanceCriticalSendFailures = 0
     this.performanceEventLoopLagMs = 0
   }
 
@@ -2453,6 +2466,147 @@ export class GameLobbyRoom extends Room {
   }
 
   /**
+   * Builds player visual budget options for the current flush.
+   *
+   * @param serverTimeMs - Current server wall-clock time.
+   * @returns Player visual-budget limits.
+   */
+  private playerVisualBudgetOptions(serverTimeMs: number): VisualBudgetOptions {
+    const budget = this.performanceConfig.netSendBudget
+    return {
+      maxDeltas: budget.maxPlayerDeltas,
+      maxRemovals: 0,
+      maxBytes: budget.maxBytes,
+      maxDeferralMs: budget.maxDeferralMs,
+      serverTimeMs,
+    }
+  }
+
+  /**
+   * Builds projectile visual budget options for the current flush.
+   *
+   * @param serverTimeMs - Current server wall-clock time.
+   * @returns Projectile visual-budget limits.
+   */
+  private projectileVisualBudgetOptions(serverTimeMs: number): VisualBudgetOptions {
+    const budget = this.performanceConfig.netSendBudget
+    return {
+      maxDeltas: budget.maxProjectileDeltas,
+      maxRemovals: budget.maxRemovals,
+      maxBytes: budget.maxBytes,
+      maxDeferralMs: budget.maxDeferralMs,
+      serverTimeMs,
+    }
+  }
+
+  /**
+   * Records send-budget backlog after a budgeted visual flush.
+   *
+   * @param stats - Deferred entity count and oldest queued age.
+   */
+  private recordVisualBudgetFlushStats(stats: VisualBudgetFlushStats): void {
+    if (stats.deferredEntities > 0) {
+      this.performanceVisualBudgetDeferrals++
+      this.performanceVisualBudgetDeferredEntities += stats.deferredEntities
+    }
+    this.performanceVisualBudgetMaxDeferralAgeMs = Math.max(
+      this.performanceVisualBudgetMaxDeferralAgeMs,
+      stats.maxDeferredAgeMs,
+    )
+  }
+
+  /**
+   * Broadcasts a critical room event and records failures for perf gates.
+   *
+   * @param event - Room event name.
+   * @param payload - Event payload.
+   */
+  private broadcastCriticalRoomEvent(event: string, payload: unknown): void {
+    try {
+      this.broadcast(event, payload)
+    } catch (err) {
+      this.performanceCriticalSendFailures++
+      throw err
+    }
+  }
+
+  /**
+   * Sends a critical private event and records failures for perf gates.
+   *
+   * @param client - Target Colyseus client.
+   * @param event - Room event name.
+   * @param payload - Event payload.
+   */
+  private sendCriticalClientEvent(
+    client: Client,
+    event: string,
+    payload: unknown,
+  ): void {
+    try {
+      client.send(event, payload)
+    } catch (err) {
+      this.performanceCriticalSendFailures++
+      throw err
+    }
+  }
+
+  /**
+   * Broadcasts one room-wide player batch and advances the visible sequence.
+   *
+   * @param deltas - Player deltas to send room-wide.
+   * @param serverTimeMs - Current server wall-clock time.
+   * @param critical - Whether send failure should count as critical.
+   */
+  private broadcastPlayerBatchUpdate(
+    deltas: readonly PlayerDelta[],
+    serverTimeMs: number,
+    critical = false,
+  ): void {
+    if (deltas.length === 0) return
+    try {
+      this.broadcast(RoomEvent.PlayerBatchUpdate, {
+        deltas,
+        removedIds: [],
+        seq: this.playerBatchSeq++,
+        serverTimeMs,
+      })
+    } catch (err) {
+      if (critical) this.performanceCriticalSendFailures++
+      throw err
+    }
+  }
+
+  /**
+   * Routes player deltas into immediate semantic and budgetable visual lanes.
+   *
+   * When the send budget is disabled this preserves the legacy single visual
+   * coalescer path exactly.
+   *
+   * @param playerDeltas - Player deltas from one simulation tick.
+   * @param serverTimeMs - Current server wall-clock time.
+   */
+  private ingestPlayerDeltasForRoomWideBatches(
+    playerDeltas: readonly PlayerDelta[],
+    serverTimeMs: number,
+  ): void {
+    if (!this.performanceConfig.netSendBudget.enabled) {
+      this.playerVisualBatchCoalescer.ingest(playerDeltas)
+      return
+    }
+
+    const criticalDeltas: PlayerDelta[] = []
+    const visualDeltas: PlayerDelta[] = []
+    for (const delta of playerDeltas) {
+      const split = splitPlayerDeltaForVisualBudget(delta)
+      if (split.critical) criticalDeltas.push(split.critical)
+      if (split.visual) visualDeltas.push(split.visual)
+    }
+
+    this.broadcastPlayerBatchUpdate(criticalDeltas, serverTimeMs, true)
+    this.playerVisualBatchCoalescer.ingest(visualDeltas, serverTimeMs)
+  }
+
+  /**
    * Sends owner-only ACK payloads so reconciliation is not delayed by visual cadence.
    *
    * @param playerDeltas - Player deltas from the current simulation tick.
@@ -2478,7 +2632,11 @@ export class GameLobbyRoom extends Room {
           serverTimeMs,
         )
         if (!payload) continue
-        client.send(RoomEvent.PlayerOwnerAck, parsePlayerOwnerAckPayload(payload))
+        this.sendCriticalClientEvent(
+          client,
+          RoomEvent.PlayerOwnerAck,
+          parsePlayerOwnerAckPayload(payload),
+        )
       }
     } finally {
       this.performanceOwnerAckSendDurationMs +=
@@ -2490,44 +2648,75 @@ export class GameLobbyRoom extends Room {
    * Flushes pending room-wide visual movement/projectile batches.
    *
    * @param serverTimeMs - Current server wall-clock time.
+   * @param options - Optional flush controls for terminal match cleanup.
    */
-  private flushPendingVisualBatches(serverTimeMs: number): void {
+  private flushPendingVisualBatches(
+    serverTimeMs: number,
+    options: { readonly forceAll?: boolean } = {},
+  ): void {
     const startedAtPerfMs = performance.now()
+    const budgetEnabled =
+      this.performanceConfig.netSendBudget.enabled && options.forceAll !== true
+    let emitted = false
     try {
       if (this.playerVisualBatchCoalescer.hasPending()) {
-        const deltas = this.playerVisualBatchCoalescer.flush()
+        const flush = budgetEnabled
+          ? this.playerVisualBatchCoalescer.flushBudgeted(
+              this.playerVisualBudgetOptions(serverTimeMs),
+            )
+          : { deltas: this.playerVisualBatchCoalescer.flush() }
+        const deltas = flush.deltas
         if (deltas.length > 0) {
-          this.broadcast(RoomEvent.PlayerBatchUpdate, {
-            deltas,
-            removedIds: [],
-            seq: this.playerBatchSeq++,
-            serverTimeMs,
-          })
+          this.broadcastPlayerBatchUpdate(deltas, serverTimeMs)
+          emitted = true
+        }
+        if (budgetEnabled) {
+          this.recordVisualBudgetFlushStats(flush as VisualBudgetFlushStats)
         }
       }
 
       if (this.fireballVisualBatchCoalescer.hasPending()) {
-        const fireballs = this.fireballVisualBatchCoalescer.flush()
+        const flush = budgetEnabled
+          ? this.fireballVisualBatchCoalescer.flushBudgeted(
+              this.projectileVisualBudgetOptions(serverTimeMs),
+            )
+          : { batch: this.fireballVisualBatchCoalescer.flush() }
+        const fireballs = flush.batch
         if (fireballs.deltas.length > 0 || fireballs.removedIds.length > 0) {
           this.broadcast(RoomEvent.FireballBatchUpdate, {
             ...fireballs,
             seq: this.fireballBatchSeq++,
             serverTimeMs: fireballs.serverTimeMs ?? serverTimeMs,
           })
+          emitted = true
+        }
+        if (budgetEnabled) {
+          this.recordVisualBudgetFlushStats(flush as VisualBudgetFlushStats)
         }
       }
 
       if (this.homingOrbVisualBatchCoalescer.hasPending()) {
-        const homingOrbs = this.homingOrbVisualBatchCoalescer.flush()
+        const flush = budgetEnabled
+          ? this.homingOrbVisualBatchCoalescer.flushBudgeted(
+              this.projectileVisualBudgetOptions(serverTimeMs),
+            )
+          : { batch: this.homingOrbVisualBatchCoalescer.flush() }
+        const homingOrbs = flush.batch
         if (homingOrbs.deltas.length > 0 || homingOrbs.removedIds.length > 0) {
           this.broadcast(RoomEvent.HomingOrbBatchUpdate, {
             ...homingOrbs,
             seq: this.homingOrbBatchSeq++,
             serverTimeMs: homingOrbs.serverTimeMs ?? serverTimeMs,
           })
+          emitted = true
+        }
+        if (budgetEnabled) {
+          this.recordVisualBudgetFlushStats(flush as VisualBudgetFlushStats)
         }
       }
-      this.lastNetworkFlushAtMs = serverTimeMs
+      if (emitted || !this.hasPendingVisualBatches()) {
+        this.lastNetworkFlushAtMs = serverTimeMs
+      }
     } finally {
       this.performanceVisualFlushDurationMs +=
         performance.now() - startedAtPerfMs
@@ -2550,17 +2739,28 @@ export class GameLobbyRoom extends Room {
       unavailableReason: processMetricUnavailableReason,
       ...processMetricFields
     } = this.processEventLoopMonitor.snapshot(nowPerfMs)
+    const roomWideBroadcastDurationMs = Math.max(
+      0,
+      this.performanceBroadcastDurationMs -
+        this.performanceOwnerAckSendDurationMs -
+        this.performanceImmediateBroadcastDurationMs,
+    )
     const metrics: ServerPerformanceStatusPayload["metrics"] = {
       windowMs,
       droppedDebtMs: this.performanceDroppedDebtMs,
       catchUpCallbacks: this.performanceCatchUpCallbacks,
       inputQueueDrops: this.performanceInputQueueDrops,
       simDurationMs: this.performanceSimDurationMs,
-      broadcastDurationMs: this.performanceBroadcastDurationMs,
+      broadcastDurationMs: roomWideBroadcastDurationMs,
       roomTickDurationMs: this.performanceRoomTickDurationMs,
       visualFlushDurationMs: this.performanceVisualFlushDurationMs,
       ownerAckSendDurationMs: this.performanceOwnerAckSendDurationMs,
       immediateBroadcastDurationMs: this.performanceImmediateBroadcastDurationMs,
+      visualBudgetDeferrals: this.performanceVisualBudgetDeferrals,
+      visualBudgetDeferredEntities: this.performanceVisualBudgetDeferredEntities,
+      visualBudgetMaxDeferralAgeMs: this.performanceVisualBudgetMaxDeferralAgeMs,
+      visualBudgetDroppedVisuals: this.performanceVisualBudgetDroppedVisuals,
+      criticalSendFailures: this.performanceCriticalSendFailures,
       ...processMetricFields,
       eventLoopLagMs: this.performanceEventLoopLagMs,
       processCpuPercent: ((cpu.user + cpu.system) / 1000 / windowMs) * 100,
@@ -2571,9 +2771,18 @@ export class GameLobbyRoom extends Room {
     }
     const classification = classifyServerPerformance(metrics)
     const key = serverPerformanceStatusKey(classification)
+    const hasBudgetTelemetry =
+      this.performanceVisualBudgetDeferrals > 0 ||
+      this.performanceVisualBudgetDeferredEntities > 0 ||
+      this.performanceVisualBudgetMaxDeferralAgeMs > 0 ||
+      this.performanceVisualBudgetDroppedVisuals > 0 ||
+      this.performanceCriticalSendFailures > 0
     const shouldBroadcast =
       key !== this.lastPerformanceStatusKey ||
       (classification.degraded &&
+        serverTimeMs - this.lastPerformanceStatusBroadcastAtMs >=
+          SERVER_PERFORMANCE_STATUS_MIN_INTERVAL_MS) ||
+      (hasBudgetTelemetry &&
         serverTimeMs - this.lastPerformanceStatusBroadcastAtMs >=
           SERVER_PERFORMANCE_STATUS_MIN_INTERVAL_MS)
 
@@ -2703,7 +2912,7 @@ export class GameLobbyRoom extends Room {
       }
 
       if (output.playerDeltas.length > 0) {
-        this.playerVisualBatchCoalescer.ingest(output.playerDeltas)
+        this.ingestPlayerDeltasForRoomWideBatches(output.playerDeltas, serverTimeMs)
       }
       if (output.fireballDeltas.length > 0 || output.fireballRemovedIds.length > 0) {
         this.fireballVisualBatchCoalescer.ingest({
@@ -2721,6 +2930,7 @@ export class GameLobbyRoom extends Room {
       }
 
       if (
+        !this.performanceConfig.netSendBudget.enabled &&
         this.hasPendingVisualBatches() &&
         this.shouldFlushVisualBatches(serverTimeMs)
       ) {
@@ -2729,55 +2939,73 @@ export class GameLobbyRoom extends Room {
 
       const immediateStartedAtPerfMs = performance.now()
       for (const launch of output.fireballLaunches) {
-        this.broadcast(RoomEvent.FireballLaunch, launch)
+        this.broadcastCriticalRoomEvent(RoomEvent.FireballLaunch, launch)
       }
       for (const impact of output.fireballImpacts) {
-        this.broadcast(RoomEvent.FireballImpact, impact)
+        this.broadcastCriticalRoomEvent(RoomEvent.FireballImpact, impact)
       }
       for (const launch of output.homingOrbLaunches) {
-        this.broadcast(RoomEvent.HomingOrbLaunch, launch)
+        this.broadcastCriticalRoomEvent(RoomEvent.HomingOrbLaunch, launch)
       }
       for (const impact of output.homingOrbImpacts) {
-        this.broadcast(RoomEvent.HomingOrbImpact, impact)
+        this.broadcastCriticalRoomEvent(RoomEvent.HomingOrbImpact, impact)
       }
       for (const bolt of output.lightningBolts) {
-        this.broadcast(RoomEvent.LightningBolt, bolt)
+        this.broadcastCriticalRoomEvent(RoomEvent.LightningBolt, bolt)
       }
       for (const swing of output.primaryMeleeAttacks) {
-        this.broadcast(RoomEvent.PrimaryMeleeAttack, swing)
+        this.broadcastCriticalRoomEvent(RoomEvent.PrimaryMeleeAttack, swing)
       }
       for (const telegraph of output.combatTelegraphStarts) {
-        this.broadcast(RoomEvent.CombatTelegraphStart, telegraph)
+        this.broadcastCriticalRoomEvent(RoomEvent.CombatTelegraphStart, telegraph)
       }
       for (const telegraph of output.combatTelegraphEnds) {
-        this.broadcast(RoomEvent.CombatTelegraphEnd, telegraph)
+        this.broadcastCriticalRoomEvent(RoomEvent.CombatTelegraphEnd, telegraph)
       }
       for (const sfx of output.abilitySfxEvents) {
-        this.broadcast(RoomEvent.AbilitySfx, sfx)
+        this.broadcastCriticalRoomEvent(RoomEvent.AbilitySfx, sfx)
       }
       for (const death of output.playerDeaths) {
-        this.broadcast(RoomEvent.PlayerDeath, parsePlayerDeathPayload(death))
+        this.broadcastCriticalRoomEvent(
+          RoomEvent.PlayerDeath,
+          parsePlayerDeathPayload(death),
+        )
       }
       for (const respawn of output.playerRespawns) {
-        this.broadcast(RoomEvent.PlayerRespawn, respawn)
+        this.broadcastCriticalRoomEvent(RoomEvent.PlayerRespawn, respawn)
       }
       for (const float of output.damageFloats) {
-        this.broadcast(RoomEvent.DamageFloat, float)
+        this.broadcastCriticalRoomEvent(RoomEvent.DamageFloat, float)
       }
       for (const goldUpdate of output.goldUpdates) {
         const client = this.findClientByUserId(goldUpdate.userId)
         if (client) {
-          client.send(RoomEvent.GoldBalance, { gold: goldUpdate.gold })
+          this.sendCriticalClientEvent(client, RoomEvent.GoldBalance, {
+            gold: goldUpdate.gold,
+          })
         }
       }
       this.performanceImmediateBroadcastDurationMs +=
         performance.now() - immediateStartedAtPerfMs
 
       if (output.matchEnded) {
+        if (
+          this.performanceConfig.netSendBudget.enabled &&
+          this.hasPendingVisualBatches()
+        ) {
+          this.flushPendingVisualBatches(serverTimeMs, { forceAll: true })
+        }
         recordRoomTickDuration()
         this.transitionToScoreboard(output.matchEnded.reason, output.matchEnded.entries)
         this.performanceBroadcastDurationMs += performance.now() - broadcastStartedAtPerfMs
         return false
+      }
+      if (
+        this.performanceConfig.netSendBudget.enabled &&
+        this.hasPendingVisualBatches() &&
+        this.shouldFlushVisualBatches(serverTimeMs)
+      ) {
+        this.flushPendingVisualBatches(serverTimeMs)
       }
       this.performanceBroadcastDurationMs += performance.now() - broadcastStartedAtPerfMs
       recordRoomTickDuration()

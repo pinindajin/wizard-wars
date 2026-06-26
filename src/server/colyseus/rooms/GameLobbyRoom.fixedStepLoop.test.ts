@@ -4,6 +4,7 @@ import { CLOSE_CODE_ADMIN_CLOSED } from "@/shared/constants"
 import { RoomEvent } from "@/shared/roomEvents"
 import { TICK_MS } from "@/shared/balance-config/rendering"
 import type { PlayerInputPayload } from "@/shared/types"
+import { resolveGamePerformanceConfig } from "@/server/game/performanceConfig"
 import type { SimOutput } from "@/server/game/simulation"
 
 import { GameLobbyRoom } from "./GameLobbyRoom"
@@ -17,11 +18,7 @@ type LoopRoomInternals = {
   lobbyPhase: string
   performanceCatchUpCallbacks: number
   performanceDroppedDebtMs: number
-  performanceConfig: {
-    netSendIntervalMs: number
-    simAccumulatorEnabled: boolean
-    simMaxCatchUpTicks: number
-  }
+  performanceConfig: ReturnType<typeof resolveGamePerformanceConfig>
   clearGameLoopTimer: () => void
   resetSimulationLoopState: (serverTimeMs: number) => void
   runGameLoop: (elapsedMs: number) => void
@@ -461,6 +458,7 @@ function loopRoom(
     performanceCatchUpCallbacks: 0,
     performanceDroppedDebtMs: 0,
     performanceConfig: {
+      ...resolveGamePerformanceConfig({}),
       netSendIntervalMs: 1000 / 30,
       simAccumulatorEnabled: true,
       simMaxCatchUpTicks: 6,
