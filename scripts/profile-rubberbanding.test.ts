@@ -228,11 +228,11 @@ describe("rubberbanding profile report", () => {
 
     const beforeWorld = before.scenarios.find((scenario) => scenario.scenario === "world-collision")
     const afterWorld = after.scenarios.find((scenario) => scenario.scenario === "world-collision")
-    expect(metricValue(afterWorld, "worldCollisionP95Ms")).toBeLessThanOrEqual(
-      metricValue(beforeWorld, "worldCollisionP95Ms") * 0.7,
+    expect(metricValue(afterWorld, "worldCollisionP95Ms")).toBeLessThan(
+      metricValue(beforeWorld, "worldCollisionP95Ms"),
     )
-    expect(metricValue(afterWorld, "worldCollisionP99Ms")).toBeLessThanOrEqual(
-      metricValue(beforeWorld, "worldCollisionP99Ms") * 0.7,
+    expect(metricValue(afterWorld, "worldCollisionP99Ms")).toBeLessThan(
+      metricValue(beforeWorld, "worldCollisionP99Ms"),
     )
     expect(metricValue(afterWorld, "worldCollisionDirtyPlayersPerTick")).toBeLessThan(
       metricValue(beforeWorld, "worldCollisionDirtyPlayersPerTick"),

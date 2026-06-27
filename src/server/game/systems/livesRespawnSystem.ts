@@ -8,7 +8,8 @@
  *      a RespawnTimer.  When the timer fires (checked same tick for
  *      pre-scheduled timers from previous ticks), restore health, add
  *      InvulnerableTag, face center, remove DeadTag.
- *  2b. Lives = 0: add SpectatorTag (triggers matchEndSystem).
+ *  2b. Lives = 0: add SpectatorTag. matchEndSystem may then end the match
+ *      once eliminations leave one or zero active players.
  *
  * Spawn-point selection: pick the point with maximum minimum-distance to any
  * alive enemy player.  Ties resolved by lowest index.

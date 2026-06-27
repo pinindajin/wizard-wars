@@ -126,6 +126,18 @@ function ackSeqFromOutput(
 /** Number of ticks needed to clear the dangerous window for the cleaver attack. */
 const TICKS_PAST_DANGEROUS_WINDOW =
   Math.ceil(PRIMARY_MELEE_ATTACK_CONFIGS.red_wizard_cleaver.dangerousWindowEndMs / TICK_MS) + 1
+
+/** Marks an entity as finishing its death animation on the next simulation tick. */
+function eliminateOnNextTick(
+  sim: ReturnType<typeof createGameSimulation>,
+  eid: number,
+  serverTimeMs: number,
+): void {
+  Lives.count[eid] = 1
+  addComponent(sim.world, eid, DyingTag)
+  DyingTag.expiresAtMs[eid] = serverTimeMs
+}
+
 const SIM_OUTPUT_COLLECTION_KEYS = [
   "playerDeltas",
   "fireballDeltas",
@@ -1054,6 +1066,37 @@ describe("match end", () => {
     expect(output.matchEnded?.entries).toHaveLength(1)
     expect(output.matchEnded?.entries[0].playerId).toBe("user1")
     expect(output.matchEnded?.entries[0].username).toBe("Alice")
+  })
+
+  it("keeps a multiplayer match running after one player is eliminated", () => {
+    const serverTimeMs = Date.now()
+    const sim = createGameSimulation(serverTimeMs)
+    sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    const bob = sim.addPlayer("user2", "Bob", "red_wizard", 1)
+    sim.addPlayer("user3", "Cara", "red_wizard", 2)
+    eliminateOnNextTick(sim, bob, serverTimeMs)
+
+    const output = sim.tick(new Map(), serverTimeMs)
+
+    expect(hasComponent(sim.world, bob, SpectatorTag)).toBe(true)
+    expect(output.matchEnded).toBeNull()
+  })
+
+  it("ends a multiplayer match once eliminations leave one active player", () => {
+    const serverTimeMs = Date.now()
+    const sim = createGameSimulation(serverTimeMs)
+    sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    const bob = sim.addPlayer("user2", "Bob", "red_wizard", 1)
+    const cara = sim.addPlayer("user3", "Cara", "red_wizard", 2)
+    eliminateOnNextTick(sim, bob, serverTimeMs)
+    eliminateOnNextTick(sim, cara, serverTimeMs)
+
+    const output = sim.tick(new Map(), serverTimeMs)
+
+    expect(hasComponent(sim.world, bob, SpectatorTag)).toBe(true)
+    expect(hasComponent(sim.world, cara, SpectatorTag)).toBe(true)
+    expect(output.matchEnded?.reason).toBe("lives_depleted")
+    expect(output.matchEnded?.entries).toHaveLength(3)
   })
 })
 
