@@ -17,6 +17,7 @@ Own the server-side game engine. This context is the final source of truth for m
 
 - `GameLobbyRoom` queues validated `player_input` payloads, then calls `simulation.tick(inputQueue)` once per server tick while a match is in progress.
 - Each tick runs the pipeline in order: input, casting, movement, knockback, player collision, world collision, jump physics, terrain hazards, projectile movement, melee, lightning, projectile collision, health, death, lives/respawn, economy, match end, command buffer, and delta systems.
+- A zero-life player becomes a spectator and can no longer act, but a multiplayer match only ends when eliminations leave one or zero active players. The first spectator in a larger match is not by itself terminal.
 - Server movement, knockback, jump landing checks, and terrain sampling use deterministic shared static spatial indexes for arena/world colliders. The order-sensitive `worldCollisionSystem` MTV recovery remains brute-force.
 - Server systems queue commands/events; the command buffer materializes deferred effects at deterministic points.
 - Simulation builds hydration payloads for reconnect/resync and emits deltas/events back through the room.

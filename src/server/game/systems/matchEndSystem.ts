@@ -3,19 +3,18 @@
  * the matchEnded field on SimCtx if any condition is met.
  *
  * Conditions (checked in priority order):
- *  1. lives_depleted – at least one player has SpectatorTag (lives = 0).
+ *  1. lives_depleted – eliminations leave one or zero active players.
  *  2. host_ended     – ctx.hostEndSignal is true.
  *  3. time_cap       – elapsed match time ≥ MATCH_MAX_DURATION_MS.
  *
  * Once ctx.matchEnded is set, subsequent systems see it and can act accordingly.
  */
-import { query, hasComponent } from "bitecs"
+import { query } from "bitecs"
 
 import {
   PlayerTag,
   SpectatorTag,
   Lives,
-  Health,
   HERO_INDEX_TO_ID,
   Hero,
 } from "../components"
@@ -70,8 +69,10 @@ export function matchEndSystem(ctx: SimCtx): void {
   if (ctx.matchEnded) return
 
   // 1. lives_depleted
+  const playerCount = query(world, [PlayerTag]).length
   const spectatorCount = query(world, [PlayerTag, SpectatorTag]).length
-  if (spectatorCount > 0) {
+  const activePlayerCount = playerCount - spectatorCount
+  if (spectatorCount > 0 && activePlayerCount <= 1) {
     ctx.matchEnded = {
       reason: "lives_depleted",
       entries: buildScoreboard(ctx),
