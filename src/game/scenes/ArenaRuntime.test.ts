@@ -18,7 +18,6 @@ const soundPlaySpy = vi.hoisted(() => vi.fn())
 const activeLocalInputSpy = vi.hoisted(() => vi.fn())
 
 function lastCoveredInputSeq(payload: PlayerInputStatePayload): number {
-  if (payload.protocolVersion === 1) return payload.seq
   return payload.runs[payload.runs.length - 1]?.toSeq ?? -1
 }
 

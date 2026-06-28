@@ -43,7 +43,6 @@ import {
   parsePlayerOwnerAckPayload,
   parseServerPerformanceStatusPayload,
 } from "../../../shared/validators"
-import { decodePlayerInputState } from "../../../shared/playerInputState"
 import {
   MAX_PLAYERS_PER_MATCH,
   MIN_PLAYERS_PER_MATCH,
@@ -521,7 +520,6 @@ export class GameLobbyRoom extends Room {
   private performanceVisualFlushDurationMs = 0
   private performanceOwnerAckSendDurationMs = 0
   private performanceImmediateBroadcastDurationMs = 0
-  private performanceCompactInputV1Fallbacks = 0
   private performanceCompactInputV2Batches = 0
   private performanceCompactInputV2Runs = 0
   private performanceCompactInputV2CommandSeqs = 0
@@ -1345,16 +1343,6 @@ export class GameLobbyRoom extends Room {
       return
     }
 
-    if (result.data.protocolVersion === 1) {
-      this.performanceCompactInputV1Fallbacks += 1
-      this.enqueueCanonicalPlayerInput(
-        client,
-        pd as PlayerData,
-        decodePlayerInputState(result.data),
-      )
-      return
-    }
-
     this.performanceCompactInputV2Batches += 1
     this.performanceCompactInputV2Runs += result.data.runs.length
     for (const run of result.data.runs) {
@@ -1931,8 +1919,7 @@ export class GameLobbyRoom extends Room {
   }
 
   /**
-   * Returns the room's preferred input transport while keeping both inbound
-   * handlers available during rollout.
+   * Returns the room's v2 input protocol capability for match start/full sync.
    *
    * @returns Input protocol capability for match start and full sync.
    */
@@ -1940,7 +1927,7 @@ export class GameLobbyRoom extends Room {
     const configured = process.env.WW_INPUT_PROTOCOL
     const preferredTransport = configured === "legacy" ? "legacy" : "compact"
     return {
-      protocolVersion: preferredTransport === "compact" ? 2 : 1,
+      protocolVersion: 2,
       preferredTransport,
       activeHeartbeatMs: 100,
       idleHeartbeatMs: 1_000,
@@ -2522,7 +2509,6 @@ export class GameLobbyRoom extends Room {
     this.performanceVisualFlushDurationMs = 0
     this.performanceOwnerAckSendDurationMs = 0
     this.performanceImmediateBroadcastDurationMs = 0
-    this.performanceCompactInputV1Fallbacks = 0
     this.performanceCompactInputV2Batches = 0
     this.performanceCompactInputV2Runs = 0
     this.performanceCompactInputV2CommandSeqs = 0
@@ -2899,7 +2885,6 @@ export class GameLobbyRoom extends Room {
       visualFlushDurationMs: this.performanceVisualFlushDurationMs,
       ownerAckSendDurationMs: this.performanceOwnerAckSendDurationMs,
       immediateBroadcastDurationMs: this.performanceImmediateBroadcastDurationMs,
-      compactInputV1Fallbacks: this.performanceCompactInputV1Fallbacks,
       compactInputV2Batches: this.performanceCompactInputV2Batches,
       compactInputV2Runs: this.performanceCompactInputV2Runs,
       compactInputV2CommandSeqs: this.performanceCompactInputV2CommandSeqs,
@@ -2928,12 +2913,19 @@ export class GameLobbyRoom extends Room {
       this.performanceVisualBudgetMaxDeferralAgeMs > 0 ||
       this.performanceVisualBudgetDroppedVisuals > 0 ||
       this.performanceCriticalSendFailures > 0
+    const hasCompactInputTelemetry =
+      this.performanceCompactInputV2Batches > 0 ||
+      this.performanceCompactInputV2Runs > 0 ||
+      this.performanceCompactInputV2CommandSeqs > 0
     const shouldBroadcast =
       key !== this.lastPerformanceStatusKey ||
       (classification.degraded &&
         serverTimeMs - this.lastPerformanceStatusBroadcastAtMs >=
           SERVER_PERFORMANCE_STATUS_MIN_INTERVAL_MS) ||
       (hasBudgetTelemetry &&
+        serverTimeMs - this.lastPerformanceStatusBroadcastAtMs >=
+          SERVER_PERFORMANCE_STATUS_MIN_INTERVAL_MS) ||
+      (hasCompactInputTelemetry &&
         serverTimeMs - this.lastPerformanceStatusBroadcastAtMs >=
           SERVER_PERFORMANCE_STATUS_MIN_INTERVAL_MS)
 

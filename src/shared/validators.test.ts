@@ -151,25 +151,30 @@ describe("playerInputPayloadSchema", () => {
 
 describe("playerInputStatePayloadSchema", () => {
   const validCompactInput = {
-    protocolVersion: 1,
-    seq: 42,
-    clientSendTimeMs: 1700000000000,
-    buttons: 63,
-    targetX: 100,
-    targetY: 200,
-    abilitySlot: 0,
-    useQuickItemSlot: 0,
+    protocolVersion: 2,
+    runs: [
+      {
+        fromSeq: 42,
+        toSeq: 42,
+        clientSendTimeMs: 1700000000000,
+        buttons: 63,
+        targetX: 100,
+        targetY: 200,
+        abilitySlot: 0,
+        useQuickItemSlot: 0,
+      },
+    ],
   } as const
 
-  it("accepts compact input state payloads", () => {
+  it("accepts compact v2 input state payloads", () => {
     expect(playerInputStatePayloadSchema.safeParse(validCompactInput).success).toBe(true)
   })
 
-  it("parses compact input state payloads through the shared wrapper", () => {
+  it("parses compact v2 input state payloads through the shared wrapper", () => {
     expect(parsePlayerInputStatePayload(validCompactInput)).toEqual(validCompactInput)
   })
 
-  it("rejects out-of-range compact input buttons", () => {
+  it("rejects protocol v1 compact input state payloads", () => {
     expect(
       playerInputStatePayloadSchema.safeParse({
         protocolVersion: 1,
@@ -178,6 +183,24 @@ describe("playerInputStatePayloadSchema", () => {
         buttons: 64,
         targetX: 100,
         targetY: 200,
+      }).success,
+    ).toBe(false)
+  })
+
+  it("rejects out-of-range compact input buttons", () => {
+    expect(
+      playerInputStatePayloadSchema.safeParse({
+        protocolVersion: 2,
+        runs: [
+          {
+            fromSeq: 42,
+            toSeq: 42,
+            clientSendTimeMs: 1700000000000,
+            buttons: 64,
+            targetX: 100,
+            targetY: 200,
+          },
+        ],
       }).success,
     ).toBe(false)
   })
@@ -448,6 +471,20 @@ describe("parseGameStateSyncPayload", () => {
           protocolVersion: 2,
           preferredTransport: "compact",
           activeHeartbeatMs: 0,
+          idleHeartbeatMs: 1_000,
+        },
+      } as never),
+    ).toThrow()
+    expect(() =>
+      parseGameStateSyncPayload({
+        players: [],
+        fireballs: [],
+        seq: 0,
+        serverTimeMs: 1700000000000,
+        input: {
+          protocolVersion: 1,
+          preferredTransport: "compact",
+          activeHeartbeatMs: 100,
           idleHeartbeatMs: 1_000,
         },
       } as never),

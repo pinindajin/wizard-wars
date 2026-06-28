@@ -212,12 +212,10 @@ test("full match flow: assets, overlay, canvas, movement, shop, abilities", asyn
         fromSeq: number
         toSeq: number
       }
-      type PlayerInputState =
-        | CompactInputButtons
-        | {
-            protocolVersion: 2
-            runs: PlayerInputCommandRun[]
-          }
+      type PlayerInputState = {
+        protocolVersion: 2
+        runs: PlayerInputCommandRun[]
+      }
       type ConnectionLike = {
         sendPlayerInput: (input: PlayerInput) => void
         sendPlayerInputState: (input: PlayerInputState) => void
@@ -236,14 +234,11 @@ test("full match flow: assets, overlay, canvas, movement, shop, abilities", asyn
         useQuickItemSlot: input.useQuickItemSlot ?? null,
       })
       const decodePlayerInputState = (input: PlayerInputState): PlayerInput[] => {
-        if ("runs" in input) {
-          return input.runs.flatMap((run) =>
-            Array.from({ length: run.toSeq - run.fromSeq + 1 }, () =>
-              decodePlayerInputRun(run),
-            ),
-          )
-        }
-        return [decodePlayerInputRun(input)]
+        return input.runs.flatMap((run) =>
+          Array.from({ length: run.toSeq - run.fromSeq + 1 }, () =>
+            decodePlayerInputRun(run),
+          ),
+        )
       }
       const w = globalThis as unknown as {
         __wwGame?: { scene: { getScene: (k: string) => unknown } }

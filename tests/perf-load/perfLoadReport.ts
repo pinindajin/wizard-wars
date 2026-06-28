@@ -56,7 +56,6 @@ export type PerfLoadReport = {
   readonly degradedReasons: readonly string[]
   readonly degradedReasonCounts: Readonly<Record<string, number>>
   readonly inputQueueDrops: number
-  readonly compactInputV1Fallbacks: number
   readonly compactInputV2Batches: number
   readonly compactInputV2Runs: number
   readonly compactInputV2CommandSeqs: number
@@ -189,10 +188,6 @@ export function summarizePerfLoadRun(input: PerfLoadReportInput): PerfLoadReport
     degradedReasonCounts,
     inputQueueDrops: statuses.reduce(
       (sum, status) => sum + status.metrics.inputQueueDrops,
-      0,
-    ),
-    compactInputV1Fallbacks: statuses.reduce(
-      (sum, status) => sum + (status.metrics.compactInputV1Fallbacks ?? 0),
       0,
     ),
     compactInputV2Batches: statuses.reduce(

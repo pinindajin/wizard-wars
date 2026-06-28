@@ -4,7 +4,6 @@ import { RoomEvent } from "@/shared/roomEvents"
 import type {
   PlayerInputCommandRunPayload,
   PlayerInputPayload,
-  PlayerInputStateV1Payload,
 } from "@/shared/types"
 import type { PlayerInputQueueMap } from "@/server/game/playerInputQueue"
 
@@ -58,15 +57,21 @@ function input(overrides: Partial<PlayerInputPayload> = {}): PlayerInputPayload 
   }
 }
 
-function compact(overrides: Partial<PlayerInputStateV1Payload> = {}): PlayerInputStateV1Payload {
+function compact(overrides: Partial<PlayerInputCommandRunPayload> = {}) {
+  const fromSeq = overrides.fromSeq ?? 1
   return {
-    protocolVersion: 1,
-    seq: 1,
-    clientSendTimeMs: 1_000,
-    buttons: 8,
-    targetX: 10,
-    targetY: 20,
-    ...overrides,
+    protocolVersion: 2,
+    runs: [
+      {
+        fromSeq,
+        toSeq: overrides.toSeq ?? fromSeq,
+        clientSendTimeMs: 1_000,
+        buttons: 8,
+        targetX: 10,
+        targetY: 20,
+        ...overrides,
+      },
+    ],
   }
 }
 
@@ -111,13 +116,13 @@ describe("GameLobbyRoom compact player input state", () => {
 
     handlers.get(RoomEvent.PlayerInputState)?.(c, compact())
     r.isAdminClosing = true
-    handlers.get(RoomEvent.PlayerInputState)?.(c, compact({ seq: 2 }))
+    handlers.get(RoomEvent.PlayerInputState)?.(c, compact({ fromSeq: 2 }))
 
     expect(handlePlayerInputState).toHaveBeenCalledOnce()
     expect(handlePlayerInputState).toHaveBeenCalledWith(c, compact())
   })
 
-  it("keeps legacy full player_input accepted during rollout", () => {
+  it("keeps full player_input accepted for explicit legacy transport mode", () => {
     const r = room()
     const c = client()
     const legacy = input({ seq: 3, weaponPrimary: true })
@@ -127,13 +132,30 @@ describe("GameLobbyRoom compact player input state", () => {
     expect(r.inputQueue.get("player-1")?.toArray()).toEqual([legacy])
   })
 
-  it("decodes player_input_state into the canonical full input queue", () => {
+  it("rejects protocol v1 player_input_state payloads", () => {
+    const r = room()
+    const c = client()
+
+    r.handlePlayerInputState(c, {
+      protocolVersion: 1,
+      seq: 1,
+      clientSendTimeMs: 1_000,
+      buttons: 8,
+      targetX: 10,
+      targetY: 20,
+    })
+
+    expect(r.inputQueue.get("player-1")).toBeUndefined()
+  })
+
+  it("decodes player_input_state v2 batches into the canonical full input queue", () => {
     const r = room()
     const c = client()
 
     r.handlePlayerInputState(
       c,
       compact({
+        fromSeq: 1,
         buttons: 1 | 8 | 16,
         abilitySlot: 2,
         useQuickItemSlot: 1,
@@ -257,19 +279,19 @@ describe("GameLobbyRoom compact player input state", () => {
       .toEqual([10, 11, 12])
   })
 
-  it("uses the same stale-seq duplicate filter for compact and legacy inputs", () => {
+  it("uses the same stale-seq duplicate filter for v2 compact and full inputs", () => {
     const r = room()
     const c = client()
 
-    r.handlePlayerInputState(c, compact({ seq: 5 }))
+    r.handlePlayerInputState(c, compact({ fromSeq: 5 }))
     r.handlePlayerInput(c, input({ seq: 5 }))
-    r.handlePlayerInputState(c, compact({ seq: 6, buttons: 0 }))
+    r.handlePlayerInputState(c, compact({ fromSeq: 6, buttons: 0 }))
 
     expect(r.inputQueue.get("player-1")?.toArray().map((queued) => queued.seq))
       .toEqual([5, 6])
   })
 
-  it("rejects legacy and compact input outside active simulation", () => {
+  it("rejects full and compact input outside active simulation", () => {
     const r = room()
     const c = client()
     Object.assign(r, { lobbyPhase: "LOBBY", simulation: null })
@@ -280,12 +302,12 @@ describe("GameLobbyRoom compact player input state", () => {
     expect(r.inputQueue.get("player-1")).toBeUndefined()
   })
 
-  it("rejects malformed legacy and compact input payloads", () => {
+  it("rejects malformed full and compact input payloads", () => {
     const r = room()
     const c = client()
 
     r.handlePlayerInput(c, { ...input(), seq: -1 })
-    r.handlePlayerInputState(c, { ...compact(), buttons: 64 })
+    r.handlePlayerInputState(c, compact({ buttons: 64 }))
 
     expect(r.inputQueue.get("player-1")).toBeUndefined()
   })
@@ -295,7 +317,7 @@ describe("GameLobbyRoom compact player input state", () => {
     const c = client()
 
     for (let seq = 0; seq < 40; seq++) {
-      r.handlePlayerInputState(c, compact({ seq }))
+      r.handlePlayerInputState(c, compact({ fromSeq: seq }))
     }
 
     const queuedSeqs = r.inputQueue

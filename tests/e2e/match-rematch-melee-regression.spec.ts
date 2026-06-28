@@ -46,12 +46,10 @@ async function installInputRecorder(page: import("@playwright/test").Page): Prom
       fromSeq: number
       toSeq: number
     }
-    type PlayerInputState =
-      | CompactInputButtons
-      | {
-          protocolVersion: 2
-          runs: PlayerInputCommandRun[]
-        }
+    type PlayerInputState = {
+      protocolVersion: 2
+      runs: PlayerInputCommandRun[]
+    }
     type ConnectionLike = {
       sendPlayerInput: (input: PlayerInput) => void
       sendPlayerInputState: (input: PlayerInputState) => void
@@ -70,14 +68,11 @@ async function installInputRecorder(page: import("@playwright/test").Page): Prom
       useQuickItemSlot: input.useQuickItemSlot ?? null,
     })
     const decodePlayerInputState = (input: PlayerInputState): PlayerInput[] => {
-      if ("runs" in input) {
-        return input.runs.flatMap((run) =>
-          Array.from({ length: run.toSeq - run.fromSeq + 1 }, () =>
-            decodePlayerInputRun(run),
-          ),
-        )
-      }
-      return [decodePlayerInputRun(input)]
+      return input.runs.flatMap((run) =>
+        Array.from({ length: run.toSeq - run.fromSeq + 1 }, () =>
+          decodePlayerInputRun(run),
+        ),
+      )
     }
     const w = globalThis as unknown as {
       __wwGame?: { scene: { getScene: (k: string) => unknown } }

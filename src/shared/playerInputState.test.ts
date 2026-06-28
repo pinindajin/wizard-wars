@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
-  decodePlayerInputState,
   decodePlayerInputStateRun,
-  encodePlayerInputState,
   encodePlayerInputStateRun,
   PLAYER_INPUT_BUTTONS_MAX,
 } from "./playerInputState"
@@ -35,9 +33,9 @@ function fullInput(overrides: Partial<PlayerInputPayload> = {}): PlayerInputPayl
 }
 
 describe("player input state codec", () => {
-  it("encodes held buttons and one-shot slots into a compact state payload", () => {
+  it("encodes held buttons and one-shot slots into a compact v2 command run", () => {
     expect(
-      encodePlayerInputState(
+      encodePlayerInputStateRun(
         fullInput({
           up: true,
           right: true,
@@ -51,8 +49,8 @@ describe("player input state codec", () => {
         }),
       ),
     ).toEqual({
-      protocolVersion: 1,
-      seq: 7,
+      fromSeq: 7,
+      toSeq: 7,
       clientSendTimeMs: 1_000,
       buttons: 1 | 8 | 16,
       targetX: 300,
@@ -64,7 +62,7 @@ describe("player input state codec", () => {
 
   it("encodes every held button bit", () => {
     expect(
-      encodePlayerInputState(
+      encodePlayerInputStateRun(
         fullInput({
           up: true,
           down: true,
@@ -77,38 +75,23 @@ describe("player input state codec", () => {
     ).toBe(PLAYER_INPUT_BUTTONS_MAX)
   })
 
-  it("decodes compact state payloads into canonical full input payloads", () => {
-    const state: PlayerInputStatePayload = {
-      protocolVersion: 1,
-      seq: 9,
-      clientSendTimeMs: 2_000,
-      buttons: 2 | 32,
-      targetX: 500,
-      targetY: 600,
-    }
-
-    expect(decodePlayerInputState(state)).toEqual({
-      up: false,
-      down: true,
-      left: false,
-      right: false,
-      abilitySlot: null,
-      abilityTargetX: 500,
-      abilityTargetY: 600,
-      weaponPrimary: false,
-      weaponSecondary: true,
-      weaponTargetX: 500,
-      weaponTargetY: 600,
-      useQuickItemSlot: null,
-      seq: 9,
-      clientSendTimeMs: 2_000,
-    })
+  it("rejects protocol v1 compact state payloads", () => {
+    expect(
+      playerInputStatePayloadSchema.safeParse({
+        protocolVersion: 1,
+        seq: 9,
+        clientSendTimeMs: 2_000,
+        buttons: 2 | 32,
+        targetX: 500,
+        targetY: 600,
+      }).success,
+    ).toBe(false)
   })
 
-  it("validates compact bitmask and slot bounds", () => {
+  it("validates compact bitmask and slot bounds inside v2 command runs", () => {
     const valid = {
-      protocolVersion: 1,
-      seq: 1,
+      fromSeq: 1,
+      toSeq: 1,
       clientSendTimeMs: 1_000,
       buttons: PLAYER_INPUT_BUTTONS_MAX,
       targetX: 0,
@@ -117,18 +100,26 @@ describe("player input state codec", () => {
       useQuickItemSlot: 3,
     }
 
-    expect(playerInputStatePayloadSchema.safeParse(valid).success).toBe(true)
+    const asBatch = (run: typeof valid) => ({
+      protocolVersion: 2,
+      runs: [run],
+    })
+
+    expect(playerInputStatePayloadSchema.safeParse(asBatch(valid)).success).toBe(true)
     expect(
-      playerInputStatePayloadSchema.safeParse({
-        ...valid,
-        buttons: PLAYER_INPUT_BUTTONS_MAX + 1,
-      }).success,
+      playerInputStatePayloadSchema.safeParse(
+        asBatch({ ...valid, buttons: PLAYER_INPUT_BUTTONS_MAX + 1 }),
+      ).success,
     ).toBe(false)
     expect(
-      playerInputStatePayloadSchema.safeParse({ ...valid, abilitySlot: 5 }).success,
+      playerInputStatePayloadSchema.safeParse(
+        asBatch({ ...valid, abilitySlot: 5 }),
+      ).success,
     ).toBe(false)
     expect(
-      playerInputStatePayloadSchema.safeParse({ ...valid, useQuickItemSlot: 4 })
+      playerInputStatePayloadSchema.safeParse(
+        asBatch({ ...valid, useQuickItemSlot: 4 }),
+      )
         .success,
     ).toBe(false)
   })

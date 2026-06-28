@@ -59,7 +59,6 @@ describe("perf-load report helpers", () => {
           metrics: {
             ...baseStatus.metrics,
             inputQueueDrops: 0,
-            compactInputV1Fallbacks: 1,
             compactInputV2Batches: 10,
             compactInputV2Runs: 12,
             compactInputV2CommandSeqs: 60,
@@ -83,7 +82,6 @@ describe("perf-load report helpers", () => {
     expect(stats.playerBatchGapP95Ms).toBe(50)
     expect(stats.playerBatchGapP99Ms).toBe(50)
     expect(stats.inputQueueDrops).toBe(0)
-    expect(stats.compactInputV1Fallbacks).toBe(1)
     expect(stats.compactInputV2Batches).toBe(10)
     expect(stats.compactInputV2Runs).toBe(12)
     expect(stats.compactInputV2CommandSeqs).toBe(60)

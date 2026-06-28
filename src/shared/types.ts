@@ -254,9 +254,9 @@ export type GameNetTimingPayload = {
   readonly remoteRenderDelayMs: number
 }
 
-/** Server-advertised input transport preference for additive rollout. */
+/** Server-advertised v2 input transport preference. */
 export type GameInputProtocolPayload = {
-  readonly protocolVersion: 1 | 2
+  readonly protocolVersion: 2
   readonly preferredTransport: "legacy" | "compact"
   readonly activeHeartbeatMs: number
   readonly idleHeartbeatMs: number
@@ -367,7 +367,6 @@ export type ServerPerformanceStatusPayload = {
     readonly visualFlushDurationMs?: number
     readonly ownerAckSendDurationMs?: number
     readonly immediateBroadcastDurationMs?: number
-    readonly compactInputV1Fallbacks?: number
     readonly compactInputV2Batches?: number
     readonly compactInputV2Runs?: number
     readonly compactInputV2CommandSeqs?: number
@@ -581,18 +580,7 @@ export type PlayerInputPayload = {
   readonly clientSendTimeMs: number
 }
 
-/** Client → server: compact current input state for state-change transport. */
-export type PlayerInputStateV1Payload = {
-  readonly protocolVersion: 1
-  readonly seq: number
-  readonly clientSendTimeMs: number
-  readonly buttons: number
-  readonly targetX: number
-  readonly targetY: number
-  readonly abilitySlot?: number
-  readonly useQuickItemSlot?: number
-}
-
+/** Inclusive run of one compact input command across one or more fixed ticks. */
 export type PlayerInputCommandRunPayload = {
   readonly fromSeq: number
   readonly toSeq: number
@@ -604,12 +592,13 @@ export type PlayerInputCommandRunPayload = {
   readonly useQuickItemSlot?: number
 }
 
+/** Client → server: compact v2 command batch for tick-aware input transport. */
 export type PlayerInputStateV2Payload = {
   readonly protocolVersion: 2
   readonly runs: readonly PlayerInputCommandRunPayload[]
 }
 
-export type PlayerInputStatePayload = PlayerInputStateV1Payload | PlayerInputStateV2Payload
+export type PlayerInputStatePayload = PlayerInputStateV2Payload
 
 /** Server → all: damage number floats. */
 export type DamageFloatPayload = {

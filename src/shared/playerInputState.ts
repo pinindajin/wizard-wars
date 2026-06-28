@@ -1,7 +1,6 @@
 import type {
   PlayerInputCommandRunPayload,
   PlayerInputPayload,
-  PlayerInputStateV1Payload,
 } from "./types"
 
 /** Bit mask for all buttons represented by compact player input state. */
@@ -43,29 +42,6 @@ export function playerInputButtonsFromPayload(input: PlayerInputPayload): number
 }
 
 /**
- * Encodes a canonical full input payload into the compact wire state.
- *
- * @param input - Full player input payload sampled for this local fixed tick.
- * @returns Compact input state payload for transport.
- */
-export function encodePlayerInputState(
-  input: PlayerInputPayload,
-): PlayerInputStateV1Payload {
-  return {
-    protocolVersion: 1,
-    seq: input.seq,
-    clientSendTimeMs: input.clientSendTimeMs,
-    buttons: playerInputButtonsFromPayload(input),
-    targetX: input.weaponTargetX,
-    targetY: input.weaponTargetY,
-    ...(input.abilitySlot !== null ? { abilitySlot: input.abilitySlot } : {}),
-    ...(input.useQuickItemSlot !== null
-      ? { useQuickItemSlot: input.useQuickItemSlot }
-      : {}),
-  }
-}
-
-/**
  * Encodes one or more contiguous fixed-tick inputs with identical held state.
  *
  * @param input - First canonical input payload covered by the run.
@@ -87,34 +63,6 @@ export function encodePlayerInputStateRun(
     ...(input.useQuickItemSlot !== null
       ? { useQuickItemSlot: input.useQuickItemSlot }
       : {}),
-  }
-}
-
-/**
- * Decodes compact wire state into the canonical full input payload consumed by
- * history/replay and the authoritative simulation.
- *
- * @param state - Compact input state payload.
- * @returns Canonical full player input payload.
- */
-export function decodePlayerInputState(
-  state: PlayerInputStateV1Payload,
-): PlayerInputPayload {
-  return {
-    up: hasButton(state.buttons, PLAYER_INPUT_BUTTON_BITS.up),
-    down: hasButton(state.buttons, PLAYER_INPUT_BUTTON_BITS.down),
-    left: hasButton(state.buttons, PLAYER_INPUT_BUTTON_BITS.left),
-    right: hasButton(state.buttons, PLAYER_INPUT_BUTTON_BITS.right),
-    abilitySlot: state.abilitySlot ?? null,
-    abilityTargetX: state.targetX,
-    abilityTargetY: state.targetY,
-    weaponPrimary: hasButton(state.buttons, PLAYER_INPUT_BUTTON_BITS.weaponPrimary),
-    weaponSecondary: hasButton(state.buttons, PLAYER_INPUT_BUTTON_BITS.weaponSecondary),
-    weaponTargetX: state.targetX,
-    weaponTargetY: state.targetY,
-    useQuickItemSlot: state.useQuickItemSlot ?? null,
-    seq: state.seq,
-    clientSendTimeMs: state.clientSendTimeMs,
   }
 }
 

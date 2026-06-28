@@ -459,6 +459,5 @@ export class GameConnection {
  * @returns Newest covered input sequence.
  */
 function playerInputStateSampleSeq(input: PlayerInputStatePayload): number {
-  if (input.protocolVersion === 1) return input.seq
   return input.runs[input.runs.length - 1]?.toSeq ?? -1
 }
