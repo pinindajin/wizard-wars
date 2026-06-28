@@ -26,6 +26,12 @@ const trimmedUsername = z
   .trim()
   .regex(USERNAME_REGEX, "Username may only contain letters, numbers, and underscores")
 
+const safeInputSeqSchema = z
+  .number()
+  .int()
+  .nonnegative()
+  .max(Number.MAX_SAFE_INTEGER)
+
 /** Schema for login payloads and existing usernames (1-20 chars after trim). */
 export const loginUsernameSchema = trimmedUsername.min(1).max(20)
 
@@ -63,15 +69,15 @@ export const playerInputPayloadSchema = z.object({
   weaponTargetX: z.number().finite(),
   weaponTargetY: z.number().finite(),
   useQuickItemSlot: z.number().int().min(0).max(QUICK_ITEM_SLOT_COUNT - 1).nullable(),
-  seq: z.number().int().nonnegative(),
+  seq: safeInputSeqSchema,
   clientSendTimeMs: z.number().finite().nonnegative(),
 })
 
 /** Schema for one protocol v2 command run. */
 export const playerInputCommandRunPayloadSchema = z
   .object({
-    fromSeq: z.number().int().nonnegative(),
-    toSeq: z.number().int().nonnegative(),
+    fromSeq: safeInputSeqSchema,
+    toSeq: safeInputSeqSchema,
     clientSendTimeMs: z.number().finite().nonnegative(),
     buttons: z.number().int().min(0).max(PLAYER_INPUT_BUTTONS_MAX),
     targetX: z.number().finite(),

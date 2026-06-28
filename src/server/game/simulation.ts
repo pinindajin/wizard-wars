@@ -1075,29 +1075,24 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
       const next = queue.peek()
 
       if (coalescedHeld && coalescedHeld.heldThroughSeq > lastSeq) {
-        // Fresh casts/items/changed intent should not wait behind a virtual held-input backlog.
-        if (next !== undefined && !canCoalesceHeldInput(coalescedHeld.input, next)) {
+        const virtualSeq = lastSeq + 1
+        const input = heldInputForVirtualAck(
+          coalescedHeld.input,
+          virtualSeq,
+          serverTimeMs,
+        )
+        inputMap.set(userId, input)
+        const freshestAim = freshest ?? input
+        freshestWeaponAimByPlayer.set(userId, {
+          weaponTargetX: freshestAim.weaponTargetX,
+          weaponTargetY: freshestAim.weaponTargetY,
+        })
+        lastProcessedInputSeqByPlayer.set(userId, virtualSeq)
+        lastInputTickByPlayer.set(userId, currentTick)
+        if (virtualSeq >= coalescedHeld.heldThroughSeq) {
           coalescedHeldInputByPlayer.delete(userId)
-        } else {
-          const virtualSeq = lastSeq + 1
-          const input = heldInputForVirtualAck(
-            coalescedHeld.input,
-            virtualSeq,
-            serverTimeMs,
-          )
-          inputMap.set(userId, input)
-          const freshestAim = freshest ?? input
-          freshestWeaponAimByPlayer.set(userId, {
-            weaponTargetX: freshestAim.weaponTargetX,
-            weaponTargetY: freshestAim.weaponTargetY,
-          })
-          lastProcessedInputSeqByPlayer.set(userId, virtualSeq)
-          lastInputTickByPlayer.set(userId, currentTick)
-          if (virtualSeq >= coalescedHeld.heldThroughSeq) {
-            coalescedHeldInputByPlayer.delete(userId)
-          }
-          continue
         }
+        continue
       }
 
       if (freshest !== undefined) {

@@ -371,6 +371,58 @@ describe("movement system", () => {
     expect(acks[6]!.y).toBeCloseTo(startY - 7 * stepPx, 3)
   })
 
+  it("drains compact held runs before ACKing a later release command", () => {
+    const sim = createGameSimulation(Date.now())
+    const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    const startY = Position.y[eid]
+    const queue = new PlayerInputQueue()
+    queue.pushRun({
+      fromSeq: 500,
+      toSeq: 506,
+      clientSendTimeMs: 1_000,
+      buttons: PLAYER_INPUT_BUTTON_BITS.up,
+      targetX: 0,
+      targetY: 0,
+    })
+    queue.pushRun({
+      fromSeq: 507,
+      toSeq: 507,
+      clientSendTimeMs: 1_100,
+      buttons: 0,
+      targetX: 0,
+      targetY: 0,
+    })
+    const queues: PlayerInputQueueMap = new Map([["user1", queue]])
+    const acks: Array<{ seq: number; y: number }> = []
+
+    for (let tick = 0; tick <= 7; tick++) {
+      const output = sim.tick(queues, Date.now() + tick * 17)
+      const delta = output.playerDeltas.find((d) => d.id === eid)
+      if (delta?.lastProcessedInputSeq !== undefined) {
+        const ack = sim.buildPlayerOwnerAckPayload(
+          eid,
+          delta.lastProcessedInputSeq,
+          Date.now(),
+        )
+        if (ack) acks.push({ seq: ack.lastProcessedInputSeq, y: ack.y })
+      }
+    }
+
+    expect(acks.map((ack) => ack.seq)).toEqual([
+      500,
+      501,
+      502,
+      503,
+      504,
+      505,
+      506,
+      507,
+    ])
+    const stepPx = BASE_MOVE_SPEED_PX_PER_SEC * TICK_DT_SEC
+    expect(acks[6]!.y).toBeCloseTo(startY - 7 * stepPx, 3)
+    expect(acks[7]!.y).toBeCloseTo(acks[6]!.y, 3)
+  })
+
   it.each([
     [
       "ability on first input",
@@ -411,7 +463,7 @@ describe("movement system", () => {
     expect(acks).toEqual([first.seq, second.seq])
   })
 
-  it("interrupts coalesced held inputs when a fresh edge action arrives", () => {
+  it("drains coalesced held inputs before ACKing a fresh edge action", () => {
     const sim = createGameSimulation(Date.now())
     sim.addPlayer("user1", "Alice", "red_wizard", 0)
 
@@ -439,13 +491,15 @@ describe("movement system", () => {
 
     const acks = [
       ack1,
-      ackSeqFromOutput(
-        sim,
-        sim.tick(new Map([["user1", queue]]), Date.now() + 17),
+      ...Array.from({ length: 4 }, (_, index) =>
+        ackSeqFromOutput(
+          sim,
+          sim.tick(new Map([["user1", queue]]), Date.now() + (index + 1) * 17),
+        ),
       ),
     ]
 
-    expect(acks).toEqual([400, 404])
+    expect(acks).toEqual([400, 401, 402, 403, 404])
   })
 
   it("drops queued inputs whose seq <= lastProcessedInputSeq", () => {

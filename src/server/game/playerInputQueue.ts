@@ -48,8 +48,9 @@ export class PlayerInputQueue {
    * @param run - Validated compact command run to materialize into the queue.
    */
   pushRun(run: PlayerInputCommandRunPayload): void {
-    for (let seq = run.fromSeq; seq <= run.toSeq; seq += 1) {
-      this.push(decodePlayerInputStateRun(run, seq))
+    const span = run.toSeq - run.fromSeq + 1
+    for (let offset = 0; offset < span; offset += 1) {
+      this.push(decodePlayerInputStateRun(run, run.fromSeq + offset))
     }
   }
 

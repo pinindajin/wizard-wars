@@ -203,4 +203,34 @@ describe("player input state codec", () => {
       }).success,
     ).toBe(false)
   })
+
+  it("rejects unsafe compact command sequence numbers", () => {
+    const validRun: PlayerInputCommandRunPayload = {
+      fromSeq: Number.MAX_SAFE_INTEGER,
+      toSeq: Number.MAX_SAFE_INTEGER,
+      clientSendTimeMs: 1_500,
+      buttons: 1,
+      targetX: 300,
+      targetY: 400,
+    }
+
+    expect(
+      playerInputStatePayloadSchema.safeParse({
+        protocolVersion: 2,
+        runs: [validRun],
+      }).success,
+    ).toBe(true)
+    expect(
+      playerInputStatePayloadSchema.safeParse({
+        protocolVersion: 2,
+        runs: [
+          {
+            ...validRun,
+            fromSeq: Number.MAX_SAFE_INTEGER + 1,
+            toSeq: Number.MAX_SAFE_INTEGER + 1,
+          },
+        ],
+      }).success,
+    ).toBe(false)
+  })
 })

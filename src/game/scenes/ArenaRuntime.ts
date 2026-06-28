@@ -149,6 +149,7 @@ export class ArenaRuntime {
   private readonly log = clientLogger.child({ area: "netcode" })
   private activeLocalInputHandler?: () => void
   private inputTransport: "legacy" | "compact" = "legacy"
+  private inputProtocolConfigKey: string | null = null
   private compactInputScheduler = new PlayerInputStateScheduler()
 
   /** Whether the match has started (MatchGo received). */
@@ -611,8 +612,18 @@ export class ArenaRuntime {
    * @param protocol - Optional input protocol from `MatchGo` or `GameStateSync`.
    */
   private _applyInputProtocol(protocol?: GameInputProtocolPayload): void {
-    this.inputTransport =
+    const nextTransport =
       protocol?.preferredTransport === "compact" ? "compact" : "legacy"
+    const nextConfigKey = [
+      nextTransport,
+      protocol?.activeHeartbeatMs ?? "",
+      protocol?.idleHeartbeatMs ?? "",
+    ].join(":")
+
+    if (this.inputProtocolConfigKey === nextConfigKey) return
+
+    this.inputTransport = nextTransport
+    this.inputProtocolConfigKey = nextConfigKey
     this.compactInputScheduler = new PlayerInputStateScheduler({
       activeHeartbeatMs: protocol?.activeHeartbeatMs,
       idleHeartbeatMs: protocol?.idleHeartbeatMs,
