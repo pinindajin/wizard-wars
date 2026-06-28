@@ -43,6 +43,7 @@ When adding a room event, update the shared event constant, payload type, valida
 | Event | Direction | Purpose |
 | --- | --- | --- |
 | `player_input` | Client to server | Fixed-step player intent payload. |
+| `player_input_state` | Client to server | Compact fixed-step player intent transport. |
 | `player_join` | Server to clients | Player entered match. |
 | `player_leave` | Server to clients | Player exited match. |
 | `player_batch_update` | Server to clients | Room-wide player visual deltas, removals, sequence, and visual heartbeat timestamp. |
@@ -88,6 +89,8 @@ When adding a room event, update the shared event constant, payload type, valida
 - Server remains authoritative for match state and combat outcomes.
 - Clients may render telegraphs and VFX from server-seeded timing/geometry, but they do not decide damage.
 - Input payloads are sequence-numbered, validated by the room, queued per player, capped, and consumed by the simulation at most once per player per tick.
+- `game_state_sync.input` and `match_go.input` advertise the compact input protocol. `protocolVersion: 2` with `preferredTransport: "compact"` means clients send `player_input_state` v2 command batches. Each command run covers a contiguous inclusive sequence range with identical held buttons and aim target; ability casts and quick-item uses are edge actions and must be single-tick runs. The server may still accept v1 compact payloads and full `player_input` payloads during rollout, but v2 is the normal compact path because every predicted sequence remains represented even when held movement is run-length encoded.
+- Owner ACK cursors must represent input sequences that have already affected the authoritative sample sent in `player_owner_ack`. Compact held-input coalescing must not ACK a sparse heartbeat sequence that skipped intervening simulated movement ticks.
 - Player, Fireball, and Homing Orb movement deltas may be cadence-limited by `WW_NET_SEND_RATE_HZ`. When no player visuals are pending during `IN_PROGRESS`, the room may send an empty `player_batch_update` at that cadence so clients still receive a fresh authoritative `serverTimeMs`; this heartbeat must not carry owner-only ACK cursors. When `WW_NET_SEND_BUDGET_ENABLED=true`, visual-only movement/projectile rows can also be deferred by `WW_NET_SEND_BUDGET_MAX_*` limits until `WW_NET_SEND_BUDGET_MAX_DEFERRAL_MS`; semantic player fields are split out before budgeting. Mouse-aim `facingAngle` and its paired movement sample bypass the visual budget when sent with cast/melee animation state so remote cast direction is immediate without enqueueing a stale-position interpolation sample. Facing-only updates still mutate client state, but do not enqueue remote interpolation samples. Owner ACKs, full syncs, death/respawn, shop/economy, ability SFX, combat impacts/telegraphs, and performance status bypass the visual budget.
 - `game_state_sync` includes active `fireballs` and `homingOrbs` so reconnecting clients can rebuild projectile sprites immediately.
 - `lastProcessedInputSeq` advancement is not allowed to wait for the visual delta cadence; modern servers send owner-only `player_owner_ack` messages. Clients retain batch-delivered ACK handling only as a compatibility fallback for older servers, and `game_state_sync` still carries full snapshot cursors for hydration.

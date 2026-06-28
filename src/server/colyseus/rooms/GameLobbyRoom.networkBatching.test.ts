@@ -111,7 +111,7 @@ describe("GameLobbyRoom network batching", () => {
         remoteRenderDelayMs: 84,
       },
       input: {
-        protocolVersion: 1,
+        protocolVersion: 2,
         preferredTransport: "compact",
         activeHeartbeatMs: 100,
         idleHeartbeatMs: 1_000,
@@ -213,7 +213,7 @@ describe("GameLobbyRoom network batching", () => {
         remoteRenderDelayMs: 84,
       },
       input: {
-        protocolVersion: 1,
+        protocolVersion: 2,
         preferredTransport: "compact",
         activeHeartbeatMs: 100,
         idleHeartbeatMs: 1_000,

@@ -255,6 +255,30 @@ describe("GameConnection send helpers + warning silence", () => {
     })
   })
 
+  it("sendPlayerInputState samples v2 input state by newest covered command sequence", () => {
+    const payload = {
+      protocolVersion: 2,
+      runs: [
+        {
+          fromSeq: 4,
+          toSeq: 7,
+          clientSendTimeMs: 1_000,
+          buttons: 1,
+          targetX: 10,
+          targetY: 20,
+        },
+      ],
+    } as const
+
+    conn.sendPlayerInputState(payload)
+    conn.sendPlayerInputState({ protocolVersion: 2, runs: [] })
+
+    expect(room.sent).toContainEqual({
+      type: RoomEvent.PlayerInputState,
+      payload,
+    })
+  })
+
   it("sendAssignAbility sends assign_ability with itemId and slotIndex", () => {
     conn.sendAssignAbility("lightning_bolt", 2)
     expect(room.sent).toContainEqual({

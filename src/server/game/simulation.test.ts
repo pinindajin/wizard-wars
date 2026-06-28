@@ -54,9 +54,16 @@ import {
   PRIMARY_MELEE_ATTACK_CONFIGS,
 } from "@/shared/balance-config/equipment"
 import { getPrimaryAttackAnimationConfigByAttackId } from "@/shared/balance-config/animationConfig"
-import { JUMP_CHARGE_RECHARGE_MS, JUMP_MAX_CHARGES, TICK_MS } from "@/shared/balance-config"
+import {
+  BASE_MOVE_SPEED_PX_PER_SEC,
+  JUMP_CHARGE_RECHARGE_MS,
+  JUMP_MAX_CHARGES,
+  TICK_DT_SEC,
+  TICK_MS,
+} from "@/shared/balance-config"
 import { playerDeltaSystem } from "@/server/game/systems/playerDeltaSystem"
 import type { PlayerInputPayload } from "@/shared/types"
+import { PLAYER_INPUT_BUTTON_BITS } from "@/shared/playerInputState"
 
 let nextSeq = 1
 const REPRESENTATIVE_BLOCKER_MIN_AREA_PX = 1_000
@@ -328,6 +335,40 @@ describe("movement system", () => {
       ackSeqFromOutput(sim, sim.tick(queues, Date.now() + 51)),
     ]
     expect(acks).toEqual([200, 201, 202, 203])
+  })
+
+  it("ACKs compact command-run sequences only after the matching movement tick is applied", () => {
+    const sim = createGameSimulation(Date.now())
+    const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    const startY = Position.y[eid]
+    const queue = new PlayerInputQueue()
+    queue.pushRun({
+      fromSeq: 0,
+      toSeq: 6,
+      clientSendTimeMs: 1_000,
+      buttons: PLAYER_INPUT_BUTTON_BITS.up,
+      targetX: 0,
+      targetY: 0,
+    })
+    const queues: PlayerInputQueueMap = new Map([["user1", queue]])
+    const acks: Array<{ seq: number; y: number }> = []
+
+    for (let tick = 0; tick <= 6; tick++) {
+      const output = sim.tick(queues, Date.now() + tick * 17)
+      const delta = output.playerDeltas.find((d) => d.id === eid)
+      if (delta?.lastProcessedInputSeq !== undefined) {
+        const ack = sim.buildPlayerOwnerAckPayload(
+          eid,
+          delta.lastProcessedInputSeq,
+          Date.now(),
+        )
+        if (ack) acks.push({ seq: ack.lastProcessedInputSeq, y: ack.y })
+      }
+    }
+
+    expect(acks.map((ack) => ack.seq)).toEqual([0, 1, 2, 3, 4, 5, 6])
+    const stepPx = BASE_MOVE_SPEED_PX_PER_SEC * TICK_DT_SEC
+    expect(acks[6]!.y).toBeCloseTo(startY - 7 * stepPx, 3)
   })
 
   it.each([

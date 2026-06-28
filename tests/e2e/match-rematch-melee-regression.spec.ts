@@ -37,11 +37,21 @@ async function installInputRecorder(page: import("@playwright/test").Page): Prom
       left: boolean
       right: boolean
     }
-    type PlayerInputState = {
+    type CompactInputButtons = {
       buttons: number
       abilitySlot?: number
       useQuickItemSlot?: number
     }
+    type PlayerInputCommandRun = CompactInputButtons & {
+      fromSeq: number
+      toSeq: number
+    }
+    type PlayerInputState =
+      | CompactInputButtons
+      | {
+          protocolVersion: 2
+          runs: PlayerInputCommandRun[]
+        }
     type ConnectionLike = {
       sendPlayerInput: (input: PlayerInput) => void
       sendPlayerInputState: (input: PlayerInputState) => void
@@ -49,7 +59,7 @@ async function installInputRecorder(page: import("@playwright/test").Page): Prom
     type ArenaLike = {
       getConnection?: () => ConnectionLike
     }
-    const decodePlayerInputState = (input: PlayerInputState): PlayerInput => ({
+    const decodePlayerInputRun = (input: CompactInputButtons): PlayerInput => ({
       up: (input.buttons & 1) !== 0,
       down: (input.buttons & 2) !== 0,
       left: (input.buttons & 4) !== 0,
@@ -59,6 +69,16 @@ async function installInputRecorder(page: import("@playwright/test").Page): Prom
       abilitySlot: input.abilitySlot ?? null,
       useQuickItemSlot: input.useQuickItemSlot ?? null,
     })
+    const decodePlayerInputState = (input: PlayerInputState): PlayerInput[] => {
+      if ("runs" in input) {
+        return input.runs.flatMap((run) =>
+          Array.from({ length: run.toSeq - run.fromSeq + 1 }, () =>
+            decodePlayerInputRun(run),
+          ),
+        )
+      }
+      return [decodePlayerInputRun(input)]
+    }
     const w = globalThis as unknown as {
       __wwGame?: { scene: { getScene: (k: string) => unknown } }
       __wwInputLog?: PlayerInput[]
@@ -76,7 +96,7 @@ async function installInputRecorder(page: import("@playwright/test").Page): Prom
       original(input)
     }
     conn.sendPlayerInputState = (input: PlayerInputState) => {
-      w.__wwInputLog?.push(decodePlayerInputState(input))
+      w.__wwInputLog?.push(...decodePlayerInputState(input))
       originalState(input)
     }
     w.__wwInputRecorderInstalled = true

@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vitest"
 
 import { RoomEvent } from "@/shared/roomEvents"
-import type { PlayerInputPayload, PlayerInputStatePayload } from "@/shared/types"
+import type {
+  PlayerInputCommandRunPayload,
+  PlayerInputPayload,
+  PlayerInputStateV1Payload,
+} from "@/shared/types"
 import type { PlayerInputQueueMap } from "@/server/game/playerInputQueue"
 
 import { GameLobbyRoom } from "./GameLobbyRoom"
@@ -54,7 +58,7 @@ function input(overrides: Partial<PlayerInputPayload> = {}): PlayerInputPayload 
   }
 }
 
-function compact(overrides: Partial<PlayerInputStatePayload> = {}): PlayerInputStatePayload {
+function compact(overrides: Partial<PlayerInputStateV1Payload> = {}): PlayerInputStateV1Payload {
   return {
     protocolVersion: 1,
     seq: 1,
@@ -62,6 +66,20 @@ function compact(overrides: Partial<PlayerInputStatePayload> = {}): PlayerInputS
     buttons: 8,
     targetX: 10,
     targetY: 20,
+    ...overrides,
+  }
+}
+
+function commandRun(
+  overrides: Partial<PlayerInputCommandRunPayload> = {},
+): PlayerInputCommandRunPayload {
+  return {
+    fromSeq: 10,
+    toSeq: 12,
+    clientSendTimeMs: 1_500,
+    buttons: 8,
+    targetX: 300,
+    targetY: 400,
     ...overrides,
   }
 }
@@ -144,6 +162,101 @@ describe("GameLobbyRoom compact player input state", () => {
     ])
   })
 
+  it("enqueues v2 command runs as one command per covered sequence", () => {
+    const r = room()
+    const c = client()
+
+    r.handlePlayerInputState(c, {
+      protocolVersion: 2,
+      runs: [commandRun()],
+    })
+
+    expect(r.inputQueue.get("player-1")?.toArray()).toEqual([
+      {
+        up: false,
+        down: false,
+        left: false,
+        right: true,
+        abilitySlot: null,
+        abilityTargetX: 300,
+        abilityTargetY: 400,
+        weaponPrimary: false,
+        weaponSecondary: false,
+        weaponTargetX: 300,
+        weaponTargetY: 400,
+        useQuickItemSlot: null,
+        seq: 10,
+        clientSendTimeMs: 1_500,
+      },
+      {
+        up: false,
+        down: false,
+        left: false,
+        right: true,
+        abilitySlot: null,
+        abilityTargetX: 300,
+        abilityTargetY: 400,
+        weaponPrimary: false,
+        weaponSecondary: false,
+        weaponTargetX: 300,
+        weaponTargetY: 400,
+        useQuickItemSlot: null,
+        seq: 11,
+        clientSendTimeMs: 1_500,
+      },
+      {
+        up: false,
+        down: false,
+        left: false,
+        right: true,
+        abilitySlot: null,
+        abilityTargetX: 300,
+        abilityTargetY: 400,
+        weaponPrimary: false,
+        weaponSecondary: false,
+        weaponTargetX: 300,
+        weaponTargetY: 400,
+        useQuickItemSlot: null,
+        seq: 12,
+        clientSendTimeMs: 1_500,
+      },
+    ])
+  })
+
+  it("trims overlapping v2 command runs through the highest accepted sequence", () => {
+    const r = room()
+    const c = client()
+
+    r.handlePlayerInputState(c, {
+      protocolVersion: 2,
+      runs: [commandRun({ fromSeq: 10, toSeq: 12 })],
+    })
+    r.handlePlayerInputState(c, {
+      protocolVersion: 2,
+      runs: [commandRun({ fromSeq: 12, toSeq: 14 })],
+    })
+
+    expect(r.inputQueue.get("player-1")?.toArray().map((queued) => queued.seq))
+      .toEqual([10, 11, 12, 13, 14])
+  })
+
+  it("drops fully stale v2 command runs", () => {
+    const r = room()
+    const c = client()
+
+    r.handlePlayerInputState(c, {
+      protocolVersion: 2,
+      runs: [commandRun({ fromSeq: 10, toSeq: 12 })],
+    })
+    r.handlePlayerInputState(c, {
+      protocolVersion: 2,
+      runs: [commandRun({ fromSeq: 10, toSeq: 11 })],
+    })
+
+    expect(r.inputQueue.get("player-1")?.toArray().map((queued) => queued.seq))
+      .toEqual([10, 11, 12])
+  })
+
   it("uses the same stale-seq duplicate filter for compact and legacy inputs", () => {
     const r = room()
     const c = client()
@@ -184,6 +297,29 @@ describe("GameLobbyRoom compact player input state", () => {
     for (let seq = 0; seq < 40; seq++) {
       r.handlePlayerInputState(c, compact({ seq }))
     }
+
+    const queuedSeqs = r.inputQueue
+      .get("player-1")
+      ?.toArray()
+      .map((queued) => queued.seq)
+    expect(queuedSeqs).toHaveLength(32)
+    expect(queuedSeqs?.[0]).toBe(8)
+    expect(queuedSeqs?.at(-1)).toBe(39)
+    expect(r.performanceInputQueueDrops).toBe(8)
+  })
+
+  it("caps v2 command run queues with the same drop accounting", () => {
+    const r = room()
+    const c = client()
+
+    r.handlePlayerInputState(c, {
+      protocolVersion: 2,
+      runs: [commandRun({ fromSeq: 0, toSeq: 29 })],
+    })
+    r.handlePlayerInputState(c, {
+      protocolVersion: 2,
+      runs: [commandRun({ fromSeq: 30, toSeq: 39 })],
+    })
 
     const queuedSeqs = r.inputQueue
       .get("player-1")

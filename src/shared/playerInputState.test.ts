@@ -2,11 +2,17 @@ import { describe, expect, it } from "vitest"
 
 import {
   decodePlayerInputState,
+  decodePlayerInputStateRun,
   encodePlayerInputState,
+  encodePlayerInputStateRun,
   PLAYER_INPUT_BUTTONS_MAX,
 } from "./playerInputState"
 import { playerInputStatePayloadSchema } from "./validators"
-import type { PlayerInputPayload, PlayerInputStatePayload } from "./types"
+import type {
+  PlayerInputCommandRunPayload,
+  PlayerInputPayload,
+  PlayerInputStatePayload,
+} from "./types"
 
 function fullInput(overrides: Partial<PlayerInputPayload> = {}): PlayerInputPayload {
   return {
@@ -124,6 +130,86 @@ describe("player input state codec", () => {
     expect(
       playerInputStatePayloadSchema.safeParse({ ...valid, useQuickItemSlot: 4 })
         .success,
+    ).toBe(false)
+  })
+
+  it("encodes v2 command runs and decodes individual run sequences", () => {
+    const run = encodePlayerInputStateRun(
+      fullInput({
+        seq: 10,
+        clientSendTimeMs: 1_500,
+        up: true,
+        weaponTargetX: 300,
+        weaponTargetY: 400,
+        abilityTargetX: 300,
+        abilityTargetY: 400,
+      }),
+      12,
+    )
+
+    expect(run).toEqual({
+      fromSeq: 10,
+      toSeq: 12,
+      clientSendTimeMs: 1_500,
+      buttons: 1,
+      targetX: 300,
+      targetY: 400,
+    })
+    expect(decodePlayerInputStateRun(run, 11)).toEqual({
+      ...fullInput({
+        seq: 11,
+        clientSendTimeMs: 1_500,
+        up: true,
+        weaponTargetX: 300,
+        weaponTargetY: 400,
+        abilityTargetX: 300,
+        abilityTargetY: 400,
+      }),
+    })
+  })
+
+  it("validates v2 command batches and rejects multi-tick edge action runs", () => {
+    const validRun: PlayerInputCommandRunPayload = {
+      fromSeq: 10,
+      toSeq: 12,
+      clientSendTimeMs: 1_500,
+      buttons: 1,
+      targetX: 300,
+      targetY: 400,
+    }
+    const validBatch: PlayerInputStatePayload = {
+      protocolVersion: 2,
+      runs: [validRun],
+    }
+
+    expect(playerInputStatePayloadSchema.safeParse(validBatch).success).toBe(true)
+    expect(
+      playerInputStatePayloadSchema.safeParse({
+        protocolVersion: 2,
+        runs: [{ ...validRun, toSeq: 9 }],
+      }).success,
+    ).toBe(false)
+    expect(
+      playerInputStatePayloadSchema.safeParse({
+        protocolVersion: 2,
+        runs: [{ ...validRun, toSeq: 41 }],
+      }).success,
+    ).toBe(false)
+    expect(
+      playerInputStatePayloadSchema.safeParse({
+        protocolVersion: 2,
+        runs: [{ ...validRun, abilitySlot: 2 }],
+      }).success,
+    ).toBe(false)
+    expect(
+      playerInputStatePayloadSchema.safeParse({
+        protocolVersion: 2,
+        runs: Array.from({ length: 17 }, (_, index) => ({
+          ...validRun,
+          fromSeq: index,
+          toSeq: index,
+        })),
+      }).success,
     ).toBe(false)
   })
 })

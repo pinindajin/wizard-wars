@@ -1,4 +1,8 @@
-import type { PlayerInputPayload, PlayerInputStatePayload } from "./types"
+import type {
+  PlayerInputCommandRunPayload,
+  PlayerInputPayload,
+  PlayerInputStateV1Payload,
+} from "./types"
 
 /** Bit mask for all buttons represented by compact player input state. */
 export const PLAYER_INPUT_BUTTON_BITS = {
@@ -18,6 +22,8 @@ export const PLAYER_INPUT_BUTTONS_MAX =
   PLAYER_INPUT_BUTTON_BITS.right |
   PLAYER_INPUT_BUTTON_BITS.weaponPrimary |
   PLAYER_INPUT_BUTTON_BITS.weaponSecondary
+export const MAX_PLAYER_INPUT_COMMAND_RUN_SPAN_TICKS = 30
+export const MAX_PLAYER_INPUT_COMMAND_RUNS_PER_BATCH = 16
 
 /**
  * Builds a compact button mask from a canonical full input payload.
@@ -44,10 +50,35 @@ export function playerInputButtonsFromPayload(input: PlayerInputPayload): number
  */
 export function encodePlayerInputState(
   input: PlayerInputPayload,
-): PlayerInputStatePayload {
+): PlayerInputStateV1Payload {
   return {
     protocolVersion: 1,
     seq: input.seq,
+    clientSendTimeMs: input.clientSendTimeMs,
+    buttons: playerInputButtonsFromPayload(input),
+    targetX: input.weaponTargetX,
+    targetY: input.weaponTargetY,
+    ...(input.abilitySlot !== null ? { abilitySlot: input.abilitySlot } : {}),
+    ...(input.useQuickItemSlot !== null
+      ? { useQuickItemSlot: input.useQuickItemSlot }
+      : {}),
+  }
+}
+
+/**
+ * Encodes one or more contiguous fixed-tick inputs with identical held state.
+ *
+ * @param input - First canonical input payload covered by the run.
+ * @param toSeq - Final sequence covered by this run.
+ * @returns Compact command-run payload for protocol v2 transport.
+ */
+export function encodePlayerInputStateRun(
+  input: PlayerInputPayload,
+  toSeq = input.seq,
+): PlayerInputCommandRunPayload {
+  return {
+    fromSeq: input.seq,
+    toSeq,
     clientSendTimeMs: input.clientSendTimeMs,
     buttons: playerInputButtonsFromPayload(input),
     targetX: input.weaponTargetX,
@@ -67,7 +98,7 @@ export function encodePlayerInputState(
  * @returns Canonical full player input payload.
  */
 export function decodePlayerInputState(
-  state: PlayerInputStatePayload,
+  state: PlayerInputStateV1Payload,
 ): PlayerInputPayload {
   return {
     up: hasButton(state.buttons, PLAYER_INPUT_BUTTON_BITS.up),
@@ -84,6 +115,35 @@ export function decodePlayerInputState(
     useQuickItemSlot: state.useQuickItemSlot ?? null,
     seq: state.seq,
     clientSendTimeMs: state.clientSendTimeMs,
+  }
+}
+
+/**
+ * Decodes one sequence from a protocol v2 command run into the canonical input.
+ *
+ * @param run - Compact command run covering the requested sequence.
+ * @param seq - Sequence to materialize for authoritative simulation.
+ * @returns Canonical full player input payload for one simulation tick.
+ */
+export function decodePlayerInputStateRun(
+  run: PlayerInputCommandRunPayload,
+  seq: number,
+): PlayerInputPayload {
+  return {
+    up: hasButton(run.buttons, PLAYER_INPUT_BUTTON_BITS.up),
+    down: hasButton(run.buttons, PLAYER_INPUT_BUTTON_BITS.down),
+    left: hasButton(run.buttons, PLAYER_INPUT_BUTTON_BITS.left),
+    right: hasButton(run.buttons, PLAYER_INPUT_BUTTON_BITS.right),
+    abilitySlot: run.abilitySlot ?? null,
+    abilityTargetX: run.targetX,
+    abilityTargetY: run.targetY,
+    weaponPrimary: hasButton(run.buttons, PLAYER_INPUT_BUTTON_BITS.weaponPrimary),
+    weaponSecondary: hasButton(run.buttons, PLAYER_INPUT_BUTTON_BITS.weaponSecondary),
+    weaponTargetX: run.targetX,
+    weaponTargetY: run.targetY,
+    useQuickItemSlot: run.useQuickItemSlot ?? null,
+    seq,
+    clientSendTimeMs: run.clientSendTimeMs,
   }
 }
 

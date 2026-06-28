@@ -256,7 +256,7 @@ export type GameNetTimingPayload = {
 
 /** Server-advertised input transport preference for additive rollout. */
 export type GameInputProtocolPayload = {
-  readonly protocolVersion: 1
+  readonly protocolVersion: 1 | 2
   readonly preferredTransport: "legacy" | "compact"
   readonly activeHeartbeatMs: number
   readonly idleHeartbeatMs: number
@@ -367,6 +367,10 @@ export type ServerPerformanceStatusPayload = {
     readonly visualFlushDurationMs?: number
     readonly ownerAckSendDurationMs?: number
     readonly immediateBroadcastDurationMs?: number
+    readonly compactInputV1Fallbacks?: number
+    readonly compactInputV2Batches?: number
+    readonly compactInputV2Runs?: number
+    readonly compactInputV2CommandSeqs?: number
     readonly visualBudgetDeferrals?: number
     readonly visualBudgetDeferredEntities?: number
     readonly visualBudgetMaxDeferralAgeMs?: number
@@ -578,7 +582,7 @@ export type PlayerInputPayload = {
 }
 
 /** Client → server: compact current input state for state-change transport. */
-export type PlayerInputStatePayload = {
+export type PlayerInputStateV1Payload = {
   readonly protocolVersion: 1
   readonly seq: number
   readonly clientSendTimeMs: number
@@ -588,6 +592,24 @@ export type PlayerInputStatePayload = {
   readonly abilitySlot?: number
   readonly useQuickItemSlot?: number
 }
+
+export type PlayerInputCommandRunPayload = {
+  readonly fromSeq: number
+  readonly toSeq: number
+  readonly clientSendTimeMs: number
+  readonly buttons: number
+  readonly targetX: number
+  readonly targetY: number
+  readonly abilitySlot?: number
+  readonly useQuickItemSlot?: number
+}
+
+export type PlayerInputStateV2Payload = {
+  readonly protocolVersion: 2
+  readonly runs: readonly PlayerInputCommandRunPayload[]
+}
+
+export type PlayerInputStatePayload = PlayerInputStateV1Payload | PlayerInputStateV2Payload
 
 /** Server → all: damage number floats. */
 export type DamageFloatPayload = {

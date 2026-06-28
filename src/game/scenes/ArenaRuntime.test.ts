@@ -7,11 +7,20 @@ import {
 } from "../constants"
 import { ArenaRuntime } from "./ArenaRuntime"
 import { WsEvent } from "@/shared/events"
-import type { AnyWsMessage, MessageHandler } from "@/shared/types"
+import type {
+  AnyWsMessage,
+  MessageHandler,
+  PlayerInputStatePayload,
+} from "@/shared/types"
 import { SFX_KEYS } from "@/shared/balance-config/audio"
 
 const soundPlaySpy = vi.hoisted(() => vi.fn())
 const activeLocalInputSpy = vi.hoisted(() => vi.fn())
+
+function lastCoveredInputSeq(payload: PlayerInputStatePayload): number {
+  if (payload.protocolVersion === 1) return payload.seq
+  return payload.runs[payload.runs.length - 1]?.toSeq ?? -1
+}
 
 const telegraphMock = vi.hoisted(() => ({
   applyFullSync: vi.fn(),
@@ -627,7 +636,7 @@ describe("ArenaRuntime lifecycle", () => {
       type: WsEvent.MatchGo,
       payload: {
         input: {
-          protocolVersion: 1,
+          protocolVersion: 2,
           preferredTransport: "compact",
           activeHeartbeatMs: 100,
           idleHeartbeatMs: 1_000,
@@ -641,7 +650,9 @@ describe("ArenaRuntime lifecycle", () => {
     ).toEqual([0, 1, 2])
     expect(connection.sendPlayerInput).not.toHaveBeenCalled()
     expect(
-      connection.sendPlayerInputState.mock.calls.map(([payload]) => payload.seq),
+      connection.sendPlayerInputState.mock.calls.map(([payload]) =>
+        lastCoveredInputSeq(payload),
+      ),
     ).toEqual([0])
   })
 
@@ -673,7 +684,7 @@ describe("ArenaRuntime lifecycle", () => {
       type: WsEvent.MatchGo,
       payload: {
         input: {
-          protocolVersion: 1,
+          protocolVersion: 2,
           preferredTransport: "compact",
           activeHeartbeatMs: 100,
           idleHeartbeatMs: 1_000,
@@ -684,7 +695,9 @@ describe("ArenaRuntime lifecycle", () => {
 
     expect(activeLocalInputSpy).toHaveBeenCalledTimes(3)
     expect(
-      connection.sendPlayerInputState.mock.calls.map(([payload]) => payload.seq),
+      connection.sendPlayerInputState.mock.calls.map(([payload]) =>
+        lastCoveredInputSeq(payload),
+      ),
     ).toEqual([0])
   })
 

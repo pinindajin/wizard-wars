@@ -12,7 +12,11 @@ import type {
   PlayerOwnerAckPayload,
   ServerPerformanceStatusPayload,
 } from "./types"
-import { PLAYER_INPUT_BUTTONS_MAX } from "./playerInputState"
+import {
+  MAX_PLAYER_INPUT_COMMAND_RUNS_PER_BATCH,
+  MAX_PLAYER_INPUT_COMMAND_RUN_SPAN_TICKS,
+  PLAYER_INPUT_BUTTONS_MAX,
+} from "./playerInputState"
 
 /** Username: alphanumeric + underscore, 3-20 chars, must be trimmed before comparison. */
 const USERNAME_REGEX = /^[a-zA-Z0-9_]+$/
@@ -63,8 +67,8 @@ export const playerInputPayloadSchema = z.object({
   clientSendTimeMs: z.number().finite().nonnegative(),
 })
 
-/** Schema for compact player input state. */
-export const playerInputStatePayloadSchema = z.object({
+/** Schema for compact player input state v1 compatibility payloads. */
+export const playerInputStateV1PayloadSchema = z.object({
   protocolVersion: z.literal(1),
   seq: z.number().int().nonnegative(),
   clientSendTimeMs: z.number().finite().nonnegative(),
@@ -74,6 +78,52 @@ export const playerInputStatePayloadSchema = z.object({
   abilitySlot: z.number().int().min(0).max(ABILITY_BAR_SLOT_COUNT - 1).optional(),
   useQuickItemSlot: z.number().int().min(0).max(QUICK_ITEM_SLOT_COUNT - 1).optional(),
 })
+
+/** Schema for one protocol v2 command run. */
+export const playerInputCommandRunPayloadSchema = z
+  .object({
+    fromSeq: z.number().int().nonnegative(),
+    toSeq: z.number().int().nonnegative(),
+    clientSendTimeMs: z.number().finite().nonnegative(),
+    buttons: z.number().int().min(0).max(PLAYER_INPUT_BUTTONS_MAX),
+    targetX: z.number().finite(),
+    targetY: z.number().finite(),
+    abilitySlot: z.number().int().min(0).max(ABILITY_BAR_SLOT_COUNT - 1).optional(),
+    useQuickItemSlot: z.number().int().min(0).max(QUICK_ITEM_SLOT_COUNT - 1).optional(),
+  })
+  .refine((run) => run.fromSeq <= run.toSeq, {
+    message: "fromSeq must be less than or equal to toSeq",
+    path: ["toSeq"],
+  })
+  .refine(
+    (run) =>
+      run.toSeq - run.fromSeq + 1 <= MAX_PLAYER_INPUT_COMMAND_RUN_SPAN_TICKS,
+    {
+      message: `run span must be ${MAX_PLAYER_INPUT_COMMAND_RUN_SPAN_TICKS} ticks or fewer`,
+      path: ["toSeq"],
+    },
+  )
+  .refine(
+    (run) =>
+      (run.abilitySlot === undefined && run.useQuickItemSlot === undefined) ||
+      run.fromSeq === run.toSeq,
+    {
+      message: "edge actions must be encoded as single-tick command runs",
+      path: ["toSeq"],
+    },
+  )
+
+/** Schema for compact player input state. */
+export const playerInputStatePayloadSchema = z.discriminatedUnion("protocolVersion", [
+  playerInputStateV1PayloadSchema,
+  z.object({
+    protocolVersion: z.literal(2),
+    runs: z
+      .array(playerInputCommandRunPayloadSchema)
+      .min(1)
+      .max(MAX_PLAYER_INPUT_COMMAND_RUNS_PER_BATCH),
+  }),
+])
 
 /** Schema for shop purchase. */
 export const shopPurchasePayloadSchema = z.object({
@@ -300,7 +350,7 @@ export const gameNetTimingPayloadSchema = z.object({
 
 /** Input protocol advertised with match start/full sync. */
 export const gameInputProtocolPayloadSchema = z.object({
-  protocolVersion: z.literal(1),
+  protocolVersion: z.union([z.literal(1), z.literal(2)]),
   preferredTransport: z.enum(["legacy", "compact"]),
   activeHeartbeatMs: z.number().finite().positive(),
   idleHeartbeatMs: z.number().finite().positive(),
@@ -355,6 +405,10 @@ export const serverPerformanceStatusPayloadSchema = z.object({
     visualFlushDurationMs: z.number().finite().nonnegative().optional(),
     ownerAckSendDurationMs: z.number().finite().nonnegative().optional(),
     immediateBroadcastDurationMs: z.number().finite().nonnegative().optional(),
+    compactInputV1Fallbacks: z.number().int().nonnegative().optional(),
+    compactInputV2Batches: z.number().int().nonnegative().optional(),
+    compactInputV2Runs: z.number().int().nonnegative().optional(),
+    compactInputV2CommandSeqs: z.number().int().nonnegative().optional(),
     visualBudgetDeferrals: z.number().int().nonnegative().optional(),
     visualBudgetDeferredEntities: z.number().int().nonnegative().optional(),
     visualBudgetMaxDeferralAgeMs: z.number().finite().nonnegative().optional(),

@@ -56,6 +56,10 @@ export type PerfLoadReport = {
   readonly degradedReasons: readonly string[]
   readonly degradedReasonCounts: Readonly<Record<string, number>>
   readonly inputQueueDrops: number
+  readonly compactInputV1Fallbacks: number
+  readonly compactInputV2Batches: number
+  readonly compactInputV2Runs: number
+  readonly compactInputV2CommandSeqs: number
   readonly visualBudgetDeferrals: number
   readonly visualBudgetDeferredEntities: number
   readonly visualBudgetMaxDeferralAgeMs: number
@@ -185,6 +189,22 @@ export function summarizePerfLoadRun(input: PerfLoadReportInput): PerfLoadReport
     degradedReasonCounts,
     inputQueueDrops: statuses.reduce(
       (sum, status) => sum + status.metrics.inputQueueDrops,
+      0,
+    ),
+    compactInputV1Fallbacks: statuses.reduce(
+      (sum, status) => sum + (status.metrics.compactInputV1Fallbacks ?? 0),
+      0,
+    ),
+    compactInputV2Batches: statuses.reduce(
+      (sum, status) => sum + (status.metrics.compactInputV2Batches ?? 0),
+      0,
+    ),
+    compactInputV2Runs: statuses.reduce(
+      (sum, status) => sum + (status.metrics.compactInputV2Runs ?? 0),
+      0,
+    ),
+    compactInputV2CommandSeqs: statuses.reduce(
+      (sum, status) => sum + (status.metrics.compactInputV2CommandSeqs ?? 0),
       0,
     ),
     visualBudgetDeferrals: statuses.reduce(

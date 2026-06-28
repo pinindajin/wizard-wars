@@ -427,7 +427,7 @@ describe("parseGameStateSyncPayload", () => {
       seq: 0,
       serverTimeMs: 1700000000000,
       input: {
-        protocolVersion: 1,
+        protocolVersion: 2,
         preferredTransport: "compact",
         activeHeartbeatMs: 100,
         idleHeartbeatMs: 1_000,
@@ -445,7 +445,7 @@ describe("parseGameStateSyncPayload", () => {
         seq: 0,
         serverTimeMs: 1700000000000,
         input: {
-          protocolVersion: 1,
+          protocolVersion: 2,
           preferredTransport: "compact",
           activeHeartbeatMs: 0,
           idleHeartbeatMs: 1_000,
