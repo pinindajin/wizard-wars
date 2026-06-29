@@ -1207,9 +1207,17 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
           coveredTicks += 1
           skipped += 1
         }
+        const blockedByNonmatchingQueuedInput =
+          retainedInput !== null &&
+          coveredTicks < retainedTicks &&
+          queue.peek() !== undefined
+        if (blockedByNonmatchingQueuedInput) {
+          retainedHeldTicksByPlayer.delete(userId)
+          retainedHeldCoverageByPlayer.delete(userId)
+        }
         if (skipped > 0) {
           lastInputTickByPlayer.set(userId, currentTick)
-          if (coveredTicks < retainedTicks) {
+          if (coveredTicks < retainedTicks && !blockedByNonmatchingQueuedInput) {
             retainedHeldCoverageByPlayer.set(userId, {
               coveredTicks,
               coveredThroughSeq,
@@ -1236,7 +1244,11 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
         if (skipped === 0 && retainedInput === null) {
           retainedHeldTicksByPlayer.delete(userId)
           retainedHeldCoverageByPlayer.delete(userId)
-        } else if (retainedInput !== null && retainedTicks > 0) {
+        } else if (
+          retainedInput !== null &&
+          retainedTicks > 0 &&
+          !blockedByNonmatchingQueuedInput
+        ) {
           const coverage = retainedHeldCoverageByPlayer.get(userId)
           if ((coverage?.coveredTicks ?? 0) < retainedTicks) continue
         }

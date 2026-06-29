@@ -671,6 +671,51 @@ describe("movement system", () => {
     expect(queue.length).toBe(0)
   })
 
+  it("processes release commands instead of parking them behind partial retained coverage", () => {
+    const sim = createGameSimulation(Date.now())
+    const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    sim.tick(
+      queueMap([["user1", emptyInput({ up: true, seq: 0 })]]),
+      Date.now(),
+    )
+
+    for (let tick = 1; tick <= 9; tick++) {
+      sim.tick(new Map(), Date.now() + tick * 17)
+    }
+
+    const queue = new PlayerInputQueue()
+    queue.pushRun({
+      fromSeq: 1,
+      toSeq: 6,
+      clientSendTimeMs: 1_000,
+      buttons: PLAYER_INPUT_BUTTON_BITS.up,
+      targetX: 0,
+      targetY: 0,
+    })
+    queue.pushRun({
+      fromSeq: 7,
+      toSeq: 7,
+      clientSendTimeMs: 1_100,
+      buttons: 0,
+      targetX: 0,
+      targetY: 0,
+    })
+
+    const releaseTick = sim.tick(
+      new Map([["user1", queue]]),
+      Date.now() + 10 * 17,
+    )
+    const releaseAckSeq = ackSeqFromOutput(sim, releaseTick)
+    const yAfterRelease = Position.y[eid]
+    const laterTick = sim.tick(new Map(), Date.now() + 11 * 17)
+
+    expect(releaseAckSeq).toBe(7)
+    expect(queue.length).toBe(0)
+    expect(Velocity.vy[eid]).toBe(0)
+    expect(Position.y[eid]).toBeCloseTo(yAfterRelease, 3)
+    expect(ackSeqFromOutput(sim, laterTick)).toBeUndefined()
+  })
+
   it("fast-forwards retained held movement when compact heartbeats only change aim", () => {
     const sim = createGameSimulation(Date.now())
     const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
