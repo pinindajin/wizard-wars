@@ -12,7 +12,7 @@ function validationFailed(message: string): NextResponse {
 }
 
 function parseWritableHeroId(rawHeroId: unknown): HeroId | NextResponse {
-  if (rawHeroId == null) return DEFAULT_HERO_ID
+  if (rawHeroId === undefined) return DEFAULT_HERO_ID
   if (
     typeof rawHeroId === "string" &&
     (VALID_HERO_IDS as readonly string[]).includes(rawHeroId)

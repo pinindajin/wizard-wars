@@ -87,6 +87,22 @@ describe("animation tool rebuild-megasheet route", () => {
     expect(body.message).toMatch(/unknown heroId: tris/)
   })
 
+  it("rejects explicit null hero ids", async () => {
+    setNodeEnv("development")
+    const req = new Request("http://localhost/api/dev/animation-tool/rebuild-megasheet", {
+      method: "POST",
+      body: JSON.stringify({ heroId: null }),
+      headers: { "content-type": "application/json" },
+    })
+
+    const res = await POST(req)
+
+    expect(res.status).toBe(400)
+    const body = (await res.json()) as { code: string; message: string }
+    expect(body.code).toBe("validation_failed")
+    expect(body.message).toMatch(/unknown heroId: null/)
+  })
+
   it("rebuilds the selected Triss megasheet", async () => {
     setNodeEnv("development")
     const before = await stat(trissMegasheetPath)
