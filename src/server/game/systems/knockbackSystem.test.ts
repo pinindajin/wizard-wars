@@ -28,6 +28,7 @@ import { knockbackSystem } from "./knockbackSystem"
 
 const ARENA_BOUNDS = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
 const REPRESENTATIVE_BLOCKER_MIN_AREA_PX = 1_000
+const UPPER_LEFT_LAVA_POINT = { x: 264, y: 108 } as const
 
 function addGroundedPlayerWithKnockback(
   x: number,
@@ -92,10 +93,10 @@ function sampleUpperKnockbackCase(): {
 
 function sampleLavaRect(): ArenaPropColliderRect {
   const lava = ARENA_LAVA_COLLIDERS.find((rect) =>
-    rect.x <= 132 &&
-    rect.x + rect.width >= 132 &&
-    rect.y <= 54 &&
-    rect.y + rect.height >= 54,
+    rect.x <= UPPER_LEFT_LAVA_POINT.x &&
+    rect.x + rect.width >= UPPER_LEFT_LAVA_POINT.x &&
+    rect.y <= UPPER_LEFT_LAVA_POINT.y &&
+    rect.y + rect.height >= UPPER_LEFT_LAVA_POINT.y,
   )
   if (!lava) throw new Error("Expected native lava at the upper-left platform edge")
   return lava
@@ -155,8 +156,8 @@ describe("knockbackSystem", () => {
     addComponent(world, eid, Knockback)
 
     sampleLavaRect()
-    Position.x[eid] = 132
-    Position.y[eid] = 54
+    Position.x[eid] = UPPER_LEFT_LAVA_POINT.x
+    Position.y[eid] = UPPER_LEFT_LAVA_POINT.y
     TerrainState.kind[eid] = TERRAIN_KIND.lava
     Knockback.impulseX[eid] = 0
     Knockback.impulseY[eid] = 1
