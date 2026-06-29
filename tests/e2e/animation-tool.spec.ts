@@ -1,4 +1,5 @@
-import { test, expect } from "@playwright/test"
+import { test, expect, type Page } from "@playwright/test"
+import sharp from "sharp"
 
 /**
  * Dev animation tool: SFX waveform uses arena-pack URLs; Jump uses jump strips; Walk shows cadence markers.
@@ -16,6 +17,59 @@ async function gotoTool(page: import("@playwright/test").Page): Promise<void> {
   await expect(page.getByRole("heading", { name: /animation timing tool/i })).toBeVisible({
     timeout: 30_000,
   })
+}
+
+async function makeStripUpload(frameCount: number, name: string): Promise<{
+  name: string
+  mimeType: string
+  buffer: Buffer
+}> {
+  const buffer = await sharp({
+    create: {
+      width: frameCount * 124,
+      height: 124,
+      channels: 4,
+      background: { r: 224, g: 80, b: 80, alpha: 1 },
+    },
+  })
+    .png()
+    .toBuffer()
+
+  return { name, mimeType: "image/png", buffer }
+}
+
+async function mockAnimationToolChangeApis(page: Page): Promise<{
+  replaceBodies: string[]
+  rebuildHeroIds: string[]
+}> {
+  const replaceBodies: string[] = []
+  const rebuildHeroIds: string[] = []
+
+  await page.route("**/api/dev/animation-tool/replace-sheet", async (route) => {
+    replaceBodies.push(route.request().postDataBuffer()?.toString("utf8") ?? "")
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ok: true, version: `e2e-${replaceBodies.length}` }),
+    })
+  })
+
+  await page.route("**/api/dev/animation-tool/rebuild-megasheet", async (route) => {
+    const body = route.request().postDataJSON() as { heroId?: string }
+    rebuildHeroIds.push(body.heroId ?? "yen")
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ok: true, rebuiltAt: new Date(0).toISOString(), durationMs: 1 }),
+    })
+  })
+
+  return { replaceBodies, rebuildHeroIds }
+}
+
+function expectMultipartField(body: string, name: string, value: string): void {
+  expect(body).toContain(`name="${name}"`)
+  expect(body).toContain(`\r\n\r\n${value}\r\n`)
 }
 
 /** `data-testid` values for `getAnimationToolActions("yen")` action chips (see `AnimationToolClient`). */
@@ -258,6 +312,45 @@ test.describe("animation tool dev route", () => {
       await expect(rebuild).toBeVisible()
       await expect(rebuild).toBeEnabled()
       await expect(rebuild).toHaveText(/Rebuild megasheet/i)
+    })
+
+    test("replace and rebuild workflow is scoped independently for Yen and Triss", async ({
+      page,
+    }) => {
+      const api = await mockAnimationToolChangeApis(page)
+
+      await gotoTool(page)
+      await page.getByTestId("animation-tool-action-primary-yen_cleaver").click()
+      await page
+        .getByTestId("animation-tool-preview-south")
+        .locator('input[type="file"]')
+        .setInputFiles(await makeStripUpload(7, "yen-cleaver-south.png"))
+      await expect.poll(() => api.replaceBodies.length).toBe(1)
+      expectMultipartField(api.replaceBodies[0]!, "heroId", "yen")
+      expectMultipartField(api.replaceBodies[0]!, "atlasClipId", "summoned-axe-attack")
+      expectMultipartField(api.replaceBodies[0]!, "direction", "south")
+      await expect(page.getByTestId("animation-tool-megasheet-stale")).toHaveText(/stale \(1\)/i)
+
+      await page.getByTestId("animation-tool-hero-triss").click()
+      await page.getByTestId("animation-tool-action-primary-triss_big_blast").click()
+      await page
+        .getByTestId("animation-tool-preview-south")
+        .locator('input[type="file"]')
+        .setInputFiles(await makeStripUpload(17, "triss-big-blast-south.png"))
+      await expect.poll(() => api.replaceBodies.length).toBe(2)
+      expectMultipartField(api.replaceBodies[1]!, "heroId", "triss")
+      expectMultipartField(api.replaceBodies[1]!, "atlasClipId", "big-blast")
+      expectMultipartField(api.replaceBodies[1]!, "direction", "south")
+      await expect(page.getByTestId("animation-tool-megasheet-stale")).toHaveText(/stale \(1\)/i)
+
+      await page.getByTestId("animation-tool-hero-yen").click()
+      await expect(page.getByTestId("animation-tool-megasheet-stale")).toHaveText(/stale \(1\)/i)
+      await page.getByTestId("animation-tool-rebuild-megasheet").click()
+      await expect.poll(() => api.rebuildHeroIds).toEqual(["yen"])
+      await expect(page.getByTestId("animation-tool-megasheet-stale")).toHaveCount(0)
+
+      await page.getByTestId("animation-tool-hero-triss").click()
+      await expect(page.getByTestId("animation-tool-megasheet-stale")).toHaveText(/stale \(1\)/i)
     })
   })
 })
