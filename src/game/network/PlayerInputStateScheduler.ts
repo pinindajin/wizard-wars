@@ -1,7 +1,7 @@
 import {
+  MAX_PLAYER_INPUT_COMMAND_RUNS_PER_BATCH,
   MAX_PLAYER_INPUT_COMMAND_RUN_SPAN_TICKS,
   encodePlayerInputStateRun,
-  playerInputButtonsFromPayload,
 } from "@/shared/playerInputState"
 import type {
   PlayerInputCommandRunPayload,
@@ -25,7 +25,7 @@ export class PlayerInputStateScheduler {
   private lastSentAtMs: number | null = null
   private lastSentButtons: number | null = null
   private lastSentTarget: { readonly x: number; readonly y: number } | null = null
-  private pendingRun: PlayerInputCommandRunPayload | null = null
+  private pendingRuns: PlayerInputCommandRunPayload[] = []
   private activeHeartbeatMs: number
   private idleHeartbeatMs: number
 
@@ -51,7 +51,7 @@ export class PlayerInputStateScheduler {
     this.lastSentAtMs = null
     this.lastSentButtons = null
     this.lastSentTarget = null
-    this.pendingRun = null
+    this.pendingRuns = []
   }
 
   /**
@@ -65,36 +65,45 @@ export class PlayerInputStateScheduler {
     input: PlayerInputPayload,
     nowMs: number,
   ): PlayerInputStatePayload | null {
-    const buttons = playerInputButtonsFromPayload(input)
     const edge = input.abilitySlot !== null || input.useQuickItemSlot !== null
-    const active = buttons !== 0 || edge
-    const heartbeatMs = active ? this.activeHeartbeatMs : this.idleHeartbeatMs
+    const currentRun = encodePlayerInputStateRun(input)
+    let forceFlush = false
+
+    const pendingRun = this.pendingRuns[this.pendingRuns.length - 1]
+    if (pendingRun === undefined) {
+      this.pendingRuns.push(currentRun)
+      forceFlush = edge || this.hasButtonStateChangedSinceLastSent(currentRun)
+    } else if (canExtendRun(pendingRun, currentRun)) {
+      this.pendingRuns[this.pendingRuns.length - 1] = {
+        ...pendingRun,
+        toSeq: input.seq,
+      }
+    } else {
+      if (isNoOpIdleRun(pendingRun, this.lastSentTarget)) this.pendingRuns.pop()
+      this.pendingRuns.push(currentRun)
+      forceFlush = edge || this.hasButtonStateChangedSinceLastSent(currentRun)
+    }
+
+    const latestPendingRun = this.pendingRuns[this.pendingRuns.length - 1]
+    if (latestPendingRun === undefined) return null
+    const pendingSpan =
+      latestPendingRun.toSeq - latestPendingRun.fromSeq + 1
+    const runFull = pendingSpan >= MAX_PLAYER_INPUT_COMMAND_RUN_SPAN_TICKS
+    const batchFull =
+      this.pendingRuns.length >= MAX_PLAYER_INPUT_COMMAND_RUNS_PER_BATCH
+    const heartbeatMs = this.pendingRuns.some((run) =>
+      this.needsActiveHeartbeat(run),
+    )
+      ? this.activeHeartbeatMs
+      : this.idleHeartbeatMs
     const due =
       this.lastSentAtMs === null ||
       nowMs - this.lastSentAtMs >= heartbeatMs - Number.EPSILON
-    const currentRun = encodePlayerInputStateRun(input)
-    const runs: PlayerInputCommandRunPayload[] = []
-    let forceFlush = false
 
-    if (this.pendingRun === null) {
-      this.pendingRun = currentRun
-      forceFlush = this.hasChangedSinceLastSent(currentRun)
-    } else if (canExtendRun(this.pendingRun, currentRun)) {
-      this.pendingRun = { ...this.pendingRun, toSeq: input.seq }
-    } else {
-      if (!isNoOpIdleRun(this.pendingRun)) runs.push(this.pendingRun)
-      this.pendingRun = currentRun
-      forceFlush = true
-    }
+    if (!forceFlush && !edge && !due && !runFull && !batchFull) return null
 
-    const pendingSpan =
-      this.pendingRun.toSeq - this.pendingRun.fromSeq + 1
-    const runFull = pendingSpan >= MAX_PLAYER_INPUT_COMMAND_RUN_SPAN_TICKS
-
-    if (!forceFlush && !edge && !due && !runFull) return null
-
-    runs.push(this.pendingRun)
-    this.pendingRun = null
+    const runs = this.pendingRuns
+    this.pendingRuns = []
     this.lastSentAtMs = nowMs
     const lastRun = runs[runs.length - 1]
     this.lastSentButtons = lastRun.buttons
@@ -103,17 +112,31 @@ export class PlayerInputStateScheduler {
   }
 
   /**
-   * Returns whether a fresh pending run differs from the last flushed command.
+   * Returns whether a fresh pending run changes the last flushed button state.
    *
    * @param run - Singleton run for the newest tick.
    * @returns True when the command state should be sent immediately.
    */
-  private hasChangedSinceLastSent(run: PlayerInputCommandRunPayload): boolean {
+  private hasButtonStateChangedSinceLastSent(
+    run: PlayerInputCommandRunPayload,
+  ): boolean {
+    return this.lastSentButtons !== null && run.buttons !== this.lastSentButtons
+  }
+
+  /**
+   * Returns whether a run should be sent on the active compact heartbeat cadence.
+   *
+   * @param run - Pending compact run.
+   * @returns True for held buttons, edges, or target updates.
+   */
+  private needsActiveHeartbeat(run: PlayerInputCommandRunPayload): boolean {
     return (
-      this.lastSentButtons !== null &&
-      (run.buttons !== this.lastSentButtons ||
-        run.targetX !== this.lastSentTarget?.x ||
-        run.targetY !== this.lastSentTarget?.y)
+      run.buttons !== 0 ||
+      run.abilitySlot !== undefined ||
+      run.useQuickItemSlot !== undefined ||
+      (this.lastSentTarget !== null &&
+        (run.targetX !== this.lastSentTarget.x ||
+          run.targetY !== this.lastSentTarget.y))
     )
   }
 }
@@ -148,11 +171,17 @@ function canExtendRun(
  * @param run - Compact command run to inspect.
  * @returns True when the run only repeats idle/no-edge state.
  */
-function isNoOpIdleRun(run: PlayerInputCommandRunPayload): boolean {
+function isNoOpIdleRun(
+  run: PlayerInputCommandRunPayload,
+  lastSentTarget: { readonly x: number; readonly y: number } | null,
+): boolean {
   return (
     run.buttons === 0 &&
     run.abilitySlot === undefined &&
-    run.useQuickItemSlot === undefined
+    run.useQuickItemSlot === undefined &&
+    lastSentTarget !== null &&
+    run.targetX === lastSentTarget.x &&
+    run.targetY === lastSentTarget.y
   )
 }
 

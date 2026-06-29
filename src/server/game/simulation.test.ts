@@ -608,7 +608,7 @@ describe("movement system", () => {
     const initialSeq = ackSeqFromOutput(sim, initial)
     const retainedAckSeqs: number[] = []
 
-    for (let tick = 1; tick <= 5; tick++) {
+    for (let tick = 1; tick <= 6; tick++) {
       const output = sim.tick(new Map(), Date.now() + tick * 17)
       const seq = ackSeqFromOutput(sim, output)
       if (seq !== undefined) retainedAckSeqs.push(seq)
@@ -623,7 +623,7 @@ describe("movement system", () => {
       targetX: 0,
       targetY: 0,
     })
-    const heartbeat = sim.tick(new Map([["user1", queue]]), Date.now() + 6 * 17)
+    const heartbeat = sim.tick(new Map([["user1", queue]]), Date.now() + 7 * 17)
     const heartbeatSeq = ackSeqFromOutput(sim, heartbeat)
     const heartbeatAck =
       heartbeatSeq === undefined

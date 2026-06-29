@@ -179,12 +179,24 @@ describe("PlayerInputStateScheduler", () => {
     expect(sent).toEqual([0, 6, 12])
   })
 
-  it("sends idle weapon target changes as command runs without waiting for idle heartbeat", () => {
+  it("batches target-only changes until the active heartbeat", () => {
     const scheduler = new PlayerInputStateScheduler()
 
     expect(lastCoveredSeq(scheduler.maybeBuildState(input(0), 0)!)).toBe(0)
 
-    const aim = scheduler.maybeBuildState(input(1, { weaponTargetX: 160 }), 50)
+    for (let seq = 1; seq <= 5; seq++) {
+      expect(
+        scheduler.maybeBuildState(
+          input(seq, { weaponTargetX: 100 + seq * 10 }),
+          seq * 1000 / 60,
+        ),
+      ).toBeNull()
+    }
+
+    const aim = scheduler.maybeBuildState(
+      input(6, { weaponTargetX: 160 }),
+      100,
+    )
 
     expect(aim).toEqual({
       protocolVersion: 2,
@@ -194,31 +206,48 @@ describe("PlayerInputStateScheduler", () => {
           toSeq: 1,
           clientSendTimeMs: 16.6667,
           buttons: 0,
-          targetX: 160,
+          targetX: 110,
           targetY: 200,
         },
-      ],
-    })
-
-    expect(
-      scheduler.maybeBuildState(input(2, { weaponTargetX: 160 }), 100),
-    ).toBeNull()
-
-    const verticalAim = scheduler.maybeBuildState(
-      input(3, { weaponTargetX: 160, weaponTargetY: 260 }),
-      150,
-    )
-
-    expect(verticalAim).toEqual({
-      protocolVersion: 2,
-      runs: [
+        {
+          fromSeq: 2,
+          toSeq: 2,
+          clientSendTimeMs: 33.3334,
+          buttons: 0,
+          targetX: 120,
+          targetY: 200,
+        },
         {
           fromSeq: 3,
           toSeq: 3,
           clientSendTimeMs: 50.000099999999996,
           buttons: 0,
+          targetX: 130,
+          targetY: 200,
+        },
+        {
+          fromSeq: 4,
+          toSeq: 4,
+          clientSendTimeMs: 66.6668,
+          buttons: 0,
+          targetX: 140,
+          targetY: 200,
+        },
+        {
+          fromSeq: 5,
+          toSeq: 5,
+          clientSendTimeMs: 83.33349999999999,
+          buttons: 0,
+          targetX: 150,
+          targetY: 200,
+        },
+        {
+          fromSeq: 6,
+          toSeq: 6,
+          clientSendTimeMs: 100.00019999999999,
+          buttons: 0,
           targetX: 160,
-          targetY: 260,
+          targetY: 200,
         },
       ],
     })

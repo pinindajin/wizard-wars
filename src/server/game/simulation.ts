@@ -352,6 +352,31 @@ function clearRetainedPlayerInput(eid: number): void {
   PlayerInput.seq[eid] = 0
 }
 
+/**
+ * Restores held component state that was suppressed for one ACK-only tick.
+ *
+ * @param eid - Player entity id.
+ * @param input - Retained held input snapshot to restore for future ticks.
+ */
+function restoreRetainedPlayerInput(
+  eid: number,
+  input: PlayerInputPayload,
+): void {
+  PlayerInput.up[eid] = input.up ? 1 : 0
+  PlayerInput.down[eid] = input.down ? 1 : 0
+  PlayerInput.left[eid] = input.left ? 1 : 0
+  PlayerInput.right[eid] = input.right ? 1 : 0
+  PlayerInput.weaponPrimary[eid] = input.weaponPrimary ? 1 : 0
+  PlayerInput.weaponSecondary[eid] = input.weaponSecondary ? 1 : 0
+  PlayerInput.abilitySlot[eid] = -1
+  PlayerInput.abilityTargetX[eid] = input.abilityTargetX
+  PlayerInput.abilityTargetY[eid] = input.abilityTargetY
+  PlayerInput.weaponTargetX[eid] = input.weaponTargetX
+  PlayerInput.weaponTargetY[eid] = input.weaponTargetY
+  PlayerInput.useQuickItemSlot[eid] = -1
+  PlayerInput.seq[eid] = input.seq
+}
+
 // ─── SimCtx ───────────────────────────────────────────────────────────────
 
 /**
@@ -384,6 +409,11 @@ export type SimCtx = {
   homingOrbCastTargetPlayerMap: Map<number, string>
 
   inputMap: Map<string, PlayerInputPayload>
+  /**
+   * Tick-local retained inputs whose already-simulated command seqs are being
+   * ACKed without applying one extra retained movement/action tick.
+   */
+  suppressedRetainedInputsByPlayer?: Map<string, PlayerInputPayload>
   /**
    * Freshest currently queued weapon aim per player. This lets primary melee
    * snapshot direction from the latest received cursor while movement, casts,
@@ -481,6 +511,7 @@ export type SimOutput = {
 
 type SimScratch = {
   readonly inputMap: Map<string, PlayerInputPayload>
+  readonly suppressedRetainedInputsByPlayer: Map<string, PlayerInputPayload>
   readonly freshestWeaponAimByPlayer: Map<string, FreshestWeaponAim>
   readonly damageRequests: DamageRequest[]
   readonly deathEvents: DeathEvent[]
@@ -533,6 +564,7 @@ function createSimScratch(): SimScratch {
 
   return {
     inputMap: new Map(),
+    suppressedRetainedInputsByPlayer: new Map(),
     freshestWeaponAimByPlayer: new Map(),
     damageRequests: [],
     deathEvents: [],
@@ -586,6 +618,7 @@ function createSimScratch(): SimScratch {
  */
 function resetScratchForTick(scratch: SimScratch): void {
   scratch.inputMap.clear()
+  scratch.suppressedRetainedInputsByPlayer.clear()
   scratch.freshestWeaponAimByPlayer.clear()
   scratch.damageRequests.length = 0
   scratch.deathEvents.length = 0
@@ -712,6 +745,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     homingOrbTargetPlayerMap,
     homingOrbCastTargetPlayerMap,
     inputMap: scratch.inputMap,
+    suppressedRetainedInputsByPlayer: scratch.suppressedRetainedInputsByPlayer,
     freshestWeaponAimByPlayer: scratch.freshestWeaponAimByPlayer,
     lastProcessedInputSeqByPlayer,
     commandBuffer,
@@ -1115,6 +1149,8 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     resetDamageablePlayerTargetCaches(ctx)
 
     const inputMap = scratch.inputMap
+    const suppressedRetainedInputsByPlayer =
+      scratch.suppressedRetainedInputsByPlayer
     const freshestWeaponAimByPlayer = scratch.freshestWeaponAimByPlayer
     for (const [userId, queue] of perPlayerInputs) {
       let lastSeq = lastProcessedInputSeqByPlayer.get(userId) ?? 0
@@ -1135,10 +1171,8 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
         let skipped = 0
         while (retainedInput !== null && skipped < retainedTicks) {
           const candidate = queue.peek()
-          const following = queue.peek(1)
           if (
             candidate === undefined ||
-            following === undefined ||
             !canCoalesceHeldInput(retainedInput, candidate)
           ) {
             break
@@ -1148,8 +1182,19 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
           skipped += 1
         }
         if (skipped > 0) {
+          const remainingRetainedTicks = retainedTicks - skipped
           lastProcessedInputSeqByPlayer.set(userId, lastSeq)
-          retainedHeldTicksByPlayer.set(userId, retainedTicks - skipped)
+          if (remainingRetainedTicks > 0) {
+            retainedHeldTicksByPlayer.set(userId, remainingRetainedTicks)
+          } else {
+            retainedHeldTicksByPlayer.delete(userId)
+            if (retainedInput !== null && queue.peek() === undefined) {
+              suppressedRetainedInputsByPlayer.set(
+                userId,
+                heldInputForVirtualAck(retainedInput, lastSeq, serverTimeMs),
+              )
+            }
+          }
         }
         if (skipped === 0 && retainedInput === null) {
           retainedHeldTicksByPlayer.delete(userId)
@@ -1211,6 +1256,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
 
     for (const userId of playerEntityMap.keys()) {
       if (inputMap.has(userId)) continue
+      if (suppressedRetainedInputsByPlayer.has(userId)) continue
       const lastInputTick = lastInputTickByPlayer.get(userId) ?? currentTick
       if (currentTick - lastInputTick <= HELD_INPUT_STALE_TICKS) {
         const eid = playerEntityMap.get(userId)
@@ -1273,6 +1319,11 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     worldCollisionSystem(ctx)
     playerDeltaSystem(ctx)
     projectileDeltaSystem(ctx)
+
+    for (const [userId, input] of suppressedRetainedInputsByPlayer) {
+      const eid = playerEntityMap.get(userId)
+      if (eid !== undefined) restoreRetainedPlayerInput(eid, input)
+    }
 
     if (ctx.matchEnded) {
       hostEndSignal = false
