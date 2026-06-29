@@ -70,6 +70,7 @@ describe("asset pack URLs are absolute", () => {
     expect(urls).toContain(
       "/assets/sprites/heroes/lady-wizard/sheets/lady-wizard-megasheet.png",
     )
+    expect(urls).toContain("/assets/sprites/heroes/triss/sheets/triss-megasheet.png")
     expect(urls).toContain("/assets/sprites/abilities/fireball-fly.png")
     expect(urls).toContain("/assets/sprites/abilities/homing-orb-fly.png")
     expect(urls).toContain("/assets/sprites/abilities/fireball-channel.png")
@@ -108,6 +109,27 @@ describe("asset pack URLs are absolute", () => {
     expect(flyMeta.width! / fly.frameConfig!.frameWidth).toBe(5)
     expect(homingMeta.width! / homing.frameConfig!.frameWidth).toBe(5)
     expect(channelMeta.width! / channel.frameConfig!.frameWidth).toBe(8)
+  })
+
+  it("hero sheet metadata matches Phaser frame configs", async () => {
+    const files = (arenaPack as { arena: { files: PackFile[] } }).arena.files
+    const yen = packFileForKey(files, "lady-wizard")
+    const triss = packFileForKey(files, "triss")
+
+    expect(yen.frameConfig).toEqual({ frameWidth: 124, frameHeight: 124 })
+    expect(triss.frameConfig).toEqual({ frameWidth: 124, frameHeight: 124 })
+
+    const yenMeta = await sharp("public/assets/sprites/heroes/lady-wizard/sheets/lady-wizard-megasheet.png").metadata()
+    const trissMeta = await sharp("public/assets/sprites/heroes/triss/sheets/triss-megasheet.png").metadata()
+
+    expect({ width: yenMeta.width, height: yenMeta.height }).toEqual({
+      width: 111 * 124,
+      height: 8 * 124,
+    })
+    expect({ width: trissMeta.width, height: trissMeta.height }).toEqual({
+      width: 120 * 124,
+      height: 8 * 124,
+    })
   })
 
   it("arena pack exposes prop sprites for Phaser Editor visual placement", () => {

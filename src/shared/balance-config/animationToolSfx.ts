@@ -1,7 +1,7 @@
 import { ABILITY_CONFIGS } from "./abilities"
 import { SFX_KEYS } from "./audio"
 import { PRIMARY_MELEE_ATTACK_CONFIGS, type PrimaryMeleeAttackId } from "./equipment"
-import { HERO_CONFIGS } from "./heroes"
+import { HERO_CONFIGS, type HeroId } from "./heroes"
 import type { AnimationActionId } from "./animationConfig"
 import { primaryAttackActionId } from "./animationConfig"
 
@@ -15,7 +15,7 @@ import { primaryAttackActionId } from "./animationConfig"
  * @returns Phaser SFX key string, or `null` if unmapped / unknown hero / mismatched primary id.
  */
 export function resolveSfxKeyForAction(heroId: string, actionId: AnimationActionId): string | null {
-  const hero = HERO_CONFIGS[heroId]
+  const hero = HERO_CONFIGS[heroId as HeroId]
   if (!hero) return null
 
   if (actionId.startsWith("spell:")) {

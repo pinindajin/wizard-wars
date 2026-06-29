@@ -18,15 +18,26 @@ async function gotoTool(page: import("@playwright/test").Page): Promise<void> {
   })
 }
 
-/** `data-testid` values for `getAnimationToolActions("red_wizard")` action chips (see `AnimationToolClient`). */
-const RED_WIZARD_ACTION_TEST_IDS = [
+/** `data-testid` values for `getAnimationToolActions("yen")` action chips (see `AnimationToolClient`). */
+const YEN_ACTION_TEST_IDS = [
   "animation-tool-action-idle",
   "animation-tool-action-walk",
   "animation-tool-action-death",
   "animation-tool-action-spell-fireball",
   "animation-tool-action-spell-jump",
   "animation-tool-action-spell-lightning_bolt",
-  "animation-tool-action-primary-red_wizard_cleaver",
+  "animation-tool-action-primary-yen_cleaver",
+] as const
+
+/** `data-testid` values for `getAnimationToolActions("triss")` action chips (see `AnimationToolClient`). */
+const TRISS_ACTION_TEST_IDS = [
+  "animation-tool-action-idle",
+  "animation-tool-action-walk",
+  "animation-tool-action-death",
+  "animation-tool-action-spell-fireball",
+  "animation-tool-action-spell-jump",
+  "animation-tool-action-spell-lightning_bolt",
+  "animation-tool-action-primary-triss_big_blast",
 ] as const
 
 test.describe("animation tool dev route", () => {
@@ -48,10 +59,23 @@ test.describe("animation tool dev route", () => {
         r.ok(),
     )
     await gotoTool(page)
-    await page.getByTestId("animation-tool-action-primary-red_wizard_cleaver").click()
+    await page.getByTestId("animation-tool-action-primary-yen_cleaver").click()
     await pngOk
     await waitForWaveformInteractive(page)
   })
+
+  test("Triss big blast: waveform decodes and primary strip loads", async ({ page }) => {
+    const pngOk = page.waitForResponse(
+      (r) =>
+        r.url().includes("/assets/sprites/heroes/triss/sheets/big-blast-south.png") && r.ok(),
+    )
+    await gotoTool(page)
+    await page.getByTestId("animation-tool-hero-triss").click()
+    await page.getByTestId("animation-tool-action-primary-triss_big_blast").click()
+    await pngOk
+    await waitForWaveformInteractive(page)
+  })
+
 
   test("jump: loads jump strip (not heavy spell cast) and waveform decodes", async ({ page }) => {
     const jumpSouth = page.waitForResponse(
@@ -99,20 +123,31 @@ test.describe("animation tool dev route", () => {
       }
     })
 
-    test("hero chips switch selection and shared-art banner stays visible", async ({ page }) => {
+    test("hero chips switch selection and scoped-art banner stays visible", async ({ page }) => {
       await gotoTool(page)
-      await expect(page.getByTestId("animation-tool-shared-art-banner")).toBeVisible()
-      await page.getByTestId("animation-tool-hero-barbarian").click()
-      await expect(page.getByTestId("animation-tool-hero-barbarian")).toHaveAttribute("aria-pressed", "true")
-      await page.getByTestId("animation-tool-hero-ranger").click()
-      await expect(page.getByTestId("animation-tool-hero-ranger")).toHaveAttribute("aria-pressed", "true")
-      await page.getByTestId("animation-tool-hero-red_wizard").click()
-      await expect(page.getByTestId("animation-tool-hero-red_wizard")).toHaveAttribute("aria-pressed", "true")
+      await expect(page.getByTestId("animation-tool-hero-art-banner")).toBeVisible()
+      await expect(page.getByTestId("animation-tool-hero-barbarian")).toHaveCount(0)
+      await expect(page.getByTestId("animation-tool-hero-ranger")).toHaveCount(0)
+      await expect(page.getByTestId("animation-tool-hero-red_wizard")).toHaveCount(0)
+      await page.getByTestId("animation-tool-hero-triss").click()
+      await expect(page.getByTestId("animation-tool-hero-triss")).toHaveAttribute("aria-pressed", "true")
+      await page.getByTestId("animation-tool-hero-yen").click()
+      await expect(page.getByTestId("animation-tool-hero-yen")).toHaveAttribute("aria-pressed", "true")
     })
 
-    test("every red wizard action loads south preview without atlas failure", async ({ page }) => {
+    test("every Yen action loads south preview without atlas failure", async ({ page }) => {
       await gotoTool(page)
-      for (const testId of RED_WIZARD_ACTION_TEST_IDS) {
+      for (const testId of YEN_ACTION_TEST_IDS) {
+        await page.getByTestId(testId).click()
+        await expect(page.getByTestId("animation-tool-preview-south")).toBeVisible({ timeout: 45_000 })
+        await expect(page.getByText(/^Failed to load atlas:/)).toHaveCount(0)
+      }
+    })
+
+    test("every Triss action loads south preview without atlas failure", async ({ page }) => {
+      await gotoTool(page)
+      await page.getByTestId("animation-tool-hero-triss").click()
+      for (const testId of TRISS_ACTION_TEST_IDS) {
         await page.getByTestId(testId).click()
         await expect(page.getByTestId("animation-tool-preview-south")).toBeVisible({ timeout: 45_000 })
         await expect(page.getByText(/^Failed to load atlas:/)).toHaveCount(0)
@@ -185,7 +220,7 @@ test.describe("animation tool dev route", () => {
 
     test("cleaver: timing panel dangerous window fields accept edits", async ({ page }) => {
       await gotoTool(page)
-      await page.getByTestId("animation-tool-action-primary-red_wizard_cleaver").click()
+      await page.getByTestId("animation-tool-action-primary-yen_cleaver").click()
       await page.getByTestId("animation-tool-section-toggle-timing").click()
       await page.getByTestId("animation-tool-section-toggle-timing").click()
       const start = page.getByLabel(/Dangerous start/i)

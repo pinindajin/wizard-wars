@@ -6,7 +6,7 @@ import type { PlayerDeathPayload } from "@/shared/types"
 describe("killFeedAbilityLabel", () => {
   it("maps known abilities", () => {
     expect(killFeedAbilityLabel("fireball")).toBe("Fireball")
-    expect(killFeedAbilityLabel("red_wizard_cleaver")).toBe("Red Wizard Cleaver")
+    expect(killFeedAbilityLabel("yen_cleaver")).toBe("Yen Cleaver")
   })
 
   it("handles null", () => {

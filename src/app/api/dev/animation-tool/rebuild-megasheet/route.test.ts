@@ -10,6 +10,10 @@ const megasheetPath = join(
   cwd,
   "public/assets/sprites/heroes/lady-wizard/sheets/lady-wizard-megasheet.png",
 )
+const trissMegasheetPath = join(
+  cwd,
+  "public/assets/sprites/heroes/triss/sheets/triss-megasheet.png",
+)
 
 const originalNodeEnv = process.env.NODE_ENV
 
@@ -44,6 +48,26 @@ describe("animation tool rebuild-megasheet route", () => {
     expect(body.ok).toBe(true)
     expect(typeof body.durationMs).toBe("number")
     const after = await stat(megasheetPath)
+    expect(after.mtimeMs).toBeGreaterThanOrEqual(before.mtimeMs)
+  })
+
+  it("rebuilds the selected Triss megasheet", async () => {
+    setNodeEnv("development")
+    const before = await stat(trissMegasheetPath)
+    await new Promise((r) => setTimeout(r, 5))
+    const req = new Request("http://localhost/api/dev/animation-tool/rebuild-megasheet", {
+      method: "POST",
+      body: JSON.stringify({ heroId: "triss" }),
+      headers: { "content-type": "application/json" },
+    })
+    const res = await POST(req)
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { ok: boolean; outputPath: string; width: number; height: number }
+    expect(body.ok).toBe(true)
+    expect(body.outputPath).toContain("triss-megasheet.png")
+    expect(body.width).toBe(14880)
+    expect(body.height).toBe(992)
+    const after = await stat(trissMegasheetPath)
     expect(after.mtimeMs).toBeGreaterThanOrEqual(before.mtimeMs)
   })
 })

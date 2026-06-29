@@ -28,7 +28,7 @@ describe("animation config", () => {
 
   it("rejects direction-specific timing keys", () => {
     const bad = structuredClone(ANIMATION_CONFIG)
-    bad.heroes.red_wizard.actions["idle:south"] = {
+    bad.heroes.yen.actions["idle:south"] = {
       type: "behavior",
       durationMs: 999,
     }
@@ -37,7 +37,7 @@ describe("animation config", () => {
 
   it("rejects invalid spell and dangerous timing", () => {
     const badSpell = structuredClone(ANIMATION_CONFIG)
-    badSpell.heroes.red_wizard.actions["spell:fireball"] = {
+    badSpell.heroes.yen.actions["spell:fireball"] = {
       type: "spell",
       durationMs: 500,
       effectTiming: "during",
@@ -46,7 +46,7 @@ describe("animation config", () => {
     expect(animationConfigSchema.safeParse(badSpell).success).toBe(false)
 
     const badAttack = structuredClone(ANIMATION_CONFIG)
-    badAttack.heroes.red_wizard.actions["primary:red_wizard_cleaver"] = {
+    badAttack.heroes.yen.actions["primary:yen_cleaver"] = {
       type: "primaryAttack",
       durationMs: 100,
       dangerousWindowStartMs: 90,
@@ -57,7 +57,7 @@ describe("animation config", () => {
 
   it("accepts before spell timing without an effect ms", () => {
     const before = structuredClone(ANIMATION_CONFIG)
-    before.heroes.red_wizard.actions["spell:fireball"] = {
+    before.heroes.yen.actions["spell:fireball"] = {
       type: "spell",
       durationMs: 500,
       effectTiming: "before",
@@ -67,7 +67,7 @@ describe("animation config", () => {
 
   it("rejects missing during ms, before/after ms, and overlong dangerous windows", () => {
     const missingDuring = structuredClone(ANIMATION_CONFIG)
-    missingDuring.heroes.red_wizard.actions["spell:fireball"] = {
+    missingDuring.heroes.yen.actions["spell:fireball"] = {
       type: "spell",
       durationMs: 500,
       effectTiming: "during",
@@ -75,7 +75,7 @@ describe("animation config", () => {
     expect(animationConfigSchema.safeParse(missingDuring).success).toBe(false)
 
     const afterWithMs = structuredClone(ANIMATION_CONFIG)
-    afterWithMs.heroes.red_wizard.actions["spell:fireball"] = {
+    afterWithMs.heroes.yen.actions["spell:fireball"] = {
       type: "spell",
       durationMs: 500,
       effectTiming: "after",
@@ -84,7 +84,7 @@ describe("animation config", () => {
     expect(animationConfigSchema.safeParse(afterWithMs).success).toBe(false)
 
     const beforeWithMs = structuredClone(ANIMATION_CONFIG)
-    beforeWithMs.heroes.red_wizard.actions["spell:fireball"] = {
+    beforeWithMs.heroes.yen.actions["spell:fireball"] = {
       type: "spell",
       durationMs: 500,
       effectTiming: "before",
@@ -93,7 +93,7 @@ describe("animation config", () => {
     expect(animationConfigSchema.safeParse(beforeWithMs).success).toBe(false)
 
     const tooLongAttack = structuredClone(ANIMATION_CONFIG)
-    tooLongAttack.heroes.red_wizard.actions["primary:red_wizard_cleaver"] = {
+    tooLongAttack.heroes.yen.actions["primary:yen_cleaver"] = {
       type: "primaryAttack",
       durationMs: 100,
       dangerousWindowStartMs: 50,
@@ -108,11 +108,11 @@ describe("animation config", () => {
     expect(animationConfigSchema.safeParse(unknownHero).success).toBe(false)
 
     const missingHero = structuredClone(ANIMATION_CONFIG)
-    delete missingHero.heroes.ranger
+    delete missingHero.heroes.triss
     expect(animationConfigSchema.safeParse(missingHero).success).toBe(false)
 
     const missingAction = structuredClone(ANIMATION_CONFIG)
-    delete missingAction.heroes.red_wizard.actions.walk
+    delete missingAction.heroes.yen.actions.walk
     expect(animationConfigSchema.safeParse(missingAction).success).toBe(false)
   })
 
@@ -128,7 +128,7 @@ describe("animation config", () => {
 
   it("rejects frameDurationsMs when length mismatches clip frame count", () => {
     const bad = structuredClone(ANIMATION_CONFIG)
-    bad.heroes.red_wizard.actions["primary:red_wizard_cleaver"] = {
+    bad.heroes.yen.actions["primary:yen_cleaver"] = {
       type: "primaryAttack",
       durationMs: 570,
       dangerousWindowStartMs: 300,
@@ -140,7 +140,7 @@ describe("animation config", () => {
 
   it("rejects frameDurationsMs when sum does not match durationMs", () => {
     const bad = structuredClone(ANIMATION_CONFIG)
-    bad.heroes.red_wizard.actions["primary:red_wizard_cleaver"] = {
+    bad.heroes.yen.actions["primary:yen_cleaver"] = {
       type: "primaryAttack",
       durationMs: 570,
       dangerousWindowStartMs: 300,
@@ -152,7 +152,7 @@ describe("animation config", () => {
 
   it("accepts optional frameDurationsMs when length and sum match", () => {
     const good = structuredClone(ANIMATION_CONFIG)
-    good.heroes.red_wizard.actions["primary:red_wizard_cleaver"] = {
+    good.heroes.yen.actions["primary:yen_cleaver"] = {
       type: "primaryAttack",
       durationMs: 570,
       dangerousWindowStartMs: 300,
@@ -194,8 +194,11 @@ describe("animation config", () => {
     expect(megasheetClipForAnimationActionKey("spell:homing_orb")).toBe("light_spell_cast")
     expect(megasheetClipForAnimationActionKey("spell:jump")).toBe("jump")
     expect(megasheetClipForAnimationActionKey("spell:lightning_bolt")).toBe("heavy_spell_cast")
-    expect(megasheetClipForAnimationActionKey("primary:red_wizard_cleaver")).toBe(
+    expect(megasheetClipForAnimationActionKey("primary:yen_cleaver", "yen")).toBe(
       "summoned_axe_swing",
+    )
+    expect(megasheetClipForAnimationActionKey("primary:triss_big_blast", "triss")).toBe(
+      "big_blast",
     )
     expect(() => megasheetClipForAnimationActionKey("not-a-real-key")).toThrow(
       /Unknown animation action key/,
@@ -217,8 +220,8 @@ describe("animation config", () => {
   })
 
   it("builds one shared action list without direction variants", () => {
-    const actions = getAnimationToolActions("red_wizard")
-    expect(actions.map((action) => action.id)).toContain("primary:red_wizard_cleaver")
+    const actions = getAnimationToolActions("yen")
+    expect(actions.map((action) => action.id)).toContain("primary:yen_cleaver")
     expect(actions.find((action) => action.id === "spell:homing_orb")).toMatchObject({
       atlasClipId: "light-spell-cast",
       megasheetClip: "light_spell_cast",
@@ -229,14 +232,14 @@ describe("animation config", () => {
       getAnimationToolActions("ranger", {
         ...ANIMATION_CONFIG,
         heroes: {
-          red_wizard: ANIMATION_CONFIG.heroes.red_wizard,
+          yen: ANIMATION_CONFIG.heroes.yen,
         },
       } as never)[0]!.config,
-    ).toBe(ANIMATION_CONFIG.heroes.red_wizard.actions.idle)
+    ).toBe(ANIMATION_CONFIG.heroes.yen.actions.idle)
   })
 
   it("maps Jump spell to jump megasheet and atlas clips in the animation tool list", () => {
-    const actions = getAnimationToolActions("red_wizard")
+    const actions = getAnimationToolActions("yen")
     const jump = actions.find((a) => a.id === "spell:jump")
     expect(jump).toBeDefined()
     expect(jump!.atlasClipId).toBe("jump")
@@ -253,10 +256,10 @@ describe("animation config", () => {
     ).toEqual(ANIMATION_CONFIG)
 
     expect(getAnimationActionConfig("missing", "walk").type).toBe("behavior")
-    expect(getBehaviorAnimationConfig("red_wizard", "walk").durationMs).toBeGreaterThan(0)
-    expect(getSpellAnimationConfig("red_wizard", "fireball").durationMs).toBe(500)
+    expect(getBehaviorAnimationConfig("yen", "walk").durationMs).toBeGreaterThan(0)
+    expect(getSpellAnimationConfig("yen", "fireball").durationMs).toBe(500)
     expect(
-      getPrimaryAttackAnimationConfig("red_wizard", "red_wizard_cleaver").durationMs,
+      getPrimaryAttackAnimationConfig("yen", "yen_cleaver").durationMs,
     ).toBeGreaterThan(0)
     expect(
       getPrimaryAttackAnimationConfigByAttackId("not_real" as never).durationMs,
@@ -269,6 +272,7 @@ describe("animation config", () => {
         schemaVersion: 1,
         heroes: {
           red_wizard: { actions: {} },
+          yen: { actions: {} },
         },
       } as never).type,
     ).toBe("behavior")
@@ -278,6 +282,7 @@ describe("animation config", () => {
         schemaVersion: 1,
         heroes: {
           red_wizard: { actions: {} },
+          yen: { actions: {} },
         },
       } as never),
     ).toThrow(/Missing animation action/)
@@ -285,22 +290,46 @@ describe("animation config", () => {
 
   it("throws when a helper is asked for the wrong action kind", () => {
     const wrongSpell = structuredClone(ANIMATION_CONFIG)
-    wrongSpell.heroes.red_wizard.actions["spell:fireball"] = {
+    wrongSpell.heroes.yen.actions["spell:fireball"] = {
       type: "behavior",
       durationMs: 500,
     }
     const wrongPrimary = structuredClone(ANIMATION_CONFIG)
-    wrongPrimary.heroes.red_wizard.actions["primary:red_wizard_cleaver"] = {
+    wrongPrimary.heroes.yen.actions["primary:yen_cleaver"] = {
       type: "behavior",
       durationMs: 500,
     }
 
-    expect(() => getBehaviorAnimationConfig("red_wizard", "spell:fireball" as never)).toThrow(
+    expect(() => getBehaviorAnimationConfig("yen", "spell:fireball" as never)).toThrow(
       /not behavior/,
     )
-    expect(() => getSpellAnimationConfig("red_wizard", "fireball", wrongSpell)).toThrow(/not spell/)
+    expect(() => getSpellAnimationConfig("yen", "fireball", wrongSpell)).toThrow(/not spell/)
     expect(() =>
-      getPrimaryAttackAnimationConfig("red_wizard", "red_wizard_cleaver", wrongPrimary),
+      getPrimaryAttackAnimationConfig("yen", "yen_cleaver", wrongPrimary),
     ).toThrow(/not primary attack/)
+  })
+
+  it("defines Triss action clips with the requested source-animation mapping", () => {
+    const actions = getAnimationToolActions("triss")
+    expect(actions.find((action) => action.id === "idle")).toMatchObject({
+      atlasClipId: "idle",
+      megasheetClip: "idle",
+    })
+    expect(actions.find((action) => action.id === "spell:fireball")).toMatchObject({
+      atlasClipId: "channel-fire",
+      megasheetClip: "channel_fire",
+    })
+    expect(actions.find((action) => action.id === "spell:homing_orb")).toMatchObject({
+      atlasClipId: "channel-fire",
+      megasheetClip: "channel_fire",
+    })
+    expect(actions.find((action) => action.id === "spell:lightning_bolt")).toMatchObject({
+      atlasClipId: "ground-pound",
+      megasheetClip: "ground_pound",
+    })
+    expect(actions.find((action) => action.id === "primary:triss_big_blast")).toMatchObject({
+      atlasClipId: "big-blast",
+      megasheetClip: "big_blast",
+    })
   })
 })

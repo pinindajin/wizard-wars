@@ -226,7 +226,7 @@ vi.mock("@/game/minimap/MinimapController", () => ({
 }))
 
 vi.mock("@/game/animation/LadyWizardAnimDefs", () => ({
-  registerLadyWizardAnims: vi.fn(),
+  registerHeroSpriteAnims: vi.fn(),
 }))
 
 vi.mock("@/game/animation/FireballAnimDefs", () => ({
@@ -426,7 +426,7 @@ describe("ArenaRuntime lifecycle", () => {
       type: WsEvent.PrimaryMeleeAttack,
       payload: {
         casterId: "player-1",
-        attackId: "red_wizard_cleaver",
+        attackId: "yen_cleaver",
         x: 0,
         y: 0,
         facingAngle: 0,

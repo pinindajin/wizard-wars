@@ -1,3 +1,5 @@
+import type { HeroId } from "../../shared/balance-config/heroes"
+
 /**
  * All bitECS 0.4 component definitions for Wizard Wars.
  *
@@ -321,14 +323,13 @@ export const ABILITY_INDEX_TO_ID: readonly string[] = [
 ]
 
 /** Maps hero string IDs to the integer stored in {@link Hero}.typeIndex. */
-export const HERO_INDEX: Record<string, number> = {
-  red_wizard: 0,
-  barbarian: 1,
-  ranger: 2,
+export const HERO_INDEX: Record<HeroId, number> = {
+  yen: 0,
+  triss: 1,
 }
 
 /** Reverse lookup: Hero.typeIndex → hero ID string. */
-export const HERO_INDEX_TO_ID: readonly string[] = ["red_wizard", "barbarian", "ranger"]
+export const HERO_INDEX_TO_ID: readonly HeroId[] = ["yen", "triss"]
 
 /** Maps quick-item string IDs to the integer stored in QuickItemSlots.slotNItem. */
 export const ITEM_INDEX: Record<string, number> = {

@@ -202,6 +202,25 @@ describe("animation tool replace-sheet route", () => {
     expect(body.message).toMatch(/expected 1860/)
   })
 
+  it("uses selected hero atlas clips and frame counts", async () => {
+    setNodeEnv("development")
+    const form = new FormData()
+    form.set("heroId", "triss")
+    form.set("atlasClipId", "big-blast")
+    form.set("direction", "east")
+    form.set(
+      "file",
+      new File([new Uint8Array(await makeStripBuffer(16))], "big-blast-east.png", {
+        type: "image/png",
+      }),
+    )
+    const res = await POST(buildRequest(form))
+    expect(res.status).toBe(400)
+    const body = (await res.json()) as { code: string; message: string }
+    expect(body.code).toBe("validation_failed")
+    expect(body.message).toMatch(/expected 2108/)
+  })
+
   it("rejects wrong height", async () => {
     setNodeEnv("development")
     const form = new FormData()

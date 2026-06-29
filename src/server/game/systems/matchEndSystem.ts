@@ -20,6 +20,7 @@ import {
 } from "../components"
 import type { SimCtx } from "../simulation"
 import { MATCH_MAX_DURATION_MS } from "../../../shared/balance-config"
+import { DEFAULT_HERO_ID } from "../../../shared/balance-config/heroes"
 import type { ScoreboardEntry } from "../../../shared/types"
 
 /**
@@ -33,7 +34,7 @@ function buildScoreboard(ctx: SimCtx): ScoreboardEntry[] {
     if (eid === undefined) continue
 
     const heroIndex = eid !== undefined ? Hero.typeIndex[eid] : 0
-    const heroId = HERO_INDEX_TO_ID[heroIndex] ?? "red_wizard"
+    const heroId = HERO_INDEX_TO_ID[heroIndex] ?? DEFAULT_HERO_ID
     const username = ctx.playerUsernameMap.get(userId) ?? userId
 
     entries.push({

@@ -106,6 +106,15 @@
             },
             {
                 "type": "spritesheet",
+                "key": "triss",
+                "url": "/assets/sprites/heroes/triss/sheets/triss-megasheet.png",
+                "frameConfig": {
+                    "frameWidth": 124,
+                    "frameHeight": 124
+                }
+            },
+            {
+                "type": "spritesheet",
                 "key": "fireball",
                 "url": "/assets/sprites/abilities/fireball-fly.png",
                 "frameConfig": {

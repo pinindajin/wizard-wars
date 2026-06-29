@@ -56,12 +56,15 @@ test("arena static asset pack is served", async ({ request }) => {
   expect(json.arena?.files?.length).toBeGreaterThan(0)
 })
 
-test("lady-wizard megasheet is served", async ({ request }) => {
-  const res = await request.get(
+test("hero megasheets are served", async ({ request }) => {
+  for (const path of [
     "/assets/sprites/heroes/lady-wizard/sheets/lady-wizard-megasheet.png",
-  )
-  expect(res.status()).toBe(200)
-  expect(res.headers()["content-type"] ?? "").toMatch(/image\/png/)
+    "/assets/sprites/heroes/triss/sheets/triss-megasheet.png",
+  ]) {
+    const res = await request.get(path)
+    expect(res.status(), `${path} should return 200`).toBe(200)
+    expect(res.headers()["content-type"] ?? "").toMatch(/image\/png/)
+  }
 })
 
 test("every URL in every asset pack resolves with a 200", async ({ request }) => {

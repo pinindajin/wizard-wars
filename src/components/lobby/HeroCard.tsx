@@ -2,69 +2,64 @@
 
 import { useState } from "react"
 import { LobbyStatusPill } from "@/components/lobby/LobbyChrome"
+import type { HeroId } from "@/shared/balance-config/heroes"
 
 /** Hero display config — extend this to match your HERO_CONFIGS shape. */
 export type HeroCardConfig = {
-  id: string
+  id: HeroId
   displayName: string
   desc?: string
   accent: string        // e.g. "#ef4444"
   bg: string            // e.g. "linear-gradient(145deg,#450a0a,#7f1d1d)"
   portraitBg: string    // e.g. "linear-gradient(180deg,#7f1d1d,#450a0a)"
   border: string        // e.g. "rgba(239,68,68,0.35)"
-  icon: string          // emoji glyph
+  icon: string
+  portraitUrl: string
+  portraitSheetWidth: number
 }
 
 /**
  * HERO_CARD_CONFIGS maps hero IDs to their visual config.
  * Import and extend this alongside HERO_CONFIGS from balance-config.
  */
-export const HERO_CARD_CONFIGS: Record<string, HeroCardConfig> = {
-  red_wizard: {
-    id: "red_wizard",
-    displayName: "Red Wizard",
-    desc: "High burst damage. Rains arcane destruction from range.",
+export const HERO_CARD_CONFIGS: Record<HeroId, HeroCardConfig> = {
+  yen: {
+    id: "yen",
+    displayName: "Yen",
+    desc: "Classic spell duelist with the familiar cleaver swing.",
     accent: "#ef4444",
     bg: "linear-gradient(145deg,#450a0a,#7f1d1d)",
     portraitBg: "linear-gradient(180deg,#7f1d1d,#450a0a)",
     border: "rgba(239,68,68,0.35)",
-    icon: "🔴",
+    icon: "Y",
+    portraitUrl: "/assets/sprites/heroes/lady-wizard/sheets/idle-south.png",
+    portraitSheetWidth: 640,
   },
-  barbarian: {
-    id: "barbarian",
-    displayName: "Barbarian",
-    desc: "Unstoppable tank. Charges through enemies with sheer force.",
-    accent: "#f97316",
-    bg: "linear-gradient(145deg,#431407,#7c2d12)",
-    portraitBg: "linear-gradient(180deg,#7c2d12,#431407)",
-    border: "rgba(249,115,22,0.35)",
-    icon: "🟠",
-  },
-  ranger: {
-    id: "ranger",
-    displayName: "Ranger",
-    desc: "Swift and deadly. Kites opponents with precision shots.",
+  triss: {
+    id: "triss",
+    displayName: "Triss",
+    desc: "A fiery caster with longer, tighter blast pressure.",
     accent: "#10b981",
     bg: "linear-gradient(145deg,#022c22,#064e3b)",
     portraitBg: "linear-gradient(180deg,#064e3b,#022c22)",
     border: "rgba(16,185,129,0.35)",
-    icon: "🟢",
+    icon: "T",
+    portraitUrl: "/assets/sprites/heroes/triss/sheets/idle-south.png",
+    portraitSheetWidth: 160,
   },
 }
 
 // Sprite sheet constants (idle-south.png, ~1.29× scale)
 // 124px native frame → 160px display; 496px native sheet → 643px display
 const FRAME = 160
-const SHEET_W = 643
 // Vertical offset so the portrait shows head + upper chest
 const SPRITE_TOP = -30
 
 type StatusTone = "neutral" | "accent" | "success" | "warning" | "danger"
 
 function heroTone(heroId: string): StatusTone {
-  if (heroId === "red_wizard") return "danger"
-  if (heroId === "barbarian")  return "warning"
-  if (heroId === "ranger")     return "success"
+  if (heroId === "yen") return "danger"
+  if (heroId === "triss") return "success"
   return "neutral"
 }
 
@@ -88,8 +83,7 @@ function heroTone(heroId: string): StatusTone {
  * ```
  *
  * Requires in globals.css:
- *   The sprite is served from /assets/sprites/heroes/lady-wizard/sheets/idle-south.png
- *   (already in public/ — no extra files needed).
+ *   Portrait sprites are served from each hero's committed `sheets/idle-south.png`.
  */
 export function HeroCard({
   config,
@@ -172,8 +166,8 @@ export function HeroCard({
         <div
           style={{
             ...spriteStyle,
-            backgroundImage: "url(/assets/sprites/heroes/lady-wizard/sheets/idle-south.png)",
-            backgroundSize: `${SHEET_W}px ${FRAME}px`,
+            backgroundImage: `url(${config.portraitUrl})`,
+            backgroundSize: `${config.portraitSheetWidth}px ${FRAME}px`,
             backgroundPosition: "0 0",
             backgroundRepeat: "no-repeat",
             imageRendering: "pixelated",

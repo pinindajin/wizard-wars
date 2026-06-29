@@ -4,12 +4,11 @@ import {
   DIRECTIONS,
   getAnimKey,
   getDirectionFromAngle,
+  getHeroAnimKey,
+  registerHeroSpriteAnims,
   registerLadyWizardAnims,
 } from "./LadyWizardAnimDefs"
 import {
-  LADY_WIZARD_CLIP_BASE_FRAME,
-  LADY_WIZARD_CLIP_FRAMES,
-  LADY_WIZARD_FRAMES_PER_DIRECTION_ROW,
   LADY_WIZARD_MEGASHEET_CLIP_ORDER,
 } from "@/shared/sprites/ladyWizard"
 
@@ -17,6 +16,12 @@ describe("LadyWizardAnimDefs", () => {
   it("builds animation keys and falls back to idle for unknown states", () => {
     expect(getAnimKey("walk", "south")).toBe("lady-wizard-walk-south")
     expect(getAnimKey("not-real", "north")).toBe("lady-wizard-breathing_idle-north")
+    expect(getHeroAnimKey("yen", "walk", "south")).toBe("lady-wizard-walk-south")
+    expect(getHeroAnimKey("triss", "walk", "south")).toBe("triss-walk-south")
+    expect(getHeroAnimKey("triss", "primary_melee_attack", "north")).toBe(
+      "triss-big_blast-north",
+    )
+    expect(getHeroAnimKey("not-real", "idle", "north")).toBe("lady-wizard-breathing_idle-north")
   })
 
   it("maps angles into the nearest sprite direction", () => {
@@ -81,6 +86,29 @@ describe("LadyWizardAnimDefs", () => {
 
     expect(animManager.create).not.toHaveBeenCalledWith(
       expect.objectContaining({ key: existingKey }),
+    )
+  })
+
+  it("registers Yen and Triss animations from hero sprite metadata", () => {
+    const animManager = {
+      exists: vi.fn(() => false),
+      generateFrameNumbers: vi.fn((texture: string, range: { start: number; end: number }) => [
+        `${texture}:${range.start}`,
+        `${texture}:${range.end}`,
+      ]),
+      create: vi.fn(),
+    }
+
+    registerHeroSpriteAnims(animManager as never)
+
+    expect(animManager.create).toHaveBeenCalledWith(
+      expect.objectContaining({ key: "lady-wizard-walk-south" }),
+    )
+    expect(animManager.create).toHaveBeenCalledWith(
+      expect.objectContaining({ key: "triss-idle-south" }),
+    )
+    expect(animManager.create).toHaveBeenCalledWith(
+      expect.objectContaining({ key: "triss-big_blast-south-west" }),
     )
   })
 })

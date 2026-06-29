@@ -2,18 +2,22 @@ import { z } from "zod"
 
 import animationConfigJson from "./animation-config.json"
 import { ABILITY_CONFIGS } from "./abilities"
-import { DEFAULT_HERO_ID, HERO_CONFIGS, type HeroConfig } from "./heroes"
+import {
+  DEFAULT_HERO_ID,
+  HERO_CONFIGS,
+  VALID_HERO_IDS,
+  normalizeHeroId,
+  type HeroConfig,
+} from "./heroes"
 import {
   PRIMARY_MELEE_ATTACK_CONFIGS,
   type PrimaryMeleeAttackId,
 } from "./equipment"
 import { TICK_MS } from "./rendering"
 import {
-  LADY_WIZARD_ATLAS_CLIP_TO_MEGASHEET,
-  LADY_WIZARD_CLIP_FRAMES,
-  type LadyWizardAtlasClipId,
-  type LadyWizardMegasheetClip,
-} from "../sprites/ladyWizard"
+  HERO_SPRITE_CONFIGS,
+  type HeroSpriteActionClipId,
+} from "../sprites/heroSprites"
 
 export const ANIMATION_CONFIG_SCHEMA_VERSION = 1
 
@@ -98,15 +102,15 @@ export const animationActionConfigSchema = z.discriminatedUnion("type", [
 ])
 
 /**
- * Megasheet clip whose frame count must match `frameDurationsMs` length for a hero action key.
+ * Sprite action clip whose frame count must match `frameDurationsMs` length.
  *
- * @param actionKey - Key under `heroes[*].actions` (e.g. `idle`, `spell:fireball`, `primary:red_wizard_cleaver`).
- * @returns Megasheet clip id for `LADY_WIZARD_CLIP_FRAMES`.
+ * @param actionKey - Key under `heroes[*].actions` (e.g. `idle`, `spell:fireball`, `primary:yen_cleaver`).
+ * @returns Generic hero sprite action clip id.
  */
-export function megasheetClipForAnimationActionKey(actionKey: string): LadyWizardMegasheetClip {
+function actionClipForAnimationActionKey(actionKey: string): HeroSpriteActionClipId {
   switch (actionKey) {
     case "idle":
-      return "breathing_idle"
+      return "idle"
     case "walk":
       return "walk"
     case "death":
@@ -122,8 +126,23 @@ export function megasheetClipForAnimationActionKey(actionKey: string): LadyWizar
     if (abilityId === "jump") return "jump"
     return "heavy_spell_cast"
   }
-  if (actionKey.startsWith("primary:")) return "summoned_axe_swing"
+  if (actionKey.startsWith("primary:")) return "primary_melee_attack"
   throw new Error(`Unknown animation action key: ${actionKey}`)
+}
+
+/**
+ * Megasheet clip whose frame count must match `frameDurationsMs` length for a hero action key.
+ *
+ * @param actionKey - Key under `heroes[*].actions` (e.g. `idle`, `spell:fireball`, `primary:yen_cleaver`).
+ * @param heroId - Hero whose sprite layout should resolve the clip name.
+ * @returns Hero-specific megasheet clip id.
+ */
+export function megasheetClipForAnimationActionKey(
+  actionKey: string,
+  heroId: string = DEFAULT_HERO_ID,
+): string {
+  const actionClip = actionClipForAnimationActionKey(actionKey)
+  return HERO_SPRITE_CONFIGS[normalizeHeroId(heroId)].clips[actionClip].megasheetClip
 }
 
 /**
@@ -145,7 +164,7 @@ export const animationConfigSchema = z.object({
     }),
   ),
 }).superRefine((value, ctx) => {
-  const allowedHeroIds = new Set(Object.keys(HERO_CONFIGS))
+  const allowedHeroIds = new Set<string>(VALID_HERO_IDS)
   for (const heroId of Object.keys(value.heroes)) {
     if (!allowedHeroIds.has(heroId)) {
       ctx.addIssue({
@@ -196,13 +215,13 @@ export const animationConfigSchema = z.object({
     for (const [actionKey, action] of Object.entries(heroConfig.actions)) {
       const fd = "frameDurationsMs" in action ? action.frameDurationsMs : undefined
       if (fd === undefined) continue
-      const clip = megasheetClipForAnimationActionKey(actionKey)
-      const expectedFrames = LADY_WIZARD_CLIP_FRAMES[clip]
+      const actionClip = actionClipForAnimationActionKey(actionKey)
+      const expectedFrames = HERO_SPRITE_CONFIGS[normalizeHeroId(heroId)].clips[actionClip].frameCount
       if (fd.length !== expectedFrames) {
         ctx.addIssue({
           code: "custom",
           path: ["heroes", heroId, "actions", actionKey, "frameDurationsMs"],
-          message: `frameDurationsMs length must be ${String(expectedFrames)} for ${actionKey} (${clip})`,
+          message: `frameDurationsMs length must be ${String(expectedFrames)} for ${actionKey} (${megasheetClipForAnimationActionKey(actionKey, heroId)})`,
         })
         continue
       }
@@ -246,8 +265,8 @@ export type AnimationToolAction = {
   readonly id: AnimationActionId
   readonly label: string
   readonly category: "Behavior" | "Spell" | "Attack"
-  readonly atlasClipId: LadyWizardAtlasClipId
-  readonly megasheetClip: LadyWizardMegasheetClip
+  readonly atlasClipId: string
+  readonly megasheetClip: string
   readonly config: AnimationActionConfig
 }
 
@@ -363,7 +382,7 @@ export function primaryAttackActionId(
 }
 
 function heroConfigFor(heroId: string): HeroConfig {
-  return HERO_CONFIGS[heroId] ?? HERO_CONFIGS[DEFAULT_HERO_ID]
+  return HERO_CONFIGS[normalizeHeroId(heroId)]
 }
 
 export function getAnimationActionConfig(
@@ -371,8 +390,9 @@ export function getAnimationActionConfig(
   actionId: AnimationActionId,
   config: AnimationConfig = ANIMATION_CONFIG,
 ): AnimationActionConfig {
+  const canonicalHeroId = normalizeHeroId(heroId)
   const action =
-    config.heroes[heroId]?.actions[actionId] ??
+    config.heroes[canonicalHeroId]?.actions[actionId] ??
     config.heroes[DEFAULT_HERO_ID]?.actions[actionId] ??
     ANIMATION_CONFIG.heroes[DEFAULT_HERO_ID].actions[actionId]
   if (!action) throw new Error(`Missing animation action ${actionId}`)
@@ -434,51 +454,50 @@ export function getAnimationToolActions(
   config: AnimationConfig = ANIMATION_CONFIG,
 ): readonly AnimationToolAction[] {
   const hero = heroConfigFor(heroId)
+  const spriteConfig = HERO_SPRITE_CONFIGS[hero.id]
   const actions = config.heroes[hero.id]?.actions ?? config.heroes[DEFAULT_HERO_ID].actions
   const primaryId = hero.primaryMeleeAttackId
+  const clip = (clipId: HeroSpriteActionClipId) => spriteConfig.clips[clipId]
 
   return [
     {
       id: "idle",
       label: "Idle",
       category: "Behavior",
-      atlasClipId: "idle",
-      megasheetClip: LADY_WIZARD_ATLAS_CLIP_TO_MEGASHEET.idle,
+      atlasClipId: clip("idle").atlasClipId,
+      megasheetClip: clip("idle").megasheetClip,
       config: actions.idle,
     },
     {
       id: "walk",
       label: "Walk",
       category: "Behavior",
-      atlasClipId: "walk",
-      megasheetClip: LADY_WIZARD_ATLAS_CLIP_TO_MEGASHEET.walk,
+      atlasClipId: clip("walk").atlasClipId,
+      megasheetClip: clip("walk").megasheetClip,
       config: actions.walk,
     },
     {
       id: "death",
       label: "Death",
       category: "Behavior",
-      atlasClipId: "death",
-      megasheetClip: LADY_WIZARD_ATLAS_CLIP_TO_MEGASHEET.death,
+      atlasClipId: clip("death").atlasClipId,
+      megasheetClip: clip("death").megasheetClip,
       config: actions.death,
     },
     ...Object.values(ABILITY_CONFIGS).map((ability): AnimationToolAction => {
       const light = isLightSpellCastAbilityId(ability.id)
       const jump = ability.id === "jump"
+      const actionClipId: HeroSpriteActionClipId = light
+        ? "light_spell_cast"
+        : jump
+          ? "jump"
+          : "heavy_spell_cast"
       return {
         id: spellActionId(ability.id),
         label: ability.displayName,
         category: "Spell" as const,
-        atlasClipId: light
-          ? ("light-spell-cast" as const)
-          : jump
-            ? ("jump" as const)
-            : ("heavy-spell-cast" as const),
-        megasheetClip: light
-          ? ("light_spell_cast" as const)
-          : jump
-            ? ("jump" as const)
-            : ("heavy_spell_cast" as const),
+        atlasClipId: clip(actionClipId).atlasClipId,
+        megasheetClip: clip(actionClipId).megasheetClip,
         config: actions[spellActionId(ability.id)],
       }
     }),
@@ -486,8 +505,8 @@ export function getAnimationToolActions(
       id: primaryAttackActionId(primaryId),
       label: PRIMARY_MELEE_ATTACK_CONFIGS[primaryId].displayName,
       category: "Attack",
-      atlasClipId: "summoned-axe-attack",
-      megasheetClip: "summoned_axe_swing",
+      atlasClipId: clip("primary_melee_attack").atlasClipId,
+      megasheetClip: clip("primary_melee_attack").megasheetClip,
       config: actions[primaryAttackActionId(primaryId)],
     },
   ]

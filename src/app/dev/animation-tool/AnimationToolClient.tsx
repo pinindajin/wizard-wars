@@ -13,7 +13,6 @@ import {
   ANIMATION_CONFIG_SCHEMA_VERSION,
   frameRateForDuration,
   getAnimationToolActions,
-  megasheetClipForAnimationActionKey,
   msToFrameIndexForAction,
   msToTickOffset,
   parseAnimationConfig,
@@ -25,15 +24,18 @@ import {
 import { LIGHTNING_TELEGRAPH_DANGER_LEAD_MS } from "@/shared/balance-config/telegraphs"
 import { HERO_CONFIGS, VALID_HERO_IDS } from "@/shared/balance-config/heroes"
 import {
-  LADY_WIZARD_CLIP_FRAMES,
   LADY_WIZARD_DIRECTIONS,
   LADY_WIZARD_FRAME_SIZE_PX,
   LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y,
-  ladyWizardAtlasPublicPath,
   type LadyWizardDirection,
 } from "@/shared/sprites/ladyWizard"
 import {
-  buildLadyWizardViewerCells,
+  HERO_SPRITE_CONFIGS,
+  heroAtlasPublicPath,
+  normalizeHeroSpriteId,
+} from "@/shared/sprites/heroSprites"
+import {
+  buildHeroSpriteViewerCells,
   type LadyWizardAtlasJson,
   type LadyWizardViewerCell,
 } from "@/shared/sprites/ladyWizardViewerModel"
@@ -95,9 +97,23 @@ type TimingValidation = {
 }
 
 const HERO_SELECTION_COLORS: Record<string, string> = {
-  red_wizard: "bg-red-400 shadow-[0_0_18px_rgba(248,113,113,0.8)]",
-  barbarian: "bg-orange-400 shadow-[0_0_18px_rgba(251,146,60,0.65)]",
-  ranger: "bg-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.65)]",
+  yen: "bg-red-400 shadow-[0_0_18px_rgba(248,113,113,0.8)]",
+  triss: "bg-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.65)]",
+}
+
+/**
+ * Returns the frame count for an animation-tool action under the selected hero.
+ *
+ * @param heroId - Selected hero id.
+ * @param action - Animation tool action descriptor.
+ * @returns Expected frame count for per-frame timing.
+ */
+function frameCountForToolAction(heroId: string, action: AnimationToolAction): number {
+  const spriteConfig = HERO_SPRITE_CONFIGS[normalizeHeroSpriteId(heroId)]
+  const clip = Object.values(spriteConfig.clips).find(
+    (candidate) => candidate.megasheetClip === action.megasheetClip,
+  )
+  return clip?.frameCount ?? 1
 }
 
 function timingDraftFromConfig(config: AnimationActionConfig): TimingDraft {
@@ -918,7 +934,7 @@ export function AnimationToolClient() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [config, setConfig] = useState<AnimationConfig>(() => cloneConfig(ANIMATION_CONFIG))
   const [savedConfig, setSavedConfig] = useState<AnimationConfig>(() => cloneConfig(ANIMATION_CONFIG))
-  const [heroId, setHeroId] = useState(VALID_HERO_IDS[0] ?? "red_wizard")
+  const [heroId, setHeroId] = useState(VALID_HERO_IDS[0] ?? "yen")
   const [actionId, setActionId] = useState<AnimationActionId>("idle")
   const [timeMs, setTimeMs] = useState(0)
   const [playing, setPlaying] = useState(false)
@@ -947,7 +963,8 @@ export function AnimationToolClient() {
     let cancelled = false
     void (async () => {
       try {
-        const res = await fetch(ladyWizardAtlasPublicPath())
+        setLoadError(null)
+        const res = await fetch(heroAtlasPublicPath(heroId))
         if (!res.ok) throw new Error(`atlas ${res.status}`)
         const json = (await res.json()) as LadyWizardAtlasJson
         if (!cancelled) setAtlas(json)
@@ -958,7 +975,7 @@ export function AnimationToolClient() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [heroId])
 
   useEffect(() => {
     try {
@@ -997,8 +1014,10 @@ export function AnimationToolClient() {
   const timingDraft = timingDrafts[timingDraftKey] ?? timingDraftFromConfig(actionConfig)
   const cells = useMemo(() => {
     if (!atlas) return []
-    return buildLadyWizardViewerCells(atlas).filter((cell) => cell.atlasClipId === action.atlasClipId)
-  }, [action.atlasClipId, atlas])
+    return buildHeroSpriteViewerCells(heroId, atlas).filter(
+      (cell) => cell.atlasClipId === action.atlasClipId,
+    )
+  }, [action.atlasClipId, atlas, heroId])
   const orderedCells = LADY_WIZARD_DIRECTIONS.map(
     (direction) => cells.find((cell) => cell.direction === direction)!,
   ).filter(Boolean)
@@ -1079,7 +1098,7 @@ export function AnimationToolClient() {
     }
 
     if (fd && fd.length > 0) {
-      const expectedLen = LADY_WIZARD_CLIP_FRAMES[megasheetClipForAnimationActionKey(action.id)]
+      const expectedLen = frameCountForToolAction(heroId, action)
       if (fd.length !== expectedLen) {
         errors.frameDurationsMs = `Need ${String(expectedLen)} frame durations for this action.`
       } else {
@@ -1235,6 +1254,7 @@ export function AnimationToolClient() {
           return
         }
         const form = new FormData()
+        form.set("heroId", heroId)
         form.set("atlasClipId", atlasClipId)
         form.set("direction", direction)
         form.set("file", file)
@@ -1273,14 +1293,18 @@ export function AnimationToolClient() {
         setReplaceUploadingKey(null)
       }
     },
-    [],
+    [heroId],
   )
 
   const handleRebuildMegasheet = useCallback(async () => {
     setMegasheetRebuildBusy(true)
     setMegasheetRebuildStatus("rebuilding…")
     try {
-      const res = await fetch("/api/dev/animation-tool/rebuild-megasheet", { method: "POST" })
+      const res = await fetch("/api/dev/animation-tool/rebuild-megasheet", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ heroId }),
+      })
       const body = (await res.json()) as { ok?: boolean; message?: string }
       if (!res.ok || body.ok === false) {
         setMegasheetRebuildStatus(body.message ?? `rebuild failed (${res.status})`)
@@ -1293,7 +1317,7 @@ export function AnimationToolClient() {
     } finally {
       setMegasheetRebuildBusy(false)
     }
-  }, [])
+  }, [heroId])
 
   const handleSfxImportSubmit = useCallback(
     async (file: File) => {
@@ -1397,10 +1421,9 @@ export function AnimationToolClient() {
         <aside className="flex flex-col gap-4 rounded-2xl border border-stone-700 bg-stone-900/80 p-4">
           <p
             className="rounded-lg border border-sky-800/60 bg-sky-950/40 p-3 font-mono text-[11px] leading-relaxed text-sky-100"
-            data-testid="animation-tool-shared-art-banner"
+            data-testid="animation-tool-hero-art-banner"
           >
-            Sprite art is shared across all heroes today (lady-wizard strips). Replacing a strip affects every hero
-            using that clip.
+            Sprite art is scoped to the selected hero. Replacing a strip affects that hero using that clip.
           </p>
           <CollapsiblePanel title="Hero">
             <div className="flex flex-col gap-2" data-testid="animation-tool-hero-select">
@@ -1542,8 +1565,7 @@ export function AnimationToolClient() {
                 type="checkbox"
                 checked={frameDurationsActive}
                 onChange={(event) => {
-                  const clip = megasheetClipForAnimationActionKey(action.id)
-                  const n = LADY_WIZARD_CLIP_FRAMES[clip]
+                  const n = frameCountForToolAction(heroId, action)
                   if (event.target.checked) {
                     const totalMs =
                       wholePositiveInteger(timingDraft.durationMs) ?? actionConfig.durationMs

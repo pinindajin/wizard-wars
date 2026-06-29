@@ -1,12 +1,19 @@
 import { NextResponse } from "next/server"
 
 import { isAnimationToolApiForbiddenInProduction } from "@/shared/dev/animationToolE2eGate"
+import { normalizeHeroId } from "@/shared/balance-config/heroes"
 
-import { buildLadyWizardMegasheet } from "../../../../../../scripts/build-lady-wizard-megasheet"
+import { buildHeroMegasheet } from "../../../../../../scripts/build-hero-megasheet"
 
 export const runtime = "nodejs"
 
-export async function POST(): Promise<NextResponse> {
+/**
+ * Rebuilds one hero megasheet for the dev animation tool.
+ *
+ * @param request - Optional JSON body with `heroId`; missing body defaults to Yen.
+ * @returns JSON rebuild result.
+ */
+export async function POST(request?: Request): Promise<NextResponse> {
   if (isAnimationToolApiForbiddenInProduction()) {
     return NextResponse.json(
       { ok: false, code: "forbidden", message: "animation tool is dev-only" },
@@ -16,7 +23,16 @@ export async function POST(): Promise<NextResponse> {
 
   const startedAt = Date.now()
   try {
-    const result = await buildLadyWizardMegasheet({ silent: true })
+    let heroId = "yen"
+    if (request) {
+      try {
+        const body = (await request.json()) as { heroId?: unknown }
+        heroId = String(body.heroId ?? "yen")
+      } catch {
+        heroId = "yen"
+      }
+    }
+    const result = await buildHeroMegasheet({ heroId: normalizeHeroId(heroId), silent: true })
     const durationMs = Date.now() - startedAt
     return NextResponse.json({
       ok: true,

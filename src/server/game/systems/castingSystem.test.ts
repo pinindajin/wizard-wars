@@ -36,7 +36,7 @@ import {
 } from "../../../shared/balance-config"
 
 const originalFireballConfig = structuredClone(
-  ANIMATION_CONFIG.heroes.red_wizard.actions["spell:fireball"],
+  ANIMATION_CONFIG.heroes.yen.actions["spell:fireball"],
 )
 
 function emptyCtx(overrides: Partial<SimCtx> = {}): SimCtx {
@@ -169,7 +169,7 @@ describe("castingSystem homing orb charges and target lock", () => {
 
     PlayerInput.abilitySlot[caster] = -1
     ctx.currentTick =
-      20 + msToTickOffset(getSpellAnimationConfig("red_wizard", "homing_orb").durationMs)
+      20 + msToTickOffset(getSpellAnimationConfig("yen", "homing_orb").durationMs)
     castingSystem(ctx)
     commandBuffer.execute(world)
 
@@ -209,7 +209,7 @@ describe("castingSystem homing orb charges and target lock", () => {
 
     PlayerInput.abilitySlot[caster] = -1
     ctx.currentTick =
-      10 + msToTickOffset(getSpellAnimationConfig("red_wizard", "homing_orb").durationMs)
+      10 + msToTickOffset(getSpellAnimationConfig("yen", "homing_orb").durationMs)
     castingSystem(ctx)
     commandBuffer.execute(world)
 
@@ -320,7 +320,7 @@ describe("castingSystem jump charges", () => {
 
 describe("castingSystem animation timing", () => {
   afterEach(() => {
-    ANIMATION_CONFIG.heroes.red_wizard.actions["spell:fireball"] =
+    ANIMATION_CONFIG.heroes.yen.actions["spell:fireball"] =
       structuredClone(originalFireballConfig) as AnimationActionConfig
   })
 
@@ -346,7 +346,7 @@ describe("castingSystem animation timing", () => {
     PlayerInput.abilityTargetY[caster] = 0
 
     ctx.currentTick =
-      10 + msToTickOffset(getSpellAnimationConfig("red_wizard", "fireball").durationMs)
+      10 + msToTickOffset(getSpellAnimationConfig("yen", "fireball").durationMs)
     castingSystem(ctx)
     commandBuffer.execute(world)
 
@@ -376,7 +376,7 @@ describe("castingSystem animation timing", () => {
     PlayerInput.abilitySlot[caster] = -1
 
     ctx.currentTick =
-      10 + msToTickOffset(getSpellAnimationConfig("red_wizard", "fireball").durationMs)
+      10 + msToTickOffset(getSpellAnimationConfig("yen", "fireball").durationMs)
     castingSystem(ctx)
     addComponent(world, caster, DyingTag)
     commandBuffer.execute(world)
@@ -387,7 +387,7 @@ describe("castingSystem animation timing", () => {
   })
 
   it("can fire a spell effect before the animation finishes", () => {
-    ANIMATION_CONFIG.heroes.red_wizard.actions["spell:fireball"] = {
+    ANIMATION_CONFIG.heroes.yen.actions["spell:fireball"] = {
       type: "spell",
       durationMs: 500,
       effectTiming: "before",
@@ -435,7 +435,7 @@ describe("castingSystem animation timing", () => {
     PlayerInput.abilityTargetY[caster] = 999
 
     ctx.currentTick =
-      10 + msToTickOffset(getSpellAnimationConfig("red_wizard", "lightning_bolt").durationMs)
+      10 + msToTickOffset(getSpellAnimationConfig("yen", "lightning_bolt").durationMs)
     castingSystem(ctx)
 
     expect(ctx.pendingLightningBolts).toHaveLength(1)

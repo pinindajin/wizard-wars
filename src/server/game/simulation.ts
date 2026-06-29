@@ -49,7 +49,11 @@ import {
   JUMP_MAX_CHARGES,
   HOMING_ORB_MAX_CHARGES,
 } from "../../shared/balance-config"
-import { DEFAULT_HERO_ID, getHeroPrimaryMeleeAttackId } from "../../shared/balance-config/heroes"
+import {
+  DEFAULT_HERO_ID,
+  getHeroPrimaryMeleeAttackId,
+  normalizeHeroId,
+} from "../../shared/balance-config/heroes"
 import {
   primaryMeleeAttackIdToIndex,
   type PrimaryMeleeAttackId,
@@ -815,7 +819,8 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
   ): number {
     const eid = addEntity(world)
     const spawn = ARENA_SPAWN_POINTS[spawnIndex % ARENA_SPAWN_POINTS.length]
-    const heroIndex = HERO_INDEX[heroId] ?? 0
+    const canonicalHeroId = normalizeHeroId(heroId)
+    const heroIndex = HERO_INDEX[canonicalHeroId] ?? HERO_INDEX[DEFAULT_HERO_ID]
 
     // Face toward arena center
     const dx = ARENA_CENTER_X - spawn.x
@@ -872,7 +877,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     AbilityRuntime.jumpRechargeEndsAtMs[eid] = 0
 
     Equipment.primaryMeleeAttackIndex[eid] = primaryMeleeAttackIdToIndex(
-      getHeroPrimaryMeleeAttackId(heroId),
+      getHeroPrimaryMeleeAttackId(canonicalHeroId),
     )
     Equipment.hasSwiftBoots[eid] = 0
 
@@ -906,7 +911,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     entityPlayerMap.set(eid, userId)
     playerUsernameMap.set(userId, username)
     entityUsernameMap.set(eid, username)
-    playerHeroIdMap.set(userId, heroId)
+    playerHeroIdMap.set(userId, canonicalHeroId)
     killStats.set(userId, { kills: 0, deaths: 0, goldEarned: STARTING_GOLD })
 
     prevPlayerStates.set(eid, {

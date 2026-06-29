@@ -1,7 +1,7 @@
 import Phaser from "phaser"
 
 import { clientLogger } from "@/lib/clientLogger"
-import { HERO_CONFIGS } from "@/shared/balance-config/heroes"
+import { HERO_CONFIGS, normalizeHeroId, type HeroId } from "@/shared/balance-config/heroes"
 import { ABILITY_CONFIGS } from "@/shared/balance-config/abilities"
 import {
   PREDICTION_SNAP_THRESHOLD_PX,
@@ -51,13 +51,10 @@ import { addEntity, removeEntity } from "../world"
 import { animUsesMouseAim } from "@/shared/playerAnimAim"
 import {
   getDirectionFromAngle,
-  getAnimKey,
+  getHeroAnimKey,
 } from "../../animation/LadyWizardAnimDefs"
-import {
-  LADY_WIZARD_FRAME_SIZE_PX,
-  LADY_WIZARD_SPRITE_DISPLAY_OFFSET_X,
-  LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y,
-} from "@/shared/sprites/ladyWizard"
+import { LADY_WIZARD_FRAME_SIZE_PX } from "@/shared/sprites/ladyWizard"
+import { heroSpriteConfigFor } from "@/shared/sprites/heroSprites"
 import {
   FIREBALL_CHANNEL_ANIM,
   FIREBALL_CHANNEL_TEXTURE,
@@ -107,11 +104,12 @@ export {
   LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y,
 } from "@/shared/sprites/ladyWizard"
 
-function ladyWizardSpriteDisplayPos(footX: number, footY: number, jumpZ = 0) {
+function heroSpriteDisplayPos(heroId: string, footX: number, footY: number, jumpZ = 0) {
+  const spriteConfig = heroSpriteConfigFor(heroId)
   const liftPx = jumpZ * JUMP_SPRITE_Y_PIXELS_PER_SIM_Z
   return {
-    x: footX + LADY_WIZARD_SPRITE_DISPLAY_OFFSET_X,
-    y: footY + LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y - liftPx,
+    x: footX + spriteConfig.displayOffsetX,
+    y: footY + spriteConfig.displayOffsetY - liftPx,
   }
 }
 
@@ -174,6 +172,8 @@ const LAVA_LAP_DEPTH_EPS = 0.75
 /** Per-entity rendering state that lives outside the shared ECS records. */
 interface PlayerRenderEntry {
   sprite: Phaser.GameObjects.Sprite
+  /** Canonical hero id used for sprite texture and animation keys. */
+  heroId: HeroId
   /** Colored ellipse under the feet; scene-owned (not in `playerGroup`). */
   footMarker: Phaser.GameObjects.Ellipse
   nameTag: Phaser.GameObjects.Text
@@ -400,9 +400,9 @@ export class PlayerRenderSystem {
       entry.simPrevY = y
       entry.simCurrX = x
       entry.simCurrY = y
-      const sp = ladyWizardSpriteDisplayPos(x, y)
+      const sp = heroSpriteDisplayPos(entry.heroId, x, y)
       entry.sprite.setPosition(sp.x, sp.y)
-      entry.sprite.setDepth(y + LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y)
+      entry.sprite.setDepth(y + heroSpriteConfigFor(entry.heroId).displayOffsetY)
       const footY = y + FOOT_MARKER_CENTER_Y_OFFSET_FROM_FOOT
       entry.footMarker.setPosition(x, footY)
       entry.footMarker.setDepth(y - FOOT_MARKER_DEPTH_EPS)
@@ -502,14 +502,16 @@ export class PlayerRenderSystem {
   ): void {
     addEntity(id)
 
-    const footColor = HERO_CONFIGS[heroId]?.tint ?? 0xffffff
+    const canonicalHeroId = normalizeHeroId(heroId)
+    const heroSpriteConfig = heroSpriteConfigFor(canonicalHeroId)
+    const footColor = HERO_CONFIGS[canonicalHeroId].tint
     const isLocal = playerId === this.localPlayerId
 
-    const sp0 = ladyWizardSpriteDisplayPos(x, y)
-    const sprite = this.scene.add.sprite(sp0.x, sp0.y, "lady-wizard")
+    const sp0 = heroSpriteDisplayPos(canonicalHeroId, x, y)
+    const sprite = this.scene.add.sprite(sp0.x, sp0.y, heroSpriteConfig.spriteKey)
     sprite.setOrigin(0.5, 1.0)
     sprite.clearTint()
-    sprite.setDepth(y + LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y)
+    sprite.setDepth(y + heroSpriteConfig.displayOffsetY)
     this.group.add(sprite)
 
     const footY = y + FOOT_MARKER_CENTER_Y_OFFSET_FROM_FOOT
@@ -541,6 +543,7 @@ export class PlayerRenderSystem {
 
     this.entries.set(id, {
       sprite,
+      heroId: canonicalHeroId,
       footMarker,
       nameTag,
       hpBar,
@@ -719,7 +722,12 @@ export class PlayerRenderSystem {
     }
 
     if (typeof entry.sprite.setCrop === "function") {
-      entry.sprite.setCrop(0, 0, LADY_WIZARD_FRAME_SIZE_PX, LAVA_SUBMERGE_VISIBLE_HEIGHT_PX)
+      entry.sprite.setCrop(
+        0,
+        0,
+        heroSpriteConfigFor(entry.heroId).frameSizePx,
+        LAVA_SUBMERGE_VISIBLE_HEIGHT_PX,
+      )
     }
     if (!entry.lavaLapOverlay) {
       const overlay = this.scene.add.sprite(renderPos.x, renderPos.y, LAVA_LAP_TEXTURE)
@@ -806,7 +814,8 @@ export class PlayerRenderSystem {
     const entry = this.entries.get(id)
     if (!entry) return
 
-    const animKey = getAnimKey(
+    const animKey = getHeroAnimKey(
+      entry.heroId,
       "primary_melee_attack",
       getDirectionFromAngle(payload.facingAngle),
     )
@@ -1040,9 +1049,11 @@ export class PlayerRenderSystem {
         )
       }
 
-      const sp = ladyWizardSpriteDisplayPos(renderPos.x, renderPos.y, state.jumpZ ?? 0)
+      entry.heroId = normalizeHeroId(state.heroId)
+      const heroSpriteConfig = heroSpriteConfigFor(entry.heroId)
+      const sp = heroSpriteDisplayPos(entry.heroId, renderPos.x, renderPos.y, state.jumpZ ?? 0)
       entry.sprite.setPosition(sp.x, sp.y)
-      entry.sprite.setDepth(renderPos.y + LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y)
+      entry.sprite.setDepth(renderPos.y + heroSpriteConfig.displayOffsetY)
 
       const footY = renderPos.y + FOOT_MARKER_CENTER_Y_OFFSET_FROM_FOOT
       entry.footMarker.setPosition(renderPos.x, footY)
@@ -1067,7 +1078,7 @@ export class PlayerRenderSystem {
         state.animState === "primary_melee_attack" &&
         entry.lockedPrimaryMeleeAnimKey !== null
           ? entry.lockedPrimaryMeleeAnimKey
-          : getAnimKey(state.animState, direction)
+          : getHeroAnimKey(entry.heroId, state.animState, direction)
       if (animKey !== entry.lastAnimKey) {
         entry.sprite.play(animKey, true)
         entry.lastAnimKey = animKey

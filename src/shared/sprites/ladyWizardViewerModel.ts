@@ -1,11 +1,8 @@
 import {
-  LADY_WIZARD_ATLAS_CLIP_IDS,
-  LADY_WIZARD_ATLAS_CLIP_TO_MEGASHEET,
-  type LadyWizardAtlasClipId,
-  LADY_WIZARD_CLIP_FRAMES,
-  LADY_WIZARD_DIRECTIONS,
-  ladyWizardStripPublicPath,
-} from "./ladyWizard"
+  HERO_SPRITE_DIRECTIONS,
+  heroSpriteConfigFor,
+  heroStripPublicPath,
+} from "./heroSprites"
 
 /** Shape of committed `sheets/atlas.json`. */
 export type LadyWizardAtlasJson = {
@@ -14,7 +11,7 @@ export type LadyWizardAtlasJson = {
 }
 
 export type LadyWizardViewerCell = {
-  atlasClipId: LadyWizardAtlasClipId
+  atlasClipId: string
   direction: string
   /** Frame count from atlas when present; 0 when missing. */
   frameCount: number
@@ -26,21 +23,27 @@ export type LadyWizardViewerCell = {
 }
 
 /**
- * Builds a stable gallery matrix: known atlas clip order × eight directions.
+ * Builds a stable hero gallery matrix: configured atlas clip order × eight directions.
  * Missing atlas entries are explicit placeholders (`missing: true`).
  *
+ * @param heroId - Selected hero id.
  * @param atlas - Parsed `atlas.json` body.
  * @returns Flat list of cells in row-major order (clip major, direction minor).
  */
-export function buildLadyWizardViewerCells(atlas: LadyWizardAtlasJson): LadyWizardViewerCell[] {
+export function buildHeroSpriteViewerCells(
+  heroId: string,
+  atlas: LadyWizardAtlasJson,
+): LadyWizardViewerCell[] {
   const out: LadyWizardViewerCell[] = []
+  const spriteConfig = heroSpriteConfigFor(heroId)
 
-  for (const atlasClipId of LADY_WIZARD_ATLAS_CLIP_IDS) {
+  for (const actionClipId of spriteConfig.clipOrder) {
+    const clip = spriteConfig.clips[actionClipId]
+    const atlasClipId = clip.atlasClipId
     const clipBlock = atlas.clips[atlasClipId]
-    const megasheetClip = LADY_WIZARD_ATLAS_CLIP_TO_MEGASHEET[atlasClipId]
-    const expectedFrames = LADY_WIZARD_CLIP_FRAMES[megasheetClip]
+    const expectedFrames = clip.frameCount
 
-    for (const direction of LADY_WIZARD_DIRECTIONS) {
+    for (const direction of HERO_SPRITE_DIRECTIONS) {
       const rawCount =
         clipBlock && Object.prototype.hasOwnProperty.call(clipBlock, direction)
           ? (clipBlock[direction] ?? 0)
@@ -53,11 +56,21 @@ export function buildLadyWizardViewerCells(atlas: LadyWizardAtlasJson): LadyWiza
         direction,
         frameCount,
         expectedFrames,
-        stripUrl: ladyWizardStripPublicPath(atlasClipId, direction),
+        stripUrl: heroStripPublicPath(heroId, atlasClipId, direction),
         missing,
       })
     }
   }
 
   return out
+}
+
+/**
+ * Builds the legacy Yen/lady-wizard viewer matrix.
+ *
+ * @param atlas - Parsed `atlas.json` body.
+ * @returns Flat list of cells in row-major order.
+ */
+export function buildLadyWizardViewerCells(atlas: LadyWizardAtlasJson): LadyWizardViewerCell[] {
+  return buildHeroSpriteViewerCells("yen", atlas)
 }
