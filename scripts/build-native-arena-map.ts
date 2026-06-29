@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync, copyFileSync } from "node:fs"
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { basename, dirname, relative, resolve } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
@@ -42,8 +42,15 @@ type Placement = {
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(SCRIPT_DIR, "..")
 
-const ARENA_WIDTH = 1402
-const ARENA_HEIGHT = 1122
+const SOURCE_ARENA_WIDTH = 1402
+const SOURCE_ARENA_HEIGHT = 1122
+export const ARENA_OUTPUT_SCALE = 2
+export const ARENA_OUTPUT_WIDTH = SOURCE_ARENA_WIDTH * ARENA_OUTPUT_SCALE
+export const ARENA_OUTPUT_HEIGHT = SOURCE_ARENA_HEIGHT * ARENA_OUTPUT_SCALE
+export const ARENA_OUTPUT_COLS = 44
+export const ARENA_OUTPUT_ROWS = 36
+const ARENA_WIDTH = SOURCE_ARENA_WIDTH
+const ARENA_HEIGHT = SOURCE_ARENA_HEIGHT
 const REGION_CELL_PX = 4
 const PROP_DIR = resolve(ROOT, "public/assets/sprites/arena-props")
 const MAP_DIR = resolve(ROOT, "public/assets/maps")
@@ -70,6 +77,41 @@ const DETAIL_CROPS = [
 
 const TOP_LEFT_CORNER_CROP = { x: 0, y: 0, width: 470, height: 390 } as const
 const BOTTOM_HALF_REVIEW_CROP = { x: 0, y: 670, width: ARENA_WIDTH, height: ARENA_HEIGHT - 670 } as const
+
+function scaleArenaOutputValue(value: number): number {
+  return Math.round(value * ARENA_OUTPUT_SCALE)
+}
+
+export function scaleArenaOutputRect<T extends Rect>(rect: T): T {
+  return {
+    ...rect,
+    x: scaleArenaOutputValue(rect.x),
+    y: scaleArenaOutputValue(rect.y),
+    width: scaleArenaOutputValue(rect.width),
+    height: scaleArenaOutputValue(rect.height),
+  }
+}
+
+export function scaleArenaOutputPlacement(placement: Placement): Placement {
+  return {
+    ...placement,
+    x: scaleArenaOutputValue(placement.x),
+    y: scaleArenaOutputValue(placement.y),
+    scale: placement.scale * ARENA_OUTPUT_SCALE,
+  }
+}
+
+function scaleArenaOutputPoint<T extends { readonly x: number; readonly y: number }>(point: T): T {
+  return {
+    ...point,
+    x: scaleArenaOutputValue(point.x),
+    y: scaleArenaOutputValue(point.y),
+  }
+}
+
+function scaleArenaOutputRects<T extends Rect>(rects: readonly T[]): T[] {
+  return rects.map(scaleArenaOutputRect)
+}
 
 const REGION_NONE: RegionClass = 0
 const REGION_WALKABLE: RegionClass = 1
@@ -1549,6 +1591,14 @@ const SPAWNS = [
   { x: 700, y: 930 },
 ] as const
 
+function arenaOutputPlacements(): Placement[] {
+  return PLACEMENTS.map(scaleArenaOutputPlacement)
+}
+
+function arenaOutputSpawns(): Array<{ x: number; y: number }> {
+  return SPAWNS.map(scaleArenaOutputPoint)
+}
+
 async function loadRaw(path: string): Promise<RawImage> {
   const image = sharp(path).ensureAlpha()
   const meta = await image.metadata()
@@ -1558,6 +1608,15 @@ async function loadRaw(path: string): Promise<RawImage> {
     width: meta.width ?? 0,
     height: meta.height ?? 0,
   }
+}
+
+async function loadRawResized(path: string, width: number, height: number): Promise<RawImage> {
+  const data = await sharp(path)
+    .ensureAlpha()
+    .resize(width, height, { kernel: "nearest" })
+    .raw()
+    .toBuffer()
+  return { data, width, height }
 }
 
 function isCheckerBackground(r: number, g: number, b: number): boolean {
@@ -1721,9 +1780,10 @@ async function writeContactSheet(props: readonly PropDef[]): Promise<void> {
 
 async function renderReconstruction(props: readonly PropDef[]): Promise<void> {
   const propById = new Map(props.map((p) => [p.id, p]))
+  const placements = arenaOutputPlacements()
   const composites: sharp.OverlayOptions[] = []
   const propFootprints: Rect[] = []
-  for (const placement of PLACEMENTS) {
+  for (const placement of placements) {
     const prop = propById.get(placement.propId)
     if (!prop) throw new Error(`Unknown prop ${placement.propId}`)
     const scaleX = placement.flipX ? -placement.scale : placement.scale
@@ -1734,8 +1794,8 @@ async function renderReconstruction(props: readonly PropDef[]): Promise<void> {
     propFootprints.push({
       x: Math.max(0, Math.round(placement.x - width / 2) - 8),
       y: Math.max(0, Math.round(placement.y - height) - 8),
-      width: Math.min(ARENA_WIDTH, width + 16),
-      height: Math.min(ARENA_HEIGHT, height + 16),
+      width: Math.min(ARENA_OUTPUT_WIDTH, width + 16),
+      height: Math.min(ARENA_OUTPUT_HEIGHT, height + 16),
     })
     composites.push({
       input: await input.png().toBuffer(),
@@ -1748,21 +1808,21 @@ async function renderReconstruction(props: readonly PropDef[]): Promise<void> {
     .png()
     .toFile(resolve(REVIEW_DIR, "reconstructed-map.png"))
 
-  const target = await loadRaw(SOURCE_TARGET)
+  const target = await loadRawResized(SOURCE_TARGET, ARENA_OUTPUT_WIDTH, ARENA_OUTPUT_HEIGHT)
   const recon = await loadRaw(resolve(REVIEW_DIR, "reconstructed-map.png"))
-  const diff = Buffer.alloc(ARENA_WIDTH * ARENA_HEIGHT * 4)
-  const propMask = new Uint8Array(ARENA_WIDTH * ARENA_HEIGHT)
+  const diff = Buffer.alloc(ARENA_OUTPUT_WIDTH * ARENA_OUTPUT_HEIGHT * 4)
+  const propMask = new Uint8Array(ARENA_OUTPUT_WIDTH * ARENA_OUTPUT_HEIGHT)
   for (const rect of propFootprints) {
     const x0 = Math.max(0, rect.x)
     const y0 = Math.max(0, rect.y)
-    const x1 = Math.min(ARENA_WIDTH, rect.x + rect.width)
-    const y1 = Math.min(ARENA_HEIGHT, rect.y + rect.height)
+    const x1 = Math.min(ARENA_OUTPUT_WIDTH, rect.x + rect.width)
+    const y1 = Math.min(ARENA_OUTPUT_HEIGHT, rect.y + rect.height)
     for (let y = y0; y < y1; y++) {
-      propMask.fill(1, y * ARENA_WIDTH + x0, y * ARENA_WIDTH + x1)
+      propMask.fill(1, y * ARENA_OUTPUT_WIDTH + x0, y * ARENA_OUTPUT_WIDTH + x1)
     }
   }
 
-  for (let i = 0, p = 0; i < ARENA_WIDTH * ARENA_HEIGHT; i++, p += 4) {
+  for (let i = 0, p = 0; i < ARENA_OUTPUT_WIDTH * ARENA_OUTPUT_HEIGHT; i++, p += 4) {
     if (!propMask[i]) {
       const base = Math.round((target.data[p]! + target.data[p + 1]! + target.data[p + 2]!) / 3)
       diff[p] = base
@@ -1780,17 +1840,17 @@ async function renderReconstruction(props: readonly PropDef[]): Promise<void> {
     diff[p + 2] = Math.min(255, db * 3)
     diff[p + 3] = max > 18 ? 255 : 55
   }
-  await sharp(diff, { raw: { width: ARENA_WIDTH, height: ARENA_HEIGHT, channels: 4 } })
+  await sharp(diff, { raw: { width: ARENA_OUTPUT_WIDTH, height: ARENA_OUTPUT_HEIGHT, channels: 4 } })
     .png()
     .toFile(resolve(REVIEW_DIR, "reconstruction-diff.png"))
 }
 
 function numberedPlacementSvg(): Buffer {
-  const labels = PLACEMENTS.map((placement, index) => {
+  const labels = arenaOutputPlacements().map((placement, index) => {
     const label = String(index + 1)
     return `<g transform="translate(${placement.x} ${placement.y})"><circle r="12" fill="#ffe600" fill-opacity="0.88" stroke="#111111" stroke-width="2"/><text y="1" text-anchor="middle" dominant-baseline="middle" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#111111">${label}</text></g>`
   }).join("")
-  return Buffer.from(`<svg width="${ARENA_WIDTH}" height="${ARENA_HEIGHT}" viewBox="0 0 ${ARENA_WIDTH} ${ARENA_HEIGHT}" xmlns="http://www.w3.org/2000/svg">${labels}</svg>`)
+  return Buffer.from(`<svg width="${ARENA_OUTPUT_WIDTH}" height="${ARENA_OUTPUT_HEIGHT}" viewBox="0 0 ${ARENA_OUTPUT_WIDTH} ${ARENA_OUTPUT_HEIGHT}" xmlns="http://www.w3.org/2000/svg">${labels}</svg>`)
 }
 
 function scaledColliderForPlacement(props: readonly PropDef[], placement: Placement, index: number): Rect & { name: string } {
@@ -1810,21 +1870,25 @@ function scaledColliderForPlacement(props: readonly PropDef[], placement: Placem
   }
 }
 
+function arenaOutputPropColliders(props: readonly PropDef[]): Array<Rect & { name: string }> {
+  return scaleArenaOutputRects(PLACEMENTS.map((p, i) => scaledColliderForPlacement(props, p, i)))
+}
+
 function colorRectLayer(
   props: readonly PropDef[],
   rects: readonly (Rect & { readonly name?: string })[],
   color: { r: number; g: number; b: number; a: number },
 ): Buffer {
-  const data = Buffer.alloc(ARENA_WIDTH * ARENA_HEIGHT * 4)
+  const data = Buffer.alloc(ARENA_OUTPUT_WIDTH * ARENA_OUTPUT_HEIGHT * 4)
   for (const rect of rects) {
     const x0 = Math.max(0, rect.x)
     const y0 = Math.max(0, rect.y)
-    const x1 = Math.min(ARENA_WIDTH, rect.x + rect.width)
-    const y1 = Math.min(ARENA_HEIGHT, rect.y + rect.height)
+    const x1 = Math.min(ARENA_OUTPUT_WIDTH, rect.x + rect.width)
+    const y1 = Math.min(ARENA_OUTPUT_HEIGHT, rect.y + rect.height)
     for (let y = y0; y < y1; y++) {
       for (let x = x0; x < x1; x++) {
         const edge = x === x0 || y === y0 || x === x1 - 1 || y === y1 - 1
-        const i = (y * ARENA_WIDTH + x) * 4
+        const i = (y * ARENA_OUTPUT_WIDTH + x) * 4
         data[i] = color.r
         data[i + 1] = color.g
         data[i + 2] = color.b
@@ -1874,7 +1938,10 @@ async function maskLayerPng(
 ): Promise<Buffer> {
   return sharp(maskRegionLayer(mask, color, fillAlpha, lineAlpha), {
     raw: { width: ARENA_WIDTH, height: ARENA_HEIGHT, channels: 4 },
-  }).png().toBuffer()
+  })
+    .resize(ARENA_OUTPUT_WIDTH, ARENA_OUTPUT_HEIGHT, { kernel: "nearest" })
+    .png()
+    .toBuffer()
 }
 
 function textSvg(width: number, height: number, text: string, options: { fontSize?: number; y?: number } = {}): Buffer {
@@ -2019,7 +2086,7 @@ async function writeBottomHalfReviewCrops(): Promise<void> {
 }
 
 async function writeOverlayImages(props: readonly PropDef[]): Promise<void> {
-  const propColliders = PLACEMENTS.map((p, i) => scaledColliderForPlacement(props, p, i))
+  const propColliders = arenaOutputPropColliders(props)
 
   const overlays = [
     ["object-collision-yellow-highlight.png", propColliders, { r: 255, g: 230, b: 0, a: 115 }],
@@ -2027,7 +2094,7 @@ async function writeOverlayImages(props: readonly PropDef[]): Promise<void> {
 
   for (const [name, rects, color] of overlays) {
     const overlay = await sharp(colorRectLayer(props, rects, color), {
-      raw: { width: ARENA_WIDTH, height: ARENA_HEIGHT, channels: 4 },
+      raw: { width: ARENA_OUTPUT_WIDTH, height: ARENA_OUTPUT_HEIGHT, channels: 4 },
     }).png().toBuffer()
     const background = name === "object-collision-yellow-highlight.png" ? resolve(REVIEW_DIR, "reconstructed-map.png") : BASE_OUT
     await sharp(background)
@@ -2051,6 +2118,7 @@ async function writeOverlayImages(props: readonly PropDef[]): Promise<void> {
     rawWalkableMask[p + 3] = 255
   }
   await sharp(rawWalkableMask, { raw: { width: ARENA_WIDTH, height: ARENA_HEIGHT, channels: 4 } })
+    .resize(ARENA_OUTPUT_WIDTH, ARENA_OUTPUT_HEIGHT, { kernel: "nearest" })
     .png()
     .toFile(resolve(REVIEW_DIR, "walkable-mask-filled.png"))
 
@@ -2074,7 +2142,7 @@ async function writeOverlayImages(props: readonly PropDef[]): Promise<void> {
       },
       {
         input: await sharp(colorRectLayer(props, propColliders, { r: 255, g: 230, b: 0, a: 105 }), {
-          raw: { width: ARENA_WIDTH, height: ARENA_HEIGHT, channels: 4 },
+          raw: { width: ARENA_OUTPUT_WIDTH, height: ARENA_OUTPUT_HEIGHT, channels: 4 },
         }).png().toBuffer(),
       },
     ])
@@ -2085,18 +2153,18 @@ async function writeOverlayImages(props: readonly PropDef[]): Promise<void> {
   await sharp(BASE_OUT)
     .composite([
       {
-        input: await sharp(colorRectLayer(props, WALKABLE_RECTS, { r: 80, g: 255, b: 120, a: 12 }), {
-          raw: { width: ARENA_WIDTH, height: ARENA_HEIGHT, channels: 4 },
+        input: await sharp(colorRectLayer(props, scaleArenaOutputRects(WALKABLE_RECTS), { r: 80, g: 255, b: 120, a: 12 }), {
+          raw: { width: ARENA_OUTPUT_WIDTH, height: ARENA_OUTPUT_HEIGHT, channels: 4 },
         }).png().toBuffer(),
       },
       {
-        input: await sharp(colorRectLayer(props, LAVA_RECTS, { r: 255, g: 60, b: 0, a: 18 }), {
-          raw: { width: ARENA_WIDTH, height: ARENA_HEIGHT, channels: 4 },
+        input: await sharp(colorRectLayer(props, scaleArenaOutputRects(LAVA_RECTS), { r: 255, g: 60, b: 0, a: 18 }), {
+          raw: { width: ARENA_OUTPUT_WIDTH, height: ARENA_OUTPUT_HEIGHT, channels: 4 },
         }).png().toBuffer(),
       },
       {
-        input: await sharp(colorRectLayer(props, CLIFF_RECTS, { r: 255, g: 255, b: 255, a: 12 }), {
-          raw: { width: ARENA_WIDTH, height: ARENA_HEIGHT, channels: 4 },
+        input: await sharp(colorRectLayer(props, scaleArenaOutputRects(CLIFF_RECTS), { r: 255, g: 255, b: 255, a: 12 }), {
+          raw: { width: ARENA_OUTPUT_WIDTH, height: ARENA_OUTPUT_HEIGHT, channels: 4 },
         }).png().toBuffer(),
       },
     ])
@@ -2147,7 +2215,12 @@ function repoPath(path: string): string {
 
 function writeSceneAndRuntimeSources(props: readonly PropDef[]): void {
   const propById = new Map(props.map((p) => [p.id, p]))
-  const propColliders = PLACEMENTS.map((p, i) => scaledColliderForPlacement(props, p, i))
+  const placements = arenaOutputPlacements()
+  const propColliders = arenaOutputPropColliders(props)
+  const lavaRects = scaleArenaOutputRects(LAVA_RECTS)
+  const cliffRects = scaleArenaOutputRects(CLIFF_RECTS)
+  const nonWalkableRects = scaleArenaOutputRects(NON_WALKABLE_RECTS)
+  const walkableRects = scaleArenaOutputRects(WALKABLE_RECTS)
 
   const displayList: Record<string, unknown>[] = [
     {
@@ -2162,8 +2235,8 @@ function writeSceneAndRuntimeSources(props: readonly PropDef[]): void {
     },
   ]
 
-  for (let i = 0; i < PLACEMENTS.length; i++) {
-    const placement = PLACEMENTS[i]!
+  for (let i = 0; i < placements.length; i++) {
+    const placement = placements[i]!
     displayList.push({
       type: "Image",
       id: `arena_prop_${String(i).padStart(3, "0")}`,
@@ -2182,22 +2255,22 @@ function writeSceneAndRuntimeSources(props: readonly PropDef[]): void {
     const rect = propColliders[i]!
     displayList.push(rectangleSceneObject(rect.name, rect.name, rect, 0xffff00))
   }
-  for (let i = 0; i < LAVA_RECTS.length; i++) {
+  for (let i = 0; i < lavaRects.length; i++) {
     const label = `lavaArea_${String(i).padStart(3, "0")}`
-    displayList.push(rectangleSceneObject(label, label, LAVA_RECTS[i]!, 0xff3c00))
+    displayList.push(rectangleSceneObject(label, label, lavaRects[i]!, 0xff3c00))
   }
-  for (let i = 0; i < CLIFF_RECTS.length; i++) {
+  for (let i = 0; i < cliffRects.length; i++) {
     const label = `cliffArea_${String(i).padStart(3, "0")}`
-    displayList.push(rectangleSceneObject(label, label, CLIFF_RECTS[i]!, 0xffffff))
+    displayList.push(rectangleSceneObject(label, label, cliffRects[i]!, 0xffffff))
   }
-  for (let i = 0; i < NON_WALKABLE_RECTS.length; i++) {
-    const rect = NON_WALKABLE_RECTS[i]!
+  for (let i = 0; i < nonWalkableRects.length; i++) {
+    const rect = nonWalkableRects[i]!
     const label = `nonWalkableArea_${String(i).padStart(3, "0")}`
     displayList.push(rectangleSceneObject(label, label, rect, 0xff0000))
   }
-  for (let i = 0; i < WALKABLE_RECTS.length; i++) {
+  for (let i = 0; i < walkableRects.length; i++) {
     const label = `walkableArea_${String(i).padStart(3, "0")}`
-    displayList.push(rectangleSceneObject(label, label, WALKABLE_RECTS[i]!, 0x50ff78))
+    displayList.push(rectangleSceneObject(label, label, walkableRects[i]!, 0x50ff78))
   }
 
   writeFileSync(
@@ -2213,8 +2286,8 @@ function writeSceneAndRuntimeSources(props: readonly PropDef[]): void {
           createMethodName: "editorCreate",
           sceneKey: "Arena",
           compilerOutputLanguage: "TYPE_SCRIPT",
-          borderWidth: ARENA_WIDTH,
-          borderHeight: ARENA_HEIGHT,
+          borderWidth: ARENA_OUTPUT_WIDTH,
+          borderHeight: ARENA_OUTPUT_HEIGHT,
         },
         displayList,
         plainObjects: [],
@@ -2226,12 +2299,12 @@ function writeSceneAndRuntimeSources(props: readonly PropDef[]): void {
         },
       },
       null,
-      4,
+      2,
     )}\n`,
     "utf8",
   )
 
-  const propCreateLines = PLACEMENTS.map((placement, index) => {
+  const propCreateLines = placements.map((placement, index) => {
     const prop = propById.get(placement.propId)!
     const key = `arena-prop-${placement.propId}`
     const varName = `arenaProp${index}`
@@ -2300,7 +2373,8 @@ function writeAssetPacks(props: readonly PropDef[]): void {
 }
 
 function writeMetadata(props: readonly PropDef[]): void {
-  const propColliders = PLACEMENTS.map((p, i) => scaledColliderForPlacement(props, p, i))
+  const placements = arenaOutputPlacements()
+  const propColliders = arenaOutputPropColliders(props)
   const metadata = {
     generatedFrom: {
       base: repoPath(SOURCE_BASE),
@@ -2308,24 +2382,24 @@ function writeMetadata(props: readonly PropDef[]): void {
       target: repoPath(SOURCE_TARGET),
       walkableGuide: repoPath(SOURCE_WALKABLE_GUIDE),
     },
-    arena: { width: ARENA_WIDTH, height: ARENA_HEIGHT },
+    arena: { width: ARENA_OUTPUT_WIDTH, height: ARENA_OUTPUT_HEIGHT },
     props,
-    placements: PLACEMENTS,
+    placements,
     propColliders,
-    nonWalkableAreas: NON_WALKABLE_RECTS,
-    lavaAreas: LAVA_RECTS,
-    cliffAreas: CLIFF_RECTS,
-    walkableAreas: WALKABLE_RECTS,
-    spawnPoints: SPAWNS,
+    nonWalkableAreas: scaleArenaOutputRects(NON_WALKABLE_RECTS),
+    lavaAreas: scaleArenaOutputRects(LAVA_RECTS),
+    cliffAreas: scaleArenaOutputRects(CLIFF_RECTS),
+    walkableAreas: scaleArenaOutputRects(WALKABLE_RECTS),
+    spawnPoints: arenaOutputSpawns(),
   }
   writeFileSync(resolve(PROP_DIR, "metadata.json"), `${JSON.stringify(metadata, null, 2)}\n`, "utf8")
-  writeFileSync(resolve(REVIEW_DIR, "placements.json"), `${JSON.stringify({ placements: PLACEMENTS, propColliders }, null, 2)}\n`, "utf8")
+  writeFileSync(resolve(REVIEW_DIR, "placements.json"), `${JSON.stringify({ placements, propColliders }, null, 2)}\n`, "utf8")
 }
 
 function writeArenaLayout(): void {
   writeFileSync(
     resolve(ROOT, "src/shared/balance-config/arena-layout.ts"),
-    `/**\n * Project-owned native Arena layout data.\n *\n * The arena visual is image-backed at native map resolution. Keep this file in\n * sync with \`Arena.scene\`, \`public/assets/tilemaps/arena.json\`, and the\n * generated collider files when the arena changes.\n */\nexport const ARENA_LAYOUT_WIDTH = ${ARENA_WIDTH}\nexport const ARENA_LAYOUT_HEIGHT = ${ARENA_HEIGHT}\nexport const ARENA_LAYOUT_COLS = 22\nexport const ARENA_LAYOUT_ROWS = 18\nexport const ARENA_LAYOUT_IMPORTED_TILE_FIRST_GID = 17\nexport const ARENA_LAYOUT_SPAWN_POINTS = ${JSON.stringify(SPAWNS, null, 2)} as const\n`,
+    `/**\n * Project-owned native Arena layout data.\n *\n * The arena visual is image-backed at native map resolution. Keep this file in\n * sync with \`Arena.scene\`, \`public/assets/tilemaps/arena.json\`, and the\n * generated collider files when the arena changes.\n */\nexport const ARENA_LAYOUT_WIDTH = ${ARENA_OUTPUT_WIDTH}\nexport const ARENA_LAYOUT_HEIGHT = ${ARENA_OUTPUT_HEIGHT}\nexport const ARENA_LAYOUT_COLS = ${ARENA_OUTPUT_COLS}\nexport const ARENA_LAYOUT_ROWS = ${ARENA_OUTPUT_ROWS}\nexport const ARENA_LAYOUT_IMPORTED_TILE_FIRST_GID = 17\nexport const ARENA_LAYOUT_SPAWN_POINTS = ${JSON.stringify(arenaOutputSpawns(), null, 2)} as const\n`,
     "utf8",
   )
 }
@@ -2335,7 +2409,10 @@ async function main(): Promise<void> {
     mkdirSync(dir, { recursive: true })
   }
   await buildArenaGeometry()
-  copyFileSync(SOURCE_BASE, BASE_OUT)
+  await sharp(SOURCE_BASE)
+    .resize(ARENA_OUTPUT_WIDTH, ARENA_OUTPUT_HEIGHT, { kernel: "nearest" })
+    .png()
+    .toFile(BASE_OUT)
   const props = await extractProps()
   writeMetadata(props)
   await writeContactSheet(props)
