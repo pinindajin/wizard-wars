@@ -23,9 +23,15 @@ import {
   ARENA_WIDTH,
   ARENA_WORLD_COLLIDERS,
 } from "@/shared/balance-config/arena"
-import { PLAYER_WORLD_COLLISION_FOOTPRINT } from "@/shared/balance-config/combat"
+import {
+  JUMP_LANDING_GRACE_PX,
+  PLAYER_WORLD_COLLISION_FOOTPRINT,
+} from "@/shared/balance-config/combat"
 import { terrainStateAtPosition } from "@/shared/collision/terrainHazards"
-import { canOccupyWorldPosition } from "@/shared/collision/worldCollision"
+import {
+  canOccupyWorldPosition,
+  resolveJumpLandingWithGrace,
+} from "@/shared/collision/worldCollision"
 import type { PlayerInputPayload } from "@/shared/types"
 
 function input(overrides: Partial<PlayerInputPayload> = {}): PlayerInputPayload {
@@ -57,27 +63,76 @@ function queue(payload: PlayerInputPayload): PlayerInputQueueMap {
  */
 function findIllegalGroundPoint(): { x: number; y: number } {
   const bounds = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
+  const edgeOverlapPx = Math.min(2, JUMP_LANDING_GRACE_PX)
+  const candidatesFor = (pit: { x: number; y: number; width: number; height: number }) => [
+    {
+      x: pit.x + pit.width + PLAYER_WORLD_COLLISION_FOOTPRINT.radiusX - edgeOverlapPx,
+      y: pit.y + pit.height / 2,
+      movementX: 1,
+      movementY: 0,
+    },
+    {
+      x: pit.x - PLAYER_WORLD_COLLISION_FOOTPRINT.radiusX + edgeOverlapPx,
+      y: pit.y + pit.height / 2,
+      movementX: -1,
+      movementY: 0,
+    },
+    {
+      x: pit.x + pit.width / 2,
+      y:
+        pit.y +
+        pit.height +
+        PLAYER_WORLD_COLLISION_FOOTPRINT.radiusY +
+        PLAYER_WORLD_COLLISION_FOOTPRINT.offsetY -
+        edgeOverlapPx,
+      movementX: 0,
+      movementY: 1,
+    },
+    {
+      x: pit.x + pit.width / 2,
+      y:
+        pit.y -
+        PLAYER_WORLD_COLLISION_FOOTPRINT.radiusY +
+        PLAYER_WORLD_COLLISION_FOOTPRINT.offsetY +
+        edgeOverlapPx,
+      movementX: 0,
+      movementY: -1,
+    },
+  ]
+
   for (const pit of ARENA_WORLD_COLLIDERS) {
-    for (let ix = 0.25; ix <= 0.75; ix += 0.05) {
-      for (let iy = 0.25; iy <= 0.75; iy += 0.05) {
-        const x = pit.x + pit.width * ix
-        const y = pit.y + pit.height * iy
-        if (terrainStateAtPosition(x, y) !== "land") continue
-        if (
-          !canOccupyWorldPosition(
-            x,
-            y,
-            PLAYER_WORLD_COLLISION_FOOTPRINT,
-            bounds,
-            ARENA_WORLD_COLLIDERS,
-          )
-        ) {
-          return { x, y }
-        }
+    for (const candidate of candidatesFor(pit)) {
+      if (terrainStateAtPosition(candidate.x, candidate.y) !== "land") continue
+      if (
+        canOccupyWorldPosition(
+          candidate.x,
+          candidate.y,
+          PLAYER_WORLD_COLLISION_FOOTPRINT,
+          bounds,
+          ARENA_WORLD_COLLIDERS,
+        )
+      ) {
+        continue
+      }
+      if (
+        resolveJumpLandingWithGrace(
+          candidate.x,
+          candidate.y,
+          PLAYER_WORLD_COLLISION_FOOTPRINT,
+          bounds,
+          ARENA_WORLD_COLLIDERS,
+          {
+            movementX: candidate.movementX,
+            movementY: candidate.movementY,
+            gracePx: JUMP_LANDING_GRACE_PX,
+          },
+        )
+      ) {
+        return { x: candidate.x, y: candidate.y }
       }
     }
   }
-  throw new Error("expected non-walkable interior sample")
+  throw new Error("expected non-walkable landing-edge sample")
 }
 
 function sampleNativeLavaEdgeJump(): {
@@ -86,7 +141,12 @@ function sampleNativeLavaEdgeJump(): {
   minLandingX: number
   input: Partial<PlayerInputPayload>
 } {
-  const sample = { startX: 24, startY: 800, minLandingX: 112, input: { right: true } }
+  const sample = {
+    startX: 1872,
+    startY: 64,
+    minLandingX: 1976,
+    input: { right: true },
+  }
   if (terrainStateAtPosition(sample.startX, sample.startY) !== "lava") {
     throw new Error("expected native lava-edge jump start to be lava")
   }
@@ -102,7 +162,7 @@ function sampleLavaEdge(): {
   landThresholdX: number
   exitInput: Partial<PlayerInputPayload>
 } {
-  const sample = { x: 24, y: 800, landThresholdX: 112, exitInput: { right: true } }
+  const sample = { x: 1872, y: 64, landThresholdX: 1976, exitInput: { right: true } }
   if (
     terrainStateAtPosition(sample.x, sample.y) === "lava" &&
     terrainStateAtPosition(sample.landThresholdX, sample.y) === "land"
@@ -225,7 +285,7 @@ describe("jump pit landing (integration)", () => {
   it("keeps a jump landing in lava from walking out afterward", () => {
     const sim = createGameSimulation(Date.now())
     const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
-    const lava = { x: 100, y: 40, exitInput: { down: true } satisfies Partial<PlayerInputPayload> }
+    const lava = { x: 648, y: 72, exitInput: { right: true } satisfies Partial<PlayerInputPayload> }
 
     Position.x[eid] = lava.x
     Position.y[eid] = lava.y
@@ -241,7 +301,7 @@ describe("jump pit landing (integration)", () => {
     }
 
     expect(terrainStateAtPosition(Position.x[eid], Position.y[eid])).toBe("lava")
-    expect(Position.y[eid]).toBeLessThanOrEqual(lava.y + 8)
+    expect(Position.x[eid]).toBeLessThanOrEqual(lava.x + 8)
     expect(TerrainState.kind[eid]).toBe(TERRAIN_KIND.lava)
   })
 

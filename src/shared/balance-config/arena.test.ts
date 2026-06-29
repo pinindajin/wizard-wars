@@ -26,6 +26,8 @@ import {
 } from "@/shared/balance-config/arena-layout"
 import { canOccupyWorldPosition } from "@/shared/collision/worldCollision"
 
+const ARENA_SCALE = 2
+
 /**
  * Tests whether a player spawn oval overlaps a generated collider rectangle.
  *
@@ -53,6 +55,10 @@ function pointOverlapsCollider(
   rect: { x: number; y: number; width: number; height: number },
 ): boolean {
   return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height
+}
+
+function scaledPoint(point: { readonly x: number; readonly y: number }): { x: number; y: number } {
+  return { x: point.x * ARENA_SCALE, y: point.y * ARENA_SCALE }
 }
 
 function hasFootprintReachablePath(
@@ -167,12 +173,12 @@ describe("arena constants", () => {
     }
   })
 
-  it("has native image dimensions while retaining 64px broadphase cells", () => {
+  it("has doubled native image dimensions while retaining 64px broadphase cells", () => {
     expect(TILE_SIZE_PX).toBe(64)
-    expect(ARENA_WIDTH).toBe(1402)
-    expect(ARENA_HEIGHT).toBe(1122)
-    expect(ARENA_COLS).toBeGreaterThan(0)
-    expect(ARENA_ROWS).toBeGreaterThan(0)
+    expect(ARENA_WIDTH).toBe(2804)
+    expect(ARENA_HEIGHT).toBe(2244)
+    expect(ARENA_COLS).toBe(44)
+    expect(ARENA_ROWS).toBe(36)
   })
 
   it("has correct center coordinates", () => {
@@ -194,17 +200,18 @@ describe("arena constants", () => {
       { label: "main arena join", x: 430, y: 365 },
     ]
     for (const sample of samples) {
+      const scaled = scaledPoint(sample)
       const blockingCollider = ARENA_NON_WALKABLE_COLLIDERS.find((rect) =>
-        pointOverlapsCollider(sample.x, sample.y, rect),
+        pointOverlapsCollider(scaled.x, scaled.y, rect),
       )
       expect(blockingCollider, sample.label).toBeUndefined()
     }
     expect(
       hasFootprintReachablePath(
-        { x: 164, y: 154 },
-        { x: 430, y: 365 },
-        { minX: 40, maxX: 520, minY: 50, maxY: 430 },
-        4,
+        scaledPoint({ x: 164, y: 154 }),
+        scaledPoint({ x: 430, y: 365 }),
+        { minX: 80, maxX: 1040, minY: 100, maxY: 860 },
+        8,
       ),
     ).toBe(true)
   })
@@ -222,14 +229,15 @@ describe("arena constants", () => {
     ]
 
     for (const sample of samples) {
+      const scaled = scaledPoint(sample)
       const blockingCollider = ARENA_NON_WALKABLE_COLLIDERS.find((rect) =>
-        pointOverlapsCollider(sample.x, sample.y, rect),
+        pointOverlapsCollider(scaled.x, scaled.y, rect),
       )
       expect(blockingCollider, `${sample.label} point blocker`).toBeUndefined()
       expect(
         canOccupyWorldPosition(
-          sample.x,
-          sample.y,
+          scaled.x,
+          scaled.y,
           PLAYER_WORLD_COLLISION_FOOTPRINT,
           { width: ARENA_WIDTH, height: ARENA_HEIGHT },
           ARENA_WORLD_COLLIDERS,
@@ -252,8 +260,9 @@ describe("arena constants", () => {
     ]
 
     for (const sample of samples) {
+      const scaled = scaledPoint(sample)
       const blockingCollider = ARENA_NON_WALKABLE_COLLIDERS.find((rect) =>
-        pointOverlapsCollider(sample.x, sample.y, rect),
+        pointOverlapsCollider(scaled.x, scaled.y, rect),
       )
       expect(blockingCollider, sample.label).toBeDefined()
     }
@@ -273,6 +282,23 @@ describe("spawn points", () => {
       expect(sp.y).toBeGreaterThan(0)
       expect(sp.y).toBeLessThan(ARENA_HEIGHT)
     }
+  })
+
+  it("scales spawn points with the doubled arena", () => {
+    expect(ARENA_SPAWN_POINTS).toEqual([
+      { x: 1420, y: 1124 },
+      { x: 1170, y: 1120 },
+      { x: 1670, y: 1120 },
+      { x: 1420, y: 820 },
+      { x: 1420, y: 1420 },
+      { x: 1020, y: 1010 },
+      { x: 1820, y: 1010 },
+      { x: 1024, y: 1250 },
+      { x: 1816, y: 1250 },
+      { x: 372, y: 1712 },
+      { x: 2432, y: 1712 },
+      { x: 1400, y: 1860 },
+    ])
   })
 
   it("no two spawn points overlap (all distinct positions)", () => {

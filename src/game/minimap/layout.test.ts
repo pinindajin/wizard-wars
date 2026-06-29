@@ -5,8 +5,8 @@ import { computeMinimapViewport } from "./layout"
 const BASE = {
   canvasWidth: 1344,
   canvasHeight: 768,
-  arenaWidth: 1402,
-  arenaHeight: 1122,
+  arenaWidth: 2804,
+  arenaHeight: 2244,
 } as const
 
 describe("computeMinimapViewport", () => {
