@@ -254,9 +254,9 @@ export type GameNetTimingPayload = {
   readonly remoteRenderDelayMs: number
 }
 
-/** Server-advertised input transport preference for additive rollout. */
+/** Server-advertised v2 input transport preference. */
 export type GameInputProtocolPayload = {
-  readonly protocolVersion: 1
+  readonly protocolVersion: 2
   readonly preferredTransport: "legacy" | "compact"
   readonly activeHeartbeatMs: number
   readonly idleHeartbeatMs: number
@@ -278,6 +278,8 @@ export type GameStateSyncPayload = {
   readonly timing?: GameNetTimingPayload
   /** Optional input transport capability. Missing means legacy full input. */
   readonly input?: GameInputProtocolPayload
+  /** True when the server reset this client's input stream before this sync. */
+  readonly inputStreamReset?: boolean
 }
 
 /** A fireball projectile snapshot. */
@@ -367,6 +369,9 @@ export type ServerPerformanceStatusPayload = {
     readonly visualFlushDurationMs?: number
     readonly ownerAckSendDurationMs?: number
     readonly immediateBroadcastDurationMs?: number
+    readonly compactInputV2Batches?: number
+    readonly compactInputV2Runs?: number
+    readonly compactInputV2CommandSeqs?: number
     readonly visualBudgetDeferrals?: number
     readonly visualBudgetDeferredEntities?: number
     readonly visualBudgetMaxDeferralAgeMs?: number
@@ -577,10 +582,10 @@ export type PlayerInputPayload = {
   readonly clientSendTimeMs: number
 }
 
-/** Client → server: compact current input state for state-change transport. */
-export type PlayerInputStatePayload = {
-  readonly protocolVersion: 1
-  readonly seq: number
+/** Inclusive run of one compact input command across one or more fixed ticks. */
+export type PlayerInputCommandRunPayload = {
+  readonly fromSeq: number
+  readonly toSeq: number
   readonly clientSendTimeMs: number
   readonly buttons: number
   readonly targetX: number
@@ -588,6 +593,14 @@ export type PlayerInputStatePayload = {
   readonly abilitySlot?: number
   readonly useQuickItemSlot?: number
 }
+
+/** Client → server: compact v2 command batch for tick-aware input transport. */
+export type PlayerInputStateV2Payload = {
+  readonly protocolVersion: 2
+  readonly runs: readonly PlayerInputCommandRunPayload[]
+}
+
+export type PlayerInputStatePayload = PlayerInputStateV2Payload
 
 /** Server → all: damage number floats. */
 export type DamageFloatPayload = {

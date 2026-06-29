@@ -149,6 +149,7 @@ export class ArenaRuntime {
   private readonly log = clientLogger.child({ area: "netcode" })
   private activeLocalInputHandler?: () => void
   private inputTransport: "legacy" | "compact" = "legacy"
+  private inputProtocolConfigKey: string | null = null
   private compactInputScheduler = new PlayerInputStateScheduler()
 
   /** Whether the match has started (MatchGo received). */
@@ -359,7 +360,7 @@ export class ArenaRuntime {
       switch (message.type) {
         case WsEvent.GameStateSync: {
           const payload = message.payload as GameStateSyncPayload
-          this._applyInputProtocol(payload.input)
+          this._applyInputProtocol(payload.input, payload.inputStreamReset === true)
           this.networkSyncSystem.applyFullSync(payload)
           this.playerRenderSystem.applyFullSync(payload)
           this.projectileRenderSystem.applyFullSyncFireballs(
@@ -609,10 +610,24 @@ export class ArenaRuntime {
    * when old servers omit the capability payload.
    *
    * @param protocol - Optional input protocol from `MatchGo` or `GameStateSync`.
+   * @param resetInputState - True when the server reset this client's input stream.
    */
-  private _applyInputProtocol(protocol?: GameInputProtocolPayload): void {
-    this.inputTransport =
+  private _applyInputProtocol(
+    protocol?: GameInputProtocolPayload,
+    resetInputState = false,
+  ): void {
+    const nextTransport =
       protocol?.preferredTransport === "compact" ? "compact" : "legacy"
+    const nextConfigKey = [
+      nextTransport,
+      protocol?.activeHeartbeatMs ?? "",
+      protocol?.idleHeartbeatMs ?? "",
+    ].join(":")
+
+    if (!resetInputState && this.inputProtocolConfigKey === nextConfigKey) return
+
+    this.inputTransport = nextTransport
+    this.inputProtocolConfigKey = nextConfigKey
     this.compactInputScheduler = new PlayerInputStateScheduler({
       activeHeartbeatMs: protocol?.activeHeartbeatMs,
       idleHeartbeatMs: protocol?.idleHeartbeatMs,
