@@ -82,7 +82,7 @@ export class PlayerInputStateScheduler {
     } else if (canExtendRun(this.pendingRun, currentRun)) {
       this.pendingRun = { ...this.pendingRun, toSeq: input.seq }
     } else {
-      runs.push(this.pendingRun)
+      if (!isNoOpIdleRun(this.pendingRun)) runs.push(this.pendingRun)
       this.pendingRun = currentRun
       forceFlush = true
     }
@@ -139,6 +139,20 @@ function canExtendRun(
     pending.targetY === next.targetY &&
     pending.abilitySlot === undefined &&
     pending.useQuickItemSlot === undefined
+  )
+}
+
+/**
+ * Returns whether a run has no authoritative gameplay effect by itself.
+ *
+ * @param run - Compact command run to inspect.
+ * @returns True when the run only repeats idle/no-edge state.
+ */
+function isNoOpIdleRun(run: PlayerInputCommandRunPayload): boolean {
+  return (
+    run.buttons === 0 &&
+    run.abilitySlot === undefined &&
+    run.useQuickItemSlot === undefined
   )
 }
 

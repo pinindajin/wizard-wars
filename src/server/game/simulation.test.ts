@@ -597,6 +597,47 @@ describe("movement system", () => {
     expect(Math.abs(step2 - step1)).toBeLessThan(0.01)
   })
 
+  it("fast-forwards retained held ticks before replaying a later compact heartbeat", () => {
+    const sim = createGameSimulation(Date.now())
+    const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    const startY = Position.y[eid]
+    const initial = sim.tick(
+      queueMap([["user1", emptyInput({ up: true, seq: 0 })]]),
+      Date.now(),
+    )
+    const initialSeq = ackSeqFromOutput(sim, initial)
+    const retainedAckSeqs: number[] = []
+
+    for (let tick = 1; tick <= 5; tick++) {
+      const output = sim.tick(new Map(), Date.now() + tick * 17)
+      const seq = ackSeqFromOutput(sim, output)
+      if (seq !== undefined) retainedAckSeqs.push(seq)
+    }
+
+    const queue = new PlayerInputQueue()
+    queue.pushRun({
+      fromSeq: 1,
+      toSeq: 6,
+      clientSendTimeMs: 1_000,
+      buttons: PLAYER_INPUT_BUTTON_BITS.up,
+      targetX: 0,
+      targetY: 0,
+    })
+    const heartbeat = sim.tick(new Map([["user1", queue]]), Date.now() + 6 * 17)
+    const heartbeatSeq = ackSeqFromOutput(sim, heartbeat)
+    const heartbeatAck =
+      heartbeatSeq === undefined
+        ? null
+        : sim.buildPlayerOwnerAckPayload(eid, heartbeatSeq, Date.now())
+
+    expect(initialSeq).toBe(0)
+    expect(retainedAckSeqs).toEqual([])
+    expect(heartbeatAck?.lastProcessedInputSeq).toBe(6)
+    const stepPx = BASE_MOVE_SPEED_PX_PER_SEC * TICK_DT_SEC
+    expect(heartbeatAck?.y).toBeCloseTo(startY - 7 * stepPx, 3)
+    expect(queue.length).toBe(0)
+  })
+
   it("expires retained held movement after the stale-input threshold", () => {
     const sim = createGameSimulation(Date.now())
     sim.addPlayer("user1", "Alice", "red_wizard", 0)

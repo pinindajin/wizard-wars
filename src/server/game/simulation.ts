@@ -292,6 +292,66 @@ function heldInputForVirtualAck(
   }
 }
 
+/**
+ * Builds an input payload shape from currently retained held component state.
+ *
+ * @param eid - Player entity id.
+ * @param seq - Sequence cursor to assign to the retained payload shape.
+ * @param serverTimeMs - Current server wall-clock time.
+ * @returns A held input payload, or null when no held button is active.
+ */
+function retainedHeldInputForVirtualAck(
+  eid: number,
+  seq: number,
+  serverTimeMs: number,
+): PlayerInputPayload | null {
+  const hasHeldInput =
+    PlayerInput.up[eid] === 1 ||
+    PlayerInput.down[eid] === 1 ||
+    PlayerInput.left[eid] === 1 ||
+    PlayerInput.right[eid] === 1 ||
+    PlayerInput.weaponPrimary[eid] === 1 ||
+    PlayerInput.weaponSecondary[eid] === 1
+  if (!hasHeldInput) return null
+  return {
+    up: PlayerInput.up[eid] === 1,
+    down: PlayerInput.down[eid] === 1,
+    left: PlayerInput.left[eid] === 1,
+    right: PlayerInput.right[eid] === 1,
+    abilitySlot: null,
+    abilityTargetX: PlayerInput.abilityTargetX[eid],
+    abilityTargetY: PlayerInput.abilityTargetY[eid],
+    weaponPrimary: PlayerInput.weaponPrimary[eid] === 1,
+    weaponSecondary: PlayerInput.weaponSecondary[eid] === 1,
+    weaponTargetX: PlayerInput.weaponTargetX[eid],
+    weaponTargetY: PlayerInput.weaponTargetY[eid],
+    useQuickItemSlot: null,
+    seq,
+    clientSendTimeMs: serverTimeMs,
+  }
+}
+
+/**
+ * Clears retained input component state for reconnects and removals.
+ *
+ * @param eid - Player entity id.
+ */
+function clearRetainedPlayerInput(eid: number): void {
+  PlayerInput.up[eid] = 0
+  PlayerInput.down[eid] = 0
+  PlayerInput.left[eid] = 0
+  PlayerInput.right[eid] = 0
+  PlayerInput.weaponPrimary[eid] = 0
+  PlayerInput.weaponSecondary[eid] = 0
+  PlayerInput.abilitySlot[eid] = -1
+  PlayerInput.abilityTargetX[eid] = 0
+  PlayerInput.abilityTargetY[eid] = 0
+  PlayerInput.weaponTargetX[eid] = 0
+  PlayerInput.weaponTargetY[eid] = 0
+  PlayerInput.useQuickItemSlot[eid] = -1
+  PlayerInput.seq[eid] = 0
+}
+
 // ─── SimCtx ───────────────────────────────────────────────────────────────
 
 /**
@@ -629,6 +689,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
   const lastProcessedInputSeqByPlayer = new Map<string, number>()
   const lastInputTickByPlayer = new Map<string, number>()
   const coalescedHeldInputByPlayer = new Map<string, CoalescedHeldInput>()
+  const retainedHeldTicksByPlayer = new Map<string, number>()
   const activeMeleeAttacks = new Map<number, ActiveMeleeAttack>()
   const activeCombatTelegraphs = new Map<string, CombatTelegraphStartPayload>()
   const invulnerableExpiresAtTickByEntity = new Map<number, number>()
@@ -789,19 +850,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     // alone. Explicit zeroing matters because `inputSystem` now retains
     // held fields across empty-queue ticks (cause C fix) rather than
     // zeroing them every tick.
-    PlayerInput.up[eid] = 0
-    PlayerInput.down[eid] = 0
-    PlayerInput.left[eid] = 0
-    PlayerInput.right[eid] = 0
-    PlayerInput.weaponPrimary[eid] = 0
-    PlayerInput.weaponSecondary[eid] = 0
-    PlayerInput.abilitySlot[eid] = -1
-    PlayerInput.abilityTargetX[eid] = 0
-    PlayerInput.abilityTargetY[eid] = 0
-    PlayerInput.weaponTargetX[eid] = 0
-    PlayerInput.weaponTargetY[eid] = 0
-    PlayerInput.useQuickItemSlot[eid] = -1
-    PlayerInput.seq[eid] = 0
+    clearRetainedPlayerInput(eid)
     TerrainState.kind[eid] = 0
     TerrainState.lavaDamageCarry[eid] = 0
 
@@ -835,6 +884,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     // `-1`: no input processed yet; first client `seq: 0` is accepted in `tick`.
     lastProcessedInputSeqByPlayer.set(userId, -1)
     lastInputTickByPlayer.set(userId, currentTick)
+    retainedHeldTicksByPlayer.delete(userId)
 
     return eid
   }
@@ -860,6 +910,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     lastProcessedInputSeqByPlayer.delete(userId)
     lastInputTickByPlayer.delete(userId)
     coalescedHeldInputByPlayer.delete(userId)
+    retainedHeldTicksByPlayer.delete(userId)
     activeMeleeAttacks.delete(eid)
     homingOrbCastTargetPlayerMap.delete(eid)
     invulnerableExpiresAtTickByEntity.delete(eid)
@@ -887,6 +938,9 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     lastProcessedInputSeqByPlayer.set(userId, -1)
     lastInputTickByPlayer.set(userId, currentTick)
     coalescedHeldInputByPlayer.delete(userId)
+    retainedHeldTicksByPlayer.delete(userId)
+    const eid = playerEntityMap.get(userId)
+    if (eid !== undefined) clearRetainedPlayerInput(eid)
   }
 
   // ── buildGameStateSyncPayload ───────────────────────────────────────
@@ -1063,13 +1117,44 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     const inputMap = scratch.inputMap
     const freshestWeaponAimByPlayer = scratch.freshestWeaponAimByPlayer
     for (const [userId, queue] of perPlayerInputs) {
-      const lastSeq = lastProcessedInputSeqByPlayer.get(userId) ?? 0
+      let lastSeq = lastProcessedInputSeqByPlayer.get(userId) ?? 0
       const coalescedHeld = coalescedHeldInputByPlayer.get(userId)
       const staleThroughSeq = Math.max(
         lastSeq,
         coalescedHeld?.heldThroughSeq ?? lastSeq,
       )
       queue.dropThroughSeq(staleThroughSeq)
+
+      const retainedTicks = retainedHeldTicksByPlayer.get(userId) ?? 0
+      if (retainedTicks > 0) {
+        const eid = playerEntityMap.get(userId)
+        const retainedInput =
+          eid === undefined
+            ? null
+            : retainedHeldInputForVirtualAck(eid, lastSeq + 1, serverTimeMs)
+        let skipped = 0
+        while (retainedInput !== null && skipped < retainedTicks) {
+          const candidate = queue.peek()
+          const following = queue.peek(1)
+          if (
+            candidate === undefined ||
+            following === undefined ||
+            !canCoalesceHeldInput(retainedInput, candidate)
+          ) {
+            break
+          }
+          queue.consume()
+          lastSeq = candidate.seq
+          skipped += 1
+        }
+        if (skipped > 0) {
+          lastProcessedInputSeqByPlayer.set(userId, lastSeq)
+          retainedHeldTicksByPlayer.set(userId, retainedTicks - skipped)
+        }
+        if (skipped === 0 && retainedInput === null) {
+          retainedHeldTicksByPlayer.delete(userId)
+        }
+      }
 
       const freshest = queue.latest()
       const next = queue.peek()
@@ -1089,6 +1174,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
         })
         lastProcessedInputSeqByPlayer.set(userId, virtualSeq)
         lastInputTickByPlayer.set(userId, currentTick)
+        retainedHeldTicksByPlayer.delete(userId)
         if (virtualSeq >= coalescedHeld.heldThroughSeq) {
           coalescedHeldInputByPlayer.delete(userId)
         }
@@ -1106,6 +1192,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
         queue.consume()
         lastProcessedInputSeqByPlayer.set(userId, next.seq)
         lastInputTickByPlayer.set(userId, currentTick)
+        retainedHeldTicksByPlayer.delete(userId)
         let heldThroughSeq = next.seq
         queue.consumeWhile(
           (queued) => canCoalesceHeldInput(next, queued),
@@ -1125,7 +1212,26 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     for (const userId of playerEntityMap.keys()) {
       if (inputMap.has(userId)) continue
       const lastInputTick = lastInputTickByPlayer.get(userId) ?? currentTick
-      if (currentTick - lastInputTick <= HELD_INPUT_STALE_TICKS) continue
+      if (currentTick - lastInputTick <= HELD_INPUT_STALE_TICKS) {
+        const eid = playerEntityMap.get(userId)
+        if (eid === undefined) continue
+        const lastSeq = lastProcessedInputSeqByPlayer.get(userId) ?? -1
+        const retainedInput = retainedHeldInputForVirtualAck(
+          eid,
+          Math.max(0, lastSeq + 1),
+          serverTimeMs,
+        )
+        if (retainedInput === null) {
+          retainedHeldTicksByPlayer.delete(userId)
+          continue
+        }
+        retainedHeldTicksByPlayer.set(
+          userId,
+          (retainedHeldTicksByPlayer.get(userId) ?? 0) + 1,
+        )
+        continue
+      }
+      retainedHeldTicksByPlayer.delete(userId)
       inputMap.set(userId, {
         up: false,
         down: false,

@@ -139,6 +139,31 @@ describe("PlayerInputStateScheduler", () => {
     expect(sent).toEqual([0, 30, 60])
   })
 
+  it("drops pending no-op idle runs before fresh active input", () => {
+    const scheduler = new PlayerInputStateScheduler()
+
+    expect(lastCoveredSeq(scheduler.maybeBuildState(input(0), 0)!)).toBe(0)
+    for (let seq = 1; seq <= 5; seq++) {
+      expect(scheduler.maybeBuildState(input(seq), seq * 1000 / 60)).toBeNull()
+    }
+
+    expect(
+      scheduler.maybeBuildState(input(6, { right: true }), 1000 / 10),
+    ).toEqual({
+      protocolVersion: 2,
+      runs: [
+        {
+          fromSeq: 6,
+          toSeq: 6,
+          clientSendTimeMs: 100.00019999999999,
+          buttons: 8,
+          targetX: 100,
+          targetY: 200,
+        },
+      ],
+    })
+  })
+
   it("sends active held input heartbeats every 100ms", () => {
     const scheduler = new PlayerInputStateScheduler()
     const sent: number[] = []
@@ -187,14 +212,6 @@ describe("PlayerInputStateScheduler", () => {
     expect(verticalAim).toEqual({
       protocolVersion: 2,
       runs: [
-        {
-          fromSeq: 2,
-          toSeq: 2,
-          clientSendTimeMs: 33.3334,
-          buttons: 0,
-          targetX: 160,
-          targetY: 200,
-        },
         {
           fromSeq: 3,
           toSeq: 3,
@@ -280,14 +297,6 @@ describe("PlayerInputStateScheduler", () => {
     expect(quick).toEqual({
       protocolVersion: 2,
       runs: [
-        {
-          fromSeq: 3,
-          toSeq: 3,
-          clientSendTimeMs: 50.000099999999996,
-          buttons: 0,
-          targetX: 100,
-          targetY: 200,
-        },
         {
           fromSeq: 4,
           toSeq: 4,
