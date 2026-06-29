@@ -6,9 +6,12 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
   bumpReplacesSinceRebuild,
+  bumpReplacesSinceRebuildForHero,
   clearReplacesSinceRebuild,
+  clearReplacesSinceRebuildForHero,
   LADY_WIZARD_REPLACE_MAX_FILE_BYTES,
   replaceStripCacheKey,
+  replacesSinceRebuildForHero,
   validateLadyWizardReplaceFile,
   withStripCacheBust,
 } from "./animationToolReplaceClient"
@@ -43,6 +46,19 @@ describe("animationToolReplaceClient", () => {
     expect(bumpReplacesSinceRebuild(0)).toBe(1)
     expect(bumpReplacesSinceRebuild(3)).toBe(4)
     expect(clearReplacesSinceRebuild()).toBe(0)
+  })
+
+  it("tracks stale megasheet counters per hero", () => {
+    const withYen = bumpReplacesSinceRebuildForHero({}, "yen")
+    const withYenAndTriss = bumpReplacesSinceRebuildForHero(withYen, "triss")
+    const withTwoYenAndTriss = bumpReplacesSinceRebuildForHero(withYenAndTriss, "yen")
+
+    expect(replacesSinceRebuildForHero(withTwoYenAndTriss, "yen")).toBe(2)
+    expect(replacesSinceRebuildForHero(withTwoYenAndTriss, "triss")).toBe(1)
+
+    const clearedYen = clearReplacesSinceRebuildForHero(withTwoYenAndTriss, "yen")
+    expect(replacesSinceRebuildForHero(clearedYen, "yen")).toBe(0)
+    expect(replacesSinceRebuildForHero(clearedYen, "triss")).toBe(1)
   })
 
   it("accepts a PNG when dimensions match expected frames", async () => {

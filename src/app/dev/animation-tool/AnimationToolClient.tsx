@@ -48,9 +48,11 @@ import {
   spriteViewerMovementOvalRadii,
 } from "@/shared/sprites/spriteViewerOverlays"
 import {
-  bumpReplacesSinceRebuild,
-  clearReplacesSinceRebuild,
+  bumpReplacesSinceRebuildForHero,
+  clearReplacesSinceRebuildForHero,
   replaceStripCacheKey,
+  replacesSinceRebuildForHero,
+  type ReplacesSinceRebuildByHero,
   validateLadyWizardReplaceFile,
   withStripCacheBust,
 } from "@/app/dev/animation-tool/animationToolReplaceClient"
@@ -946,7 +948,8 @@ export function AnimationToolClient() {
     hurtbox: true,
   })
   const [stripVersionByKey, setStripVersionByKey] = useState<Record<string, string>>({})
-  const [replacesSinceRebuild, setReplacesSinceRebuild] = useState(0)
+  const [replacesSinceRebuildByHero, setReplacesSinceRebuildByHero] =
+    useState<ReplacesSinceRebuildByHero>({})
   const [megasheetRebuildBusy, setMegasheetRebuildBusy] = useState(false)
   const [megasheetRebuildStatus, setMegasheetRebuildStatus] = useState("")
   const [replaceErrorByKey, setReplaceErrorByKey] = useState<Record<string, string>>({})
@@ -958,6 +961,7 @@ export function AnimationToolClient() {
   const [sfxReloadToken, setSfxReloadToken] = useState(0)
   const rafRef = useRef<number | null>(null)
   const lastRafRef = useRef<number>(0)
+  const replacesSinceRebuild = replacesSinceRebuildForHero(replacesSinceRebuildByHero, heroId)
 
   useEffect(() => {
     let cancelled = false
@@ -1282,7 +1286,7 @@ export function AnimationToolClient() {
         if (body.version) {
           setStripVersionByKey((prev) => ({ ...prev, [key]: body.version! }))
         }
-        setReplacesSinceRebuild((n) => bumpReplacesSinceRebuild(n))
+        setReplacesSinceRebuildByHero((prev) => bumpReplacesSinceRebuildForHero(prev, heroId))
         setReplaceErrorByKey((prev) => ({ ...prev, [key]: "" }))
       } catch (error) {
         setReplaceErrorByKey((prev) => ({
@@ -1310,7 +1314,7 @@ export function AnimationToolClient() {
         setMegasheetRebuildStatus(body.message ?? `rebuild failed (${res.status})`)
         return
       }
-      setReplacesSinceRebuild(clearReplacesSinceRebuild())
+      setReplacesSinceRebuildByHero((prev) => clearReplacesSinceRebuildForHero(prev, heroId))
       setMegasheetRebuildStatus("Megasheet rebuilt — hard-reload /game to refresh textures.")
     } catch (error) {
       setMegasheetRebuildStatus(error instanceof Error ? error.message : "rebuild failed")
