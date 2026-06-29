@@ -726,6 +726,78 @@ describe("ArenaRuntime lifecycle", () => {
     }
   })
 
+  it("resets pending compact runs when full sync marks the input stream reset", () => {
+    vi.useFakeTimers()
+    try {
+      const { runtime, connection } = makeRuntime()
+      let seq = 0
+      let simSteps = 3
+      const inputProtocol = {
+        protocolVersion: 2 as const,
+        preferredTransport: "compact" as const,
+        activeHeartbeatMs: 100,
+        idleHeartbeatMs: 1_000,
+      }
+      connection.nextSeq.mockImplementation(() => seq++)
+      keyboardControllerMock.collectInput.mockImplementation((nextSeq: number) => ({
+        up: false,
+        down: false,
+        left: false,
+        right: true,
+        abilitySlot: null,
+        abilityTargetX: 0,
+        abilityTargetY: 0,
+        useQuickItemSlot: null,
+        seq: nextSeq,
+      }))
+      playerRenderMock.update.mockImplementation(
+        (_delta: number, _intent: unknown, onSimStep?: () => void) => {
+          for (let i = 0; i < simSteps; i++) onSimStep?.()
+        },
+      )
+
+      runtime.start()
+      vi.setSystemTime(1_000)
+      connection.emit({
+        type: WsEvent.MatchGo,
+        payload: { input: inputProtocol },
+      })
+      runtime.update(0, 51)
+      expect(connection.sendPlayerInputState).toHaveBeenCalledTimes(1)
+
+      connection.emit({
+        type: WsEvent.GameStateSync,
+        payload: {
+          players: [],
+          fireballs: [],
+          homingOrbs: [],
+          activeTelegraphs: [],
+          seq: 1,
+          serverTimeMs: 1_050,
+          input: inputProtocol,
+          inputStreamReset: true,
+        },
+      })
+
+      vi.setSystemTime(1_100)
+      simSteps = 1
+      runtime.update(0, 17)
+
+      const secondState = connection.sendPlayerInputState.mock.calls[1]?.[0]
+      expect(secondState).toEqual({
+        protocolVersion: 2,
+        runs: [
+          expect.objectContaining({
+            fromSeq: 3,
+            toSeq: 3,
+          }),
+        ],
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("continues reporting active local input even when compact wire sends are suppressed", () => {
     const { runtime, connection } = makeRuntime()
     let seq = 0

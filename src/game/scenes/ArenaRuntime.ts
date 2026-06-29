@@ -360,7 +360,7 @@ export class ArenaRuntime {
       switch (message.type) {
         case WsEvent.GameStateSync: {
           const payload = message.payload as GameStateSyncPayload
-          this._applyInputProtocol(payload.input)
+          this._applyInputProtocol(payload.input, payload.inputStreamReset === true)
           this.networkSyncSystem.applyFullSync(payload)
           this.playerRenderSystem.applyFullSync(payload)
           this.projectileRenderSystem.applyFullSyncFireballs(
@@ -610,8 +610,12 @@ export class ArenaRuntime {
    * when old servers omit the capability payload.
    *
    * @param protocol - Optional input protocol from `MatchGo` or `GameStateSync`.
+   * @param resetInputState - True when the server reset this client's input stream.
    */
-  private _applyInputProtocol(protocol?: GameInputProtocolPayload): void {
+  private _applyInputProtocol(
+    protocol?: GameInputProtocolPayload,
+    resetInputState = false,
+  ): void {
     const nextTransport =
       protocol?.preferredTransport === "compact" ? "compact" : "legacy"
     const nextConfigKey = [
@@ -620,7 +624,7 @@ export class ArenaRuntime {
       protocol?.idleHeartbeatMs ?? "",
     ].join(":")
 
-    if (this.inputProtocolConfigKey === nextConfigKey) return
+    if (!resetInputState && this.inputProtocolConfigKey === nextConfigKey) return
 
     this.inputTransport = nextTransport
     this.inputProtocolConfigKey = nextConfigKey

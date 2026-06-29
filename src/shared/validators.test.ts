@@ -460,6 +460,25 @@ describe("parseGameStateSyncPayload", () => {
     expect(parseGameStateSyncPayload(raw)).toEqual(raw)
   })
 
+  it("accepts optional input stream reset flag in GameStateSync payloads", () => {
+    const raw: GameStateSyncPayload = {
+      players: [],
+      fireballs: [],
+      homingOrbs: [],
+      seq: 0,
+      serverTimeMs: 1700000000000,
+      inputStreamReset: true,
+      input: {
+        protocolVersion: 2,
+        preferredTransport: "compact",
+        activeHeartbeatMs: 100,
+        idleHeartbeatMs: 1_000,
+      },
+    }
+
+    expect(parseGameStateSyncPayload(raw)).toEqual(raw)
+  })
+
   it("rejects malformed compact input protocol in GameStateSync payloads", () => {
     expect(() =>
       parseGameStateSyncPayload({
@@ -487,6 +506,15 @@ describe("parseGameStateSyncPayload", () => {
           activeHeartbeatMs: 100,
           idleHeartbeatMs: 1_000,
         },
+      } as never),
+    ).toThrow()
+    expect(() =>
+      parseGameStateSyncPayload({
+        players: [],
+        fireballs: [],
+        seq: 0,
+        serverTimeMs: 1700000000000,
+        inputStreamReset: "yes",
       } as never),
     ).toThrow()
   })

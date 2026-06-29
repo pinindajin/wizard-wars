@@ -278,6 +278,8 @@ export type GameStateSyncPayload = {
   readonly timing?: GameNetTimingPayload
   /** Optional input transport capability. Missing means legacy full input. */
   readonly input?: GameInputProtocolPayload
+  /** True when the server reset this client's input stream before this sync. */
+  readonly inputStreamReset?: boolean
 }
 
 /** A fireball projectile snapshot. */

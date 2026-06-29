@@ -357,6 +357,7 @@ export const gameStateSyncPayloadSchema = z.object({
   serverTimeMs: z.number().finite().nonnegative(),
   timing: gameNetTimingPayloadSchema.optional(),
   input: gameInputProtocolPayloadSchema.optional(),
+  inputStreamReset: z.boolean().optional(),
 })
 
 /** Server → clients: player eliminated (validated before broadcast). */

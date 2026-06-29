@@ -242,6 +242,11 @@ type CoalescedHeldInput = {
   readonly heldThroughSeq: number
 }
 
+type RetainedHeldCoverage = {
+  readonly coveredTicks: number
+  readonly coveredThroughSeq: number
+}
+
 /**
  * Returns true when two queued inputs describe the same held intent and can be
  * represented by one payload plus virtual one-sequence-per-tick ACK advancement.
@@ -272,6 +277,33 @@ function canCoalesceHeldInput(
     first.weaponTargetY === second.weaponTargetY &&
     first.abilityTargetX === second.abilityTargetX &&
     first.abilityTargetY === second.abilityTargetY
+  )
+}
+
+/**
+ * Returns true when a queued input confirms movement that was already applied
+ * through retained held state. Aim targets may differ because facing is sampled
+ * separately from the retained movement step.
+ */
+function canFastForwardRetainedHeldMovement(
+  first: PlayerInputPayload,
+  second: PlayerInputPayload,
+): boolean {
+  if (
+    first.abilitySlot !== null ||
+    second.abilitySlot !== null ||
+    first.useQuickItemSlot !== null ||
+    second.useQuickItemSlot !== null
+  ) {
+    return false
+  }
+  return (
+    first.up === second.up &&
+    first.down === second.down &&
+    first.left === second.left &&
+    first.right === second.right &&
+    first.weaponPrimary === second.weaponPrimary &&
+    first.weaponSecondary === second.weaponSecondary
   )
 }
 
@@ -358,25 +390,6 @@ function clearRetainedPlayerInput(eid: number): void {
  * @param eid - Player entity id.
  * @param input - Retained held input snapshot to restore for future ticks.
  */
-function restoreRetainedPlayerInput(
-  eid: number,
-  input: PlayerInputPayload,
-): void {
-  PlayerInput.up[eid] = input.up ? 1 : 0
-  PlayerInput.down[eid] = input.down ? 1 : 0
-  PlayerInput.left[eid] = input.left ? 1 : 0
-  PlayerInput.right[eid] = input.right ? 1 : 0
-  PlayerInput.weaponPrimary[eid] = input.weaponPrimary ? 1 : 0
-  PlayerInput.weaponSecondary[eid] = input.weaponSecondary ? 1 : 0
-  PlayerInput.abilitySlot[eid] = -1
-  PlayerInput.abilityTargetX[eid] = input.abilityTargetX
-  PlayerInput.abilityTargetY[eid] = input.abilityTargetY
-  PlayerInput.weaponTargetX[eid] = input.weaponTargetX
-  PlayerInput.weaponTargetY[eid] = input.weaponTargetY
-  PlayerInput.useQuickItemSlot[eid] = -1
-  PlayerInput.seq[eid] = input.seq
-}
-
 // ─── SimCtx ───────────────────────────────────────────────────────────────
 
 /**
@@ -413,7 +426,7 @@ export type SimCtx = {
    * Tick-local retained inputs whose already-simulated command seqs are being
    * ACKed without applying one extra retained movement/action tick.
    */
-  suppressedRetainedInputsByPlayer?: Map<string, PlayerInputPayload>
+  ackOnlyRetainedInputsByPlayer?: Map<string, PlayerInputPayload>
   /**
    * Freshest currently queued weapon aim per player. This lets primary melee
    * snapshot direction from the latest received cursor while movement, casts,
@@ -511,7 +524,7 @@ export type SimOutput = {
 
 type SimScratch = {
   readonly inputMap: Map<string, PlayerInputPayload>
-  readonly suppressedRetainedInputsByPlayer: Map<string, PlayerInputPayload>
+  readonly ackOnlyRetainedInputsByPlayer: Map<string, PlayerInputPayload>
   readonly freshestWeaponAimByPlayer: Map<string, FreshestWeaponAim>
   readonly damageRequests: DamageRequest[]
   readonly deathEvents: DeathEvent[]
@@ -564,7 +577,7 @@ function createSimScratch(): SimScratch {
 
   return {
     inputMap: new Map(),
-    suppressedRetainedInputsByPlayer: new Map(),
+    ackOnlyRetainedInputsByPlayer: new Map(),
     freshestWeaponAimByPlayer: new Map(),
     damageRequests: [],
     deathEvents: [],
@@ -618,7 +631,7 @@ function createSimScratch(): SimScratch {
  */
 function resetScratchForTick(scratch: SimScratch): void {
   scratch.inputMap.clear()
-  scratch.suppressedRetainedInputsByPlayer.clear()
+  scratch.ackOnlyRetainedInputsByPlayer.clear()
   scratch.freshestWeaponAimByPlayer.clear()
   scratch.damageRequests.length = 0
   scratch.deathEvents.length = 0
@@ -723,6 +736,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
   const lastInputTickByPlayer = new Map<string, number>()
   const coalescedHeldInputByPlayer = new Map<string, CoalescedHeldInput>()
   const retainedHeldTicksByPlayer = new Map<string, number>()
+  const retainedHeldCoverageByPlayer = new Map<string, RetainedHeldCoverage>()
   const activeMeleeAttacks = new Map<number, ActiveMeleeAttack>()
   const activeCombatTelegraphs = new Map<string, CombatTelegraphStartPayload>()
   const invulnerableExpiresAtTickByEntity = new Map<number, number>()
@@ -745,7 +759,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     homingOrbTargetPlayerMap,
     homingOrbCastTargetPlayerMap,
     inputMap: scratch.inputMap,
-    suppressedRetainedInputsByPlayer: scratch.suppressedRetainedInputsByPlayer,
+    ackOnlyRetainedInputsByPlayer: scratch.ackOnlyRetainedInputsByPlayer,
     freshestWeaponAimByPlayer: scratch.freshestWeaponAimByPlayer,
     lastProcessedInputSeqByPlayer,
     commandBuffer,
@@ -919,6 +933,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     lastProcessedInputSeqByPlayer.set(userId, -1)
     lastInputTickByPlayer.set(userId, currentTick)
     retainedHeldTicksByPlayer.delete(userId)
+    retainedHeldCoverageByPlayer.delete(userId)
 
     return eid
   }
@@ -945,6 +960,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     lastInputTickByPlayer.delete(userId)
     coalescedHeldInputByPlayer.delete(userId)
     retainedHeldTicksByPlayer.delete(userId)
+    retainedHeldCoverageByPlayer.delete(userId)
     activeMeleeAttacks.delete(eid)
     homingOrbCastTargetPlayerMap.delete(eid)
     invulnerableExpiresAtTickByEntity.delete(eid)
@@ -973,6 +989,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     lastInputTickByPlayer.set(userId, currentTick)
     coalescedHeldInputByPlayer.delete(userId)
     retainedHeldTicksByPlayer.delete(userId)
+    retainedHeldCoverageByPlayer.delete(userId)
     const eid = playerEntityMap.get(userId)
     if (eid !== undefined) clearRetainedPlayerInput(eid)
   }
@@ -1149,14 +1166,15 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     resetDamageablePlayerTargetCaches(ctx)
 
     const inputMap = scratch.inputMap
-    const suppressedRetainedInputsByPlayer =
-      scratch.suppressedRetainedInputsByPlayer
+    const ackOnlyRetainedInputsByPlayer = scratch.ackOnlyRetainedInputsByPlayer
     const freshestWeaponAimByPlayer = scratch.freshestWeaponAimByPlayer
     for (const [userId, queue] of perPlayerInputs) {
       let lastSeq = lastProcessedInputSeqByPlayer.get(userId) ?? 0
+      const retainedCoverage = retainedHeldCoverageByPlayer.get(userId)
       const coalescedHeld = coalescedHeldInputByPlayer.get(userId)
       const staleThroughSeq = Math.max(
         lastSeq,
+        retainedCoverage?.coveredThroughSeq ?? lastSeq,
         coalescedHeld?.heldThroughSeq ?? lastSeq,
       )
       queue.dropThroughSeq(staleThroughSeq)
@@ -1167,37 +1185,60 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
         const retainedInput =
           eid === undefined
             ? null
-            : retainedHeldInputForVirtualAck(eid, lastSeq + 1, serverTimeMs)
+            : retainedHeldInputForVirtualAck(
+                eid,
+                (retainedCoverage?.coveredThroughSeq ?? lastSeq) + 1,
+                serverTimeMs,
+              )
         let skipped = 0
-        while (retainedInput !== null && skipped < retainedTicks) {
+        let coveredTicks = retainedCoverage?.coveredTicks ?? 0
+        let coveredThroughSeq = retainedCoverage?.coveredThroughSeq ?? lastSeq
+        let latestFastForwardedInput: PlayerInputPayload | null = null
+        while (retainedInput !== null && coveredTicks < retainedTicks) {
           const candidate = queue.peek()
           if (
             candidate === undefined ||
-            !canCoalesceHeldInput(retainedInput, candidate)
+            !canFastForwardRetainedHeldMovement(retainedInput, candidate)
           ) {
             break
           }
-          queue.consume()
-          lastSeq = candidate.seq
+          latestFastForwardedInput = queue.consume() ?? candidate
+          coveredThroughSeq = candidate.seq
+          coveredTicks += 1
           skipped += 1
         }
         if (skipped > 0) {
-          const remainingRetainedTicks = retainedTicks - skipped
+          lastInputTickByPlayer.set(userId, currentTick)
+          if (coveredTicks < retainedTicks) {
+            retainedHeldCoverageByPlayer.set(userId, {
+              coveredTicks,
+              coveredThroughSeq,
+            })
+            continue
+          }
+
+          lastSeq = coveredThroughSeq
           lastProcessedInputSeqByPlayer.set(userId, lastSeq)
-          if (remainingRetainedTicks > 0) {
-            retainedHeldTicksByPlayer.set(userId, remainingRetainedTicks)
+          retainedHeldTicksByPlayer.delete(userId)
+          retainedHeldCoverageByPlayer.delete(userId)
+          if (retainedInput !== null && queue.peek() === undefined) {
+            const ackInput = heldInputForVirtualAck(
+              latestFastForwardedInput ?? retainedInput,
+              lastSeq,
+              serverTimeMs,
+            )
+            inputMap.set(userId, ackInput)
+            ackOnlyRetainedInputsByPlayer.set(userId, ackInput)
           } else {
             retainedHeldTicksByPlayer.delete(userId)
-            if (retainedInput !== null && queue.peek() === undefined) {
-              suppressedRetainedInputsByPlayer.set(
-                userId,
-                heldInputForVirtualAck(retainedInput, lastSeq, serverTimeMs),
-              )
-            }
           }
         }
         if (skipped === 0 && retainedInput === null) {
           retainedHeldTicksByPlayer.delete(userId)
+          retainedHeldCoverageByPlayer.delete(userId)
+        } else if (retainedInput !== null && retainedTicks > 0) {
+          const coverage = retainedHeldCoverageByPlayer.get(userId)
+          if ((coverage?.coveredTicks ?? 0) < retainedTicks) continue
         }
       }
 
@@ -1220,6 +1261,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
         lastProcessedInputSeqByPlayer.set(userId, virtualSeq)
         lastInputTickByPlayer.set(userId, currentTick)
         retainedHeldTicksByPlayer.delete(userId)
+        retainedHeldCoverageByPlayer.delete(userId)
         if (virtualSeq >= coalescedHeld.heldThroughSeq) {
           coalescedHeldInputByPlayer.delete(userId)
         }
@@ -1238,6 +1280,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
         lastProcessedInputSeqByPlayer.set(userId, next.seq)
         lastInputTickByPlayer.set(userId, currentTick)
         retainedHeldTicksByPlayer.delete(userId)
+        retainedHeldCoverageByPlayer.delete(userId)
         let heldThroughSeq = next.seq
         queue.consumeWhile(
           (queued) => canCoalesceHeldInput(next, queued),
@@ -1256,7 +1299,6 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
 
     for (const userId of playerEntityMap.keys()) {
       if (inputMap.has(userId)) continue
-      if (suppressedRetainedInputsByPlayer.has(userId)) continue
       const lastInputTick = lastInputTickByPlayer.get(userId) ?? currentTick
       if (currentTick - lastInputTick <= HELD_INPUT_STALE_TICKS) {
         const eid = playerEntityMap.get(userId)
@@ -1269,6 +1311,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
         )
         if (retainedInput === null) {
           retainedHeldTicksByPlayer.delete(userId)
+          retainedHeldCoverageByPlayer.delete(userId)
           continue
         }
         retainedHeldTicksByPlayer.set(
@@ -1278,6 +1321,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
         continue
       }
       retainedHeldTicksByPlayer.delete(userId)
+      retainedHeldCoverageByPlayer.delete(userId)
       inputMap.set(userId, {
         up: false,
         down: false,
@@ -1319,11 +1363,6 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     worldCollisionSystem(ctx)
     playerDeltaSystem(ctx)
     projectileDeltaSystem(ctx)
-
-    for (const [userId, input] of suppressedRetainedInputsByPlayer) {
-      const eid = playerEntityMap.get(userId)
-      if (eid !== undefined) restoreRetainedPlayerInput(eid, input)
-    }
 
     if (ctx.matchEnded) {
       hostEndSignal = false

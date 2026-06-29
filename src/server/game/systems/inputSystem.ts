@@ -36,27 +36,6 @@ export function inputSystem(ctx: SimCtx): void {
     const input = userId !== undefined ? inputMap.get(userId) : undefined
 
     if (!input) {
-      const suppressedInput =
-        userId !== undefined
-          ? ctx.suppressedRetainedInputsByPlayer?.get(userId)
-          : undefined
-      if (suppressedInput !== undefined) {
-        PlayerInput.up[eid] = 0
-        PlayerInput.down[eid] = 0
-        PlayerInput.left[eid] = 0
-        PlayerInput.right[eid] = 0
-        PlayerInput.weaponPrimary[eid] = 0
-        PlayerInput.weaponSecondary[eid] = 0
-        PlayerInput.abilitySlot[eid] = -1
-        PlayerInput.abilityTargetX[eid] = suppressedInput.abilityTargetX
-        PlayerInput.abilityTargetY[eid] = suppressedInput.abilityTargetY
-        PlayerInput.weaponTargetX[eid] = suppressedInput.weaponTargetX
-        PlayerInput.weaponTargetY[eid] = suppressedInput.weaponTargetY
-        PlayerInput.useQuickItemSlot[eid] = -1
-        PlayerInput.seq[eid] = suppressedInput.seq
-        continue
-      }
-
       // Retain held fields; clear only edge-triggered action fields.
       PlayerInput.abilitySlot[eid] = -1
       PlayerInput.useQuickItemSlot[eid] = -1

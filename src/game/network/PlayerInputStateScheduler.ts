@@ -79,7 +79,15 @@ export class PlayerInputStateScheduler {
         toSeq: input.seq,
       }
     } else {
-      if (isNoOpIdleRun(pendingRun, this.lastSentTarget)) this.pendingRuns.pop()
+      const freshAction =
+        edge ||
+        currentRun.buttons !== 0 ||
+        this.hasButtonStateChangedSinceLastSent(currentRun)
+      if (freshAction) {
+        this.pendingRuns = this.pendingRuns.filter((run) => !isTargetOnlyRun(run))
+      } else if (isNoOpIdleRun(pendingRun, this.lastSentTarget)) {
+        this.pendingRuns.pop()
+      }
       this.pendingRuns.push(currentRun)
       forceFlush = edge || this.hasButtonStateChangedSinceLastSent(currentRun)
     }
@@ -182,6 +190,20 @@ function isNoOpIdleRun(
     lastSentTarget !== null &&
     run.targetX === lastSentTarget.x &&
     run.targetY === lastSentTarget.y
+  )
+}
+
+/**
+ * Returns whether a compact run only updates cursor/aim state.
+ *
+ * @param run - Compact command run to inspect.
+ * @returns True when no held button or edge command depends on the run.
+ */
+function isTargetOnlyRun(run: PlayerInputCommandRunPayload): boolean {
+  return (
+    run.buttons === 0 &&
+    run.abilitySlot === undefined &&
+    run.useQuickItemSlot === undefined
   )
 }
 

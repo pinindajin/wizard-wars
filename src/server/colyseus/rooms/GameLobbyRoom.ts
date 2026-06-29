@@ -792,7 +792,10 @@ export class GameLobbyRoom extends Room {
 
     this.resetPlayerInputStreamForNewTransport(auth.sub)
     if (this.lobbyPhase === "IN_PROGRESS") {
-      this.sendInProgressHydrationToClient(client, { includeLobbyState: false })
+      this.sendInProgressHydrationToClient(client, {
+        includeLobbyState: false,
+        inputStreamReset: true,
+      })
     }
 
     logger.info(
@@ -900,7 +903,10 @@ export class GameLobbyRoom extends Room {
 
     this.resetPlayerInputStreamForNewTransport(pd.playerId)
     if (this.lobbyPhase === "IN_PROGRESS") {
-      this.sendInProgressHydrationToClient(client, { includeLobbyState: false })
+      this.sendInProgressHydrationToClient(client, {
+        includeLobbyState: false,
+        inputStreamReset: true,
+      })
     }
 
     logger.info(
@@ -1887,10 +1893,14 @@ export class GameLobbyRoom extends Room {
    * @param opts - When `includeLobbyState` is true, sends `LobbyState` first
    *   (explicit resync). Join/reconnect pass false because `onJoin` /
    *   `onReconnect` already sent lobby state.
+   *   `inputStreamReset` marks hydrations after server-side input queue resets.
    */
   private sendInProgressHydrationToClient(
     client: Client,
-    opts?: { readonly includeLobbyState?: boolean },
+    opts?: {
+      readonly includeLobbyState?: boolean
+      readonly inputStreamReset?: boolean
+    },
   ): void {
     if (this.lobbyPhase !== "IN_PROGRESS") return
 
@@ -1904,7 +1914,14 @@ export class GameLobbyRoom extends Room {
       client.send(RoomEvent.ShopState, buildShopStatePayload(economy))
     }
     if (this.simulation) {
-      const gameStateSync = this.buildGameStateSyncPayload(Date.now())
+      const baseGameStateSync = this.buildGameStateSyncPayload(Date.now())
+      const gameStateSync =
+        opts?.inputStreamReset === true
+          ? parseGameStateSyncPayload({
+              ...baseGameStateSync,
+              inputStreamReset: true,
+            })
+          : baseGameStateSync
       client.send(RoomEvent.GameStateSync, gameStateSync)
     }
   }

@@ -63,7 +63,7 @@ const ARENA_BOUNDS = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
  * @param ctx - Shared simulation context.
  */
 export function movementSystem(ctx: SimCtx): void {
-  const { world } = ctx
+  const { world, entityPlayerMap } = ctx
 
   for (const eid of query(world, [PlayerTag])) {
     // Blocked from moving
@@ -137,8 +137,13 @@ export function movementSystem(ctx: SimCtx): void {
     )
     Velocity.vx[eid] = moved.appliedDx / TICK_DT_SEC
     Velocity.vy[eid] = moved.appliedDy / TICK_DT_SEC
-    Position.x[eid] = moved.x
-    Position.y[eid] = moved.y
+    const userId = entityPlayerMap.get(eid)
+    const ackOnlyRetainedMovement =
+      userId !== undefined && ctx.ackOnlyRetainedInputsByPlayer?.has(userId)
+    if (!ackOnlyRetainedMovement) {
+      Position.x[eid] = moved.x
+      Position.y[eid] = moved.y
+    }
 
     if (moved.appliedDx !== 0 || moved.appliedDy !== 0) {
       MoveFacing.angle[eid] = Math.atan2(moved.appliedDy, moved.appliedDx)

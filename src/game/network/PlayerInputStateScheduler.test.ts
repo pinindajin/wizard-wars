@@ -253,6 +253,39 @@ describe("PlayerInputStateScheduler", () => {
     })
   })
 
+  it("drops stale target-only runs before fresh active input", () => {
+    const scheduler = new PlayerInputStateScheduler()
+
+    expect(lastCoveredSeq(scheduler.maybeBuildState(input(0), 0)!)).toBe(0)
+    for (let seq = 1; seq <= 5; seq++) {
+      expect(
+        scheduler.maybeBuildState(
+          input(seq, { weaponTargetX: 100 + seq * 10 }),
+          seq * 1000 / 60,
+        ),
+      ).toBeNull()
+    }
+
+    expect(
+      scheduler.maybeBuildState(
+        input(6, { right: true, weaponTargetX: 160 }),
+        100,
+      ),
+    ).toEqual({
+      protocolVersion: 2,
+      runs: [
+        {
+          fromSeq: 6,
+          toSeq: 6,
+          clientSendTimeMs: 100.00019999999999,
+          buttons: 8,
+          targetX: 160,
+          targetY: 200,
+        },
+      ],
+    })
+  })
+
   it("sends held-button releases immediately", () => {
     const scheduler = new PlayerInputStateScheduler()
 

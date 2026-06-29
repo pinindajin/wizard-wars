@@ -635,7 +635,113 @@ describe("movement system", () => {
     expect(heartbeatAck?.lastProcessedInputSeq).toBe(6)
     const stepPx = BASE_MOVE_SPEED_PX_PER_SEC * TICK_DT_SEC
     expect(heartbeatAck?.y).toBeCloseTo(startY - 7 * stepPx, 3)
+    expect(heartbeatAck?.vy).toBeLessThan(0)
+    expect(heartbeatAck?.replayContext.moveState).toBe("moving")
     expect(queue.length).toBe(0)
+  })
+
+  it("does not ACK retained movement until compact commands cover the retained backlog", () => {
+    const sim = createGameSimulation(Date.now())
+    sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    sim.tick(
+      queueMap([["user1", emptyInput({ up: true, seq: 0 })]]),
+      Date.now(),
+    )
+
+    for (let tick = 1; tick <= 9; tick++) {
+      sim.tick(new Map(), Date.now() + tick * 17)
+    }
+
+    const queue = new PlayerInputQueue()
+    queue.pushRun({
+      fromSeq: 1,
+      toSeq: 6,
+      clientSendTimeMs: 1_000,
+      buttons: PLAYER_INPUT_BUTTON_BITS.up,
+      targetX: 0,
+      targetY: 0,
+    })
+
+    const partialHeartbeat = sim.tick(
+      new Map([["user1", queue]]),
+      Date.now() + 10 * 17,
+    )
+
+    expect(ackSeqFromOutput(sim, partialHeartbeat)).toBeUndefined()
+    expect(queue.length).toBe(0)
+  })
+
+  it("fast-forwards retained held movement when compact heartbeats only change aim", () => {
+    const sim = createGameSimulation(Date.now())
+    const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    const startY = Position.y[eid]
+
+    sim.tick(
+      queueMap([["user1", emptyInput({ up: true, seq: 0 })]]),
+      Date.now(),
+    )
+    for (let tick = 1; tick <= 6; tick++) {
+      sim.tick(new Map(), Date.now() + tick * 17)
+    }
+
+    const queue = new PlayerInputQueue()
+    for (let seq = 1; seq <= 6; seq++) {
+      queue.push(
+        emptyInput({
+          up: true,
+          seq,
+          weaponTargetX: seq * 25,
+          weaponTargetY: seq * 10,
+        }),
+      )
+    }
+
+    const heartbeat = sim.tick(new Map([["user1", queue]]), Date.now() + 7 * 17)
+    const heartbeatSeq = ackSeqFromOutput(sim, heartbeat)
+    const heartbeatAck =
+      heartbeatSeq === undefined
+        ? null
+        : sim.buildPlayerOwnerAckPayload(eid, heartbeatSeq, Date.now())
+
+    expect(heartbeatAck?.lastProcessedInputSeq).toBe(6)
+    expect(heartbeatAck?.y).toBeCloseTo(
+      startY - 7 * BASE_MOVE_SPEED_PX_PER_SEC * TICK_DT_SEC,
+      3,
+    )
+    expect(queue.length).toBe(0)
+  })
+
+  it("refreshes retained held freshness when compact heartbeats are fast-forwarded", () => {
+    const sim = createGameSimulation(Date.now())
+    const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    sim.tick(
+      queueMap([["user1", emptyInput({ up: true, seq: 0 })]]),
+      Date.now(),
+    )
+    for (let tick = 1; tick <= 6; tick++) {
+      sim.tick(new Map(), Date.now() + tick * 17)
+    }
+
+    const queue = new PlayerInputQueue()
+    queue.pushRun({
+      fromSeq: 1,
+      toSeq: 6,
+      clientSendTimeMs: 1_000,
+      buttons: PLAYER_INPUT_BUTTON_BITS.up,
+      targetX: 0,
+      targetY: 0,
+    })
+    sim.tick(new Map([["user1", queue]]), Date.now() + 7 * 17)
+    const yAfterHeartbeat = Position.y[eid]
+
+    for (let tick = 1; tick <= 9; tick++) {
+      sim.tick(new Map(), Date.now() + (7 + tick) * 17)
+    }
+
+    expect(Position.y[eid]).toBeCloseTo(
+      yAfterHeartbeat - 9 * BASE_MOVE_SPEED_PX_PER_SEC * TICK_DT_SEC,
+      3,
+    )
   })
 
   it("expires retained held movement after the stale-input threshold", () => {
