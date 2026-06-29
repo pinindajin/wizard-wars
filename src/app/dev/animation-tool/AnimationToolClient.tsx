@@ -170,6 +170,7 @@ function stripFrameDurationsMs(config: AnimationActionConfig): AnimationActionCo
   const { frameDurationsMs: _fd, ...rest } = config as AnimationActionConfig & {
     frameDurationsMs?: readonly number[]
   }
+  void _fd
   return rest as AnimationActionConfig
 }
 
@@ -1148,7 +1149,7 @@ export function AnimationToolClient() {
     }
 
     return errors
-  }, [action.id, actionConfig, timingDraft])
+  }, [action, actionConfig, heroId, timingDraft])
 
   const timingHasErrors = Object.keys(timingValidation).length > 0
 

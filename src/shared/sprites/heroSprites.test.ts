@@ -6,6 +6,7 @@ import {
   heroAnimationsFramesFsDir,
   heroAtlasFsPath,
   heroAtlasPublicPath,
+  heroSpriteActionClipForAtlasClip,
   heroMegasheetFsPath,
   heroMegasheetPublicPath,
   heroSheetsArchiveFsDir,
@@ -63,6 +64,19 @@ describe("hero sprite registry", () => {
     expect(normalizeHeroSpriteId("triss")).toBe("triss")
     expect(normalizeHeroSpriteId("red_wizard")).toBe("yen")
     expect(normalizeHeroSpriteId("missing")).toBe("yen")
+  })
+
+  it("resolves action clips from hero-specific atlas clip ids", () => {
+    expect(heroSpriteActionClipForAtlasClip("triss", "big-blast")).toBe(
+      "primary_melee_attack",
+    )
+    expect(heroSpriteActionClipForAtlasClip("triss", "channel-fire")).toBe(
+      "light_spell_cast",
+    )
+    expect(heroSpriteActionClipForAtlasClip("missing", "summoned-axe-attack")).toBe(
+      "primary_melee_attack",
+    )
+    expect(heroSpriteActionClipForAtlasClip("triss", "summoned-axe-attack")).toBeNull()
   })
 })
 

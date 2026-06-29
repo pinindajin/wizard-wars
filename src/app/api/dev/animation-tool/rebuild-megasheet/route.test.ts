@@ -51,6 +51,26 @@ describe("animation tool rebuild-megasheet route", () => {
     expect(after.mtimeMs).toBeGreaterThanOrEqual(before.mtimeMs)
   })
 
+  it("defaults to Yen when request JSON cannot be parsed", async () => {
+    setNodeEnv("development")
+    const before = await stat(megasheetPath)
+    await new Promise((r) => setTimeout(r, 5))
+    const req = new Request("http://localhost/api/dev/animation-tool/rebuild-megasheet", {
+      method: "POST",
+      body: "{",
+      headers: { "content-type": "application/json" },
+    })
+
+    const res = await POST(req)
+
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { ok: boolean; outputPath: string }
+    expect(body.ok).toBe(true)
+    expect(body.outputPath).toContain("lady-wizard-megasheet.png")
+    const after = await stat(megasheetPath)
+    expect(after.mtimeMs).toBeGreaterThanOrEqual(before.mtimeMs)
+  })
+
   it("rebuilds the selected Triss megasheet", async () => {
     setNodeEnv("development")
     const before = await stat(trissMegasheetPath)

@@ -87,6 +87,23 @@ describe("animation tool import-sound route", () => {
     expect(res.status).toBe(400)
   })
 
+  it("rejects unknown hero ids", async () => {
+    setNodeEnv("development")
+    const donor = await readFile(donorMp3)
+    const form = new FormData()
+    form.set("confirmReplace", "true")
+    form.set("heroId", "barbarian")
+    form.set("actionId", "spell:fireball")
+    form.set("file", new File([new Uint8Array(donor)], "x.mp3", { type: "audio/mpeg" }))
+
+    const res = await POST(buildRequest(form))
+
+    expect(res.status).toBe(400)
+    const body = (await res.json()) as { code: string; message: string }
+    expect(body.code).toBe("validation_failed")
+    expect(body.message).toMatch(/unknown heroId/)
+  })
+
   it("rejects unmapped action", async () => {
     setNodeEnv("development")
     const donor = await readFile(donorMp3)

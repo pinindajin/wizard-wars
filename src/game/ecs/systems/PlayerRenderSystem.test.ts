@@ -278,6 +278,7 @@ function mockSceneAndGroup() {
           setTint: vi.fn(),
           clearTint: vi.fn(),
           setDepth: vi.fn(),
+          setCrop: vi.fn(),
           play: vi.fn(),
           setPosition: vi.fn((nextX: number, nextY: number) => {
             sprite.x = nextX
@@ -387,6 +388,27 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     for (const c of heroTints) {
       expect(sprite.setTint).not.toHaveBeenCalledWith(c)
     }
+  })
+
+  it("uses the selected hero frame size when cropping lava-submerged sprites", () => {
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    sys.localPlayerId = "p1"
+    const lava = sampleLavaRect()
+
+    sys.applyFullSync(sync([snap({
+      id: 1,
+      playerId: "p1",
+      heroId: "triss",
+      x: lava.point.x,
+      y: lava.point.y,
+      terrainState: "lava",
+    })]))
+    sys.update(20, { up: false, down: false, left: false, right: false })
+
+    const add = scene.add as { sprite: ReturnType<typeof vi.fn> }
+    const sprite = add.sprite.mock.results[0]!.value as { setCrop: ReturnType<typeof vi.fn> }
+    expect(sprite.setCrop).toHaveBeenCalledWith(0, 0, 124, 70)
   })
 
   it("reports local reconciliation corrections to the runtime bridge", () => {

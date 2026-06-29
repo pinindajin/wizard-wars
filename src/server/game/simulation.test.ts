@@ -36,6 +36,7 @@ import {
   AbilitySlots,
   Facing,
   Health,
+  Hero,
   InvulnerableTag,
   JumpArc,
   Lives,
@@ -1353,6 +1354,17 @@ describe("match end", () => {
     expect(output.matchEnded?.entries).toHaveLength(1)
     expect(output.matchEnded?.entries[0].playerId).toBe("user1")
     expect(output.matchEnded?.entries[0].username).toBe("Alice")
+  })
+
+  it("scoreboard entries normalize stale numeric hero indexes to Yen", () => {
+    const sim = createGameSimulation(Date.now())
+    const eid = sim.addPlayer("user1", "Alice", "triss", 0)
+    Hero.typeIndex[eid] = 99
+
+    sim.requestHostEnd()
+    const output = sim.tick(new Map(), Date.now())
+
+    expect(output.matchEnded?.entries[0].heroId).toBe("yen")
   })
 
   it("keeps a multiplayer match running after one player is eliminated", () => {

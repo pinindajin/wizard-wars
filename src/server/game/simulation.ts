@@ -820,7 +820,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     const eid = addEntity(world)
     const spawn = ARENA_SPAWN_POINTS[spawnIndex % ARENA_SPAWN_POINTS.length]
     const canonicalHeroId = normalizeHeroId(heroId)
-    const heroIndex = HERO_INDEX[canonicalHeroId] ?? HERO_INDEX[DEFAULT_HERO_ID]
+    const heroIndex = HERO_INDEX[canonicalHeroId]
 
     // Face toward arena center
     const dx = ARENA_CENTER_X - spawn.x

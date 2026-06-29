@@ -236,6 +236,14 @@ describe("animation config", () => {
         },
       } as never)[0]!.config,
     ).toBe(ANIMATION_CONFIG.heroes.yen.actions.idle)
+    expect(
+      getAnimationToolActions("triss", {
+        ...ANIMATION_CONFIG,
+        heroes: {
+          yen: ANIMATION_CONFIG.heroes.yen,
+        },
+      } as never)[0]!.config,
+    ).toBe(ANIMATION_CONFIG.heroes.yen.actions.idle)
   })
 
   it("maps Jump spell to jump megasheet and atlas clips in the animation tool list", () => {

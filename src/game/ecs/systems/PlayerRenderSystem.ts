@@ -1051,7 +1051,7 @@ export class PlayerRenderSystem {
 
       entry.heroId = normalizeHeroId(state.heroId)
       const heroSpriteConfig = heroSpriteConfigFor(entry.heroId)
-      const sp = heroSpriteDisplayPos(entry.heroId, renderPos.x, renderPos.y, state.jumpZ ?? 0)
+      const sp = heroSpriteDisplayPos(entry.heroId, renderPos.x, renderPos.y, state.jumpZ)
       entry.sprite.setPosition(sp.x, sp.y)
       entry.sprite.setDepth(renderPos.y + heroSpriteConfig.displayOffsetY)
 
