@@ -7,6 +7,11 @@ import { NextResponse } from "next/server"
 import sharp from "sharp"
 
 import {
+  DEFAULT_HERO_ID,
+  VALID_HERO_IDS,
+  type HeroId,
+} from "@/shared/balance-config/heroes"
+import {
   HERO_SPRITE_DIRECTIONS,
   heroAnimationsArchiveFsDir,
   heroAnimationsFramesFsDir,
@@ -17,7 +22,6 @@ import {
   heroStripPublicPath,
 } from "@/shared/sprites/heroSprites"
 import { isAnimationToolApiForbiddenInProduction } from "@/shared/dev/animationToolE2eGate"
-import { normalizeHeroId } from "@/shared/balance-config/heroes"
 
 export const runtime = "nodejs"
 
@@ -60,7 +64,14 @@ export async function POST(request: Request): Promise<NextResponse> {
     return err("validation_failed", "expected multipart/form-data body")
   }
 
-  const heroId = normalizeHeroId(String(form.get("heroId") ?? "yen"))
+  const rawHeroId = form.get("heroId")
+  if (
+    rawHeroId !== null &&
+    (typeof rawHeroId !== "string" || !(VALID_HERO_IDS as readonly string[]).includes(rawHeroId))
+  ) {
+    return err("validation_failed", `unknown heroId: ${String(rawHeroId)}`)
+  }
+  const heroId = (rawHeroId ?? DEFAULT_HERO_ID) as HeroId
   const heroSpriteConfig = heroSpriteConfigFor(heroId)
   const atlasClipId = String(form.get("atlasClipId") ?? "")
   const direction = String(form.get("direction") ?? "")

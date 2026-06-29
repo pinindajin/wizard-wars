@@ -1,11 +1,26 @@
 import { NextResponse } from "next/server"
 
 import { isAnimationToolApiForbiddenInProduction } from "@/shared/dev/animationToolE2eGate"
-import { normalizeHeroId } from "@/shared/balance-config/heroes"
+import { DEFAULT_HERO_ID, VALID_HERO_IDS, type HeroId } from "@/shared/balance-config/heroes"
 
 import { buildHeroMegasheet } from "../../../../../../scripts/build-hero-megasheet"
 
 export const runtime = "nodejs"
+
+function validationFailed(message: string): NextResponse {
+  return NextResponse.json({ ok: false, code: "validation_failed", message }, { status: 400 })
+}
+
+function parseWritableHeroId(rawHeroId: unknown): HeroId | NextResponse {
+  if (rawHeroId == null) return DEFAULT_HERO_ID
+  if (
+    typeof rawHeroId === "string" &&
+    (VALID_HERO_IDS as readonly string[]).includes(rawHeroId)
+  ) {
+    return rawHeroId as HeroId
+  }
+  return validationFailed(`unknown heroId: ${String(rawHeroId)}`)
+}
 
 /**
  * Rebuilds one hero megasheet for the dev animation tool.
@@ -23,16 +38,22 @@ export async function POST(request?: Request): Promise<NextResponse> {
 
   const startedAt = Date.now()
   try {
-    let heroId = "yen"
+    let rawHeroId: unknown
     if (request) {
       try {
-        const body = (await request.json()) as { heroId?: unknown }
-        heroId = String(body.heroId ?? "yen")
+        const body = (await request.json()) as unknown
+        rawHeroId =
+          body !== null && typeof body === "object" && "heroId" in body
+            ? (body as { heroId?: unknown }).heroId
+            : undefined
       } catch {
-        heroId = "yen"
+        rawHeroId = undefined
       }
     }
-    const result = await buildHeroMegasheet({ heroId: normalizeHeroId(heroId), silent: true })
+    const heroId = parseWritableHeroId(rawHeroId)
+    if (heroId instanceof NextResponse) return heroId
+
+    const result = await buildHeroMegasheet({ heroId, silent: true })
     const durationMs = Date.now() - startedAt
     return NextResponse.json({
       ok: true,
