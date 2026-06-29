@@ -1,4 +1,6 @@
+import { decodePlayerInputStateRun } from "@/shared/playerInputState"
 import type { PlayerInputPayload } from "@/shared/types"
+import type { PlayerInputCommandRunPayload } from "@/shared/types"
 
 export type PlayerInputQueueMap = Map<string, PlayerInputQueue>
 
@@ -38,6 +40,18 @@ export class PlayerInputQueue {
    */
   push(input: PlayerInputPayload): void {
     this.items.push(input)
+  }
+
+  /**
+   * Appends every command sequence covered by a compact protocol v2 run.
+   *
+   * @param run - Validated compact command run to materialize into the queue.
+   */
+  pushRun(run: PlayerInputCommandRunPayload): void {
+    const span = run.toSeq - run.fromSeq + 1
+    for (let offset = 0; offset < span; offset += 1) {
+      this.push(decodePlayerInputStateRun(run, run.fromSeq + offset))
+    }
   }
 
   /**

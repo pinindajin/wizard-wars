@@ -203,10 +203,18 @@ test("full match flow: assets, overlay, canvas, movement, shop, abilities", asyn
         left: boolean
         right: boolean
       }
-      type PlayerInputState = {
+      type CompactInputButtons = {
         buttons: number
         abilitySlot?: number
         useQuickItemSlot?: number
+      }
+      type PlayerInputCommandRun = CompactInputButtons & {
+        fromSeq: number
+        toSeq: number
+      }
+      type PlayerInputState = {
+        protocolVersion: 2
+        runs: PlayerInputCommandRun[]
       }
       type ConnectionLike = {
         sendPlayerInput: (input: PlayerInput) => void
@@ -215,7 +223,7 @@ test("full match flow: assets, overlay, canvas, movement, shop, abilities", asyn
       type ArenaLike = {
         getConnection?: () => ConnectionLike
       }
-      const decodePlayerInputState = (input: PlayerInputState): PlayerInput => ({
+      const decodePlayerInputRun = (input: CompactInputButtons): PlayerInput => ({
         up: (input.buttons & 1) !== 0,
         down: (input.buttons & 2) !== 0,
         left: (input.buttons & 4) !== 0,
@@ -225,6 +233,13 @@ test("full match flow: assets, overlay, canvas, movement, shop, abilities", asyn
         abilitySlot: input.abilitySlot ?? null,
         useQuickItemSlot: input.useQuickItemSlot ?? null,
       })
+      const decodePlayerInputState = (input: PlayerInputState): PlayerInput[] => {
+        return input.runs.flatMap((run) =>
+          Array.from({ length: run.toSeq - run.fromSeq + 1 }, () =>
+            decodePlayerInputRun(run),
+          ),
+        )
+      }
       const w = globalThis as unknown as {
         __wwGame?: { scene: { getScene: (k: string) => unknown } }
         __wwInputLog?: PlayerInput[]
@@ -242,7 +257,7 @@ test("full match flow: assets, overlay, canvas, movement, shop, abilities", asyn
         original(input)
       }
       conn.sendPlayerInputState = (input: PlayerInputState) => {
-        w.__wwInputLog?.push(decodePlayerInputState(input))
+        w.__wwInputLog?.push(...decodePlayerInputState(input))
         originalState(input)
       }
       w.__wwInputRecorderInstalled = true
@@ -356,6 +371,7 @@ test("full match flow: assets, overlay, canvas, movement, shop, abilities", asyn
     (afterSettleY ?? 0) - (settledY ?? 0),
     `expected local Y NOT to drift backward after W release (settledY=${settledY}, afterSettleY=${afterSettleY})`,
   ).toBeLessThan(4)
+  await expect(page.getByTestId("performance-issue-rubberbanding")).toHaveCount(0)
 
   await installInputRecorder()
 
@@ -453,4 +469,5 @@ test("full match flow: assets, overlay, canvas, movement, shop, abilities", asyn
     offendingWarnings,
     `unexpected onMessage warnings: ${offendingWarnings.join(" | ")}`,
   ).toEqual([])
+  await expect(page.getByTestId("performance-issue-rubberbanding")).toHaveCount(0)
 })

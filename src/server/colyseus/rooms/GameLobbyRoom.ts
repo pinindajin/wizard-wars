@@ -26,6 +26,7 @@ import type {
   LobbyHostTransferPayload,
   LobbyScoreboardPayload,
   PlayerDelta,
+  PlayerInputCommandRunPayload,
   PlayerInputPayload,
   ServerPerformanceStatusPayload,
   ScoreboardEntry,
@@ -42,7 +43,6 @@ import {
   parsePlayerOwnerAckPayload,
   parseServerPerformanceStatusPayload,
 } from "../../../shared/validators"
-import { decodePlayerInputState } from "../../../shared/playerInputState"
 import {
   MAX_PLAYERS_PER_MATCH,
   MIN_PLAYERS_PER_MATCH,
@@ -520,6 +520,9 @@ export class GameLobbyRoom extends Room {
   private performanceVisualFlushDurationMs = 0
   private performanceOwnerAckSendDurationMs = 0
   private performanceImmediateBroadcastDurationMs = 0
+  private performanceCompactInputV2Batches = 0
+  private performanceCompactInputV2Runs = 0
+  private performanceCompactInputV2CommandSeqs = 0
   private performanceVisualBudgetDeferrals = 0
   private performanceVisualBudgetDeferredEntities = 0
   private performanceVisualBudgetMaxDeferralAgeMs = 0
@@ -789,7 +792,10 @@ export class GameLobbyRoom extends Room {
 
     this.resetPlayerInputStreamForNewTransport(auth.sub)
     if (this.lobbyPhase === "IN_PROGRESS") {
-      this.sendInProgressHydrationToClient(client, { includeLobbyState: false })
+      this.sendInProgressHydrationToClient(client, {
+        includeLobbyState: false,
+        inputStreamReset: true,
+      })
     }
 
     logger.info(
@@ -897,7 +903,10 @@ export class GameLobbyRoom extends Room {
 
     this.resetPlayerInputStreamForNewTransport(pd.playerId)
     if (this.lobbyPhase === "IN_PROGRESS") {
-      this.sendInProgressHydrationToClient(client, { includeLobbyState: false })
+      this.sendInProgressHydrationToClient(client, {
+        includeLobbyState: false,
+        inputStreamReset: true,
+      })
     }
 
     logger.info(
@@ -1340,11 +1349,11 @@ export class GameLobbyRoom extends Room {
       return
     }
 
-    this.enqueueCanonicalPlayerInput(
-      client,
-      pd as PlayerData,
-      decodePlayerInputState(result.data),
-    )
+    this.performanceCompactInputV2Batches += 1
+    this.performanceCompactInputV2Runs += result.data.runs.length
+    for (const run of result.data.runs) {
+      this.enqueueCanonicalPlayerInputRun(client, pd as PlayerData, run)
+    }
   }
 
   /**
@@ -1401,6 +1410,71 @@ export class GameLobbyRoom extends Room {
           sessionId: client.sessionId,
           phase: this.lobbyPhase,
           seq: input.seq,
+          queueLength: queue.length,
+          reason: "input_queue_cap",
+        },
+        "[GameLobbyRoom] player input queue capped",
+      )
+    }
+  }
+
+  /**
+   * Enqueues a protocol v2 command run while preserving one sequence per tick.
+   *
+   * @param client - Sending client.
+   * @param pd - Player data attached to the client.
+   * @param run - Validated command run to queue.
+   */
+  private enqueueCanonicalPlayerInputRun(
+    client: Client,
+    pd: PlayerData,
+    run: PlayerInputCommandRunPayload,
+  ): void {
+    const highest = this.highestAcceptedSeqByPlayer.get(pd.playerId) ?? -1
+    if (run.toSeq <= highest) {
+      logger.debug(
+        {
+          event: "room.player_input.dropped_duplicate",
+          area: "netcode",
+          side: "server",
+          roomId: this.roomId,
+          playerId: pd.playerId,
+          sessionId: client.sessionId,
+          phase: this.lobbyPhase,
+          seq: run.toSeq,
+          highest,
+          reason: "stale_or_duplicate_seq",
+        },
+        "[GameLobbyRoom] player input dropped",
+      )
+      return
+    }
+
+    const acceptedRun =
+      run.fromSeq <= highest ? { ...run, fromSeq: highest + 1 } : run
+    let queue = this.inputQueue.get(pd.playerId)
+    if (!queue) {
+      queue = new PlayerInputQueue()
+      this.inputQueue.set(pd.playerId, queue)
+    }
+    queue.pushRun(acceptedRun)
+    this.performanceCompactInputV2CommandSeqs +=
+      acceptedRun.toSeq - acceptedRun.fromSeq + 1
+    this.highestAcceptedSeqByPlayer.set(pd.playerId, acceptedRun.toSeq)
+
+    const dropped = queue.trimToCap(INPUT_QUEUE_CAP_PER_PLAYER)
+    for (let i = 0; i < dropped; i += 1) {
+      this.performanceInputQueueDrops += 1
+      logger.warn(
+        {
+          event: "room.player_input.queue_cap_drop",
+          area: "netcode",
+          side: "server",
+          roomId: this.roomId,
+          playerId: pd.playerId,
+          sessionId: client.sessionId,
+          phase: this.lobbyPhase,
+          seq: acceptedRun.toSeq,
           queueLength: queue.length,
           reason: "input_queue_cap",
         },
@@ -1819,10 +1893,14 @@ export class GameLobbyRoom extends Room {
    * @param opts - When `includeLobbyState` is true, sends `LobbyState` first
    *   (explicit resync). Join/reconnect pass false because `onJoin` /
    *   `onReconnect` already sent lobby state.
+   *   `inputStreamReset` marks hydrations after server-side input queue resets.
    */
   private sendInProgressHydrationToClient(
     client: Client,
-    opts?: { readonly includeLobbyState?: boolean },
+    opts?: {
+      readonly includeLobbyState?: boolean
+      readonly inputStreamReset?: boolean
+    },
   ): void {
     if (this.lobbyPhase !== "IN_PROGRESS") return
 
@@ -1836,7 +1914,14 @@ export class GameLobbyRoom extends Room {
       client.send(RoomEvent.ShopState, buildShopStatePayload(economy))
     }
     if (this.simulation) {
-      const gameStateSync = this.buildGameStateSyncPayload(Date.now())
+      const baseGameStateSync = this.buildGameStateSyncPayload(Date.now())
+      const gameStateSync =
+        opts?.inputStreamReset === true
+          ? parseGameStateSyncPayload({
+              ...baseGameStateSync,
+              inputStreamReset: true,
+            })
+          : baseGameStateSync
       client.send(RoomEvent.GameStateSync, gameStateSync)
     }
   }
@@ -1851,16 +1936,16 @@ export class GameLobbyRoom extends Room {
   }
 
   /**
-   * Returns the room's preferred input transport while keeping both inbound
-   * handlers available during rollout.
+   * Returns the room's v2 input protocol capability for match start/full sync.
    *
    * @returns Input protocol capability for match start and full sync.
    */
   private buildGameInputProtocolPayload(): GameInputProtocolPayload {
     const configured = process.env.WW_INPUT_PROTOCOL
+    const preferredTransport = configured === "legacy" ? "legacy" : "compact"
     return {
-      protocolVersion: 1,
-      preferredTransport: configured === "legacy" ? "legacy" : "compact",
+      protocolVersion: 2,
+      preferredTransport,
       activeHeartbeatMs: 100,
       idleHeartbeatMs: 1_000,
     }
@@ -2441,6 +2526,9 @@ export class GameLobbyRoom extends Room {
     this.performanceVisualFlushDurationMs = 0
     this.performanceOwnerAckSendDurationMs = 0
     this.performanceImmediateBroadcastDurationMs = 0
+    this.performanceCompactInputV2Batches = 0
+    this.performanceCompactInputV2Runs = 0
+    this.performanceCompactInputV2CommandSeqs = 0
     this.performanceVisualBudgetDeferrals = 0
     this.performanceVisualBudgetDeferredEntities = 0
     this.performanceVisualBudgetMaxDeferralAgeMs = 0
@@ -2814,6 +2902,9 @@ export class GameLobbyRoom extends Room {
       visualFlushDurationMs: this.performanceVisualFlushDurationMs,
       ownerAckSendDurationMs: this.performanceOwnerAckSendDurationMs,
       immediateBroadcastDurationMs: this.performanceImmediateBroadcastDurationMs,
+      compactInputV2Batches: this.performanceCompactInputV2Batches,
+      compactInputV2Runs: this.performanceCompactInputV2Runs,
+      compactInputV2CommandSeqs: this.performanceCompactInputV2CommandSeqs,
       visualBudgetDeferrals: this.performanceVisualBudgetDeferrals,
       visualBudgetDeferredEntities: this.performanceVisualBudgetDeferredEntities,
       visualBudgetMaxDeferralAgeMs: this.performanceVisualBudgetMaxDeferralAgeMs,
@@ -2839,12 +2930,19 @@ export class GameLobbyRoom extends Room {
       this.performanceVisualBudgetMaxDeferralAgeMs > 0 ||
       this.performanceVisualBudgetDroppedVisuals > 0 ||
       this.performanceCriticalSendFailures > 0
+    const hasCompactInputTelemetry =
+      this.performanceCompactInputV2Batches > 0 ||
+      this.performanceCompactInputV2Runs > 0 ||
+      this.performanceCompactInputV2CommandSeqs > 0
     const shouldBroadcast =
       key !== this.lastPerformanceStatusKey ||
       (classification.degraded &&
         serverTimeMs - this.lastPerformanceStatusBroadcastAtMs >=
           SERVER_PERFORMANCE_STATUS_MIN_INTERVAL_MS) ||
       (hasBudgetTelemetry &&
+        serverTimeMs - this.lastPerformanceStatusBroadcastAtMs >=
+          SERVER_PERFORMANCE_STATUS_MIN_INTERVAL_MS) ||
+      (hasCompactInputTelemetry &&
         serverTimeMs - this.lastPerformanceStatusBroadcastAtMs >=
           SERVER_PERFORMANCE_STATUS_MIN_INTERVAL_MS)
 

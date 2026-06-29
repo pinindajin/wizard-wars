@@ -111,7 +111,7 @@ describe("GameLobbyRoom network batching", () => {
         remoteRenderDelayMs: 84,
       },
       input: {
-        protocolVersion: 1,
+        protocolVersion: 2,
         preferredTransport: "compact",
         activeHeartbeatMs: 100,
         idleHeartbeatMs: 1_000,
@@ -150,7 +150,7 @@ describe("GameLobbyRoom network batching", () => {
     expect(getActiveGameLoopRoomCountForDiagnostics()).toBe(initialCount)
   })
 
-  it("advertises legacy input transport when the compact rollout env is disabled", () => {
+  it("advertises protocol v2 with legacy transport when legacy input env is set", () => {
     process.env.WW_INPUT_PROTOCOL = "legacy"
     const room = new GameLobbyRoom()
 
@@ -161,7 +161,7 @@ describe("GameLobbyRoom network batching", () => {
         }
       ).buildGameInputProtocolPayload(),
     ).toEqual({
-      protocolVersion: 1,
+      protocolVersion: 2,
       preferredTransport: "legacy",
       activeHeartbeatMs: 100,
       idleHeartbeatMs: 1_000,
@@ -213,7 +213,7 @@ describe("GameLobbyRoom network batching", () => {
         remoteRenderDelayMs: 84,
       },
       input: {
-        protocolVersion: 1,
+        protocolVersion: 2,
         preferredTransport: "compact",
         activeHeartbeatMs: 100,
         idleHeartbeatMs: 1_000,
@@ -2148,9 +2148,9 @@ describe("GameLobbyRoom network batching", () => {
       performanceVisualFlushDurationMs: 4,
       performanceOwnerAckSendDurationMs: 5,
       performanceImmediateBroadcastDurationMs: 6,
-      performanceVisualBudgetDeferrals: 1,
-      performanceVisualBudgetDeferredEntities: 2,
-      performanceVisualBudgetMaxDeferralAgeMs: 125,
+      performanceVisualBudgetDeferrals: 0,
+      performanceVisualBudgetDeferredEntities: 0,
+      performanceVisualBudgetMaxDeferralAgeMs: 0,
       performanceVisualBudgetDroppedVisuals: 0,
       performanceCriticalSendFailures: 0,
       performanceEventLoopLagMs: 0,
@@ -2159,11 +2159,23 @@ describe("GameLobbyRoom network batching", () => {
       },
     })
 
-    ;(
-      room as unknown as {
-        maybeBroadcastServerPerformanceStatus: (serverTimeMs: number) => void
-      }
-    ).maybeBroadcastServerPerformanceStatus(6_000)
+    const privateRoom = room as unknown as {
+      maybeBroadcastServerPerformanceStatus: (serverTimeMs: number) => void
+    }
+    privateRoom.maybeBroadcastServerPerformanceStatus(6_000)
+    broadcast.mockClear()
+    Object.assign(room as object, {
+      performanceWindowStartedAtPerfMs: performance.now() - 1_100,
+      performanceWindowCpuStart: process.cpuUsage(),
+      performanceVisualBudgetDeferrals: 1,
+      performanceVisualBudgetDeferredEntities: 2,
+      performanceVisualBudgetMaxDeferralAgeMs: 125,
+      processEventLoopMonitor: {
+        snapshot: vi.fn(() => ({})),
+      },
+    })
+
+    privateRoom.maybeBroadcastServerPerformanceStatus(7_000)
 
     expect(broadcast).toHaveBeenCalledWith(
       RoomEvent.ServerPerformanceStatus,
@@ -2176,6 +2188,72 @@ describe("GameLobbyRoom network batching", () => {
           visualBudgetMaxDeferralAgeMs: 125,
           visualBudgetDroppedVisuals: 0,
           criticalSendFailures: 0,
+        }),
+      }),
+    )
+  })
+
+  it("broadcasts nominal server performance status when compact input telemetry is present", () => {
+    const room = new GameLobbyRoom()
+    const broadcast = vi.fn()
+    Object.defineProperty(room, "clients", {
+      configurable: true,
+      value: [{ userData: { playerId: "player-1" } }],
+    })
+    Object.assign(room as object, {
+      broadcast,
+      performanceWindowStartedAtPerfMs: performance.now() - 1_100,
+      performanceWindowCpuStart: process.cpuUsage(),
+      performanceDroppedDebtMs: 0,
+      performanceCatchUpCallbacks: 0,
+      performanceInputQueueDrops: 0,
+      performanceSimDurationMs: 1,
+      performanceBroadcastDurationMs: 2,
+      performanceRoomTickDurationMs: 3,
+      performanceVisualFlushDurationMs: 4,
+      performanceOwnerAckSendDurationMs: 5,
+      performanceImmediateBroadcastDurationMs: 6,
+      performanceCompactInputV2Batches: 0,
+      performanceCompactInputV2Runs: 0,
+      performanceCompactInputV2CommandSeqs: 0,
+      performanceVisualBudgetDeferrals: 0,
+      performanceVisualBudgetDeferredEntities: 0,
+      performanceVisualBudgetMaxDeferralAgeMs: 0,
+      performanceVisualBudgetDroppedVisuals: 0,
+      performanceCriticalSendFailures: 0,
+      performanceEventLoopLagMs: 0,
+      processEventLoopMonitor: {
+        snapshot: vi.fn(() => ({})),
+      },
+    })
+
+    const privateRoom = room as unknown as {
+      maybeBroadcastServerPerformanceStatus: (serverTimeMs: number) => void
+    }
+    privateRoom.maybeBroadcastServerPerformanceStatus(6_000)
+    broadcast.mockClear()
+    Object.assign(room as object, {
+      performanceWindowStartedAtPerfMs: performance.now() - 1_100,
+      performanceWindowCpuStart: process.cpuUsage(),
+      performanceCompactInputV2Batches: 2,
+      performanceCompactInputV2Runs: 3,
+      performanceCompactInputV2CommandSeqs: 42,
+      processEventLoopMonitor: {
+        snapshot: vi.fn(() => ({})),
+      },
+    })
+
+    privateRoom.maybeBroadcastServerPerformanceStatus(7_000)
+
+    expect(broadcast).toHaveBeenCalledWith(
+      RoomEvent.ServerPerformanceStatus,
+      expect.objectContaining({
+        degraded: false,
+        reasons: [],
+        metrics: expect.objectContaining({
+          compactInputV2Batches: 2,
+          compactInputV2Runs: 3,
+          compactInputV2CommandSeqs: 42,
         }),
       }),
     )

@@ -259,7 +259,10 @@ export class GameConnection {
   }
 
   sendPlayerInputState(input: PlayerInputStatePayload): void {
-    this.send(RoomEvent.PlayerInputState, input, { sampleEvery: 60, seq: input.seq })
+    this.send(RoomEvent.PlayerInputState, input, {
+      sampleEvery: 60,
+      seq: playerInputStateSampleSeq(input),
+    })
   }
 
   // ─── Send Helpers (Shop / Inventory) ──────────────────────────────────────
@@ -447,4 +450,14 @@ export class GameConnection {
     }
     this._room.send(type, payload)
   }
+}
+
+/**
+ * Returns the newest sequence covered by a compact input payload for sampled logs.
+ *
+ * @param input - Compact player input payload.
+ * @returns Newest covered input sequence.
+ */
+function playerInputStateSampleSeq(input: PlayerInputStatePayload): number {
+  return input.runs[input.runs.length - 1]?.toSeq ?? -1
 }

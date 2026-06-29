@@ -239,15 +239,44 @@ describe("GameConnection send helpers + warning silence", () => {
 
   it("sendPlayerInputState sends compact input on the additive room event", () => {
     const payload = {
-      protocolVersion: 1,
-      seq: 4,
-      clientSendTimeMs: 1_000,
-      buttons: 1,
-      targetX: 10,
-      targetY: 20,
+      protocolVersion: 2,
+      runs: [
+        {
+          fromSeq: 4,
+          toSeq: 4,
+          clientSendTimeMs: 1_000,
+          buttons: 1,
+          targetX: 10,
+          targetY: 20,
+        },
+      ],
     } as const
 
     conn.sendPlayerInputState(payload)
+
+    expect(room.sent).toContainEqual({
+      type: RoomEvent.PlayerInputState,
+      payload,
+    })
+  })
+
+  it("sendPlayerInputState samples v2 input state by newest covered command sequence", () => {
+    const payload = {
+      protocolVersion: 2,
+      runs: [
+        {
+          fromSeq: 4,
+          toSeq: 7,
+          clientSendTimeMs: 1_000,
+          buttons: 1,
+          targetX: 10,
+          targetY: 20,
+        },
+      ],
+    } as const
+
+    conn.sendPlayerInputState(payload)
+    conn.sendPlayerInputState({ protocolVersion: 2, runs: [] })
 
     expect(room.sent).toContainEqual({
       type: RoomEvent.PlayerInputState,

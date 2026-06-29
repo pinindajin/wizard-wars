@@ -7,11 +7,19 @@ import {
 } from "../constants"
 import { ArenaRuntime } from "./ArenaRuntime"
 import { WsEvent } from "@/shared/events"
-import type { AnyWsMessage, MessageHandler } from "@/shared/types"
+import type {
+  AnyWsMessage,
+  MessageHandler,
+  PlayerInputStatePayload,
+} from "@/shared/types"
 import { SFX_KEYS } from "@/shared/balance-config/audio"
 
 const soundPlaySpy = vi.hoisted(() => vi.fn())
 const activeLocalInputSpy = vi.hoisted(() => vi.fn())
+
+function lastCoveredInputSeq(payload: PlayerInputStatePayload): number {
+  return payload.runs[payload.runs.length - 1]?.toSeq ?? -1
+}
 
 const telegraphMock = vi.hoisted(() => ({
   applyFullSync: vi.fn(),
@@ -627,7 +635,7 @@ describe("ArenaRuntime lifecycle", () => {
       type: WsEvent.MatchGo,
       payload: {
         input: {
-          protocolVersion: 1,
+          protocolVersion: 2,
           preferredTransport: "compact",
           activeHeartbeatMs: 100,
           idleHeartbeatMs: 1_000,
@@ -641,8 +649,153 @@ describe("ArenaRuntime lifecycle", () => {
     ).toEqual([0, 1, 2])
     expect(connection.sendPlayerInput).not.toHaveBeenCalled()
     expect(
-      connection.sendPlayerInputState.mock.calls.map(([payload]) => payload.seq),
+      connection.sendPlayerInputState.mock.calls.map(([payload]) =>
+        lastCoveredInputSeq(payload),
+      ),
     ).toEqual([0])
+  })
+
+  it("preserves pending compact runs when full sync repeats unchanged input protocol", () => {
+    vi.useFakeTimers()
+    try {
+      const { runtime, connection } = makeRuntime()
+      let seq = 0
+      let simSteps = 3
+      const inputProtocol = {
+        protocolVersion: 2 as const,
+        preferredTransport: "compact" as const,
+        activeHeartbeatMs: 100,
+        idleHeartbeatMs: 1_000,
+      }
+      connection.nextSeq.mockImplementation(() => seq++)
+      keyboardControllerMock.collectInput.mockImplementation((nextSeq: number) => ({
+        up: false,
+        down: false,
+        left: false,
+        right: true,
+        abilitySlot: null,
+        abilityTargetX: 0,
+        abilityTargetY: 0,
+        useQuickItemSlot: null,
+        seq: nextSeq,
+      }))
+      playerRenderMock.update.mockImplementation(
+        (_delta: number, _intent: unknown, onSimStep?: () => void) => {
+          for (let i = 0; i < simSteps; i++) onSimStep?.()
+        },
+      )
+
+      runtime.start()
+      vi.setSystemTime(1_000)
+      connection.emit({
+        type: WsEvent.MatchGo,
+        payload: { input: inputProtocol },
+      })
+      runtime.update(0, 51)
+      expect(connection.sendPlayerInputState).toHaveBeenCalledTimes(1)
+
+      connection.emit({
+        type: WsEvent.GameStateSync,
+        payload: {
+          players: [],
+          fireballs: [],
+          homingOrbs: [],
+          activeTelegraphs: [],
+          seq: 1,
+          serverTimeMs: 1_050,
+          input: inputProtocol,
+        },
+      })
+
+      vi.setSystemTime(1_100)
+      simSteps = 4
+      runtime.update(0, 68)
+
+      const secondState = connection.sendPlayerInputState.mock.calls[1]?.[0]
+      expect(secondState).toEqual({
+        protocolVersion: 2,
+        runs: [
+          expect.objectContaining({
+            fromSeq: 1,
+            toSeq: 3,
+          }),
+        ],
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("resets pending compact runs when full sync marks the input stream reset", () => {
+    vi.useFakeTimers()
+    try {
+      const { runtime, connection } = makeRuntime()
+      let seq = 0
+      let simSteps = 3
+      const inputProtocol = {
+        protocolVersion: 2 as const,
+        preferredTransport: "compact" as const,
+        activeHeartbeatMs: 100,
+        idleHeartbeatMs: 1_000,
+      }
+      connection.nextSeq.mockImplementation(() => seq++)
+      keyboardControllerMock.collectInput.mockImplementation((nextSeq: number) => ({
+        up: false,
+        down: false,
+        left: false,
+        right: true,
+        abilitySlot: null,
+        abilityTargetX: 0,
+        abilityTargetY: 0,
+        useQuickItemSlot: null,
+        seq: nextSeq,
+      }))
+      playerRenderMock.update.mockImplementation(
+        (_delta: number, _intent: unknown, onSimStep?: () => void) => {
+          for (let i = 0; i < simSteps; i++) onSimStep?.()
+        },
+      )
+
+      runtime.start()
+      vi.setSystemTime(1_000)
+      connection.emit({
+        type: WsEvent.MatchGo,
+        payload: { input: inputProtocol },
+      })
+      runtime.update(0, 51)
+      expect(connection.sendPlayerInputState).toHaveBeenCalledTimes(1)
+
+      connection.emit({
+        type: WsEvent.GameStateSync,
+        payload: {
+          players: [],
+          fireballs: [],
+          homingOrbs: [],
+          activeTelegraphs: [],
+          seq: 1,
+          serverTimeMs: 1_050,
+          input: inputProtocol,
+          inputStreamReset: true,
+        },
+      })
+
+      vi.setSystemTime(1_100)
+      simSteps = 1
+      runtime.update(0, 17)
+
+      const secondState = connection.sendPlayerInputState.mock.calls[1]?.[0]
+      expect(secondState).toEqual({
+        protocolVersion: 2,
+        runs: [
+          expect.objectContaining({
+            fromSeq: 3,
+            toSeq: 3,
+          }),
+        ],
+      })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it("continues reporting active local input even when compact wire sends are suppressed", () => {
@@ -673,7 +826,7 @@ describe("ArenaRuntime lifecycle", () => {
       type: WsEvent.MatchGo,
       payload: {
         input: {
-          protocolVersion: 1,
+          protocolVersion: 2,
           preferredTransport: "compact",
           activeHeartbeatMs: 100,
           idleHeartbeatMs: 1_000,
@@ -684,7 +837,9 @@ describe("ArenaRuntime lifecycle", () => {
 
     expect(activeLocalInputSpy).toHaveBeenCalledTimes(3)
     expect(
-      connection.sendPlayerInputState.mock.calls.map(([payload]) => payload.seq),
+      connection.sendPlayerInputState.mock.calls.map(([payload]) =>
+        lastCoveredInputSeq(payload),
+      ),
     ).toEqual([0])
   })
 
