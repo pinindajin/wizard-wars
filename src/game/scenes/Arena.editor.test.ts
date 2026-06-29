@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
+import sharp from "sharp"
 import { describe, expect, it } from "vitest"
 
 import { buildArenaTilemapFromScene } from "../../../scripts/export-arena-tilemap"
@@ -51,6 +52,95 @@ function rectsOverlap(a: TiledObject, b: TiledObject): boolean {
 }
 
 describe("Arena Phaser Editor scene", () => {
+  it("uses a doubled native arena base image and editor bounds", async () => {
+    const scene = readJson<{
+      readonly settings: {
+        readonly borderWidth: number
+        readonly borderHeight: number
+      }
+    }>("src/game/scenes/Arena.scene")
+    const metadata = await sharp(resolve(ROOT, "public/assets/maps/arena-base.png")).metadata()
+
+    expect(metadata.width).toBe(2804)
+    expect(metadata.height).toBe(2244)
+    expect(scene.settings.borderWidth).toBe(2804)
+    expect(scene.settings.borderHeight).toBe(2244)
+  })
+
+  it("keeps representative arena visuals and collision rectangles aligned after doubling", () => {
+    const scene = readJson<{
+      readonly displayList: readonly {
+        readonly type: string
+        readonly label: string
+        readonly x?: number
+        readonly y?: number
+        readonly width?: number
+        readonly height?: number
+        readonly scaleX?: number
+        readonly scaleY?: number
+      }[]
+    }>("src/game/scenes/Arena.scene")
+
+    expect(scene.displayList.find((item) => item.label === "arena_prop_000_brazier-tower")).toMatchObject({
+      x: 264,
+      y: 172,
+      scaleX: 0.48,
+      scaleY: 0.48,
+    })
+    expect(scene.displayList.find((item) => item.label === "propCollider_000")).toMatchObject({
+      x: 242,
+      y: 148,
+      width: 46,
+      height: 24,
+    })
+    expect(scene.displayList.find((item) => item.label === "lavaArea_000")).toMatchObject({
+      x: 256,
+      y: 24,
+      width: 56,
+      height: 8,
+    })
+    expect(scene.displayList.find((item) => item.label === "nonWalkableArea_000")).toMatchObject({
+      x: 0,
+      y: 0,
+      width: 2804,
+      height: 24,
+    })
+  })
+
+  it("keeps tracked arena metadata aligned with the doubled source scene", () => {
+    const metadata = readJson<{
+      readonly arena: { readonly width: number; readonly height: number }
+      readonly placements: readonly {
+        readonly x: number
+        readonly y: number
+        readonly scale: number
+      }[]
+      readonly propColliders: readonly {
+        readonly x: number
+        readonly y: number
+        readonly width: number
+        readonly height: number
+      }[]
+      readonly spawnPoints: readonly { readonly x: number; readonly y: number }[]
+    }>("public/assets/sprites/arena-props/metadata.json")
+    const reviewPlacements = readJson<{
+      readonly placements: readonly { readonly x: number; readonly y: number; readonly scale: number }[]
+      readonly propColliders: readonly {
+        readonly x: number
+        readonly y: number
+        readonly width: number
+        readonly height: number
+      }[]
+    }>("public/assets/arena-review/native-map/placements.json")
+
+    expect(metadata.arena).toEqual({ width: 2804, height: 2244 })
+    expect(metadata.placements[0]).toMatchObject({ x: 264, y: 172, scale: 0.48 })
+    expect(metadata.propColliders[0]).toMatchObject({ x: 242, y: 148, width: 46, height: 24 })
+    expect(metadata.spawnPoints[0]).toEqual({ x: 1420, y: 1124 })
+    expect(reviewPlacements.placements[0]).toMatchObject({ x: 264, y: 172, scale: 0.48 })
+    expect(reviewPlacements.propColliders[0]).toMatchObject({ x: 242, y: 148, width: 46, height: 24 })
+  })
+
   it("exports to the committed arena tilemap without semantic drift", () => {
     const exported = buildArenaTilemapFromScene()
     const committed = readJson("public/assets/tilemaps/arena.json")

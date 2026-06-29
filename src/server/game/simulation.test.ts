@@ -1635,8 +1635,8 @@ describe("primary melee attack", () => {
     const eids: number[] = []
     for (let i = 0; i < 12; i++) {
       const eid = sim.addPlayer(`user${i}`, `Player ${i}`, "red_wizard", i)
-      Position.x[eid] = 160 + (i % 4) * 4
-      Position.y[eid] = 160 + Math.floor(i / 4) * 4
+      Position.x[eid] = 320 + (i % 4) * 4
+      Position.y[eid] = 320 + Math.floor(i / 4) * 4
       eids.push(eid)
     }
 

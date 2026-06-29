@@ -22,9 +22,9 @@ import {
 import { canOccupyWorldPosition, type ArenaPropColliderRect } from "./worldCollision"
 
 const rect: ArenaPropColliderRect = { x: 10, y: 20, width: 30, height: 40 }
-const OPEN_LAND_POINT = { x: 710, y: 562 }
-const OPEN_LAVA_POINT = { x: 400, y: 140 }
-const OPEN_CLIFF_POINT = { x: 452, y: 1060 }
+const OPEN_LAND_POINT = { x: 1420, y: 1124 }
+const OPEN_LAVA_POINT = { x: 800, y: 280 }
+const OPEN_CLIFF_POINT = { x: 904, y: 2120 }
 
 function sampleLavaRect(): ArenaPropColliderRect {
   const lava = ARENA_LAVA_COLLIDERS.find((candidate) =>

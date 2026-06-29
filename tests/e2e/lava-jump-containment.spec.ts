@@ -6,9 +6,11 @@ import {
   ARENA_WORLD_COLLIDERS,
 } from "../../src/shared/balance-config"
 import { PLAYER_WORLD_COLLISION_FOOTPRINT } from "../../src/shared/balance-config/combat"
+import { TICK_MS } from "../../src/shared/balance-config/rendering"
 import { terrainColliderSetForPlayerState } from "../../src/shared/collision/arenaSpatialIndexes"
 import { terrainStateAtPosition } from "../../src/shared/collision/terrainHazards"
 import { canOccupyWorldPosition } from "../../src/shared/collision/worldCollision"
+import { MAX_PLAYER_INPUT_COMMAND_RUN_SPAN_TICKS } from "../../src/shared/playerInputState"
 import { buyAndAssignJump, startSinglePlayerMatch } from "./ability-cooldown-helpers"
 
 type TerrainState = "land" | "lava" | "cliff"
@@ -42,8 +44,8 @@ type LavaEscapeSample = {
 }
 
 const PREFERRED_NATIVE_LAVA_EDGE_SAMPLE = {
-  start: { x: 164, y: 36 },
-  landThreshold: { x: 164, y: 68 },
+  start: { x: 1128, y: 136 },
+  landThreshold: { x: 1128, y: 200 },
   axis: "y",
   direction: 1,
   input: { down: true },
@@ -51,6 +53,7 @@ const PREFERRED_NATIVE_LAVA_EDGE_SAMPLE = {
 
 const ARENA_BOUNDS = { width: ARENA_WIDTH, height: ARENA_HEIGHT } as const
 const LAVA_TERRAIN_COLLIDER_SET = terrainColliderSetForPlayerState(0, "lava")
+const HELD_INPUT_CHUNK_TICKS = MAX_PLAYER_INPUT_COMMAND_RUN_SPAN_TICKS
 
 function sampleAxisValue(
   point: { readonly x: number; readonly y: number },
@@ -315,10 +318,93 @@ async function waitForProcessedInput(page: Page, seq: number): Promise<void> {
 }
 
 /**
- * Sends an input repeatedly, matching the live client's active-input heartbeat.
+ * Sends held input as a compact fixed-tick command run.
  *
- * The E2E hooks bypass ArenaRuntime's compact scheduler, so one raw input would
- * otherwise rely on the server's stale-input grace and can expire mid-jump on CI.
+ * @param page - Playwright page hosting the live game.
+ * @param input - Held movement fields to encode.
+ * @param tickCount - Number of simulation ticks covered by the run.
+ * @returns Last client input sequence covered by the run.
+ */
+async function sendHeldInputRun(
+  page: Page,
+  input: PlayerInputOverrides,
+  tickCount: number,
+): Promise<number> {
+  return page.evaluate(
+    ({ inputOverrides, maxRunTicks, ticks }) => {
+      type PlayerInputCommandRun = {
+        fromSeq: number
+        toSeq: number
+        clientSendTimeMs: number
+        buttons: number
+        targetX: number
+        targetY: number
+      }
+      type PlayerInputState = {
+        protocolVersion: 2
+        runs: readonly PlayerInputCommandRun[]
+      }
+      type ConnectionLike = {
+        nextSeq: () => number
+        sendPlayerInputState: (input: PlayerInputState) => void
+      }
+      type ArenaLike = {
+        getConnection?: () => ConnectionLike
+      }
+      const arena = (
+        globalThis as unknown as {
+          __wwGame?: { scene: { getScene: (key: string) => unknown } }
+        }
+      ).__wwGame?.scene.getScene("Arena") as ArenaLike | null | undefined
+      const connection = arena?.getConnection?.()
+      if (!connection) throw new Error("E2E lava input: game connection missing")
+
+      const buttons =
+        (inputOverrides.up ? 1 : 0) |
+        (inputOverrides.down ? 2 : 0) |
+        (inputOverrides.left ? 4 : 0) |
+        (inputOverrides.right ? 8 : 0)
+      const runs: PlayerInputCommandRun[] = []
+      let ticksRemaining = ticks
+      let latestSeq = -1
+
+      while (ticksRemaining > 0) {
+        const runTicks = Math.min(maxRunTicks, ticksRemaining)
+        let fromSeq = -1
+        let toSeq = -1
+        for (let i = 0; i < runTicks; i += 1) {
+          const seq = connection.nextSeq()
+          if (i === 0) fromSeq = seq
+          toSeq = seq
+        }
+        latestSeq = toSeq
+        runs.push({
+          fromSeq,
+          toSeq,
+          clientSendTimeMs: Date.now(),
+          buttons,
+          targetX: 700,
+          targetY: 350,
+        })
+        ticksRemaining -= runTicks
+      }
+
+      connection.sendPlayerInputState({
+        protocolVersion: 2,
+        runs,
+      })
+      return latestSeq
+    },
+    {
+      inputOverrides: input,
+      maxRunTicks: MAX_PLAYER_INPUT_COMMAND_RUN_SPAN_TICKS,
+      ticks: tickCount,
+    },
+  )
+}
+
+/**
+ * Sends held input in compact fixed-tick chunks.
  *
  * @param page - Playwright page hosting the live game.
  * @param input - Held movement or action fields to resend.
@@ -335,11 +421,10 @@ async function sendHeldInputUntil(
   const deadline = Date.now() + timeout
   let lastState: AuthoritativePlayerState | null = null
   while (Date.now() < deadline) {
-    const seq = await sendPlayerInput(page, input)
+    const seq = await sendHeldInputRun(page, input, HELD_INPUT_CHUNK_TICKS)
     await waitForProcessedInput(page, seq)
     lastState = await readAuthoritativeState(page)
     if (lastState && done(lastState)) return lastState
-    await page.waitForTimeout(75)
   }
   throw new Error(
     `Timed out waiting for held input condition; lastState=${JSON.stringify(lastState)}`,
@@ -347,7 +432,7 @@ async function sendHeldInputUntil(
 }
 
 /**
- * Holds movement for a fixed duration using the same heartbeat helper.
+ * Holds movement for a fixed duration using compact fixed-tick chunks.
  *
  * @param page - Playwright page hosting the live game.
  * @param input - Held movement fields to resend.
@@ -358,11 +443,12 @@ async function sendHeldInputFor(
   input: PlayerInputOverrides,
   durationMs: number,
 ): Promise<void> {
-  const deadline = Date.now() + durationMs
-  while (Date.now() < deadline) {
-    const seq = await sendPlayerInput(page, input)
+  let ticksRemaining = Math.max(1, Math.ceil(durationMs / TICK_MS))
+  while (ticksRemaining > 0) {
+    const ticks = Math.min(HELD_INPUT_CHUNK_TICKS, ticksRemaining)
+    const seq = await sendHeldInputRun(page, input, ticks)
     await waitForProcessedInput(page, seq)
-    await page.waitForTimeout(75)
+    ticksRemaining -= ticks
   }
 }
 
