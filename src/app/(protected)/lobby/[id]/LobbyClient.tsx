@@ -13,7 +13,7 @@ import {
 import { LobbyIdlePill } from "@/components/lobby/LobbyIdlePill"
 import { AdminClosingModal } from "@/components/lobby/AdminClosingModal"
 import { HeroCard, HERO_CARD_CONFIGS } from "@/components/lobby/HeroCard"
-import { HERO_CONFIGS } from "@/shared/balance-config/heroes"
+import { HERO_CONFIGS, normalizeHeroId } from "@/shared/balance-config/heroes"
 import { MATCH_COUNTDOWN_DURATION_MS } from "@/shared/balance-config/lobby"
 import {
   LobbyChatPayload,
@@ -56,9 +56,8 @@ const HERO_CARDS = Object.values(HERO_CONFIGS)
 
 /** Hero → display icon */
 const HERO_ICON: Record<string, string> = {
-  red_wizard: "🔴",
-  barbarian: "🟠",
-  ranger: "🟢",
+  yen: "Y",
+  triss: "T",
 }
 
 /**
@@ -358,7 +357,7 @@ export default function LobbyClient() {
             aside={
               myPlayer?.heroId ? (
                 <LobbyStatusPill tone="accent">
-                  {HERO_CONFIGS[myPlayer.heroId]?.displayName ?? "Selected"}
+                  {HERO_CONFIGS[normalizeHeroId(myPlayer.heroId)].displayName}
                 </LobbyStatusPill>
               ) : null
             }
@@ -394,7 +393,7 @@ export default function LobbyClient() {
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-white">{p.username}</p>
                       <p className="mt-1 text-xs text-slate-400">
-                        {HERO_CONFIGS[p.heroId]?.displayName ?? p.heroId}
+                        {HERO_CONFIGS[normalizeHeroId(p.heroId)].displayName}
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">

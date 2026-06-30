@@ -5,7 +5,7 @@ Cross-context vocabulary for active engineering work.
 | Term | Definition |
 | --- | --- |
 | Arena | Playfield for a match. Current arena is a native image-backed 2804x2244 px map with editor-authored prop, cliff, lava, and walkable regions. |
-| Hero | Player avatar. Current MVP heroes share the lady-wizard sprite and differ through identity/config rather than separate art. |
+| Hero | Player avatar. Current selectable heroes are Yen, who uses the existing lady-wizard sprite set, and Triss, who uses her own Triss sprite set. |
 | Lives | Respawn tickets. A player who reaches zero lives becomes a spectator; the match ends when eliminations leave one or zero active players. |
 | Kill | Lethal damage event. The killer receives kill credit and session gold. |
 | Respawn | Return to play after death delay at a selected safe spawn point. |

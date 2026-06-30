@@ -116,7 +116,7 @@ describe("primaryMeleeAttackSystem", () => {
     expect(ctx.combatTelegraphStarts[0]!.shape.type).toBe("cone")
     const swing = ctx.primaryMeleeAttacks[0]!
     expect(swing.casterId).toBe("attacker")
-    expect(swing.attackId).toBe("red_wizard_cleaver")
+    expect(swing.attackId).toBe("yen_cleaver")
     expect(swing.hurtboxRadiusPx).toBeGreaterThan(0)
     expect(swing.hurtboxArcDeg).toBeGreaterThan(0)
     expect(swing.dangerousWindowStartMs).toBeGreaterThanOrEqual(0)
@@ -124,7 +124,7 @@ describe("primaryMeleeAttackSystem", () => {
 
     expect(ctx.activeMeleeAttacks.size).toBe(1)
     const active = ctx.activeMeleeAttacks.get(eid)!
-    expect(active.attackId).toBe("red_wizard_cleaver")
+    expect(active.attackId).toBe("yen_cleaver")
     expect(active.startTick).toBe(20)
     expect(active.facingAngle).toBe(0)
     expect(active.hitTargets.size).toBe(0)
@@ -194,12 +194,12 @@ describe("primaryMeleeAttackSystem", () => {
     const world = createWorld()
     const attacker = addAttacker(world, 0, 100)
     const target = addTarget(world, 30, 100)
-    const cfg = PRIMARY_MELEE_ATTACK_CONFIGS.red_wizard_cleaver
+    const cfg = PRIMARY_MELEE_ATTACK_CONFIGS.yen_cleaver
     const startTick = 0
     const dangerousTick = startTick + Math.ceil(cfg.dangerousWindowStartMs / TICK_MS) + 1
 
     const active: ActiveMeleeAttack = {
-      attackId: "red_wizard_cleaver",
+      attackId: "yen_cleaver",
       startTick,
       facingAngle: 0,
       casterUserId: "a",
@@ -237,10 +237,10 @@ describe("primaryMeleeAttackSystem", () => {
     const world = createWorld()
     const attacker = addAttacker(world, 0, 100, Math.PI)
     addTarget(world, 30, 100)
-    const cfg = PRIMARY_MELEE_ATTACK_CONFIGS.red_wizard_cleaver
+    const cfg = PRIMARY_MELEE_ATTACK_CONFIGS.yen_cleaver
 
     const active: ActiveMeleeAttack = {
-      attackId: "red_wizard_cleaver",
+      attackId: "yen_cleaver",
       startTick: 0,
       facingAngle: Math.PI,
       casterUserId: "a",
@@ -264,10 +264,10 @@ describe("primaryMeleeAttackSystem", () => {
   it("removes the active attack after the swing duration elapses", () => {
     const world = createWorld()
     const attacker = addAttacker(world, 0, 100)
-    const cfg = PRIMARY_MELEE_ATTACK_CONFIGS.red_wizard_cleaver
+    const cfg = PRIMARY_MELEE_ATTACK_CONFIGS.yen_cleaver
 
     const active: ActiveMeleeAttack = {
-      attackId: "red_wizard_cleaver",
+      attackId: "yen_cleaver",
       startTick: 0,
       facingAngle: 0,
       casterUserId: "a",
@@ -294,12 +294,12 @@ describe("primaryMeleeAttackSystem", () => {
       const attacker = addAttacker(world, 0, 100)
       addTarget(world, 30, 100)
       addComponent(world, attacker, component)
-      const cfg = PRIMARY_MELEE_ATTACK_CONFIGS.red_wizard_cleaver
+      const cfg = PRIMARY_MELEE_ATTACK_CONFIGS.yen_cleaver
       const activeMeleeAttacks = new Map<number, ActiveMeleeAttack>([
         [
           attacker,
           {
-            attackId: "red_wizard_cleaver",
+            attackId: "yen_cleaver",
             startTick: 0,
             facingAngle: 0,
             casterUserId: "a",

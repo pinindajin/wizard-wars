@@ -9,23 +9,24 @@ import {
   type AlphaOutlineSegment,
 } from "@/lib/sprite-outline"
 import {
-  type LadyWizardAtlasClipId,
-  LADY_WIZARD_ATLAS_CLIP_TO_MEGASHEET,
-  LADY_WIZARD_CLIP_FPS,
-  LADY_WIZARD_FRAME_SIZE_PX,
-  LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y,
-  ladyWizardAtlasPublicPath,
-} from "@/shared/sprites/ladyWizard"
+  HERO_CONFIGS,
+  VALID_HERO_IDS,
+  normalizeHeroId,
+  type HeroId,
+} from "@/shared/balance-config/heroes"
 import {
-  buildLadyWizardViewerCells,
+  HERO_SPRITE_CONFIGS,
+  heroAtlasPublicPath,
+  type HeroSpriteDirection,
+} from "@/shared/sprites/heroSprites"
+import {
+  buildHeroSpriteViewerCells,
   type LadyWizardAtlasJson,
   type LadyWizardViewerCell,
 } from "@/shared/sprites/ladyWizardViewerModel"
 import {
   SPRITE_VIEWER_CENTERPOINT_MARKER_ARM_PX,
   SPRITE_VIEWER_CENTERPOINT_MARKER_RADIUS_PX,
-  SPRITE_VIEWER_DEFAULT_PRIMARY_ATTACK_ID,
-  SPRITE_VIEWER_PRIMARY_ATTACK_ATLAS_CLIP_ID,
   spriteViewerAttackHurtbox,
   spriteViewerCharacterHitbox,
   spriteViewerCenterpoint,
@@ -33,11 +34,9 @@ import {
   spriteViewerFrameIsDangerous,
   spriteViewerMovementOvalRadii,
 } from "@/shared/sprites/spriteViewerOverlays"
-import type { LadyWizardDirection } from "@/shared/sprites/ladyWizard"
 
 const DETAIL_SCALE = 2
 const DETAIL_PAD = 16
-const FRAME = LADY_WIZARD_FRAME_SIZE_PX
 
 /**
  * One legend line with a click-to-expand details panel (avoids hover/stacking/CSS issues).
@@ -96,23 +95,28 @@ function outlineCacheKey(stripUrl: string, frameIndex: number): string {
  *
  * @param img - Decoded strip image (`naturalWidth` is strip width).
  * @param frameIndex - Frame column index.
- * @returns ImageData for the `FRAME×FRAME` cel, or null if dimensions are invalid.
+ * @param frameSize - Square cel size in pixels.
+ * @returns ImageData for the selected cel, or null if dimensions are invalid.
  */
-function copyFrameImageData(img: HTMLImageElement, frameIndex: number): ImageData | null {
-  const sx = frameIndex * FRAME
-  if (sx + FRAME > img.naturalWidth || img.naturalHeight < FRAME) return null
+function copyFrameImageData(
+  img: HTMLImageElement,
+  frameIndex: number,
+  frameSize: number,
+): ImageData | null {
+  const sx = frameIndex * frameSize
+  if (sx + frameSize > img.naturalWidth || img.naturalHeight < frameSize) return null
   const c = document.createElement("canvas")
-  c.width = FRAME
-  c.height = FRAME
+  c.width = frameSize
+  c.height = frameSize
   const cctx = c.getContext("2d")
   if (!cctx) return null
   cctx.imageSmoothingEnabled = false
-  cctx.drawImage(img, sx, 0, FRAME, FRAME, 0, 0, FRAME, FRAME)
-  return cctx.getImageData(0, 0, FRAME, FRAME)
+  cctx.drawImage(img, sx, 0, frameSize, frameSize, 0, 0, frameSize, frameSize)
+  return cctx.getImageData(0, 0, frameSize, frameSize)
 }
 
 /**
- * Client UI for the lady-wizard sprite viewer: gallery, detail canvas, overlays, playback.
+ * Client UI for hero sprite viewing: gallery, detail canvas, overlays, playback.
  *
  * @returns React tree for `/dev/sprite-viewer`.
  */
@@ -133,19 +137,31 @@ export function SpriteViewerClient() {
   const [showCollision, setShowCollision] = useState(true)
   const [showEdge, setShowEdge] = useState(true)
   const [showAttackHurtbox, setShowAttackHurtbox] = useState(true)
+  const [heroId, setHeroId] = useState<HeroId>(VALID_HERO_IDS[0] ?? "yen")
 
-  const cells = useMemo(() => (atlas ? buildLadyWizardViewerCells(atlas) : []), [atlas])
+  const normalizedHeroId = normalizeHeroId(heroId)
+  const heroConfig = HERO_CONFIGS[normalizedHeroId]
+  const spriteConfig = HERO_SPRITE_CONFIGS[normalizedHeroId]
+  const frameSize = spriteConfig.frameSizePx
+  const displayOffsetY = spriteConfig.displayOffsetY
+  const primaryAttackId = heroConfig.primaryMeleeAttackId
+  const primaryAttackAtlasClipId = spriteConfig.clips.primary_melee_attack.atlasClipId
+
+  const cells = useMemo(
+    () => (atlas ? buildHeroSpriteViewerCells(normalizedHeroId, atlas) : []),
+    [atlas, normalizedHeroId],
+  )
 
   useEffect(() => {
     let cancelled = false
     void (async () => {
       try {
-        const res = await fetch(ladyWizardAtlasPublicPath())
+        const res = await fetch(heroAtlasPublicPath(normalizedHeroId))
         if (!res.ok) throw new Error(`atlas ${res.status}`)
         const json = (await res.json()) as LadyWizardAtlasJson
         if (cancelled) return
         setAtlas(json)
-        const built = buildLadyWizardViewerCells(json)
+        const built = buildHeroSpriteViewerCells(normalizedHeroId, json)
         const first = built.find((c) => !c.missing) ?? built[0] ?? null
         setSelected(first)
         setFrameIndex(0)
@@ -156,7 +172,7 @@ export function SpriteViewerClient() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [normalizedHeroId])
 
   useEffect(() => {
     stripImageRef.current = null
@@ -181,10 +197,12 @@ export function SpriteViewerClient() {
     img.src = selected.stripUrl
   }, [selected])
 
-  const megasheetClip = selected
-    ? LADY_WIZARD_ATLAS_CLIP_TO_MEGASHEET[selected.atlasClipId as LadyWizardAtlasClipId]
+  const selectedActionClipId = selected
+    ? spriteConfig.clipOrder.find(
+        (actionClipId) => spriteConfig.clips[actionClipId].atlasClipId === selected.atlasClipId,
+      )
     : undefined
-  const fps = megasheetClip ? LADY_WIZARD_CLIP_FPS[megasheetClip] : 8
+  const fps = selectedActionClipId ? spriteConfig.clips[selectedActionClipId].fps : 8
   const maxFrame = selected && !selected.missing ? Math.max(0, selected.frameCount - 1) : 0
   const displayFrame = Math.min(frameIndex, maxFrame)
 
@@ -201,13 +219,13 @@ export function SpriteViewerClient() {
       const key = outlineCacheKey(stripUrl, frameIndex)
       const hit = outlineCacheRef.current.get(key)
       if (hit) return hit
-      const idata = copyFrameImageData(img, frameIndex)
+      const idata = copyFrameImageData(img, frameIndex, frameSize)
       if (!idata) return []
-      const segs = computeAlphaOutlineSegments(idata.data, FRAME, FRAME)
+      const segs = computeAlphaOutlineSegments(idata.data, frameSize, frameSize)
       outlineCacheRef.current.set(key, segs)
       return segs
     },
-    [],
+    [frameSize],
   )
 
   const drawDetail = useCallback(() => {
@@ -216,8 +234,8 @@ export function SpriteViewerClient() {
     const ctx = canvas.getContext("2d")
     if (!ctx) return
 
-    const cw = FRAME * DETAIL_SCALE + DETAIL_PAD * 2
-    const ch = FRAME * DETAIL_SCALE + DETAIL_PAD * 2
+    const cw = frameSize * DETAIL_SCALE + DETAIL_PAD * 2
+    const ch = frameSize * DETAIL_SCALE + DETAIL_PAD * 2
     if (canvas.width !== cw || canvas.height !== ch) {
       canvas.width = cw
       canvas.height = ch
@@ -226,8 +244,8 @@ export function SpriteViewerClient() {
     ctx.fillStyle = "#0c0c12"
     ctx.fillRect(0, 0, cw, ch)
 
-    const cx = DETAIL_PAD + (FRAME * DETAIL_SCALE) / 2
-    const cy = DETAIL_PAD + FRAME * DETAIL_SCALE
+    const cx = DETAIL_PAD + (frameSize * DETAIL_SCALE) / 2
+    const cy = DETAIL_PAD + frameSize * DETAIL_SCALE
 
     if (!selected || selected.missing || stripBroken || !stripLoaded) {
       ctx.fillStyle = "#64748b"
@@ -251,12 +269,22 @@ export function SpriteViewerClient() {
     ctx.imageSmoothingEnabled = false
     ctx.translate(cx, cy)
     ctx.scale(DETAIL_SCALE, DETAIL_SCALE)
-    ctx.drawImage(img, displayFrame * FRAME, 0, FRAME, FRAME, -FRAME / 2, -FRAME, FRAME, FRAME)
+    ctx.drawImage(
+      img,
+      displayFrame * frameSize,
+      0,
+      frameSize,
+      frameSize,
+      -frameSize / 2,
+      -frameSize,
+      frameSize,
+      frameSize,
+    )
 
-    const centerpoint = spriteViewerCenterpoint()
+    const centerpoint = spriteViewerCenterpoint(displayOffsetY)
     if (showCollision) {
       const movementOval = spriteViewerMovementOvalRadii()
-      const combatHitbox = spriteViewerCharacterHitbox()
+      const combatHitbox = spriteViewerCharacterHitbox(displayOffsetY)
       ctx.strokeStyle = "rgba(34, 197, 94, 0.85)"
       ctx.lineWidth = 1 / DETAIL_SCALE
       ctx.beginPath()
@@ -295,13 +323,13 @@ export function SpriteViewerClient() {
       const segs = getOrComputeOutline(img, selected.stripUrl, displayFrame)
       ctx.strokeStyle = "rgba(56, 189, 248, 0.9)"
       ctx.lineWidth = 1 / DETAIL_SCALE
-      strokeAlphaOutlineSegments(ctx, segs, -FRAME / 2, -FRAME)
+      strokeAlphaOutlineSegments(ctx, segs, -frameSize / 2, -frameSize)
     }
 
-    if (showAttackHurtbox && selected.atlasClipId === SPRITE_VIEWER_PRIMARY_ATTACK_ATLAS_CLIP_ID) {
+    if (showAttackHurtbox && selected.atlasClipId === primaryAttackAtlasClipId) {
       const overlay = spriteViewerAttackHurtbox(
-        SPRITE_VIEWER_DEFAULT_PRIMARY_ATTACK_ID,
-        selected.direction as LadyWizardDirection,
+        primaryAttackId,
+        selected.direction as HeroSpriteDirection,
         fps,
       )
       const halfArcRad = (overlay.arcDeg * Math.PI) / 360
@@ -330,6 +358,10 @@ export function SpriteViewerClient() {
     showEdge,
     showAttackHurtbox,
     fps,
+    frameSize,
+    displayOffsetY,
+    primaryAttackAtlasClipId,
+    primaryAttackId,
     getOrComputeOutline,
   ])
 
@@ -372,13 +404,42 @@ export function SpriteViewerClient() {
     <div className="flex min-h-screen flex-col gap-4 p-4 md:flex-row md:p-6">
       <div className="flex min-w-0 flex-1 flex-col gap-3">
         <header>
-          <h1 className="font-mono text-lg tracking-tight text-zinc-100">Lady-wizard sprite viewer</h1>
+          <h1 className="font-mono text-lg tracking-tight text-zinc-100">Hero sprite viewer</h1>
           <p className="max-w-xl text-sm text-zinc-400">
             Shipped strips from <code className="text-violet-300">/assets/.../sheets/atlas.json</code>. Collision
             overlay shows the movement oval and character hitbox centered on the sim anchor (texture bottom minus{" "}
-            <code className="text-violet-300">{LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y}px</code>).
+            <code className="text-violet-300">{displayOffsetY}px</code>).
           </p>
         </header>
+
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Hero sprite selection">
+          {VALID_HERO_IDS.map((id) => {
+            const active = id === normalizedHeroId
+            return (
+              <button
+                key={id}
+                type="button"
+                className={[
+                  "rounded border px-3 py-1.5 font-mono text-xs",
+                  active
+                    ? "border-violet-400 bg-violet-600 text-white"
+                    : "border-zinc-700 bg-zinc-900 text-zinc-300 hover:border-violet-500/70",
+                ].join(" ")}
+                onClick={() => {
+                  setAtlas(null)
+                  setLoadError(null)
+                  setSelected(null)
+                  setFrameIndex(0)
+                  setPlaying(false)
+                  setHeroId(id)
+                }}
+                data-testid={`sprite-viewer-hero-${id}`}
+              >
+                {HERO_CONFIGS[id].displayName}
+              </button>
+            )
+          })}
+        </div>
 
         {loadError ? (
           <p className="text-sm text-red-400">Failed to load atlas: {loadError}</p>
@@ -413,7 +474,11 @@ export function SpriteViewerClient() {
                 >
                   <span className="truncate text-zinc-400">{cell.atlasClipId}</span>
                   <span>{cell.direction}</span>
-                  {cell.missing ? <span className="mt-1 text-amber-500">—</span> : <span className="mt-1">{cell.frameCount}f</span>}
+                  {cell.missing ? (
+                    <span className="mt-1 text-amber-500">—</span>
+                  ) : (
+                    <span className="mt-1">{cell.frameCount}f</span>
+                  )}
                 </button>
               )
             })}
@@ -509,7 +574,7 @@ export function SpriteViewerClient() {
             <LegendTipRow
               testId="sprite-viewer-legend-info-centerpoint"
               label={
-                <span title={spriteViewerCenterpointTooltip()}>
+                <span title={spriteViewerCenterpointTooltip(displayOffsetY)}>
                   <span className="text-rose-400">Red/white</span>: centerpoint / sim anchor.
                 </span>
               }
@@ -519,10 +584,10 @@ export function SpriteViewerClient() {
                 <code className="text-violet-300">Position.x/y</code> used by movement, collision, combat targeting,
                 camera follow, and render interpolation. The detail canvas draws it at{" "}
                 <code className="text-violet-300">
-                  ({spriteViewerCenterpoint().x}, {spriteViewerCenterpoint().y})
+                  ({spriteViewerCenterpoint(displayOffsetY).x}, {spriteViewerCenterpoint(displayOffsetY).y})
                 </code>{" "}
                 relative to the cel because the sprite art is bottom-anchored and shifted by{" "}
-                <code className="text-violet-300">LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y</code>.
+                <code className="text-violet-300">{displayOffsetY}px</code>.
               </p>
               <p>
                 <strong className="text-zinc-100">Relationship to overlays.</strong> The movement oval and character
@@ -563,8 +628,9 @@ export function SpriteViewerClient() {
               testId="sprite-viewer-legend-info-hitbox"
               label={
                 <span>
-                  <span className="text-fuchsia-300">Purple</span>: character hitbox ({spriteViewerCharacterHitbox().width}×
-                  {spriteViewerCharacterHitbox().height}).
+                  <span className="text-fuchsia-300">Purple</span>: character hitbox (
+                  {spriteViewerCharacterHitbox(displayOffsetY).width}×
+                  {spriteViewerCharacterHitbox(displayOffsetY).height}).
                 </span>
               }
             >
@@ -594,8 +660,8 @@ export function SpriteViewerClient() {
             >
               <p>
                 <strong className="text-zinc-100">What it is.</strong> A half-circle drawn around the sim anchor when{" "}
-                <code className="text-violet-300">summoned-axe-attack</code> is selected. The flat side passes through
-                the centerpoint and the curve faces the direction of the displayed cell.
+                <code className="text-violet-300">{primaryAttackAtlasClipId}</code> is selected. The flat side passes
+                through the centerpoint and the curve faces the direction of the displayed cell.
               </p>
               <p>
                 <strong className="text-zinc-100">Color.</strong> White when the current frame is outside the
@@ -629,13 +695,13 @@ export function SpriteViewerClient() {
                 <strong className="text-zinc-100">None in gameplay.</strong> Phaser renders textures and animation
                 frames, but no server or client sim path consumes this outline for hits, line-of-sight, or pathfinding.
                 It is purely a <strong className="text-zinc-100">dev/QA art signal</strong>: trims, padding, and
-                semi-transparent fringe relative to the fixed {FRAME}px cel.
+                semi-transparent fringe relative to the fixed {frameSize}px cel.
               </p>
               <p>
                 <strong className="text-zinc-100">If you change it.</strong> Adjusting threshold, caching, or stroke
                 color in the viewer affects diagnostics only. Changing the actual PNGs or atlas layout is what changes
-                what players see in-game through Phaser—plan asset rebuilds (<code className="text-violet-300">build:lady-wizard-sheets</code> /{" "}
-                <code className="text-violet-300">build:lady-wizard-megasheet</code>) when art changes.
+                what players see in-game through Phaser; rebuild the affected hero sheets and megasheet when art
+                changes.
               </p>
             </LegendTipRow>
           </div>

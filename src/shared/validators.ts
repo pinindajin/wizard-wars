@@ -17,6 +17,7 @@ import {
   MAX_PLAYER_INPUT_COMMAND_RUN_SPAN_TICKS,
   PLAYER_INPUT_BUTTONS_MAX,
 } from "./playerInputState"
+import { VALID_HERO_IDS } from "./balance-config/heroes"
 
 /** Username: alphanumeric + underscore, 3-20 chars, must be trimmed before comparison. */
 const USERNAME_REGEX = /^[a-zA-Z0-9_]+$/
@@ -52,7 +53,7 @@ export const lobbyChatPayloadSchema = z.object({
 
 /** Schema for hero selection. */
 export const heroSelectPayloadSchema = z.object({
-  heroId: z.enum(["red_wizard", "barbarian", "ranger"]),
+  heroId: z.enum(VALID_HERO_IDS),
 })
 
 /** Schema for player input per tick. */

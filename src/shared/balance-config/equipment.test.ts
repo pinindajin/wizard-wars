@@ -35,4 +35,28 @@ describe("PRIMARY_MELEE_ATTACK_CONFIGS", () => {
       expect(PRIMARY_MELEE_ATTACK_CONFIGS[id].id).toBe(id)
     }
   })
+
+  it("keeps Yen on the existing melee geometry and gives Triss a longer narrower cone", () => {
+    expect(PRIMARY_MELEE_ATTACK_IDS).toEqual(["yen_cleaver", "triss_big_blast"])
+
+    const yen = PRIMARY_MELEE_ATTACK_CONFIGS.yen_cleaver
+    const triss = PRIMARY_MELEE_ATTACK_CONFIGS.triss_big_blast
+
+    expect(yen).toMatchObject({
+      displayName: "Yen Cleaver",
+      hurtboxRadiusPx: 45,
+      hurtboxArcDeg: 180,
+    })
+    expect(triss).toMatchObject({
+      displayName: "Triss Big Blast",
+      hurtboxRadiusPx: 54,
+      hurtboxArcDeg: 126,
+    })
+    expect(triss.damage).toBe(yen.damage)
+    expect(triss.durationMs).toBe(yen.durationMs)
+    expect(triss.dangerousWindowStartMs).toBe(yen.dangerousWindowStartMs)
+    expect(triss.dangerousWindowEndMs).toBe(yen.dangerousWindowEndMs)
+    expect(triss.damageProperties).toBe(yen.damageProperties)
+    expect(triss.swingSfxKey).toBe(yen.swingSfxKey)
+  })
 })

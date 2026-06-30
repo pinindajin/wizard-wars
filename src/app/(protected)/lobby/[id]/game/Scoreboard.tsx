@@ -2,7 +2,7 @@
 
 import { useCallback } from "react"
 import type { LobbyScoreboardPayload, ScoreboardEntry } from "@/shared/types"
-import { HERO_CONFIGS } from "@/shared/balance-config/heroes"
+import { HERO_CONFIGS, normalizeHeroId } from "@/shared/balance-config/heroes"
 
 /** Props for the Scoreboard component. */
 type ScoreboardProps = {
@@ -108,7 +108,7 @@ export default function Scoreboard({
             </thead>
             <tbody>
               {sorted.map((entry, idx) => {
-                const hero = HERO_CONFIGS[entry.heroId]
+                const hero = HERO_CONFIGS[normalizeHeroId(entry.heroId)]
                 const isTop = idx === 0
 
                 return (

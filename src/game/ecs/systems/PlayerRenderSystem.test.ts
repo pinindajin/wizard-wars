@@ -63,7 +63,7 @@ import type {
   PlayerSnapshot,
   PrimaryMeleeAttackPayload,
 } from "@/shared/types"
-import { getAnimKey, getDirectionFromAngle } from "../../animation/LadyWizardAnimDefs"
+import { getHeroAnimKey, getDirectionFromAngle } from "../../animation/LadyWizardAnimDefs"
 import { HERO_CONFIGS } from "@/shared/balance-config/heroes"
 import {
   ARENA_HEIGHT,
@@ -222,7 +222,7 @@ function snap(over: Partial<PlayerSnapshot> & Pick<PlayerSnapshot, "id" | "playe
     health: over.health ?? 10,
     maxHealth: over.maxHealth ?? 10,
     lives: over.lives ?? 3,
-    heroId: over.heroId ?? "red_wizard",
+    heroId: over.heroId ?? "yen",
     animState: over.animState ?? "idle",
     moveState: over.moveState ?? "idle",
     terrainState: over.terrainState ?? "land",
@@ -278,6 +278,7 @@ function mockSceneAndGroup() {
           setTint: vi.fn(),
           clearTint: vi.fn(),
           setDepth: vi.fn(),
+          setCrop: vi.fn(),
           play: vi.fn(),
           setPosition: vi.fn((nextX: number, nextY: number) => {
             sprite.x = nextX
@@ -358,12 +359,12 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     expect(ClientPlayerState[2]).toBeUndefined()
   })
 
-  it("spawns a white-tint sprite, foot ellipse 32×16 in hero color, and never hero-tints the body", () => {
+  it("spawns a hero-specific sprite, foot ellipse 32×16 in hero color, and never hero-tints the body", () => {
     const { scene, group } = mockSceneAndGroup()
     const sys = new PlayerRenderSystem(scene as never, group as never)
     sys.localPlayerId = "p1"
 
-    sys.applyFullSync(sync([snap({ id: 1, playerId: "p1", heroId: "red_wizard", x: 10, y: 20 })]))
+    sys.applyFullSync(sync([snap({ id: 1, playerId: "p1", heroId: "triss", x: 10, y: 20 })]))
 
     const add = scene.add as {
       sprite: ReturnType<typeof vi.fn>
@@ -376,16 +377,38 @@ describe("PlayerRenderSystem.applyFullSync", () => {
       footY,
       32,
       16,
-      HERO_CONFIGS.red_wizard.tint,
+      HERO_CONFIGS.triss.tint,
       1,
     )
 
     const sprite = add.sprite.mock.results[0]?.value as { setTint: ReturnType<typeof vi.fn> }
     expect(sprite).toBeDefined()
-    const heroTints = [HERO_CONFIGS.red_wizard.tint, HERO_CONFIGS.barbarian.tint, HERO_CONFIGS.ranger.tint]
+    expect(add.sprite.mock.calls[0]![2]).toBe("triss")
+    const heroTints = [HERO_CONFIGS.yen.tint, HERO_CONFIGS.triss.tint]
     for (const c of heroTints) {
       expect(sprite.setTint).not.toHaveBeenCalledWith(c)
     }
+  })
+
+  it("uses the selected hero frame size when cropping lava-submerged sprites", () => {
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    sys.localPlayerId = "p1"
+    const lava = sampleLavaRect()
+
+    sys.applyFullSync(sync([snap({
+      id: 1,
+      playerId: "p1",
+      heroId: "triss",
+      x: lava.point.x,
+      y: lava.point.y,
+      terrainState: "lava",
+    })]))
+    sys.update(20, { up: false, down: false, left: false, right: false })
+
+    const add = scene.add as { sprite: ReturnType<typeof vi.fn> }
+    const sprite = add.sprite.mock.results[0]!.value as { setCrop: ReturnType<typeof vi.fn> }
+    expect(sprite.setCrop).toHaveBeenCalledWith(0, 0, 124, 70)
   })
 
   it("reports local reconciliation corrections to the runtime bridge", () => {
@@ -568,7 +591,7 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     }
     expect(ClientPlayerState[1]!.facingAngle).toBe(Math.PI)
     expect(sprite.play).toHaveBeenCalledWith(
-      getAnimKey("light_cast", getDirectionFromAngle(Math.PI)),
+      getHeroAnimKey("yen", "light_cast", getDirectionFromAngle(Math.PI)),
       true,
     )
   })
@@ -921,7 +944,7 @@ function meleeSwingPayload(
 ): PrimaryMeleeAttackPayload {
   return {
     casterId: "p1",
-    attackId: "red_wizard_cleaver",
+    attackId: "yen_cleaver",
     x: 0,
     y: 0,
     facingAngle: 0,
@@ -961,6 +984,7 @@ describe("PlayerRenderSystem.onPrimaryMeleeSwing", () => {
         snap({
           id: 1,
           playerId: "p1",
+          heroId: "triss",
           x: OPEN_TEST_POINT.x,
           y: OPEN_TEST_POINT.y,
           facingAngle: 0,
@@ -972,7 +996,8 @@ describe("PlayerRenderSystem.onPrimaryMeleeSwing", () => {
     const sprite = spriteFn.mock.results[0]!.value as { play: ReturnType<typeof vi.fn> }
     sprite.play.mockClear()
 
-    const expectedKey = getAnimKey(
+    const expectedKey = getHeroAnimKey(
+      "triss",
       "primary_melee_attack",
       getDirectionFromAngle(0),
     )
@@ -1005,11 +1030,13 @@ describe("PlayerRenderSystem.onPrimaryMeleeSwing", () => {
 
     const spriteFn = scene.add.sprite as ReturnType<typeof vi.fn>
     const sprite = spriteFn.mock.results[0]!.value as { play: ReturnType<typeof vi.fn> }
-    const eastSwingKey = getAnimKey(
+    const eastSwingKey = getHeroAnimKey(
+      "yen",
       "primary_melee_attack",
       getDirectionFromAngle(0),
     )
-    const westSwingKey = getAnimKey(
+    const westSwingKey = getHeroAnimKey(
+      "yen",
       "primary_melee_attack",
       getDirectionFromAngle(Math.PI),
     )

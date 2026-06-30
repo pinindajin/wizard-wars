@@ -103,7 +103,7 @@ function measureTwelvePlayerCap(): BenchResult {
   for (let i = 0; i < 12; i++) {
     const userId = `p${i}`
     ids.push(userId)
-    sim.addPlayer(userId, `Player ${i}`, "red_wizard", i)
+    sim.addPlayer(userId, `Player ${i}`, "yen", i)
   }
 
   const samples: number[] = []
@@ -135,7 +135,7 @@ function measureProjectileStressBaseline(): BenchResult {
   for (let i = 0; i < 12; i++) {
     const userId = `p${i}`
     ids.push(userId)
-    sim.addPlayer(userId, `Player ${i}`, "red_wizard", i)
+    sim.addPlayer(userId, `Player ${i}`, "yen", i)
   }
 
   const samples: number[] = []

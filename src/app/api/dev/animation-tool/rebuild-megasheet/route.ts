@@ -1,12 +1,34 @@
 import { NextResponse } from "next/server"
 
 import { isAnimationToolApiForbiddenInProduction } from "@/shared/dev/animationToolE2eGate"
+import { DEFAULT_HERO_ID, VALID_HERO_IDS, type HeroId } from "@/shared/balance-config/heroes"
 
-import { buildLadyWizardMegasheet } from "../../../../../../scripts/build-lady-wizard-megasheet"
+import { buildHeroMegasheet } from "../../../../../../scripts/build-hero-megasheet"
 
 export const runtime = "nodejs"
 
-export async function POST(): Promise<NextResponse> {
+function validationFailed(message: string): NextResponse {
+  return NextResponse.json({ ok: false, code: "validation_failed", message }, { status: 400 })
+}
+
+function parseWritableHeroId(rawHeroId: unknown): HeroId | NextResponse {
+  if (rawHeroId === undefined) return DEFAULT_HERO_ID
+  if (
+    typeof rawHeroId === "string" &&
+    (VALID_HERO_IDS as readonly string[]).includes(rawHeroId)
+  ) {
+    return rawHeroId as HeroId
+  }
+  return validationFailed(`unknown heroId: ${String(rawHeroId)}`)
+}
+
+/**
+ * Rebuilds one hero megasheet for the dev animation tool.
+ *
+ * @param request - Optional JSON body with `heroId`; missing body defaults to Yen.
+ * @returns JSON rebuild result.
+ */
+export async function POST(request?: Request): Promise<NextResponse> {
   if (isAnimationToolApiForbiddenInProduction()) {
     return NextResponse.json(
       { ok: false, code: "forbidden", message: "animation tool is dev-only" },
@@ -16,7 +38,22 @@ export async function POST(): Promise<NextResponse> {
 
   const startedAt = Date.now()
   try {
-    const result = await buildLadyWizardMegasheet({ silent: true })
+    let rawHeroId: unknown
+    if (request) {
+      try {
+        const body = (await request.json()) as unknown
+        rawHeroId =
+          body !== null && typeof body === "object" && "heroId" in body
+            ? (body as { heroId?: unknown }).heroId
+            : undefined
+      } catch {
+        rawHeroId = undefined
+      }
+    }
+    const heroId = parseWritableHeroId(rawHeroId)
+    if (heroId instanceof NextResponse) return heroId
+
+    const result = await buildHeroMegasheet({ heroId, silent: true })
     const durationMs = Date.now() - startedAt
     return NextResponse.json({
       ok: true,

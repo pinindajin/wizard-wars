@@ -109,11 +109,16 @@ test("full match flow: assets, overlay, canvas, movement, shop, abilities", asyn
           if (!g) return null
           const ready =
             g.textures.exists("lady-wizard") &&
+            g.textures.exists("triss") &&
             g.textures.exists("arena-base") &&
             g.anims.exists("lady-wizard-walk-south") &&
             g.anims.exists("lady-wizard-death-south") &&
             g.anims.exists("lady-wizard-light_spell_cast-south") &&
-            g.anims.exists("lady-wizard-summoned_axe_swing-south")
+            g.anims.exists("lady-wizard-summoned_axe_swing-south") &&
+            g.anims.exists("triss-walk-south") &&
+            g.anims.exists("triss-death-south") &&
+            g.anims.exists("triss-channel_fire-south") &&
+            g.anims.exists("triss-big_blast-south")
           return ready ? g : null
         }),
       { timeout: 60_000 },

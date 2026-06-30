@@ -36,6 +36,7 @@ import {
   AbilitySlots,
   Facing,
   Health,
+  Hero,
   InvulnerableTag,
   JumpArc,
   Lives,
@@ -132,7 +133,7 @@ function ackSeqFromOutput(
 
 /** Number of ticks needed to clear the dangerous window for the cleaver attack. */
 const TICKS_PAST_DANGEROUS_WINDOW =
-  Math.ceil(PRIMARY_MELEE_ATTACK_CONFIGS.red_wizard_cleaver.dangerousWindowEndMs / TICK_MS) + 1
+  Math.ceil(PRIMARY_MELEE_ATTACK_CONFIGS.yen_cleaver.dangerousWindowEndMs / TICK_MS) + 1
 
 /** Marks an entity as finishing its death animation on the next simulation tick. */
 function eliminateOnNextTick(
@@ -1355,6 +1356,17 @@ describe("match end", () => {
     expect(output.matchEnded?.entries[0].username).toBe("Alice")
   })
 
+  it("scoreboard entries normalize stale numeric hero indexes to Yen", () => {
+    const sim = createGameSimulation(Date.now())
+    const eid = sim.addPlayer("user1", "Alice", "triss", 0)
+    Hero.typeIndex[eid] = 99
+
+    sim.requestHostEnd()
+    const output = sim.tick(new Map(), Date.now())
+
+    expect(output.matchEnded?.entries[0].heroId).toBe("yen")
+  })
+
   it("keeps a multiplayer match running after one player is eliminated", () => {
     const serverTimeMs = Date.now()
     const sim = createGameSimulation(serverTimeMs)
@@ -1390,9 +1402,9 @@ describe("match end", () => {
 describe("primary melee attack", () => {
   it("sets primary melee attack index from selected hero", () => {
     const sim = createGameSimulation(Date.now())
-    const eid = sim.addPlayer("user1", "Alice", "barbarian", 0)
+    const eid = sim.addPlayer("user1", "Alice", "triss", 0)
     expect(Equipment.primaryMeleeAttackIndex[eid]).toBe(
-      primaryMeleeAttackIdToIndex("barbarian_cleaver"),
+      primaryMeleeAttackIdToIndex("triss_big_blast"),
     )
   })
 
@@ -1405,7 +1417,7 @@ describe("primary melee attack", () => {
     )
     expect(output.primaryMeleeAttacks).toHaveLength(1)
     const swing = output.primaryMeleeAttacks[0]!
-    expect(swing.attackId).toBe("red_wizard_cleaver")
+    expect(swing.attackId).toBe("yen_cleaver")
     expect(swing.damage).toBeGreaterThan(0)
     expect(swing.hurtboxRadiusPx).toBeGreaterThan(0)
     expect(swing.hurtboxArcDeg).toBeGreaterThan(0)
@@ -1503,7 +1515,7 @@ describe("primary melee attack", () => {
     expect(Facing.angle[eid]).toBeCloseTo(0, 5)
 
     const swingTicks = Math.ceil(
-      PRIMARY_MELEE_ATTACK_CONFIGS.red_wizard_cleaver.durationMs / TICK_MS,
+      PRIMARY_MELEE_ATTACK_CONFIGS.yen_cleaver.durationMs / TICK_MS,
     )
     let chainedFacing: number | null = null
     for (let i = 0; i < swingTicks + 2; i++) {
@@ -1557,7 +1569,7 @@ describe("primary melee attack", () => {
     expect(first.primaryMeleeAttacks[0]!.facingAngle).toBeCloseTo(0, 5)
 
     const swingTicks = Math.ceil(
-      getPrimaryAttackAnimationConfigByAttackId("red_wizard_cleaver").durationMs / TICK_MS,
+      getPrimaryAttackAnimationConfigByAttackId("yen_cleaver").durationMs / TICK_MS,
     )
     const queue = new PlayerInputQueue()
     for (let i = 0; i < swingTicks; i++) {
@@ -1700,7 +1712,7 @@ describe("primary melee attack", () => {
       ]),
       Date.now(),
     )
-    const cfg = PRIMARY_MELEE_ATTACK_CONFIGS.red_wizard_cleaver
+    const cfg = PRIMARY_MELEE_ATTACK_CONFIGS.yen_cleaver
     const ticksBeforeWindow = Math.floor(cfg.dangerousWindowStartMs / TICK_MS) - 1
     advanceTicks(sim, Math.max(0, ticksBeforeWindow))
     expect(Health.current[eb]).toBe(startHp)
@@ -1881,7 +1893,7 @@ describe("primary melee attack", () => {
     )
     advanceTicks(sim, TICKS_PAST_DANGEROUS_WINDOW)
     const damageDealt = startHp - Health.current[eb]
-    expect(damageDealt).toBe(PRIMARY_MELEE_ATTACK_CONFIGS.red_wizard_cleaver.damage)
+    expect(damageDealt).toBe(PRIMARY_MELEE_ATTACK_CONFIGS.yen_cleaver.damage)
   })
 
   it("removes SwingingWeapon after swing duration when weapon input stops", () => {
@@ -1892,7 +1904,7 @@ describe("primary melee attack", () => {
     expect(hasComponent(sim.world, eid, SwingingWeapon)).toBe(true)
     sim.tick(queueMap([["user1", emptyInput({ weaponPrimary: false, seq: 2 })]]), Date.now())
     const ticksToFinish =
-      Math.ceil(PRIMARY_MELEE_ATTACK_CONFIGS.red_wizard_cleaver.durationMs / TICK_MS) + 5
+      Math.ceil(PRIMARY_MELEE_ATTACK_CONFIGS.yen_cleaver.durationMs / TICK_MS) + 5
     for (let i = 0; i < ticksToFinish; i++) sim.tick(new Map(), Date.now())
     expect(hasComponent(sim.world, eid, SwingingWeapon)).toBe(false)
   })

@@ -44,7 +44,7 @@ import { NetworkSyncSystem } from "../ecs/systems/NetworkSyncSystem"
 import { PlayerInputStateScheduler } from "../network/PlayerInputStateScheduler"
 import { KeyboardController } from "../input/KeyboardController"
 import { MouseController } from "../input/MouseController"
-import { registerLadyWizardAnims } from "../animation/LadyWizardAnimDefs"
+import { registerHeroSpriteAnims } from "../animation/LadyWizardAnimDefs"
 import { registerFireballAnims } from "../animation/FireballAnimDefs"
 import { SFX_KEYS } from "@/shared/balance-config/audio"
 import { resolveDamageFloatLocalFeedback } from "../hitFeedback/damageFloatLocalFeedback"
@@ -183,7 +183,7 @@ export class ArenaRuntime {
     this._setupCamera()
     this._setupMinimap()
     this._setupAudio()
-    registerLadyWizardAnims(this.scene.anims)
+    registerHeroSpriteAnims(this.scene.anims)
     registerFireballAnims(this.scene.anims)
     this._openConnection()
   }
