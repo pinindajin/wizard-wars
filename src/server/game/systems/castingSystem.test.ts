@@ -10,6 +10,7 @@ import {
   DyingTag,
   Facing,
   Hero,
+  HERO_INDEX,
   HomingOrb,
   HomingOrbTag,
   PlayerInput,
@@ -127,6 +128,10 @@ function addCaster(world: ReturnType<typeof createWorld>, x = 100, y = 100): num
   PlayerInput.abilityTargetX[eid] = x + 200
   PlayerInput.abilityTargetY[eid] = y
   return eid
+}
+
+function setCasterHero(eid: number, heroId: keyof typeof HERO_INDEX): void {
+  Hero.typeIndex[eid] = HERO_INDEX[heroId]
 }
 
 function addPassiveTarget(
@@ -357,6 +362,38 @@ describe("castingSystem animation timing", () => {
     expect(ctx.fireballCreatedAtTickMap.get(ctx.fireballLaunches[0]!.id)).toBe(
       ctx.currentTick,
     )
+  })
+
+  it("fires Triss fireball after her hero-specific cast animation", () => {
+    const world = createWorld()
+    const caster = addCaster(world)
+    setCasterHero(caster, "triss")
+    const commandBuffer = createCommandBuffer()
+    const ctx = emptyCtx({
+      world,
+      currentTick: 10,
+      commandBuffer,
+      entityPlayerMap: new Map([[caster, "triss-caster"]]),
+    })
+
+    castingSystem(ctx)
+    expect(hasComponent(world, caster, Casting)).toBe(true)
+    expect(Casting.animationEndsAtTick[caster]).toBe(
+      10 + msToTickOffset(getSpellAnimationConfig("triss", "fireball").durationMs),
+    )
+
+    Position.x[caster] = 500
+    Position.y[caster] = 500
+    PlayerInput.abilitySlot[caster] = -1
+
+    ctx.currentTick =
+      10 + msToTickOffset(getSpellAnimationConfig("triss", "fireball").durationMs)
+    castingSystem(ctx)
+    commandBuffer.execute(world)
+
+    expect(ctx.fireballLaunches).toHaveLength(1)
+    expect(ctx.fireballLaunches[0]!.ownerId).toBe("triss-caster")
+    expect(ctx.fireballOwnerMap.get(ctx.fireballLaunches[0]!.id)).toBe("triss-caster")
   })
 
   it("does not spawn fireball when caster is dying before command buffer execute", () => {
