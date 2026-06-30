@@ -44,7 +44,6 @@ import {
   ARENA_CENTER_Y,
   DEFAULT_PLAYER_HEALTH,
   STARTING_LIVES,
-  STARTING_GOLD,
   PLAYER_RADIUS_PX,
   JUMP_MAX_CHARGES,
   HOMING_ORB_MAX_CHARGES,
@@ -115,6 +114,7 @@ import { playerDeltaSystem } from "./systems/playerDeltaSystem"
 import { projectileDeltaSystem } from "./systems/projectileDeltaSystem"
 import { abilityRuntimeStatesForPlayer } from "./abilityRuntimeState"
 import { TICK_MS } from "../../shared/balance-config/rendering"
+import { resolveStartingGold } from "./startingGold"
 
 export const HELD_INPUT_STALE_MS = 250
 export const HELD_INPUT_STALE_TICKS = Math.ceil(HELD_INPUT_STALE_MS / TICK_MS)
@@ -821,6 +821,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     const spawn = ARENA_SPAWN_POINTS[spawnIndex % ARENA_SPAWN_POINTS.length]
     const canonicalHeroId = normalizeHeroId(heroId)
     const heroIndex = HERO_INDEX[canonicalHeroId]
+    const startingGold = resolveStartingGold()
 
     // Face toward arena center
     const dx = ARENA_CENTER_X - spawn.x
@@ -857,7 +858,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     Health.current[eid] = DEFAULT_PLAYER_HEALTH
     Health.max[eid] = DEFAULT_PLAYER_HEALTH
     Lives.count[eid] = STARTING_LIVES
-    Gold.amount[eid] = STARTING_GOLD
+    Gold.amount[eid] = startingGold
     Hero.typeIndex[eid] = heroIndex
 
     Cooldown.fireball[eid] = 0
@@ -912,7 +913,7 @@ export function createGameSimulation(matchStartedAtMs: number): GameSimulation {
     playerUsernameMap.set(userId, username)
     entityUsernameMap.set(eid, username)
     playerHeroIdMap.set(userId, canonicalHeroId)
-    killStats.set(userId, { kills: 0, deaths: 0, goldEarned: STARTING_GOLD })
+    killStats.set(userId, { kills: 0, deaths: 0, goldEarned: startingGold })
 
     prevPlayerStates.set(eid, {
       x: spawn.x,

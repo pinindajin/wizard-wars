@@ -1,8 +1,9 @@
-import { STARTING_GOLD, KILL_REWARD, ABILITY_BAR_SLOT_COUNT, QUICK_ITEM_SLOT_COUNT } from "../../shared/balance-config/economy"
+import { KILL_REWARD, ABILITY_BAR_SLOT_COUNT, QUICK_ITEM_SLOT_COUNT } from "../../shared/balance-config/economy"
 import { SHOP_ITEMS } from "../../shared/balance-config/items"
 import { AUGMENT_CONFIGS } from "../../shared/balance-config/equipment"
 import { DEFAULT_ABILITY_SLOT_0_ID } from "../../shared/balance-config/abilities"
 import type { ShopStatePayload, ShopOwnedItem, QuickItemSlot } from "../../shared/types"
+import { resolveStartingGold } from "../game/startingGold"
 
 /**
  * Per-player in-session economy and inventory state.
@@ -33,7 +34,7 @@ export const createSessionEconomy = (): SessionEconomy => {
   abilitySlots[0] = DEFAULT_ABILITY_SLOT_0_ID
 
   return {
-    gold: STARTING_GOLD,
+    gold: resolveStartingGold(),
     kills: 0,
     deaths: 0,
     ownedItemIds: new Set<string>([DEFAULT_ABILITY_SLOT_0_ID]),
