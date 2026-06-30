@@ -89,3 +89,50 @@ export function bumpReplacesSinceRebuild(n: number): number {
 export function clearReplacesSinceRebuild(): number {
   return 0
 }
+
+export type ReplacesSinceRebuildByHero = Readonly<Record<string, number>>
+
+/**
+ * Reads the stale-megasheet replacement counter for one hero.
+ *
+ * @param state - Counter map keyed by hero id.
+ * @param heroId - Selected hero id.
+ */
+export function replacesSinceRebuildForHero(
+  state: ReplacesSinceRebuildByHero,
+  heroId: string,
+): number {
+  return state[heroId] ?? 0
+}
+
+/**
+ * Increments the stale-megasheet replacement counter for one hero.
+ *
+ * @param state - Counter map keyed by hero id.
+ * @param heroId - Hero whose strip was replaced.
+ */
+export function bumpReplacesSinceRebuildForHero(
+  state: ReplacesSinceRebuildByHero,
+  heroId: string,
+): ReplacesSinceRebuildByHero {
+  return {
+    ...state,
+    [heroId]: bumpReplacesSinceRebuild(replacesSinceRebuildForHero(state, heroId)),
+  }
+}
+
+/**
+ * Clears the stale-megasheet replacement counter for one hero.
+ *
+ * @param state - Counter map keyed by hero id.
+ * @param heroId - Hero whose megasheet was rebuilt.
+ */
+export function clearReplacesSinceRebuildForHero(
+  state: ReplacesSinceRebuildByHero,
+  heroId: string,
+): ReplacesSinceRebuildByHero {
+  return {
+    ...state,
+    [heroId]: clearReplacesSinceRebuild(),
+  }
+}

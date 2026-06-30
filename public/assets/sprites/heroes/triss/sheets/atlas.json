@@ -1,0 +1,85 @@
+{
+  "frameSize": 124,
+  "clips": {
+    "idle": {
+      "south": 1,
+      "south-east": 1,
+      "east": 1,
+      "north-east": 1,
+      "north": 1,
+      "north-west": 1,
+      "west": 1,
+      "south-west": 1
+    },
+    "walk": {
+      "south": 17,
+      "south-east": 17,
+      "east": 17,
+      "north-east": 17,
+      "north": 17,
+      "north-west": 17,
+      "west": 17,
+      "south-west": 17
+    },
+    "death": {
+      "south": 17,
+      "south-east": 17,
+      "east": 17,
+      "north-east": 17,
+      "north": 17,
+      "north-west": 17,
+      "west": 17,
+      "south-west": 17
+    },
+    "channel-fire": {
+      "south": 17,
+      "south-east": 17,
+      "east": 17,
+      "north-east": 17,
+      "north": 17,
+      "north-west": 17,
+      "west": 17,
+      "south-west": 17
+    },
+    "ground-pound": {
+      "south": 17,
+      "south-east": 17,
+      "east": 17,
+      "north-east": 17,
+      "north": 17,
+      "north-west": 17,
+      "west": 17,
+      "south-west": 17
+    },
+    "big-blast": {
+      "south": 17,
+      "south-east": 17,
+      "east": 17,
+      "north-east": 17,
+      "north": 17,
+      "north-west": 17,
+      "west": 17,
+      "south-west": 17
+    },
+    "jump": {
+      "south": 17,
+      "south-east": 17,
+      "east": 17,
+      "north-east": 17,
+      "north": 17,
+      "north-west": 17,
+      "west": 17,
+      "south-west": 17
+    },
+    "stumble": {
+      "south": 17,
+      "south-east": 17,
+      "east": 17,
+      "north-east": 17,
+      "north": 17,
+      "north-west": 17,
+      "west": 17,
+      "south-west": 17
+    }
+  }
+}

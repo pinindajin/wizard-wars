@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "heroes": {
-    "red_wizard": {
+    "yen": {
       "actions": {
         "idle": {
           "type": "behavior",
@@ -39,7 +39,7 @@
           "durationMs": 500,
           "effectTiming": "before"
         },
-        "primary:red_wizard_cleaver": {
+        "primary:yen_cleaver": {
           "type": "primaryAttack",
           "durationMs": 570,
           "dangerousWindowStartMs": 300,
@@ -48,7 +48,7 @@
         }
       }
     },
-    "barbarian": {
+    "triss": {
       "actions": {
         "idle": {
           "type": "behavior",
@@ -86,59 +86,11 @@
           "durationMs": 500,
           "effectTiming": "before"
         },
-        "primary:barbarian_cleaver": {
+        "primary:triss_big_blast": {
           "type": "primaryAttack",
           "durationMs": 570,
           "dangerousWindowStartMs": 300,
-          "dangerousWindowEndMs": 570,
-          "frameDurationsMs": [180, 120, 110, 40, 40, 40, 40]
-        }
-      }
-    },
-    "ranger": {
-      "actions": {
-        "idle": {
-          "type": "behavior",
-          "durationMs": 667
-        },
-        "walk": {
-          "type": "behavior",
-          "durationMs": 1500
-        },
-        "death": {
-          "type": "behavior",
-          "durationMs": 800
-        },
-        "stumble": {
-          "type": "behavior",
-          "durationMs": 1417
-        },
-        "spell:fireball": {
-          "type": "spell",
-          "durationMs": 500,
-          "effectTiming": "after"
-        },
-        "spell:homing_orb": {
-          "type": "spell",
-          "durationMs": 500,
-          "effectTiming": "after"
-        },
-        "spell:lightning_bolt": {
-          "type": "spell",
-          "durationMs": 700,
-          "effectTiming": "after"
-        },
-        "spell:jump": {
-          "type": "spell",
-          "durationMs": 500,
-          "effectTiming": "before"
-        },
-        "primary:ranger_cleaver": {
-          "type": "primaryAttack",
-          "durationMs": 570,
-          "dangerousWindowStartMs": 300,
-          "dangerousWindowEndMs": 570,
-          "frameDurationsMs": [180, 120, 110, 40, 40, 40, 40]
+          "dangerousWindowEndMs": 570
         }
       }
     }

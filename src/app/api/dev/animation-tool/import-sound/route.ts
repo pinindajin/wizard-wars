@@ -103,7 +103,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   const actionIdRaw = String(form.get("actionId") ?? "")
   const file = form.get("file")
 
-  if (!VALID_HERO_IDS.includes(heroId)) {
+  if (!(VALID_HERO_IDS as readonly string[]).includes(heroId)) {
     return err("validation_failed", "unknown heroId")
   }
 

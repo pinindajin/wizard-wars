@@ -4,11 +4,11 @@ import { SpriteViewerClient } from "./SpriteViewerClient"
 
 export const metadata: Metadata = {
   title: "Wizard Wars — Sprite viewer",
-  description: "Dev tool: inspect shipped lady-wizard sprite strips and overlays.",
+  description: "Dev tool: inspect shipped hero sprite strips and overlays.",
 }
 
 /**
- * Public dev route: canvas-based inspector for lady-wizard atlas strips (no Phaser, no game session).
+ * Public dev route: canvas-based inspector for hero atlas strips (no Phaser, no game session).
  *
  * @returns Page shell delegating to the client canvas UI.
  */

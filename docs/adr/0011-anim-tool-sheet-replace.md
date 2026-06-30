@@ -5,7 +5,7 @@ Date: 2026-04-30
 
 ## Context
 
-Artists need to swap individual lady-wizard direction strips from `/dev/animation-tool` without leaving the dev UI or manually editing megasheets. Strips must stay aligned with `atlas.json` frame counts. Per-frame PNGs must stay consistent so sheet rebuild scripts do not clobber edits.
+Artists need to swap individual hero direction strips from `/dev/animation-tool` without leaving the dev UI or manually editing megasheets. Strips must stay aligned with `atlas.json` frame counts. Per-frame PNGs must stay consistent so sheet rebuild scripts do not clobber edits.
 
 ## Decision
 
@@ -30,7 +30,7 @@ Client behavior:
 - Pre-validate image dimensions where possible.
 - Cache-bust the changed strip after success.
 - Show a stale-megasheet indicator and manual rebuild button.
-- Make clear that the current sprite art is shared across heroes.
+- Scope sprite replacement and megasheet rebuilds to the selected hero.
 
 Testing:
 
@@ -42,13 +42,13 @@ Testing:
 
 - Manual megasheet rebuild remains an operator action.
 - Local archives grow under gitignored `old/` directories and need periodic manual pruning.
-- A second hero strip pipeline will require generalizing clip IDs, paths, and UI selection.
+- Hero sprite clip IDs, paths, and UI selection are generalized through the shared hero sprite registry.
 - Real production hosts must not set E2E bypass variables.
 
 ## Related Code
 
 - `src/app/dev/animation-tool/**`
 - `src/app/api/dev/animation-tool/**`
-- `src/shared/sprites/ladyWizard.ts`
-- `scripts/build-lady-wizard-megasheet.ts`
+- `src/shared/sprites/heroSprites.ts`
+- `scripts/build-hero-megasheet.ts`
 - `src/shared/dev/animationToolE2eGate.ts`

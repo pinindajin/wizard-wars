@@ -5,6 +5,7 @@ import {
   playerInputPayloadSchema,
   playerInputStatePayloadSchema,
   playerSnapshotSchema,
+  heroSelectPayloadSchema,
   homingOrbBatchUpdatePayloadSchema,
   homingOrbImpactPayloadSchema,
   homingOrbLaunchPayloadSchema,
@@ -96,6 +97,20 @@ describe("chatMessagePayloadSchema", () => {
 
   it("rejects messages exceeding 200 chars", () => {
     expect(chatMessagePayloadSchema.safeParse({ text: "a".repeat(201) }).success).toBe(false)
+  })
+})
+
+describe("heroSelectPayloadSchema", () => {
+  it("accepts only Yen and Triss public hero ids", () => {
+    expect(heroSelectPayloadSchema.parse({ heroId: "yen" })).toEqual({ heroId: "yen" })
+    expect(heroSelectPayloadSchema.parse({ heroId: "triss" })).toEqual({ heroId: "triss" })
+  })
+
+  it("rejects legacy and unknown hero ids", () => {
+    expect(() => heroSelectPayloadSchema.parse({ heroId: "red_wizard" })).toThrow()
+    expect(() => heroSelectPayloadSchema.parse({ heroId: "barbarian" })).toThrow()
+    expect(() => heroSelectPayloadSchema.parse({ heroId: "ranger" })).toThrow()
+    expect(() => heroSelectPayloadSchema.parse({ heroId: "nope" })).toThrow()
   })
 })
 

@@ -7,21 +7,25 @@ import { NextResponse } from "next/server"
 import sharp from "sharp"
 
 import {
-  LADY_WIZARD_ATLAS_CLIP_IDS,
-  LADY_WIZARD_DIRECTIONS,
-  LADY_WIZARD_FRAME_SIZE_PX,
-  ladyWizardAnimationsArchiveFsDir,
-  ladyWizardAnimationsFramesFsDir,
-  ladyWizardAtlasFsPath,
-  ladyWizardSheetsArchiveFsDir,
-  ladyWizardStripFsPath,
-} from "@/shared/sprites/ladyWizard"
+  DEFAULT_HERO_ID,
+  VALID_HERO_IDS,
+  type HeroId,
+} from "@/shared/balance-config/heroes"
+import {
+  HERO_SPRITE_DIRECTIONS,
+  heroAnimationsArchiveFsDir,
+  heroAnimationsFramesFsDir,
+  heroAtlasFsPath,
+  heroSheetsArchiveFsDir,
+  heroSpriteConfigFor,
+  heroStripFsPath,
+  heroStripPublicPath,
+} from "@/shared/sprites/heroSprites"
 import { isAnimationToolApiForbiddenInProduction } from "@/shared/dev/animationToolE2eGate"
 
 export const runtime = "nodejs"
 
 const MAX_BYTES = 10 * 1024 * 1024
-const FRAME = LADY_WIZARD_FRAME_SIZE_PX
 
 type AtlasJson = {
   frameSize: number
@@ -40,12 +44,12 @@ function err(code: string, message: string, status = 400, extra: ErrExtra = {}):
 }
 
 /**
- * Dev-only: replace one lady-wizard horizontal strip PNG and re-slice per-frame PNGs.
+ * Dev-only: replace one hero horizontal strip PNG and re-slice per-frame PNGs.
  *
  * Order: validate → slice upload into a temp frames dir (no live mutation) → swap strip
  * → swap frames. This keeps validation failures and slice failures from touching committed art.
  *
- * @param request - Multipart body with `atlasClipId`, `direction`, `file`.
+ * @param request - Multipart body with `heroId`, `atlasClipId`, `direction`, `file`.
  * @returns JSON including `version` for cache-busting the strip URL.
  */
 export async function POST(request: Request): Promise<NextResponse> {
@@ -60,14 +64,26 @@ export async function POST(request: Request): Promise<NextResponse> {
     return err("validation_failed", "expected multipart/form-data body")
   }
 
+  const rawHeroId = form.get("heroId")
+  if (
+    rawHeroId !== null &&
+    (typeof rawHeroId !== "string" || !(VALID_HERO_IDS as readonly string[]).includes(rawHeroId))
+  ) {
+    return err("validation_failed", `unknown heroId: ${String(rawHeroId)}`)
+  }
+  const heroId = (rawHeroId ?? DEFAULT_HERO_ID) as HeroId
+  const heroSpriteConfig = heroSpriteConfigFor(heroId)
   const atlasClipId = String(form.get("atlasClipId") ?? "")
   const direction = String(form.get("direction") ?? "")
   const file = form.get("file")
+  const allowedAtlasClipIds = heroSpriteConfig.clipOrder.map(
+    (clipId) => heroSpriteConfig.clips[clipId].atlasClipId,
+  )
 
-  if (!(LADY_WIZARD_ATLAS_CLIP_IDS as readonly string[]).includes(atlasClipId)) {
+  if (!allowedAtlasClipIds.includes(atlasClipId)) {
     return err("validation_failed", `unknown atlasClipId: ${atlasClipId}`)
   }
-  if (!(LADY_WIZARD_DIRECTIONS as readonly string[]).includes(direction)) {
+  if (!(HERO_SPRITE_DIRECTIONS as readonly string[]).includes(direction)) {
     return err("validation_failed", `unknown direction: ${direction}`)
   }
   if (!(file instanceof File)) {
@@ -77,7 +93,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     return err("validation_failed", `file too large (${file.size} > ${MAX_BYTES})`)
   }
 
-  const atlasPath = ladyWizardAtlasFsPath()
+  const atlasPath = heroAtlasFsPath(heroId)
   let atlas: AtlasJson
   try {
     atlas = JSON.parse(await readFile(atlasPath, "utf8")) as AtlasJson
@@ -97,6 +113,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   const buffer = Buffer.from(await file.arrayBuffer())
+  const frame = heroSpriteConfig.frameSizePx
 
   let meta: sharp.Metadata
   try {
@@ -107,18 +124,18 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (meta.format !== "png") {
     return err("validation_failed", `expected png, got ${meta.format ?? "unknown"}`)
   }
-  const expectedWidth = expectedFrames * FRAME
-  if (meta.width !== expectedWidth || meta.height !== FRAME) {
+  const expectedWidth = expectedFrames * frame
+  if (meta.width !== expectedWidth || meta.height !== frame) {
     return err(
       "validation_failed",
-      `expected ${expectedWidth}×${FRAME}, got ${meta.width ?? "?"}×${meta.height ?? "?"}`,
+      `expected ${expectedWidth}×${frame}, got ${meta.width ?? "?"}×${meta.height ?? "?"}`,
     )
   }
 
-  const liveStripPath = ladyWizardStripFsPath(atlasClipId, direction)
-  const sheetsArchiveDir = ladyWizardSheetsArchiveFsDir()
-  const framesLiveDir = ladyWizardAnimationsFramesFsDir(atlasClipId, direction)
-  const framesArchiveRoot = ladyWizardAnimationsArchiveFsDir(atlasClipId)
+  const liveStripPath = heroStripFsPath(heroId, atlasClipId, direction)
+  const sheetsArchiveDir = heroSheetsArchiveFsDir(heroId)
+  const framesLiveDir = heroAnimationsFramesFsDir(heroId, atlasClipId, direction)
+  const framesArchiveRoot = heroAnimationsArchiveFsDir(heroId, atlasClipId)
 
   const ts = safeIso(new Date())
   const stripArchivePath = join(sheetsArchiveDir, `${atlasClipId}-${direction}-${ts}.png`)
@@ -137,7 +154,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     for (let i = 0; i < expectedFrames; i++) {
       const out = join(framesTmpDir, `frame_${String(i).padStart(3, "0")}.png`)
       await sharp(buffer)
-        .extract({ left: i * FRAME, top: 0, width: FRAME, height: FRAME })
+        .extract({ left: i * frame, top: 0, width: frame, height: frame })
         .png()
         .toFile(out)
     }
@@ -261,14 +278,14 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   console.log(
-    `[replace-sheet] clip=${atlasClipId} dir=${direction} stripArchived=${stripArchived} framesArchived=${framesArchived} frames=${expectedFrames}`,
+    `[replace-sheet] hero=${heroId} clip=${atlasClipId} dir=${direction} stripArchived=${stripArchived} framesArchived=${framesArchived} frames=${expectedFrames}`,
   )
 
   return NextResponse.json({
     ok: true,
     savedAt: new Date().toISOString(),
     version: ts,
-    stripPublicPath: `/assets/sprites/heroes/lady-wizard/sheets/${atlasClipId}-${direction}.png`,
+    stripPublicPath: heroStripPublicPath(heroId, atlasClipId, direction),
     stripArchivePath: stripArchived ? stripArchivePath : null,
     framesArchivePath: framesArchived ? framesArchivePath : null,
     frameCount: expectedFrames,

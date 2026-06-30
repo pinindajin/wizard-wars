@@ -7,7 +7,10 @@ test.describe("sprite viewer dev route", () => {
 
   test("smoke: gallery, detail canvas, legend", async ({ page }) => {
     await page.goto("/dev/sprite-viewer")
-    await expect(page.getByRole("heading", { name: /lady-wizard sprite viewer/i })).toBeVisible()
+    await expect(page.getByRole("heading", { name: /hero sprite viewer/i })).toBeVisible()
+    await expect(page.getByTestId("sprite-viewer-hero-yen")).toBeVisible()
+    await expect(page.getByTestId("sprite-viewer-hero-triss")).toBeVisible()
+    await page.getByTestId("sprite-viewer-hero-triss").click()
     const gallery = page.getByTestId("sprite-viewer-gallery")
     await expect(gallery).toBeVisible({ timeout: 15_000 })
     await expect(gallery.locator("button:not([disabled])").first()).toBeVisible({ timeout: 15_000 })

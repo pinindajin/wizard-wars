@@ -48,8 +48,8 @@ export const AUGMENT_CONFIGS: Record<string, AugmentConfig> = {
   },
 }
 
-/** Canonical ids for each hero's primary cleaver-style melee (balanceable per hero). */
-export type PrimaryMeleeAttackId = "red_wizard_cleaver" | "barbarian_cleaver" | "ranger_cleaver"
+/** Canonical ids for each hero's primary melee attack (balanceable per hero). */
+export type PrimaryMeleeAttackId = "yen_cleaver" | "triss_big_blast"
 
 /**
  * Server-authoritative tuning for a hero primary melee hurtbox attack.
@@ -97,30 +97,26 @@ const cleaverBase: Omit<PrimaryMeleeAttackConfig, "id" | "displayName"> = {
   swingSfxKey: "sfx-axe-swing",
 }
 
-/** Per-hero primary melee configs; values initially match legacy axe tuning. */
+/** Per-hero primary melee configs. */
 export const PRIMARY_MELEE_ATTACK_CONFIGS: Record<PrimaryMeleeAttackId, PrimaryMeleeAttackConfig> = {
-  red_wizard_cleaver: {
-    id: "red_wizard_cleaver",
-    displayName: "Red Wizard Cleaver",
+  yen_cleaver: {
+    id: "yen_cleaver",
+    displayName: "Yen Cleaver",
     ...cleaverBase,
   },
-  barbarian_cleaver: {
-    id: "barbarian_cleaver",
-    displayName: "Barbarian Cleaver",
+  triss_big_blast: {
+    id: "triss_big_blast",
+    displayName: "Triss Big Blast",
     ...cleaverBase,
-  },
-  ranger_cleaver: {
-    id: "ranger_cleaver",
-    displayName: "Ranger Cleaver",
-    ...cleaverBase,
+    hurtboxRadiusPx: Math.round(AXE_HURTBOX_RADIUS_PX * 1.2),
+    hurtboxArcDeg: Math.round(AXE_HURTBOX_ARC_DEG * 0.7),
   },
 }
 
 /** Stable index order for ECS `Equipment.primaryMeleeAttackIndex`. */
 export const PRIMARY_MELEE_ATTACK_IDS: readonly PrimaryMeleeAttackId[] = [
-  "red_wizard_cleaver",
-  "barbarian_cleaver",
-  "ranger_cleaver",
+  "yen_cleaver",
+  "triss_big_blast",
 ]
 
 /**

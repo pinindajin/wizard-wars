@@ -9,12 +9,11 @@ import {
   PLAYER_WORLD_COLLISION_RADIUS_X_PX,
   PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
 } from "@/shared/balance-config/combat"
-import { LADY_WIZARD_CLIP_FPS, LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y } from "@/shared/sprites/ladyWizard"
 import { PRIMARY_MELEE_ATTACK_CONFIGS } from "@/shared/balance-config/equipment"
+import { HERO_SPRITE_CONFIGS } from "@/shared/sprites/heroSprites"
 import {
   SPRITE_VIEWER_CENTERPOINT_MARKER_ARM_PX,
   SPRITE_VIEWER_CENTERPOINT_MARKER_RADIUS_PX,
-  SPRITE_VIEWER_DEFAULT_PRIMARY_ATTACK_ID,
   spriteViewerAttackHurtbox,
   spriteViewerCharacterHitbox,
   spriteViewerCenterpoint,
@@ -29,7 +28,7 @@ describe("sprite viewer overlays", () => {
   it("places the centerpoint at the sim anchor in detail-canvas local coordinates", () => {
     expect(spriteViewerCenterpoint()).toEqual({
       x: 0,
-      y: -LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y,
+      y: -HERO_SPRITE_CONFIGS.yen.displayOffsetY,
     })
   })
 
@@ -61,7 +60,7 @@ describe("sprite viewer overlays", () => {
 
   it("describes centerpoint versus radius", () => {
     expect(spriteViewerCenterpointTooltip()).toBe(
-      `Centerpoint is the authoritative Position.x/y sim anchor at (0, ${-LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y}) in detail-canvas coordinates. The movement oval and character hitbox are drawn around this point; they do not create the point.`,
+      `Centerpoint is the authoritative Position.x/y sim anchor at (0, ${-HERO_SPRITE_CONFIGS.yen.displayOffsetY}) in detail-canvas coordinates. The movement oval and character hitbox are drawn around this point; they do not create the point.`,
     )
   })
 })
@@ -93,15 +92,22 @@ describe("primary-attack hurtbox overlay helpers", () => {
   })
 
   it("builds an attack hurtbox overlay from balance config and direction", () => {
-    const fps = LADY_WIZARD_CLIP_FPS.summoned_axe_swing
-    const overlay = spriteViewerAttackHurtbox(SPRITE_VIEWER_DEFAULT_PRIMARY_ATTACK_ID, "east", fps)
-    const cfg = PRIMARY_MELEE_ATTACK_CONFIGS[SPRITE_VIEWER_DEFAULT_PRIMARY_ATTACK_ID]
+    const fps = HERO_SPRITE_CONFIGS.yen.clips.primary_melee_attack.fps
+    const overlay = spriteViewerAttackHurtbox("yen_cleaver", "east", fps)
+    const cfg = PRIMARY_MELEE_ATTACK_CONFIGS.yen_cleaver
     expect(overlay.radiusPx).toBe(cfg.hurtboxRadiusPx)
     expect(overlay.arcDeg).toBe(cfg.hurtboxArcDeg)
     expect(overlay.facingRad).toBeCloseTo(0)
     const [start, end] = spriteViewerDangerousFrameRange(cfg, fps)
     expect(overlay.dangerousStartFrame).toBe(start)
     expect(overlay.dangerousEndFrame).toBe(end)
+  })
+
+  it("builds a Triss attack hurtbox from Triss balance config", () => {
+    const fps = HERO_SPRITE_CONFIGS.triss.clips.primary_melee_attack.fps
+    const overlay = spriteViewerAttackHurtbox("triss_big_blast", "east", fps)
+    expect(overlay.radiusPx).toBe(54)
+    expect(overlay.arcDeg).toBe(126)
   })
 
   it("flags frames inside the dangerous window and not those outside", () => {

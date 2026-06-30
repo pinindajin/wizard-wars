@@ -12,10 +12,10 @@ import {
 } from "@/shared/balance-config/equipment"
 import { getPrimaryAttackAnimationConfigByAttackId } from "@/shared/balance-config/animationConfig"
 import {
-  LADY_WIZARD_DIRECTIONS,
-  LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y,
-  type LadyWizardDirection,
-} from "@/shared/sprites/ladyWizard"
+  HERO_SPRITE_CONFIGS,
+  HERO_SPRITE_DIRECTIONS,
+  type HeroSpriteDirection,
+} from "@/shared/sprites/heroSprites"
 
 /** Centerpoint marker radius in detail-canvas world pixels. */
 export const SPRITE_VIEWER_CENTERPOINT_MARKER_RADIUS_PX = 2
@@ -48,8 +48,10 @@ export type SpriteViewerOvalRadii = {
  * collision is centered on the sim anchor, which is texture bottom minus the
  * Phaser display Y offset.
  */
-export function spriteViewerCenterpoint(): SpriteViewerCenterpoint {
-  return { x: 0, y: -LADY_WIZARD_SPRITE_DISPLAY_OFFSET_Y }
+export function spriteViewerCenterpoint(
+  displayOffsetY: number = HERO_SPRITE_CONFIGS.yen.displayOffsetY,
+): SpriteViewerCenterpoint {
+  return { x: 0, y: -displayOffsetY }
 }
 
 /**
@@ -66,8 +68,10 @@ export function spriteViewerMovementOvalRadii(): SpriteViewerOvalRadii {
  *
  * @returns Axis-aligned combat hitbox rectangle in detail-canvas world pixels.
  */
-export function spriteViewerCharacterHitbox(): SpriteViewerRect {
-  const point = spriteViewerCenterpoint()
+export function spriteViewerCharacterHitbox(
+  displayOffsetY: number = HERO_SPRITE_CONFIGS.yen.displayOffsetY,
+): SpriteViewerRect {
+  const point = spriteViewerCenterpoint(displayOffsetY)
   return {
     x: point.x - CHARACTER_HITBOX_LEFT_PX,
     y: point.y - CHARACTER_HITBOX_UP_PX,
@@ -77,16 +81,12 @@ export function spriteViewerCharacterHitbox(): SpriteViewerRect {
 }
 
 /** Human-readable tooltip copy for the centerpoint legend row. */
-export function spriteViewerCenterpointTooltip(): string {
-  const point = spriteViewerCenterpoint()
+export function spriteViewerCenterpointTooltip(
+  displayOffsetY: number = HERO_SPRITE_CONFIGS.yen.displayOffsetY,
+): string {
+  const point = spriteViewerCenterpoint(displayOffsetY)
   return `Centerpoint is the authoritative Position.x/y sim anchor at (${point.x}, ${point.y}) in detail-canvas coordinates. The movement oval and character hitbox are drawn around this point; they do not create the point.`
 }
-
-/** Default attack id used by the sprite viewer when previewing the primary-attack hurtbox. */
-export const SPRITE_VIEWER_DEFAULT_PRIMARY_ATTACK_ID: PrimaryMeleeAttackId = "red_wizard_cleaver"
-
-/** Atlas clip id whose dangerous-frames overlay reads from primary-melee balance config. */
-export const SPRITE_VIEWER_PRIMARY_ATTACK_ATLAS_CLIP_ID = "summoned-axe-attack"
 
 export type SpriteViewerHurtboxOverlay = {
   readonly radiusPx: number
@@ -105,11 +105,11 @@ export type SpriteViewerHurtboxOverlay = {
  * @param direction - Megasheet direction string (eight-compass).
  * @returns Facing angle in radians.
  */
-export function spriteViewerDirectionToFacingRad(direction: LadyWizardDirection): number {
-  const idx = LADY_WIZARD_DIRECTIONS.indexOf(direction)
+export function spriteViewerDirectionToFacingRad(direction: HeroSpriteDirection): number {
+  const idx = HERO_SPRITE_DIRECTIONS.indexOf(direction)
   if (idx < 0) return 0
-  // LADY_WIZARD_DIRECTIONS order: south, south-east, east, north-east, north, north-west, west, south-west.
-  const angles: Record<LadyWizardDirection, number> = {
+  // HERO_SPRITE_DIRECTIONS order: south, south-east, east, north-east, north, north-west, west, south-west.
+  const angles: Record<HeroSpriteDirection, number> = {
     south: Math.PI / 2,
     "south-east": Math.PI / 4,
     east: 0,
@@ -150,7 +150,7 @@ export function spriteViewerDangerousFrameRange(
  */
 export function spriteViewerAttackHurtbox(
   attackId: PrimaryMeleeAttackId,
-  direction: LadyWizardDirection,
+  direction: HeroSpriteDirection,
   fps: number,
 ): SpriteViewerHurtboxOverlay {
   const cfg = PRIMARY_MELEE_ATTACK_CONFIGS[attackId]
