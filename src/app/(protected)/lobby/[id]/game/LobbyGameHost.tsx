@@ -26,6 +26,7 @@ import PerformanceIssueOverlay from "./PerformanceIssueOverlay"
 import CountdownOverlay from "./CountdownOverlay"
 import { useLoaderStatus } from "./useLoaderStatus"
 import {
+  WW_ABILITY_SLOTS_REGISTRY_KEY,
   WW_DEBUG_MODE_REGISTRY_KEY,
   WW_GAMEPLAY_INPUT_BLOCKED_REGISTRY_KEY,
   WW_KEYBIND_CONFIG_REGISTRY_KEY,
@@ -64,6 +65,7 @@ import { usePerformanceIndicators } from "./usePerformanceIndicators"
 
 const KILL_FEED_MAX = 5
 const KILL_FEED_TTL_MS = 8000
+const DEFAULT_ABILITY_SLOTS = [null, null, null, null, null] as const
 
 /** Props for LobbyGameHost. */
 type LobbyGameHostProps = {
@@ -170,6 +172,8 @@ function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) 
     LobbyScoreboardPayload["endReason"] | null
   >(null)
   const [shopState, setShopState] = useState<ShopStatePayload | null>(null)
+  const abilitySlots = shopState?.abilitySlots ?? DEFAULT_ABILITY_SLOTS
+  const abilitySlotsRef = useRef<readonly (string | null)[]>(abilitySlots)
   const [abilityStates, setAbilityStates] = useState<AbilityRuntimeStates>(
     () => EMPTY_ABILITY_RUNTIME_STATES,
   )
@@ -196,6 +200,10 @@ function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) 
 
   const loaderStatus = useLoaderStatus(gameHost)
   const phaserLoaded = loaderStatus?.phase === "complete"
+
+  useEffect(() => {
+    abilitySlotsRef.current = abilitySlots
+  }, [abilitySlots])
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -388,6 +396,7 @@ function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) 
           localPlayerId,
           keybinds: keybindsRef.current,
           minimapCorner: minimapCornerRef.current,
+          abilitySlots: abilitySlotsRef.current,
           onPredictionCorrection: recordPredictionCorrection,
           onActiveLocalInput: recordActiveLocalInput,
         })
@@ -429,6 +438,11 @@ function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) 
     if (!gameHost) return
     gameHost.registry.set(WW_KEYBIND_CONFIG_REGISTRY_KEY, keybinds)
   }, [gameHost, keybinds])
+
+  useEffect(() => {
+    if (!gameHost) return
+    gameHost.registry.set(WW_ABILITY_SLOTS_REGISTRY_KEY, [...abilitySlots])
+  }, [abilitySlots, gameHost])
 
   useEffect(() => {
     if (!gameHost) return
@@ -515,7 +529,6 @@ function LobbyGameHostWithKeybinds({ lobbyId }: LobbyGameHostWithKeybindsProps) 
     setMountGeneration((g) => g + 1)
   }, [])
 
-  const abilitySlots = shopState?.abilitySlots ?? [null, null, null, null, null]
   const quickItems = shopState?.quickItemSlots ?? [
     { itemId: null, charges: 0 },
     { itemId: null, charges: 0 },

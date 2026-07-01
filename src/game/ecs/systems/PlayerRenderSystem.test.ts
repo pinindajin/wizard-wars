@@ -64,6 +64,7 @@ import type {
   PrimaryMeleeAttackPayload,
 } from "@/shared/types"
 import { getHeroAnimKey, getDirectionFromAngle } from "../../animation/LadyWizardAnimDefs"
+import { WW_ABILITY_SLOTS_REGISTRY_KEY } from "../../constants"
 import { HERO_CONFIGS } from "@/shared/balance-config/heroes"
 import {
   ARENA_HEIGHT,
@@ -73,6 +74,7 @@ import {
   ARENA_WIDTH,
   ARENA_WORLD_COLLIDERS,
   BASE_MOVE_SPEED_PX_PER_SEC,
+  JUMP_AIRBORNE_COLLIDER_EPSILON_PX,
   PLAYER_WORLD_COLLISION_FOOTPRINT,
   SWIFT_BOOTS_SPEED_BONUS,
   TICK_DT_SEC,
@@ -187,6 +189,14 @@ type TestRenderEntry = {
   smoothTargetY: number
 }
 
+type LocalCastResolver = {
+  _localCastAbilityIdForInput: (
+    state: PlayerSnapshot,
+    input: PlayerInputPayload | null,
+  ) => string | null
+  _abilityIdForSlot: (slotIndex: number) => string | null
+}
+
 function abilityStates() {
   return {
     fireball: {
@@ -194,6 +204,22 @@ function abilityStates() {
       cooldownDurationMs: null,
       charges: null,
       maxCharges: null,
+      rechargeEndsAtServerTimeMs: null,
+      rechargeDurationMs: null,
+    },
+    lightning_bolt: {
+      cooldownEndsAtServerTimeMs: null,
+      cooldownDurationMs: null,
+      charges: null,
+      maxCharges: null,
+      rechargeEndsAtServerTimeMs: null,
+      rechargeDurationMs: null,
+    },
+    homing_orb: {
+      cooldownEndsAtServerTimeMs: null,
+      cooldownDurationMs: null,
+      charges: 4,
+      maxCharges: 4,
       rechargeEndsAtServerTimeMs: null,
       rechargeDurationMs: null,
     },
@@ -251,6 +277,7 @@ function mockSceneAndGroup() {
   const textDestroy = vi.fn(() => destroyed.push("text"))
   const gfxDestroy = vi.fn(() => destroyed.push("gfx"))
   const ellipseDestroy = vi.fn(() => destroyed.push("ellipse"))
+  const registryValues = new Map<string, unknown>()
 
   const textChain = {
     destroy: textDestroy,
@@ -265,6 +292,14 @@ function mockSceneAndGroup() {
   }
 
   const scene = {
+    game: {
+      registry: {
+        get: vi.fn((key: string) => registryValues.get(key)),
+        set: vi.fn((key: string, value: unknown) => {
+          registryValues.set(key, value)
+        }),
+      },
+    },
     add: {
       sprite: vi.fn((x: number, y: number) => {
         const sprite = {
@@ -322,7 +357,16 @@ function mockSceneAndGroup() {
 
   const group = { add: vi.fn() }
 
-  return { scene, group, destroyed, spriteDestroy, textDestroy, gfxDestroy, ellipseDestroy }
+  return {
+    scene,
+    group,
+    destroyed,
+    registryValues,
+    spriteDestroy,
+    textDestroy,
+    gfxDestroy,
+    ellipseDestroy,
+  }
 }
 
 describe("PlayerRenderSystem.applyFullSync", () => {
@@ -709,6 +753,296 @@ describe("PlayerRenderSystem.applyFullSync", () => {
       5,
     )
     expect(after?.simCurrY).toBeCloseTo(OPEN_TEST_POINT.y, 5)
+  })
+
+  it("does not predict a movement step on the same local tick that starts rooted lightning", () => {
+    const { scene, group, registryValues } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    sys.localPlayerId = "p1"
+    registryValues.set(
+      WW_ABILITY_SLOTS_REGISTRY_KEY,
+      ["fireball", null, "lightning_bolt", null, null],
+    )
+    sys.applyFullSync(sync([snap({
+      id: 1,
+      playerId: "p1",
+      x: OPEN_TEST_POINT.x,
+      y: OPEN_TEST_POINT.y,
+      moveState: "idle",
+      castingAbilityId: null,
+    })]))
+
+    const lightningInput = input({
+      seq: 1,
+      up: true,
+      abilitySlot: 2,
+      abilityTargetX: OPEN_TEST_POINT.x + 200,
+      abilityTargetY: OPEN_TEST_POINT.y,
+    })
+
+    let sends = 0
+    sys.update(
+      17,
+      { up: true, down: false, left: false, right: false },
+      () => {
+        sends += 1
+      },
+      () => lightningInput,
+    )
+
+    expect(sends).toBe(1)
+    expect(sys._getLocalSimForTest(1)).toMatchObject({
+      simCurrX: OPEN_TEST_POINT.x,
+      simCurrY: OPEN_TEST_POINT.y,
+    })
+  })
+
+  it("keeps predicting movement on the same local tick that starts mobile fireball casts", () => {
+    const { scene, group, registryValues } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    sys.localPlayerId = "p1"
+    registryValues.set(
+      WW_ABILITY_SLOTS_REGISTRY_KEY,
+      ["fireball", "lightning_bolt", null, null, null],
+    )
+    sys.applyFullSync(sync([snap({
+      id: 1,
+      playerId: "p1",
+      x: OPEN_TEST_POINT.x,
+      y: OPEN_TEST_POINT.y,
+      moveState: "idle",
+      castingAbilityId: null,
+    })]))
+
+    sys.update(
+      17,
+      { up: true, down: false, left: false, right: false },
+      undefined,
+      () => input({
+        seq: 1,
+        up: true,
+        abilitySlot: 0,
+        abilityTargetX: OPEN_TEST_POINT.x + 200,
+        abilityTargetY: OPEN_TEST_POINT.y,
+      }),
+    )
+
+    expect(sys._getLocalSimForTest(1)?.simCurrY).toBeCloseTo(
+      OPEN_TEST_POINT.y - BASE_MOVE_SPEED_PX_PER_SEC * TICK_DT_SEC,
+      5,
+    )
+  })
+
+  it("does not root same-tick lightning prediction when the ability is still cooling down", () => {
+    const { scene, group, registryValues } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    sys.localPlayerId = "p1"
+    registryValues.set(
+      WW_ABILITY_SLOTS_REGISTRY_KEY,
+      ["fireball", "lightning_bolt", null, null, null],
+    )
+    sys.applyFullSync(sync([snap({
+      id: 1,
+      playerId: "p1",
+      x: OPEN_TEST_POINT.x,
+      y: OPEN_TEST_POINT.y,
+      moveState: "idle",
+      castingAbilityId: null,
+      abilityStates: {
+        ...abilityStates(),
+        lightning_bolt: {
+          ...abilityStates().lightning_bolt,
+          cooldownEndsAtServerTimeMs: Date.now() + 1_000,
+          cooldownDurationMs: 4_000,
+        },
+      },
+    })]))
+
+    sys.update(
+      17,
+      { up: true, down: false, left: false, right: false },
+      undefined,
+      () => input({
+        seq: 1,
+        up: true,
+        abilitySlot: 1,
+        abilityTargetX: OPEN_TEST_POINT.x + 200,
+        abilityTargetY: OPEN_TEST_POINT.y,
+      }),
+    )
+
+    expect(sys._getLocalSimForTest(1)?.simCurrY).toBeCloseTo(
+      OPEN_TEST_POINT.y - BASE_MOVE_SPEED_PX_PER_SEC * TICK_DT_SEC,
+      5,
+    )
+  })
+
+  it("resolves local ability slots through the React-owned registry with the legacy slot-0 fallback", () => {
+    const { scene, group, registryValues } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    const resolver = sys as unknown as LocalCastResolver
+
+    registryValues.set(
+      WW_ABILITY_SLOTS_REGISTRY_KEY,
+      ["lightning_bolt", null, "homing_orb"],
+    )
+
+    expect(resolver._abilityIdForSlot(0)).toBe("lightning_bolt")
+    expect(resolver._abilityIdForSlot(1)).toBeNull()
+    expect(resolver._abilityIdForSlot(2)).toBe("homing_orb")
+
+    registryValues.delete(WW_ABILITY_SLOTS_REGISTRY_KEY)
+    expect(resolver._abilityIdForSlot(0)).toBe("fireball")
+    expect(resolver._abilityIdForSlot(1)).toBeNull()
+  })
+
+  it("only applies same-tick cast movement prediction when the outbound cast can start", () => {
+    const { scene, group, registryValues } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    const resolver = sys as unknown as LocalCastResolver
+    registryValues.set(
+      WW_ABILITY_SLOTS_REGISTRY_KEY,
+      ["fireball", null, "homing_orb", "missing_ability"],
+    )
+
+    const castInput = input({ seq: 1, abilitySlot: 0 })
+    const validState = snap({ id: 1, playerId: "p1" })
+
+    expect(resolver._localCastAbilityIdForInput(validState, null)).toBeNull()
+    expect(
+      resolver._localCastAbilityIdForInput(
+        validState,
+        input({ seq: 1, abilitySlot: null }),
+      ),
+    ).toBeNull()
+    expect(resolver._localCastAbilityIdForInput(validState, castInput)).toBe(
+      "fireball",
+    )
+    expect(
+      resolver._localCastAbilityIdForInput(
+        snap({
+          id: 1,
+          playerId: "p1",
+          abilityStates: {
+            ...abilityStates(),
+            fireball: {
+              ...abilityStates().fireball,
+              cooldownEndsAtServerTimeMs: undefined as never,
+            },
+          },
+        }),
+        castInput,
+      ),
+    ).toBe("fireball")
+    expect(
+      resolver._localCastAbilityIdForInput(
+        validState,
+        input({ seq: 1, abilitySlot: 2 }),
+      ),
+    ).toBe("homing_orb")
+    expect(
+      resolver._localCastAbilityIdForInput(
+        snap({
+          id: 1,
+          playerId: "p1",
+          animState: "jump",
+          jumpZ: JUMP_AIRBORNE_COLLIDER_EPSILON_PX,
+        }),
+        castInput,
+      ),
+    ).toBe("fireball")
+    expect(
+      resolver._localCastAbilityIdForInput(
+        {
+          ...snap({ id: 1, playerId: "p1", animState: "jump" }),
+          jumpZ: undefined as never,
+        },
+        castInput,
+      ),
+    ).toBe("fireball")
+
+    const blockedStates: ReadonlyArray<{
+      readonly name: string
+      readonly state: PlayerSnapshot
+      readonly payload?: PlayerInputPayload
+    }> = [
+      { name: "dying", state: snap({ id: 1, playerId: "p1", animState: "dying" }) },
+      { name: "dead", state: snap({ id: 1, playerId: "p1", animState: "dead" }) },
+      {
+        name: "light cast",
+        state: snap({ id: 1, playerId: "p1", animState: "light_cast" }),
+      },
+      {
+        name: "heavy cast",
+        state: snap({ id: 1, playerId: "p1", animState: "heavy_cast" }),
+      },
+      {
+        name: "server cast in progress",
+        state: snap({
+          id: 1,
+          playerId: "p1",
+          castingAbilityId: "fireball",
+        }),
+      },
+      {
+        name: "airborne jump",
+        state: snap({
+          id: 1,
+          playerId: "p1",
+          animState: "jump",
+          jumpZ: JUMP_AIRBORNE_COLLIDER_EPSILON_PX + 1,
+        }),
+      },
+      {
+        name: "empty slot",
+        state: validState,
+        payload: input({ seq: 1, abilitySlot: 1 }),
+      },
+      {
+        name: "unknown ability",
+        state: validState,
+        payload: input({ seq: 1, abilitySlot: 3 }),
+      },
+      {
+        name: "cooling down",
+        state: snap({
+          id: 1,
+          playerId: "p1",
+          abilityStates: {
+            ...abilityStates(),
+            fireball: {
+              ...abilityStates().fireball,
+              cooldownEndsAtServerTimeMs: Date.now() + 1_000,
+            },
+          },
+        }),
+      },
+      {
+        name: "out of charges",
+        state: snap({
+          id: 1,
+          playerId: "p1",
+          abilityStates: {
+            ...abilityStates(),
+            homing_orb: {
+              ...abilityStates().homing_orb,
+              charges: 0,
+            },
+          },
+        }),
+        payload: input({ seq: 1, abilitySlot: 2 }),
+      },
+    ]
+
+    for (const blocked of blockedStates) {
+      expect(
+        resolver._localCastAbilityIdForInput(
+          blocked.state,
+          blocked.payload ?? castInput,
+        ),
+        blocked.name,
+      ).toBeNull()
+    }
   })
 
   it("bounds sim catch-up after a long hitch (no spiral of death)", () => {

@@ -10,6 +10,7 @@ import { createGame } from "./index"
 /** Re-export for Arena and tests. */
 export {
   WW_ACTIVE_LOCAL_INPUT_CALLBACK_REGISTRY_KEY,
+  WW_ABILITY_SLOTS_REGISTRY_KEY,
   WW_GAME_CONNECTION_REGISTRY_KEY,
   WW_KEYBIND_CONFIG_REGISTRY_KEY,
   WW_LOCAL_PLAYER_ID_REGISTRY_KEY,
@@ -35,6 +36,8 @@ export interface MountGameOptions {
   keybinds?: KeybindConfig
   /** Persisted compact minimap corner. */
   minimapCorner?: MinimapCorner
+  /** Current local ability-bar slot ids. */
+  abilitySlots?: readonly (string | null)[]
   /** Reports local prediction reconciliation classifications to React. */
   onPredictionCorrection?: (correction: RubberbandCorrection) => void
   /** Reports active local input samples to React for stale-message gating. */
@@ -66,6 +69,7 @@ export const mountGame = (options: MountGameOptions): MountedGame => {
     localPlayerId,
     keybinds,
     minimapCorner,
+    abilitySlots,
     onPredictionCorrection,
     onActiveLocalInput,
   } = options
@@ -80,6 +84,7 @@ export const mountGame = (options: MountGameOptions): MountedGame => {
     localPlayerId,
     keybinds,
     minimapCorner,
+    abilitySlots,
     onPredictionCorrection,
     onActiveLocalInput,
   })
