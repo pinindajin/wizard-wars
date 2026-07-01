@@ -465,7 +465,13 @@ export class PlayerRenderSystem {
       moveState: state.moveState,
     }
     const simCurr = { x: entry.simCurrX, y: entry.simCurrY }
-    const result = reconcileLocal(ack, this.localInputHistory, simCurr, ctx)
+    const result = reconcileLocal(
+      ack,
+      this.localInputHistory,
+      simCurr,
+      ctx,
+      (input, baseCtx) => this._localReplayContextForInput(state, input, baseCtx),
+    )
     this.predictionCorrectionHandler?.(result.correction)
 
     if (result.correction === "snap") {
@@ -1354,6 +1360,27 @@ export class PlayerRenderSystem {
     }
 
     return abilityId
+  }
+
+  private _localReplayContextForInput(
+    state: (typeof ClientPlayerState)[number],
+    input: PlayerInputPayload,
+    baseCtx: LocalReplayContext,
+  ): LocalReplayContext {
+    if (baseCtx.castingAbilityId || baseCtx.moveState === "rooted") {
+      return baseCtx
+    }
+
+    const localCastAbilityId = this._localCastAbilityIdForInput(state, input)
+    if (!localCastAbilityId) return baseCtx
+
+    const castMoveMult =
+      ABILITY_CONFIGS[localCastAbilityId].castMoveSpeedMultiplier
+    return {
+      ...baseCtx,
+      castingAbilityId: localCastAbilityId,
+      moveState: castMoveMult === 0 ? "rooted" : "casting",
+    }
   }
 
   /** Resolves a local ability-bar index through React-owned shop state. */
