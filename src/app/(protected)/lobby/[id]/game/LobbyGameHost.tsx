@@ -49,6 +49,7 @@ import {
 } from "./GameSettingsContext"
 import { useLobbyConnection } from "../LobbyConnectionProvider"
 import { AdminClosingModal } from "@/components/lobby/AdminClosingModal"
+import { DEFAULT_ABILITY_SLOT_0_ID } from "@/shared/balance-config/abilities"
 import { MATCH_COUNTDOWN_DURATION_MS } from "@/shared/balance-config/lobby"
 import KillFeed from "./KillFeed"
 import { formatKillFeedLine } from "@/lib/kill-feed-format"
@@ -65,7 +66,7 @@ import { usePerformanceIndicators } from "./usePerformanceIndicators"
 
 const KILL_FEED_MAX = 5
 const KILL_FEED_TTL_MS = 8000
-const DEFAULT_ABILITY_SLOTS = [null, null, null, null, null] as const
+const DEFAULT_ABILITY_SLOTS = [DEFAULT_ABILITY_SLOT_0_ID, null, null, null, null] as const
 
 /** Props for LobbyGameHost. */
 type LobbyGameHostProps = {

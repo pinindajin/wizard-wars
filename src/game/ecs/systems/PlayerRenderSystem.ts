@@ -26,6 +26,8 @@ import {
   SWING_MOVE_SPEED_MULTIPLIER,
   SWIFT_BOOTS_SPEED_BONUS,
   JUMP_AIRBORNE_COLLIDER_EPSILON_PX,
+  JUMP_GRAVITY_PX_PER_SEC2,
+  JUMP_INITIAL_VZ_PX_PER_SEC,
   JUMP_SPRITE_Y_PIXELS_PER_SIM_Z,
 } from "@/shared/balance-config/combat"
 import type {
@@ -95,8 +97,31 @@ type LocalInputForSimStepProvider = () => LocalInputForSimStep
 type LocalPredictedCast = {
   abilityId: string
   startedInputSeq: number
+  totalTicks: number
   remainingTicks: number
 }
+
+function hasJumpAirLockZ(jumpZ: number | null | undefined): boolean {
+  return (jumpZ ?? 0) > JUMP_AIRBORNE_COLLIDER_EPSILON_PX
+}
+
+function predictedJumpAirLockTicks(): number {
+  let z = JUMP_AIRBORNE_COLLIDER_EPSILON_PX + 1
+  let vz = JUMP_INITIAL_VZ_PX_PER_SEC
+  let totalTicks = 1
+  let airborne = true
+
+  while (airborne) {
+    vz -= JUMP_GRAVITY_PX_PER_SEC2 * TICK_DT_SEC
+    z += vz * TICK_DT_SEC
+    airborne = hasJumpAirLockZ(z)
+    if (airborne) totalTicks += 1
+  }
+
+  return totalTicks
+}
+
+const PREDICTED_JUMP_AIR_LOCK_TICKS = predictedJumpAirLockTicks()
 
 /** Oscillation frequency for invulnerability alpha pulse (Hz). */
 const INVULN_PULSE_HZ = 4
@@ -938,7 +963,7 @@ export class PlayerRenderSystem {
       onSimStep?.(inputForStep)
     }
 
-    const alpha = TICK_MS > 0 ? this.simAccumulatorMs / TICK_MS : 0
+    const alpha = this.simAccumulatorMs / TICK_MS
     this._renderStep(delta, alpha, localMoveIntent)
   }
 
@@ -1357,10 +1382,7 @@ export class PlayerRenderSystem {
     ) {
       return null
     }
-    if (
-      state.animState === "jump" &&
-      (state.jumpZ ?? 0) > JUMP_AIRBORNE_COLLIDER_EPSILON_PX
-    ) {
+    if (this._hasAuthoritativeJumpAirLock(state)) {
       return null
     }
     if (
@@ -1410,12 +1432,13 @@ export class PlayerRenderSystem {
     input: PlayerInputPayload,
     abilityId: string,
   ): void {
-    const remainingTicks = this._localPredictedCastTicks(state, abilityId)
-    if (remainingTicks <= 0) return
+    const totalTicks = this._localPredictedCastTicks(state, abilityId)
+    if (totalTicks <= 0) return
     this.localPredictedCast = {
       abilityId,
       startedInputSeq: input.seq,
-      remainingTicks,
+      totalTicks,
+      remainingTicks: totalTicks,
     }
   }
 
@@ -1424,7 +1447,9 @@ export class PlayerRenderSystem {
     abilityId: string,
   ): number {
     const cfg = ABILITY_CONFIGS[abilityId]
-    if (!cfg || cfg.castMs <= 0) return 0
+    if (!cfg) return 0
+    if (abilityId === "jump") return PREDICTED_JUMP_AIR_LOCK_TICKS
+    if (cfg.castMs <= 0) return 0
 
     const heroId = normalizeHeroId(state.heroId)
     return Math.max(
@@ -1446,7 +1471,11 @@ export class PlayerRenderSystem {
   private _clearLocalPredictedCastFromAuthority(
     state: (typeof ClientPlayerState)[number],
   ): void {
-    if (state.castingAbilityId || state.moveState === "rooted") {
+    if (
+      state.castingAbilityId ||
+      state.moveState === "rooted" ||
+      this._hasAuthoritativeJumpAirLock(state)
+    ) {
       this.localPredictedCast = null
     }
   }
@@ -1458,7 +1487,13 @@ export class PlayerRenderSystem {
   ): void {
     this._clearLocalPredictedCastFromAuthority(state)
     if (!this.localPredictedCast) return
-    if (ctx.castingAbilityId || ctx.moveState === "rooted") return
+    if (
+      ctx.castingAbilityId ||
+      ctx.moveState === "rooted" ||
+      this._replayContextHasJumpAirLock(ctx)
+    ) {
+      return
+    }
     if (ack.lastProcessedInputSeq >= this.localPredictedCast.startedInputSeq) {
       this.localPredictedCast = null
     }
@@ -1469,14 +1504,23 @@ export class PlayerRenderSystem {
     ctx: LocalReplayContext,
   ): LocalReplayInputContextResolver {
     let replayCast =
-      ctx.castingAbilityId || ctx.moveState === "rooted"
+      ctx.castingAbilityId ||
+      ctx.moveState === "rooted" ||
+      this._replayContextHasJumpAirLock(ctx)
         ? null
         : this.localPredictedCast
-          ? { ...this.localPredictedCast }
+          ? {
+            ...this.localPredictedCast,
+            remainingTicks: this.localPredictedCast.totalTicks,
+          }
           : null
 
     return (input, baseCtx) => {
-      if (baseCtx.castingAbilityId || baseCtx.moveState === "rooted") {
+      if (
+        baseCtx.castingAbilityId ||
+        baseCtx.moveState === "rooted" ||
+        this._replayContextHasJumpAirLock(baseCtx)
+      ) {
         return baseCtx
       }
 
@@ -1492,16 +1536,17 @@ export class PlayerRenderSystem {
           { ignorePredictedCast: true },
         )
         if (localCastAbilityId) {
-          const remainingTicks = this._localPredictedCastTicks(
+          const totalTicks = this._localPredictedCastTicks(
             state,
             localCastAbilityId,
           )
           replayCast =
-            remainingTicks > 0
+            totalTicks > 0
               ? {
                 abilityId: localCastAbilityId,
                 startedInputSeq: input.seq,
-                remainingTicks,
+                totalTicks,
+                remainingTicks: totalTicks,
               }
               : null
         }
@@ -1525,7 +1570,11 @@ export class PlayerRenderSystem {
     input: PlayerInputPayload,
     baseCtx: LocalReplayContext,
   ): LocalReplayContext {
-    if (baseCtx.castingAbilityId || baseCtx.moveState === "rooted") {
+    if (
+      baseCtx.castingAbilityId ||
+      baseCtx.moveState === "rooted" ||
+      this._replayContextHasJumpAirLock(baseCtx)
+    ) {
       return baseCtx
     }
 
@@ -1550,6 +1599,16 @@ export class PlayerRenderSystem {
       castingAbilityId: abilityId,
       moveState: castMoveMult === 0 ? "rooted" : "casting",
     }
+  }
+
+  private _hasAuthoritativeJumpAirLock(
+    state: (typeof ClientPlayerState)[number],
+  ): boolean {
+    return state.animState === "jump" && hasJumpAirLockZ(state.jumpZ)
+  }
+
+  private _replayContextHasJumpAirLock(ctx: LocalReplayContext): boolean {
+    return hasJumpAirLockZ(ctx.jumpZ)
   }
 
   /** Resolves a local ability-bar index through React-owned shop state. */

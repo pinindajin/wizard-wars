@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { mountGame } from "@/game/main"
 import { WW_ABILITY_SLOTS_REGISTRY_KEY } from "@/game/constants"
+import { DEFAULT_ABILITY_SLOT_0_ID } from "@/shared/balance-config/abilities"
 import { WsEvent } from "@/shared/events"
 import type {
   AnyWsMessage,
@@ -173,6 +174,20 @@ describe("LobbyGameHost performance indicators", () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it("mounts Phaser with the default fireball slot before shop state arrives", async () => {
+    render(<LobbyGameHost lobbyId="room-1" />)
+    await waitFor(() => expect(mountGame).toHaveBeenCalled())
+
+    const mountOptions = vi.mocked(mountGame).mock.calls[0]![0]
+    expect(mountOptions.abilitySlots).toEqual([
+      DEFAULT_ABILITY_SLOT_0_ID,
+      null,
+      null,
+      null,
+      null,
+    ])
   })
 
   it("clears degraded server status when the match leaves active play", async () => {
