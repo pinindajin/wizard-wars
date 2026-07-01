@@ -35,6 +35,13 @@ export const WW_DEBUG_MODE_REGISTRY_KEY = "wwDebugMode"
 export const WW_MINIMAP_CORNER_REGISTRY_KEY = "wwMinimapCorner"
 
 /**
+ * Phaser registry key for the local player's current ability-bar slot ids.
+ * React owns shop/loadout state; Arena reads this to predict same-tick cast
+ * movement for outbound ability-slot inputs.
+ */
+export const WW_ABILITY_SLOTS_REGISTRY_KEY = "wwAbilitySlots"
+
+/**
  * Phaser registry key for the loader status bridge. React components subscribe
  * via {@link subscribeLoaderStatus} to render a progress overlay outside the
  * Phaser canvas. Scenes publish via {@link publishLoaderStatus} in their
