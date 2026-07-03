@@ -36,6 +36,7 @@ import type {
   PlayerAnimState,
   PlayerDeathPayload,
   PlayerInputPayload,
+  PlayerTerrainState,
   PlayerRespawnPayload,
   PrimaryMeleeAttackPayload,
 } from "@/shared/types"
@@ -81,7 +82,6 @@ import {
 import type { RubberbandCorrection } from "@/shared/performanceIndicators"
 import {
   LocalInputHistory,
-  type LocalInputHistoryInput,
 } from "../../network/LocalInputHistory"
 import { RemoteInterpolationBuffer } from "./RemoteInterpolationBuffer"
 
@@ -106,6 +106,12 @@ type LocalPredictedCast = {
 
 type LocalPredictedAbilityCooldown = {
   endsAtServerTimeMs: number
+}
+
+type LocalPredictionTerrainContext = {
+  readonly jumpZ: number
+  readonly terrainState: PlayerTerrainState
+  readonly jumpStartedInLava: boolean
 }
 
 function hasJumpAirLockZ(jumpZ: number | null | undefined): boolean {
@@ -1019,12 +1025,16 @@ export class PlayerRenderSystem {
         state.animState === "primary_melee_attack" || !state.hasSwiftBoots
           ? 1
           : 1 + SWIFT_BOOTS_SPEED_BONUS
-      const colliderSet = terrainColliderSetForPlayerState(state.jumpZ ?? 0, state.terrainState, {
-        jumpStartedInLava: state.jumpStartedInLava ?? false,
+      const terrainContext = this._localPredictionTerrainContext(
+        state,
+        activeLocalCastAbilityId,
+      )
+      const colliderSet = terrainColliderSetForPlayerState(terrainContext.jumpZ, terrainContext.terrainState, {
+        jumpStartedInLava: terrainContext.jumpStartedInLava,
       })
       const candidateGate = worldCandidateGateForPlayerState(
-        state.jumpZ ?? 0,
-        state.terrainState,
+        terrainContext.jumpZ,
+        terrainContext.terrainState,
       )
       if (
         this._canPredictMovement(
@@ -1386,8 +1396,8 @@ export class PlayerRenderSystem {
     input: PlayerInputPayload | null,
     options: {
       readonly ignorePredictedCast?: boolean
+      readonly ignorePredictedAbilityCooldown?: boolean
       readonly currentServerTimeMs?: number
-      readonly resolvedAbilityId?: string | null
     } = {},
   ): string | null {
     if (!input || input.abilitySlot === null) return null
@@ -1410,16 +1420,14 @@ export class PlayerRenderSystem {
       return null
     }
 
-    const abilityId =
-      options.resolvedAbilityId !== undefined
-        ? options.resolvedAbilityId
-        : this._abilityIdForSlot(input.abilitySlot)
+    const abilityId = this._abilityIdForSlot(input.abilitySlot)
     if (!abilityId || !ABILITY_CONFIGS[abilityId]) return null
     if (this._serverRejectsJumpCast(state, abilityId)) return null
 
     const currentServerTimeMs =
       options.currentServerTimeMs ?? this.getEstimatedServerTimeMs()
     if (
+      !options.ignorePredictedAbilityCooldown &&
       this._isLocalPredictedAbilityCooldownActive(
         abilityId,
         currentServerTimeMs,
@@ -1570,8 +1578,8 @@ export class PlayerRenderSystem {
           input,
           {
             ignorePredictedCast: true,
+            ignorePredictedAbilityCooldown: true,
             currentServerTimeMs: this._serverTimeForReplayedInput(ack, input),
-            resolvedAbilityId: this._historyInputResolvedAbilityId(input),
           },
         )
         if (localCastAbilityId) {
@@ -1622,7 +1630,7 @@ export class PlayerRenderSystem {
       input,
       {
         ignorePredictedCast: true,
-        resolvedAbilityId: this._historyInputResolvedAbilityId(input),
+        ignorePredictedAbilityCooldown: true,
       },
     )
     if (!localCastAbilityId) return baseCtx
@@ -1634,12 +1642,45 @@ export class PlayerRenderSystem {
     baseCtx: LocalReplayContext,
     abilityId: string,
   ): LocalReplayContext {
+    if (abilityId === "jump") {
+      return {
+        ...baseCtx,
+        ...this._predictedJumpTerrainContext(baseCtx.terrainState),
+        castingAbilityId: null,
+      }
+    }
+
     const castMoveMult =
       ABILITY_CONFIGS[abilityId].castMoveSpeedMultiplier
     return {
       ...baseCtx,
       castingAbilityId: abilityId,
       moveState: castMoveMult === 0 ? "rooted" : "casting",
+    }
+  }
+
+  private _localPredictionTerrainContext(
+    state: (typeof ClientPlayerState)[number],
+    activeLocalCastAbilityId: string | null,
+  ): LocalPredictionTerrainContext {
+    if (activeLocalCastAbilityId === "jump") {
+      return this._predictedJumpTerrainContext(state.terrainState)
+    }
+
+    return {
+      jumpZ: state.jumpZ ?? 0,
+      terrainState: state.terrainState,
+      jumpStartedInLava: state.jumpStartedInLava ?? false,
+    }
+  }
+
+  private _predictedJumpTerrainContext(
+    terrainState: PlayerTerrainState,
+  ): LocalPredictionTerrainContext {
+    return {
+      jumpZ: JUMP_AIRBORNE_COLLIDER_EPSILON_PX + 1,
+      terrainState: "land",
+      jumpStartedInLava: terrainState === "lava",
     }
   }
 
@@ -1704,17 +1745,6 @@ export class PlayerRenderSystem {
     if (ack?.serverTimeMs === undefined) return undefined
     const replayedTicks = Math.max(0, input.seq - ack.lastProcessedInputSeq)
     return ack.serverTimeMs + replayedTicks * TICK_MS
-  }
-
-  private _historyInputResolvedAbilityId(
-    input: PlayerInputPayload,
-  ): string | null | undefined {
-    return (input as LocalInputHistoryInput).resolvedAbilityId
-  }
-
-  resolveLocalAbilityIdForInput(input: PlayerInputPayload): string | null {
-    if (input.abilitySlot === null) return null
-    return this._abilityIdForSlot(input.abilitySlot)
   }
 
   /** Resolves a local ability-bar index through React-owned shop state. */

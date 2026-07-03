@@ -43,7 +43,6 @@ const playerRenderMock = vi.hoisted(() => ({
   onPlayerRespawn: vi.fn(),
   triggerHitFeedbackFlashForPlayerUserId: vi.fn(),
   getEstimatedServerTimeMs: vi.fn(() => 0),
-  resolveLocalAbilityIdForInput: vi.fn((): string | null => null),
   update: vi.fn(),
   getLocalPlayerRenderPos: vi.fn(() => null),
   localInputHistory: { append: vi.fn() },
@@ -369,7 +368,6 @@ describe("ArenaRuntime lifecycle", () => {
     playerRenderMock.onPrimaryMeleeSwing.mockClear()
     networkSyncHooks.current = null
     networkSyncMock.applyOwnerAck.mockClear()
-    playerRenderMock.resolveLocalAbilityIdForInput.mockReturnValue(null)
     keyboardControllerMock.collectMoveIntent.mockReturnValue({
       up: false,
       down: false,
@@ -703,10 +701,9 @@ describe("ArenaRuntime lifecycle", () => {
     ).toEqual([0])
   })
 
-  it("records send-time ability ids with local history without changing the sent input", () => {
+  it("records sent inputs in local history without adding replay metadata", () => {
     const { runtime, connection } = makeRuntime()
     connection.nextSeq.mockReturnValue(7)
-    playerRenderMock.resolveLocalAbilityIdForInput.mockReturnValue("lightning_bolt")
     keyboardControllerMock.collectInput.mockImplementation((nextSeq: number) => ({
       up: true,
       down: false,
@@ -725,10 +722,7 @@ describe("ArenaRuntime lifecycle", () => {
     runtime.update(0, 17)
 
     const sentInput = connection.sendPlayerInput.mock.calls[0]![0]
-    expect(playerRenderMock.localInputHistory.append).toHaveBeenCalledWith(
-      sentInput,
-      { resolvedAbilityId: "lightning_bolt" },
-    )
+    expect(playerRenderMock.localInputHistory.append).toHaveBeenCalledWith(sentInput)
     expect(sentInput).not.toHaveProperty("resolvedAbilityId")
   })
 

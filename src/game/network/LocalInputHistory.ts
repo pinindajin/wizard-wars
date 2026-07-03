@@ -1,11 +1,5 @@
 import type { PlayerInputPayload } from "@/shared/types"
 
-export type LocalInputHistoryMetadata = {
-  readonly resolvedAbilityId?: string | null
-}
-
-export type LocalInputHistoryInput = PlayerInputPayload & LocalInputHistoryMetadata
-
 /**
  * Bounded, in-order history of inputs the local player has sent but the
  * server has not yet acknowledged. The client uses this on every authoritative
@@ -22,7 +16,7 @@ export type LocalInputHistoryInput = PlayerInputPayload & LocalInputHistoryMetad
  * dropped first so we never grow without bound if the server stalls.
  */
 export class LocalInputHistory {
-  private readonly items: LocalInputHistoryInput[] = []
+  private readonly items: PlayerInputPayload[] = []
 
   /**
    * @param capacity - Maximum number of pending inputs retained. At 60 Hz,
@@ -35,12 +29,8 @@ export class LocalInputHistory {
    *
    * @param input - The full `PlayerInputPayload` the client just sent.
    */
-  append(input: PlayerInputPayload, metadata: LocalInputHistoryMetadata = {}): void {
-    this.items.push(
-      metadata.resolvedAbilityId === undefined
-        ? input
-        : { ...input, resolvedAbilityId: metadata.resolvedAbilityId },
-    )
+  append(input: PlayerInputPayload): void {
+    this.items.push(input)
     if (this.items.length > this.capacity) {
       this.items.shift()
     }
@@ -59,7 +49,7 @@ export class LocalInputHistory {
   }
 
   /** Returns a read-only view of still-pending inputs, in send order. */
-  pending(): readonly LocalInputHistoryInput[] {
+  pending(): readonly PlayerInputPayload[] {
     return this.items
   }
 

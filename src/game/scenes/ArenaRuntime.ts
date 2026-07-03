@@ -569,11 +569,7 @@ export class ArenaRuntime {
     this.playerRenderSystem.update(delta, localMoveIntent, (fullInput) => {
       if (!fullInput) return
       if (!this.connection.isConnected()) return
-      const resolvedAbilityId =
-        this.playerRenderSystem.resolveLocalAbilityIdForInput(fullInput)
-      this.playerRenderSystem.localInputHistory.append(fullInput, {
-        resolvedAbilityId,
-      })
+      this.playerRenderSystem.localInputHistory.append(fullInput)
       if (this.inputTransport === "compact") {
         const state = this.compactInputScheduler.maybeBuildState(
           fullInput,

@@ -31,21 +31,6 @@ describe("LocalInputHistory", () => {
     expect(h.pending().map((i) => i.seq)).toEqual([1, 2, 3])
   })
 
-  it("stores send-time ability resolution metadata without mutating the wire input", () => {
-    const h = new LocalInputHistory()
-    const wireInput = input(1)
-    ;(h.append as (
-      input: PlayerInputPayload,
-      metadata: { readonly resolvedAbilityId: string | null },
-    ) => void)(wireInput, { resolvedAbilityId: "lightning_bolt" })
-
-    expect(wireInput).not.toHaveProperty("resolvedAbilityId")
-    expect(h.pending()[0]).toMatchObject({
-      seq: 1,
-      resolvedAbilityId: "lightning_bolt",
-    })
-  })
-
   it("drops entries with seq <= ack", () => {
     const h = new LocalInputHistory()
     for (const s of [1, 2, 3, 4, 5]) h.append(input(s))
