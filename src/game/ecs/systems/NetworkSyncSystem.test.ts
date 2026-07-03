@@ -391,6 +391,44 @@ describe("NetworkSyncSystem.applyBatchUpdate", () => {
       x: 15,
       y: 25,
       lastProcessedInputSeq: 3,
+      serverTimeMs: 2,
+      abilityStatesChanged: false,
+    })
+  })
+
+  it("marks local batch ACKs that include fresh ability state", () => {
+    const onLocalAck = vi.fn()
+    const system = new NetworkSyncSystem({ onLocalAck })
+    system.localPlayerId = "p1"
+    system.applyFullSync({
+      players: [baseSnapshot({ id: 1, playerId: "p1", x: 10, y: 20 })],
+      fireballs: [],
+      seq: 0,
+      serverTimeMs: 1,
+    })
+
+    system.applyBatchUpdate({
+      deltas: [
+        {
+          id: 1,
+          x: 15,
+          y: 25,
+          lastProcessedInputSeq: 3,
+          abilityStates: abilityStates(),
+        },
+      ],
+      removedIds: [],
+      seq: 1,
+      serverTimeMs: 2,
+    })
+
+    expect(onLocalAck).toHaveBeenCalledWith({
+      id: 1,
+      x: 15,
+      y: 25,
+      lastProcessedInputSeq: 3,
+      serverTimeMs: 2,
+      abilityStatesChanged: true,
     })
   })
 
@@ -417,6 +455,8 @@ describe("NetworkSyncSystem.applyBatchUpdate", () => {
       x: 15,
       y: 25,
       lastProcessedInputSeq: 0,
+      serverTimeMs: 2,
+      abilityStatesChanged: false,
     })
   })
 })
@@ -449,6 +489,7 @@ describe("NetworkSyncSystem.applyOwnerAck", () => {
       vx: ack.vx,
       vy: ack.vy,
       lastProcessedInputSeq: ack.lastProcessedInputSeq,
+      serverTimeMs: ack.serverTimeMs,
       replayContext: ack.replayContext,
     })
     expect(ClientPosition[1]).toEqual({ x: 10, y: 20 })

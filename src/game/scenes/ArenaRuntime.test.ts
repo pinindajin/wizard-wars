@@ -82,6 +82,8 @@ const networkSyncHooks = vi.hoisted(() => ({
       readonly x: number
       readonly y: number
       readonly lastProcessedInputSeq: number
+      readonly serverTimeMs?: number
+      readonly abilityStatesChanged?: boolean
       readonly replayContext?: {
         readonly moveState: "idle" | "moving" | "casting" | "rooted" | "swinging"
         readonly terrainState: "land" | "lava" | "cliff"
@@ -343,6 +345,22 @@ function makeRuntime(connection = makeConnection()) {
   return { runtime, scene, connection }
 }
 
+function mockPlayerRenderSimSteps(stepCount: () => number): void {
+  playerRenderMock.update.mockImplementation(
+    (
+      _delta: number,
+      _intent: unknown,
+      onSimStep?: (input: unknown) => void,
+      inputForSimStep?: () => unknown,
+    ) => {
+      for (let i = 0; i < stepCount(); i++) {
+        const input = inputForSimStep?.() ?? null
+        onSimStep?.(input)
+      }
+    },
+  )
+}
+
 describe("ArenaRuntime lifecycle", () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -597,13 +615,7 @@ describe("ArenaRuntime lifecycle", () => {
     const { runtime, connection } = makeRuntime()
     let seq = 0
     connection.nextSeq.mockImplementation(() => seq++)
-    playerRenderMock.update.mockImplementation(
-      (_delta: number, _intent: unknown, onSimStep?: () => void) => {
-        onSimStep?.()
-        onSimStep?.()
-        onSimStep?.()
-      },
-    )
+    mockPlayerRenderSimSteps(() => 3)
 
     runtime.start()
     connection.emit({ type: WsEvent.MatchGo, payload: {} })
@@ -618,17 +630,52 @@ describe("ArenaRuntime lifecycle", () => {
     expect(keyboardControllerMock.collectMoveIntent).toHaveBeenCalled()
   })
 
+  it("does not append or send local sim ticks that have no connected input", () => {
+    const { runtime, connection } = makeRuntime()
+    connection.isConnected.mockReturnValue(false)
+    playerRenderMock.update.mockImplementation(
+      (
+        _delta: number,
+        _intent: unknown,
+        onSimStep?: (input: unknown) => void,
+        inputForSimStep?: () => unknown,
+      ) => {
+        expect(inputForSimStep?.()).toBeNull()
+        onSimStep?.({
+          up: true,
+          down: false,
+          left: false,
+          right: false,
+          abilitySlot: null,
+          abilityTargetX: 0,
+          abilityTargetY: 0,
+          weaponPrimary: false,
+          weaponSecondary: false,
+          weaponTargetX: 0,
+          weaponTargetY: 0,
+          useQuickItemSlot: null,
+          seq: 1,
+          clientSendTimeMs: 10,
+        })
+        onSimStep?.(null)
+      },
+    )
+
+    runtime.start()
+    connection.emit({ type: WsEvent.MatchGo, payload: {} })
+    runtime.update(0, 17)
+
+    expect(playerRenderMock.localInputHistory.append).not.toHaveBeenCalled()
+    expect(connection.sendPlayerInput).not.toHaveBeenCalled()
+    expect(connection.sendPlayerInputState).not.toHaveBeenCalled()
+    expect(keyboardControllerMock.collectInput).not.toHaveBeenCalled()
+  })
+
   it("records every local tick but sends compact state only when the server advertises it", () => {
     const { runtime, connection } = makeRuntime()
     let seq = 0
     connection.nextSeq.mockImplementation(() => seq++)
-    playerRenderMock.update.mockImplementation(
-      (_delta: number, _intent: unknown, onSimStep?: () => void) => {
-        onSimStep?.()
-        onSimStep?.()
-        onSimStep?.()
-      },
-    )
+    mockPlayerRenderSimSteps(() => 3)
 
     runtime.start()
     connection.emit({
@@ -655,6 +702,31 @@ describe("ArenaRuntime lifecycle", () => {
     ).toEqual([0])
   })
 
+  it("records sent inputs in local history without adding replay metadata", () => {
+    const { runtime, connection } = makeRuntime()
+    connection.nextSeq.mockReturnValue(7)
+    keyboardControllerMock.collectInput.mockImplementation((nextSeq: number) => ({
+      up: true,
+      down: false,
+      left: false,
+      right: false,
+      abilitySlot: 2,
+      abilityTargetX: 12,
+      abilityTargetY: 34,
+      useQuickItemSlot: null,
+      seq: nextSeq,
+    }))
+    mockPlayerRenderSimSteps(() => 1)
+
+    runtime.start()
+    connection.emit({ type: WsEvent.MatchGo, payload: {} })
+    runtime.update(0, 17)
+
+    const sentInput = connection.sendPlayerInput.mock.calls[0]![0]
+    expect(playerRenderMock.localInputHistory.append).toHaveBeenCalledWith(sentInput)
+    expect(sentInput).not.toHaveProperty("resolvedAbilityId")
+  })
+
   it("preserves pending compact runs when full sync repeats unchanged input protocol", () => {
     vi.useFakeTimers()
     try {
@@ -679,11 +751,7 @@ describe("ArenaRuntime lifecycle", () => {
         useQuickItemSlot: null,
         seq: nextSeq,
       }))
-      playerRenderMock.update.mockImplementation(
-        (_delta: number, _intent: unknown, onSimStep?: () => void) => {
-          for (let i = 0; i < simSteps; i++) onSimStep?.()
-        },
-      )
+      mockPlayerRenderSimSteps(() => simSteps)
 
       runtime.start()
       vi.setSystemTime(1_000)
@@ -750,11 +818,7 @@ describe("ArenaRuntime lifecycle", () => {
         useQuickItemSlot: null,
         seq: nextSeq,
       }))
-      playerRenderMock.update.mockImplementation(
-        (_delta: number, _intent: unknown, onSimStep?: () => void) => {
-          for (let i = 0; i < simSteps; i++) onSimStep?.()
-        },
-      )
+      mockPlayerRenderSimSteps(() => simSteps)
 
       runtime.start()
       vi.setSystemTime(1_000)
@@ -813,13 +877,7 @@ describe("ArenaRuntime lifecycle", () => {
       useQuickItemSlot: null,
       seq: nextSeq,
     }))
-    playerRenderMock.update.mockImplementation(
-      (_delta: number, _intent: unknown, onSimStep?: () => void) => {
-        onSimStep?.()
-        onSimStep?.()
-        onSimStep?.()
-      },
-    )
+    mockPlayerRenderSimSteps(() => 3)
 
     runtime.start()
     connection.emit({
@@ -920,6 +978,29 @@ describe("ArenaRuntime lifecycle", () => {
       y: 20,
       lastProcessedInputSeq: 7,
       replayContext,
+    })
+  })
+
+  it("forwards local batch ACK ability-state freshness into player rendering", () => {
+    const { runtime } = makeRuntime()
+
+    runtime.start()
+    networkSyncHooks.current?.onLocalAck?.({
+      id: 1,
+      x: 10,
+      y: 20,
+      lastProcessedInputSeq: 7,
+      serverTimeMs: 1234,
+      abilityStatesChanged: true,
+    })
+
+    expect(playerRenderMock.onLocalAck).toHaveBeenCalledWith(1, {
+      x: 10,
+      y: 20,
+      lastProcessedInputSeq: 7,
+      serverTimeMs: 1234,
+      replayContext: undefined,
+      abilityStatesChanged: true,
     })
   })
 

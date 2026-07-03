@@ -46,6 +46,11 @@ export type LocalReplayContext = {
   readonly terrainState: PlayerTerrainState
 }
 
+export type LocalReplayInputContextResolver = (
+  input: PlayerInputPayload,
+  baseCtx: LocalReplayContext,
+) => LocalReplayContext
+
 /** Authoritative state the server just ACKed for the local player. */
 export type LocalAckState = {
   readonly x: number
@@ -53,7 +58,9 @@ export type LocalAckState = {
   readonly vx?: number
   readonly vy?: number
   readonly lastProcessedInputSeq: number
+  readonly serverTimeMs?: number
   readonly replayContext?: LocalReplayContext
+  readonly abilityStatesChanged?: boolean
 }
 
 /** Result of `reconcile`. */
@@ -178,6 +185,7 @@ function classifyCorrection(
  *   are discarded.
  * @param currentRender - The position the player is currently rendered at.
  * @param ctx - Context that affects replay speed (casting / swinging / boots).
+ * @param resolveInputContext - Optional per-pending-input context adjustment.
  * @returns Correction + the replay result for the render system to use.
  */
 export function reconcileLocal(
@@ -185,13 +193,15 @@ export function reconcileLocal(
   history: LocalInputHistory,
   currentRender: { x: number; y: number },
   ctx: LocalReplayContext,
+  resolveInputContext?: LocalReplayInputContextResolver,
 ): ReconcileResult {
   history.discardThrough(ack.lastProcessedInputSeq)
 
   let x = ack.x
   let y = ack.y
   for (const input of history.pending()) {
-    const next = stepReplay(x, y, input, ctx)
+    const replayCtx = resolveInputContext?.(input, ctx) ?? ctx
+    const next = stepReplay(x, y, input, replayCtx)
     x = next.x
     y = next.y
   }
