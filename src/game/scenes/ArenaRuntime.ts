@@ -228,13 +228,17 @@ export class ArenaRuntime {
         this.playerRenderSystem.onRemoteSnapshot(sample.id, sample)
       },
       onLocalAck: (sample) => {
-        this.playerRenderSystem.onLocalAck(sample.id, {
+        const ack = {
           x: sample.x,
           y: sample.y,
           lastProcessedInputSeq: sample.lastProcessedInputSeq,
           serverTimeMs: sample.serverTimeMs,
           replayContext: sample.replayContext,
-        })
+        }
+        if (sample.abilityStatesChanged !== undefined) {
+          Object.assign(ack, { abilityStatesChanged: sample.abilityStatesChanged })
+        }
+        this.playerRenderSystem.onLocalAck(sample.id, ack)
       },
       onServerTime: (serverTimeMs) => {
         this.playerRenderSystem.updateServerTimeOffset(serverTimeMs)

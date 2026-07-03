@@ -106,6 +106,12 @@ type LocalPredictedCast = {
 
 type LocalPredictedAbilityCooldown = {
   endsAtServerTimeMs: number
+  startedInputSeq: number
+}
+
+type LocalPredictedAbilityChargeReservation = {
+  startedInputSeq: number
+  remainingChargesAfterReservation: number
 }
 
 type LocalPredictionTerrainContext = {
@@ -118,15 +124,23 @@ function hasJumpAirLockZ(jumpZ: number | null | undefined): boolean {
   return (jumpZ ?? 0) > JUMP_AIRBORNE_COLLIDER_EPSILON_PX
 }
 
-function predictedJumpAirLockTicks(): number {
+function predictedJumpZForElapsedTicks(elapsedTicks: number): number {
   let z = JUMP_AIRBORNE_COLLIDER_EPSILON_PX + 1
   let vz = JUMP_INITIAL_VZ_PX_PER_SEC
+  for (let i = 0; i < elapsedTicks; i++) {
+    vz -= JUMP_GRAVITY_PX_PER_SEC2 * TICK_DT_SEC
+    z += vz * TICK_DT_SEC
+    if (z <= 0) return 0
+  }
+  return z
+}
+
+function predictedJumpAirLockTicks(): number {
   let totalTicks = 1
   let airborne = true
 
   while (airborne) {
-    vz -= JUMP_GRAVITY_PX_PER_SEC2 * TICK_DT_SEC
-    z += vz * TICK_DT_SEC
+    const z = predictedJumpZForElapsedTicks(totalTicks)
     airborne = hasJumpAirLockZ(z)
     if (airborne) totalTicks += 1
   }
@@ -311,6 +325,12 @@ export class PlayerRenderSystem {
     LocalPredictedAbilityCooldown
   >()
 
+  /** Charge budgets reserved by local prediction before ability-state deltas arrive. */
+  private readonly localPredictedAbilityCharges = new Map<
+    string,
+    LocalPredictedAbilityChargeReservation[]
+  >()
+
   /**
    * Offset from server clock to local clock, roughly `serverTime - Date.now()`.
    * Updated on every authoritative batch so remote interpolation can map
@@ -346,8 +366,7 @@ export class PlayerRenderSystem {
   applyFullSync(payload: GameStateSyncPayload): void {
     this.applyNetTiming(payload.timing)
     this.updateServerTimeOffset(payload.serverTimeMs)
-    this.localPredictedCast = null
-    this.localPredictedAbilityCooldowns.clear()
+    this._clearAllLocalPredictedAbilityGuards()
     const keep = new Set(payload.players.map((p) => p.id))
     for (const id of [...this.entries.keys()]) {
       if (!keep.has(id)) {
@@ -526,6 +545,7 @@ export class PlayerRenderSystem {
     }
     const simCurr = { x: entry.simCurrX, y: entry.simCurrY }
     this._clearLocalPredictedCastFromAck(state, ack, ctx)
+    this._reconcileLocalPredictedAbilityGuardsFromAuthority(state, ack, ctx)
     const result = reconcileLocal(
       ack,
       this.localInputHistory,
@@ -867,6 +887,9 @@ export class PlayerRenderSystem {
           payload.spawnY,
           "respawn",
         )
+        if (state.playerId === this.localPlayerId) {
+          this._clearAllLocalPredictedAbilityGuards()
+        }
         break
       }
     }
@@ -1013,8 +1036,9 @@ export class PlayerRenderSystem {
       if (localCastAbilityId && inputForStep) {
         this._startLocalPredictedCast(state, inputForStep, localCastAbilityId)
       }
+      const activeLocalPredictedCast = this._activeLocalPredictedCast(state)
       const activeLocalCastAbilityId =
-        localCastAbilityId ?? this._activeLocalPredictedCastAbilityId(state)
+        localCastAbilityId ?? activeLocalPredictedCast?.abilityId ?? null
       const predictionMoveIntent = inputForStep ?? localMoveIntent
       const castMoveMult = this._clientCastMoveMultiplier(state, activeLocalCastAbilityId)
       const swingMult =
@@ -1028,6 +1052,7 @@ export class PlayerRenderSystem {
       const terrainContext = this._localPredictionTerrainContext(
         state,
         activeLocalCastAbilityId,
+        activeLocalPredictedCast,
       )
       const colliderSet = terrainColliderSetForPlayerState(terrainContext.jumpZ, terrainContext.terrainState, {
         jumpStartedInLava: terrainContext.jumpStartedInLava,
@@ -1397,6 +1422,7 @@ export class PlayerRenderSystem {
     options: {
       readonly ignorePredictedCast?: boolean
       readonly ignorePredictedAbilityCooldown?: boolean
+      readonly ignorePredictedAbilityCharges?: boolean
       readonly currentServerTimeMs?: number
     } = {},
   ): string | null {
@@ -1447,7 +1473,11 @@ export class PlayerRenderSystem {
     if (
       runtime?.charges !== null &&
       runtime?.charges !== undefined &&
-      runtime.charges <= 0
+      !this._hasLocalPredictedAbilityChargeAvailable(
+        abilityId,
+        runtime.charges,
+        options.ignorePredictedAbilityCharges === true,
+      )
     ) {
       return null
     }
@@ -1455,9 +1485,9 @@ export class PlayerRenderSystem {
     return abilityId
   }
 
-  private _activeLocalPredictedCastAbilityId(
+  private _activeLocalPredictedCast(
     state: (typeof ClientPlayerState)[number],
-  ): string | null {
+  ): LocalPredictedCast | null {
     this._clearLocalPredictedCastFromAuthority(state)
     if (
       this.localPredictedCast &&
@@ -1465,7 +1495,13 @@ export class PlayerRenderSystem {
     ) {
       this.localPredictedCast = null
     }
-    return this.localPredictedCast?.abilityId ?? null
+    return this.localPredictedCast
+  }
+
+  private _activeLocalPredictedCastAbilityId(
+    state: (typeof ClientPlayerState)[number],
+  ): string | null {
+    return this._activeLocalPredictedCast(state)?.abilityId ?? null
   }
 
   private _startLocalPredictedCast(
@@ -1481,7 +1517,12 @@ export class PlayerRenderSystem {
       totalTicks,
       remainingTicks: totalTicks,
     }
-    this._startLocalPredictedAbilityCooldown(abilityId, totalTicks)
+    this._startLocalPredictedAbilityCooldown(
+      abilityId,
+      totalTicks,
+      input.seq,
+    )
+    this._reserveLocalPredictedAbilityCharge(state, abilityId, input.seq)
   }
 
   private _localPredictedCastTicks(
@@ -1522,6 +1563,45 @@ export class PlayerRenderSystem {
     }
   }
 
+  private _clearAllLocalPredictedAbilityGuards(): void {
+    this.localPredictedCast = null
+    this.localPredictedAbilityCooldowns.clear()
+    this.localPredictedAbilityCharges.clear()
+  }
+
+  private _clearLocalPredictedAbilityGuardsForInput(
+    abilityId: string,
+    startedInputSeq: number,
+  ): void {
+    const cooldown = this.localPredictedAbilityCooldowns.get(abilityId)
+    if (cooldown && cooldown.startedInputSeq <= startedInputSeq) {
+      this.localPredictedAbilityCooldowns.delete(abilityId)
+    }
+
+    const charges = this.localPredictedAbilityCharges.get(abilityId)
+    if (charges) {
+      const remainingCharges = charges.filter(
+        (charge) => charge.startedInputSeq !== startedInputSeq,
+      )
+      if (remainingCharges.length > 0) {
+        this.localPredictedAbilityCharges.set(abilityId, remainingCharges)
+      } else {
+        this.localPredictedAbilityCharges.delete(abilityId)
+      }
+    }
+  }
+
+  private _setLocalPredictedAbilityChargeReservations(
+    abilityId: string,
+    reservations: LocalPredictedAbilityChargeReservation[],
+  ): void {
+    if (reservations.length > 0) {
+      this.localPredictedAbilityCharges.set(abilityId, reservations)
+    } else {
+      this.localPredictedAbilityCharges.delete(abilityId)
+    }
+  }
+
   private _clearLocalPredictedCastFromAck(
     state: (typeof ClientPlayerState)[number],
     ack: LocalAckState,
@@ -1537,8 +1617,115 @@ export class PlayerRenderSystem {
       return
     }
     if (ack.lastProcessedInputSeq >= this.localPredictedCast.startedInputSeq) {
+      const rejectedCast = this.localPredictedCast
       this.localPredictedCast = null
+      this._clearLocalPredictedAbilityGuardsForInput(
+        rejectedCast.abilityId,
+        rejectedCast.startedInputSeq,
+      )
     }
+  }
+
+  private _reconcileLocalPredictedAbilityGuardsFromAuthority(
+    state: (typeof ClientPlayerState)[number],
+    ack: LocalAckState,
+    ctx: LocalReplayContext,
+  ): void {
+    const currentServerTimeMs = ack.serverTimeMs ?? this.getEstimatedServerTimeMs()
+    const allowReadyStateClear = ack.abilityStatesChanged === true
+
+    for (const [abilityId, cooldown] of this.localPredictedAbilityCooldowns) {
+      if (ack.lastProcessedInputSeq < cooldown.startedInputSeq) continue
+
+      const runtime = state.abilityStates[abilityId]
+      const cooldownEndsAtServerTimeMs = runtime?.cooldownEndsAtServerTimeMs
+      if (
+        cooldownEndsAtServerTimeMs !== null &&
+        cooldownEndsAtServerTimeMs !== undefined &&
+        cooldownEndsAtServerTimeMs > currentServerTimeMs
+      ) {
+        this.localPredictedAbilityCooldowns.delete(abilityId)
+        continue
+      }
+
+      if (
+        allowReadyStateClear &&
+        this._authoritativeAbilityCooldownReady(runtime, currentServerTimeMs) &&
+        !this._hasAbilityActiveInPredictionOrAuthority(state, abilityId, ctx)
+      ) {
+        this.localPredictedAbilityCooldowns.delete(abilityId)
+      }
+    }
+
+    for (const [abilityId, reservations] of this.localPredictedAbilityCharges) {
+      const runtime = state.abilityStates[abilityId]
+      const charges = runtime?.charges
+      if (charges === null || charges === undefined) {
+        this.localPredictedAbilityCharges.delete(abilityId)
+        continue
+      }
+      if (
+        allowReadyStateClear &&
+        runtime.maxCharges !== null &&
+        runtime.maxCharges !== undefined &&
+        charges >= runtime.maxCharges &&
+        !this._hasAbilityActiveInPredictionOrAuthority(state, abilityId, ctx)
+      ) {
+        this.localPredictedAbilityCharges.delete(abilityId)
+        continue
+      }
+
+      this._setLocalPredictedAbilityChargeReservations(
+        abilityId,
+        reservations.filter(
+          (reservation) =>
+            ack.lastProcessedInputSeq < reservation.startedInputSeq ||
+            charges > reservation.remainingChargesAfterReservation,
+        ),
+      )
+    }
+  }
+
+  private _authoritativeAbilityCooldownReady(
+    runtime:
+      | (typeof ClientPlayerState)[number]["abilityStates"][string]
+      | undefined,
+    currentServerTimeMs: number,
+  ): boolean {
+    if (!runtime) return false
+    return (
+      runtime.cooldownEndsAtServerTimeMs === null ||
+      runtime.cooldownEndsAtServerTimeMs === undefined ||
+      runtime.cooldownEndsAtServerTimeMs <= currentServerTimeMs
+    )
+  }
+
+  private _hasAbilityActiveInPredictionOrAuthority(
+    state: (typeof ClientPlayerState)[number],
+    abilityId: string,
+    ctx: LocalReplayContext,
+  ): boolean {
+    if (
+      this.localPredictedCast?.abilityId === abilityId &&
+      this.localPredictedCast.remainingTicks > 0
+    ) {
+      return true
+    }
+    if (state.castingAbilityId === abilityId || ctx.castingAbilityId === abilityId) {
+      return true
+    }
+    if (abilityId === "jump") {
+      return (
+        this._hasAuthoritativeJumpAirLock(state) ||
+        this._replayContextHasJumpAirLock(ctx)
+      )
+    }
+    return (
+      state.moveState === "rooted" ||
+      state.moveState === "casting" ||
+      ctx.moveState === "rooted" ||
+      ctx.moveState === "casting"
+    )
   }
 
   private _localReplayContextResolver(
@@ -1579,6 +1766,7 @@ export class PlayerRenderSystem {
           {
             ignorePredictedCast: true,
             ignorePredictedAbilityCooldown: true,
+            ignorePredictedAbilityCharges: true,
             currentServerTimeMs: this._serverTimeForReplayedInput(ack, input),
           },
         )
@@ -1607,8 +1795,13 @@ export class PlayerRenderSystem {
         return baseCtx
       }
 
+      const elapsedTicks = replayCast.totalTicks - replayCast.remainingTicks
       replayCast.remainingTicks -= 1
-      return this._localReplayContextForAbility(baseCtx, replayCast.abilityId)
+      return this._localReplayContextForAbility(
+        baseCtx,
+        replayCast.abilityId,
+        elapsedTicks,
+      )
     }
   }
 
@@ -1631,21 +1824,26 @@ export class PlayerRenderSystem {
       {
         ignorePredictedCast: true,
         ignorePredictedAbilityCooldown: true,
+        ignorePredictedAbilityCharges: true,
       },
     )
     if (!localCastAbilityId) return baseCtx
 
-    return this._localReplayContextForAbility(baseCtx, localCastAbilityId)
+    return this._localReplayContextForAbility(baseCtx, localCastAbilityId, 0)
   }
 
   private _localReplayContextForAbility(
     baseCtx: LocalReplayContext,
     abilityId: string,
+    predictedElapsedTicks: number,
   ): LocalReplayContext {
     if (abilityId === "jump") {
       return {
         ...baseCtx,
-        ...this._predictedJumpTerrainContext(baseCtx.terrainState),
+        ...this._predictedJumpTerrainContext(
+          baseCtx.terrainState,
+          predictedElapsedTicks,
+        ),
         castingAbilityId: null,
       }
     }
@@ -1662,9 +1860,15 @@ export class PlayerRenderSystem {
   private _localPredictionTerrainContext(
     state: (typeof ClientPlayerState)[number],
     activeLocalCastAbilityId: string | null,
+    activeLocalPredictedCast: LocalPredictedCast | null,
   ): LocalPredictionTerrainContext {
     if (activeLocalCastAbilityId === "jump") {
-      return this._predictedJumpTerrainContext(state.terrainState)
+      const elapsedTicks =
+        activeLocalPredictedCast?.abilityId === "jump"
+          ? activeLocalPredictedCast.totalTicks -
+            activeLocalPredictedCast.remainingTicks
+          : 0
+      return this._predictedJumpTerrainContext(state.terrainState, elapsedTicks)
     }
 
     return {
@@ -1676,9 +1880,10 @@ export class PlayerRenderSystem {
 
   private _predictedJumpTerrainContext(
     terrainState: PlayerTerrainState,
+    elapsedTicks: number,
   ): LocalPredictionTerrainContext {
     return {
-      jumpZ: JUMP_AIRBORNE_COLLIDER_EPSILON_PX + 1,
+      jumpZ: predictedJumpZForElapsedTicks(elapsedTicks),
       terrainState: "land",
       jumpStartedInLava: terrainState === "lava",
     }
@@ -1709,6 +1914,7 @@ export class PlayerRenderSystem {
   private _startLocalPredictedAbilityCooldown(
     abilityId: string,
     castTicks: number,
+    startedInputSeq: number,
   ): void {
     const cfg = ABILITY_CONFIGS[abilityId]
     if (!cfg || cfg.cooldownMs <= 0) return
@@ -1716,7 +1922,36 @@ export class PlayerRenderSystem {
     this.localPredictedAbilityCooldowns.set(abilityId, {
       endsAtServerTimeMs:
         this.getEstimatedServerTimeMs() + castTicks * TICK_MS + cfg.cooldownMs,
+      startedInputSeq,
     })
+  }
+
+  private _reserveLocalPredictedAbilityCharge(
+    state: (typeof ClientPlayerState)[number],
+    abilityId: string,
+    startedInputSeq: number,
+  ): void {
+    const runtime = state.abilityStates[abilityId]
+    if (
+      runtime?.charges === null ||
+      runtime?.charges === undefined ||
+      runtime.charges <= 0
+    ) {
+      return
+    }
+
+    const reservations = this._activeLocalPredictedAbilityChargeReservations(
+      abilityId,
+      runtime.charges,
+    )
+    reservations.push({
+      startedInputSeq,
+      remainingChargesAfterReservation: Math.max(
+        0,
+        runtime.charges - reservations.length - 1,
+      ),
+    })
+    this._setLocalPredictedAbilityChargeReservations(abilityId, reservations)
   }
 
   private _isLocalPredictedAbilityCooldownActive(
@@ -1736,6 +1971,33 @@ export class PlayerRenderSystem {
         this.localPredictedAbilityCooldowns.delete(abilityId)
       }
     }
+  }
+
+  private _hasLocalPredictedAbilityChargeAvailable(
+    abilityId: string,
+    charges: number,
+    ignorePredictedAbilityCharges: boolean,
+  ): boolean {
+    if (ignorePredictedAbilityCharges) return charges > 0
+
+    const reservations = this._activeLocalPredictedAbilityChargeReservations(
+      abilityId,
+      charges,
+    )
+    this._setLocalPredictedAbilityChargeReservations(abilityId, reservations)
+    if (charges <= 0) return false
+
+    return charges - reservations.length > 0
+  }
+
+  private _activeLocalPredictedAbilityChargeReservations(
+    abilityId: string,
+    charges: number,
+  ): LocalPredictedAbilityChargeReservation[] {
+    const reservations = this.localPredictedAbilityCharges.get(abilityId) ?? []
+    return reservations.filter(
+      (reservation) => charges > reservation.remainingChargesAfterReservation,
+    )
   }
 
   private _serverTimeForReplayedInput(
@@ -1792,8 +2054,7 @@ export class PlayerRenderSystem {
     for (const [id] of this.entries) {
       this._despawnPlayer(id)
     }
-    this.localPredictedCast = null
-    this.localPredictedAbilityCooldowns.clear()
+    this._clearAllLocalPredictedAbilityGuards()
     this.localInputHistory.clear()
     this.remoteBuffer.clear()
   }

@@ -83,6 +83,7 @@ const networkSyncHooks = vi.hoisted(() => ({
       readonly y: number
       readonly lastProcessedInputSeq: number
       readonly serverTimeMs?: number
+      readonly abilityStatesChanged?: boolean
       readonly replayContext?: {
         readonly moveState: "idle" | "moving" | "casting" | "rooted" | "swinging"
         readonly terrainState: "land" | "lava" | "cliff"
@@ -977,6 +978,29 @@ describe("ArenaRuntime lifecycle", () => {
       y: 20,
       lastProcessedInputSeq: 7,
       replayContext,
+    })
+  })
+
+  it("forwards local batch ACK ability-state freshness into player rendering", () => {
+    const { runtime } = makeRuntime()
+
+    runtime.start()
+    networkSyncHooks.current?.onLocalAck?.({
+      id: 1,
+      x: 10,
+      y: 20,
+      lastProcessedInputSeq: 7,
+      serverTimeMs: 1234,
+      abilityStatesChanged: true,
+    })
+
+    expect(playerRenderMock.onLocalAck).toHaveBeenCalledWith(1, {
+      x: 10,
+      y: 20,
+      lastProcessedInputSeq: 7,
+      serverTimeMs: 1234,
+      replayContext: undefined,
+      abilityStatesChanged: true,
     })
   })
 

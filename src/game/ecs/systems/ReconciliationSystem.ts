@@ -60,6 +60,7 @@ export type LocalAckState = {
   readonly lastProcessedInputSeq: number
   readonly serverTimeMs?: number
   readonly replayContext?: LocalReplayContext
+  readonly abilityStatesChanged?: boolean
 }
 
 /** Result of `reconcile`. */
