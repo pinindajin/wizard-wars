@@ -79,7 +79,10 @@ import {
   type LocalReplayContext,
 } from "./ReconciliationSystem"
 import type { RubberbandCorrection } from "@/shared/performanceIndicators"
-import { LocalInputHistory } from "../../network/LocalInputHistory"
+import {
+  LocalInputHistory,
+  type LocalInputHistoryInput,
+} from "../../network/LocalInputHistory"
 import { RemoteInterpolationBuffer } from "./RemoteInterpolationBuffer"
 
 /**
@@ -99,6 +102,10 @@ type LocalPredictedCast = {
   startedInputSeq: number
   totalTicks: number
   remainingTicks: number
+}
+
+type LocalPredictedAbilityCooldown = {
+  endsAtServerTimeMs: number
 }
 
 function hasJumpAirLockZ(jumpZ: number | null | undefined): boolean {
@@ -292,6 +299,12 @@ export class PlayerRenderSystem {
   /** Local-only cast window used until authoritative casting state catches up. */
   private localPredictedCast: LocalPredictedCast | null = null
 
+  /** Same-ability cooldown windows predicted before authoritative state catches up. */
+  private readonly localPredictedAbilityCooldowns = new Map<
+    string,
+    LocalPredictedAbilityCooldown
+  >()
+
   /**
    * Offset from server clock to local clock, roughly `serverTime - Date.now()`.
    * Updated on every authoritative batch so remote interpolation can map
@@ -328,6 +341,7 @@ export class PlayerRenderSystem {
     this.applyNetTiming(payload.timing)
     this.updateServerTimeOffset(payload.serverTimeMs)
     this.localPredictedCast = null
+    this.localPredictedAbilityCooldowns.clear()
     const keep = new Set(payload.players.map((p) => p.id))
     for (const id of [...this.entries.keys()]) {
       if (!keep.has(id)) {
@@ -511,7 +525,7 @@ export class PlayerRenderSystem {
       this.localInputHistory,
       simCurr,
       ctx,
-      this._localReplayContextResolver(state, ctx),
+      this._localReplayContextResolver(state, ctx, ack),
     )
     this.predictionCorrectionHandler?.(result.correction)
 
@@ -1370,7 +1384,11 @@ export class PlayerRenderSystem {
   private _localCastAbilityIdForInput(
     state: (typeof ClientPlayerState)[number],
     input: PlayerInputPayload | null,
-    options: { readonly ignorePredictedCast?: boolean } = {},
+    options: {
+      readonly ignorePredictedCast?: boolean
+      readonly currentServerTimeMs?: number
+      readonly resolvedAbilityId?: string | null
+    } = {},
   ): string | null {
     if (!input || input.abilitySlot === null) return null
     if (
@@ -1392,14 +1410,29 @@ export class PlayerRenderSystem {
       return null
     }
 
-    const abilityId = this._abilityIdForSlot(input.abilitySlot)
+    const abilityId =
+      options.resolvedAbilityId !== undefined
+        ? options.resolvedAbilityId
+        : this._abilityIdForSlot(input.abilitySlot)
     if (!abilityId || !ABILITY_CONFIGS[abilityId]) return null
+    if (this._serverRejectsJumpCast(state, abilityId)) return null
+
+    const currentServerTimeMs =
+      options.currentServerTimeMs ?? this.getEstimatedServerTimeMs()
+    if (
+      this._isLocalPredictedAbilityCooldownActive(
+        abilityId,
+        currentServerTimeMs,
+      )
+    ) {
+      return null
+    }
 
     const runtime = state.abilityStates[abilityId]
     if (
       runtime?.cooldownEndsAtServerTimeMs !== null &&
       runtime?.cooldownEndsAtServerTimeMs !== undefined &&
-      runtime.cooldownEndsAtServerTimeMs > this.getEstimatedServerTimeMs()
+      runtime.cooldownEndsAtServerTimeMs > currentServerTimeMs
     ) {
       return null
     }
@@ -1440,6 +1473,7 @@ export class PlayerRenderSystem {
       totalTicks,
       remainingTicks: totalTicks,
     }
+    this._startLocalPredictedAbilityCooldown(abilityId, totalTicks)
   }
 
   private _localPredictedCastTicks(
@@ -1502,6 +1536,7 @@ export class PlayerRenderSystem {
   private _localReplayContextResolver(
     state: (typeof ClientPlayerState)[number],
     ctx: LocalReplayContext,
+    ack?: LocalAckState,
   ): LocalReplayInputContextResolver {
     let replayCast =
       ctx.castingAbilityId ||
@@ -1533,7 +1568,11 @@ export class PlayerRenderSystem {
         const localCastAbilityId = this._localCastAbilityIdForInput(
           state,
           input,
-          { ignorePredictedCast: true },
+          {
+            ignorePredictedCast: true,
+            currentServerTimeMs: this._serverTimeForReplayedInput(ack, input),
+            resolvedAbilityId: this._historyInputResolvedAbilityId(input),
+          },
         )
         if (localCastAbilityId) {
           const totalTicks = this._localPredictedCastTicks(
@@ -1581,7 +1620,10 @@ export class PlayerRenderSystem {
     const localCastAbilityId = this._localCastAbilityIdForInput(
       state,
       input,
-      { ignorePredictedCast: true },
+      {
+        ignorePredictedCast: true,
+        resolvedAbilityId: this._historyInputResolvedAbilityId(input),
+      },
     )
     if (!localCastAbilityId) return baseCtx
 
@@ -1609,6 +1651,70 @@ export class PlayerRenderSystem {
 
   private _replayContextHasJumpAirLock(ctx: LocalReplayContext): boolean {
     return hasJumpAirLockZ(ctx.jumpZ)
+  }
+
+  private _serverRejectsJumpCast(
+    state: (typeof ClientPlayerState)[number],
+    abilityId: string,
+  ): boolean {
+    return (
+      abilityId === "jump" &&
+      (state.moveState === "swinging" ||
+        state.moveState === "knockback" ||
+        state.animState === "primary_melee_attack")
+    )
+  }
+
+  private _startLocalPredictedAbilityCooldown(
+    abilityId: string,
+    castTicks: number,
+  ): void {
+    const cfg = ABILITY_CONFIGS[abilityId]
+    if (!cfg || cfg.cooldownMs <= 0) return
+
+    this.localPredictedAbilityCooldowns.set(abilityId, {
+      endsAtServerTimeMs:
+        this.getEstimatedServerTimeMs() + castTicks * TICK_MS + cfg.cooldownMs,
+    })
+  }
+
+  private _isLocalPredictedAbilityCooldownActive(
+    abilityId: string,
+    currentServerTimeMs: number,
+  ): boolean {
+    this._pruneLocalPredictedAbilityCooldowns(currentServerTimeMs)
+    const cooldown = this.localPredictedAbilityCooldowns.get(abilityId)
+    return cooldown ? cooldown.endsAtServerTimeMs > currentServerTimeMs : false
+  }
+
+  private _pruneLocalPredictedAbilityCooldowns(
+    currentServerTimeMs: number,
+  ): void {
+    for (const [abilityId, cooldown] of this.localPredictedAbilityCooldowns) {
+      if (cooldown.endsAtServerTimeMs <= currentServerTimeMs) {
+        this.localPredictedAbilityCooldowns.delete(abilityId)
+      }
+    }
+  }
+
+  private _serverTimeForReplayedInput(
+    ack: LocalAckState | undefined,
+    input: PlayerInputPayload,
+  ): number | undefined {
+    if (ack?.serverTimeMs === undefined) return undefined
+    const replayedTicks = Math.max(0, input.seq - ack.lastProcessedInputSeq)
+    return ack.serverTimeMs + replayedTicks * TICK_MS
+  }
+
+  private _historyInputResolvedAbilityId(
+    input: PlayerInputPayload,
+  ): string | null | undefined {
+    return (input as LocalInputHistoryInput).resolvedAbilityId
+  }
+
+  resolveLocalAbilityIdForInput(input: PlayerInputPayload): string | null {
+    if (input.abilitySlot === null) return null
+    return this._abilityIdForSlot(input.abilitySlot)
   }
 
   /** Resolves a local ability-bar index through React-owned shop state. */
@@ -1657,6 +1763,7 @@ export class PlayerRenderSystem {
       this._despawnPlayer(id)
     }
     this.localPredictedCast = null
+    this.localPredictedAbilityCooldowns.clear()
     this.localInputHistory.clear()
     this.remoteBuffer.clear()
   }

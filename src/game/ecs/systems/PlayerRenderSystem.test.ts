@@ -56,7 +56,7 @@ import {
   NAME_TO_HP_BAR_GAP_PX,
   PlayerRenderSystem,
 } from "./PlayerRenderSystem"
-import type { LocalReplayContext } from "./ReconciliationSystem"
+import type { LocalAckState, LocalReplayContext } from "./ReconciliationSystem"
 import { ClientPosition, ClientPlayerState, ClientRenderPos } from "../components"
 import { clientEntities, removeEntity } from "../world"
 import type {
@@ -77,6 +77,7 @@ import {
   BASE_MOVE_SPEED_PX_PER_SEC,
   JUMP_AIRBORNE_COLLIDER_EPSILON_PX,
   PLAYER_WORLD_COLLISION_FOOTPRINT,
+  SWING_MOVE_SPEED_MULTIPLIER,
   SWIFT_BOOTS_SPEED_BONUS,
   TICK_DT_SEC,
   TICK_MS,
@@ -200,6 +201,12 @@ type LocalCastResolver = {
     totalTicks: number
     remainingTicks: number
   } | null
+  localPredictedAbilityCooldowns: Map<
+    string,
+    {
+      endsAtServerTimeMs: number
+    }
+  >
   _activeLocalPredictedCastAbilityId: (
     state: PlayerSnapshot,
   ) => string | null
@@ -241,6 +248,7 @@ type LocalCastResolver = {
     state: PlayerSnapshot,
     ctx: LocalReplayContext,
   ) => (input: PlayerInputPayload, baseCtx: LocalReplayContext) => LocalReplayContext
+  resolveLocalAbilityIdForInput: (input: PlayerInputPayload) => string | null
 }
 
 function abilityStates() {
@@ -460,6 +468,38 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     expect(destroyed).toContain("gfx")
     expect(clientEntities.has(2)).toBe(false)
     expect(ClientPlayerState[2]).toBeUndefined()
+  })
+
+  it("ignores ACKs and sim ticks when local render bookkeeping is missing", () => {
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    sys.localPlayerId = "p1"
+
+    expect(() => {
+      sys.onLocalAck(404, {
+        x: 0,
+        y: 0,
+        lastProcessedInputSeq: 0,
+        replayContext: replayCtx(),
+      })
+    }).not.toThrow()
+
+    sys.applyFullSync(sync([snap({
+      id: 1,
+      playerId: "p1",
+      x: OPEN_TEST_POINT.x,
+      y: OPEN_TEST_POINT.y,
+    })]))
+    delete ClientPlayerState[1]
+
+    expect(() => {
+      sys.update(
+        TICK_MS,
+        { up: true, down: false, left: false, right: false },
+        undefined,
+        () => input({ seq: 1, up: true }),
+      )
+    }).not.toThrow()
   })
 
   it("spawns a hero-specific sprite, foot ellipse 32×16 in hero color, and never hero-tints the body", () => {
@@ -857,6 +897,7 @@ describe("PlayerRenderSystem.applyFullSync", () => {
       }),
     ]))
     ClientPlayerState[1]!.jumpZ = undefined as never
+    ClientPlayerState[1]!.jumpStartedInLava = undefined as never
 
     sys.update(17, { up: false, down: false, left: false, right: true })
 
@@ -1249,6 +1290,57 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     )
   })
 
+  it("does not predict jump air-lock when server-side swing rejects the jump input", () => {
+    const { scene, group, registryValues } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    sys.localPlayerId = "p1"
+    registryValues.set(
+      WW_ABILITY_SLOTS_REGISTRY_KEY,
+      ["fireball", "jump", "lightning_bolt", null, null],
+    )
+    sys.applyFullSync(sync([snap({
+      id: 1,
+      playerId: "p1",
+      x: OPEN_TEST_POINT.x,
+      y: OPEN_TEST_POINT.y,
+      animState: "primary_melee_attack",
+      moveState: "swinging",
+      castingAbilityId: null,
+    })]))
+
+    const inputs = [
+      input({
+        seq: 1,
+        up: true,
+        abilitySlot: 1,
+        abilityTargetX: OPEN_TEST_POINT.x + 200,
+        abilityTargetY: OPEN_TEST_POINT.y,
+      }),
+      input({
+        seq: 2,
+        up: true,
+        abilitySlot: 2,
+        abilityTargetX: OPEN_TEST_POINT.x + 200,
+        abilityTargetY: OPEN_TEST_POINT.y,
+      }),
+    ]
+
+    for (const nextInput of inputs) {
+      sys.update(
+        TICK_MS,
+        { up: true, down: false, left: false, right: false },
+        undefined,
+        () => nextInput,
+      )
+    }
+
+    expect(sys._getLocalSimForTest(1)?.simCurrY).toBeCloseTo(
+      OPEN_TEST_POINT.y -
+        BASE_MOVE_SPEED_PX_PER_SEC * TICK_DT_SEC * SWING_MOVE_SPEED_MULTIPLIER,
+      5,
+    )
+  })
+
   it("does not root same-tick lightning prediction when the ability is still cooling down", () => {
     const { scene, group, registryValues } = mockSceneAndGroup()
     const sys = new PlayerRenderSystem(scene as never, group as never)
@@ -1341,6 +1433,61 @@ describe("PlayerRenderSystem.applyFullSync", () => {
       () => input({
         seq: lightningCastTicks + 1,
         up: true,
+      }),
+    )
+
+    expect(sys._getLocalSimForTest(1)?.simCurrY).toBeCloseTo(
+      OPEN_TEST_POINT.y - BASE_MOVE_SPEED_PX_PER_SEC * TICK_DT_SEC,
+      5,
+    )
+  })
+
+  it("rejects repeated local casts during the predicted cooldown after cast expiry", () => {
+    const { scene, group, registryValues } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    sys.localPlayerId = "p1"
+    registryValues.set(
+      WW_ABILITY_SLOTS_REGISTRY_KEY,
+      ["fireball", null, "lightning_bolt", null, null],
+    )
+    sys.applyFullSync(sync([snap({
+      id: 1,
+      playerId: "p1",
+      x: OPEN_TEST_POINT.x,
+      y: OPEN_TEST_POINT.y,
+      heroId: "yen",
+      moveState: "idle",
+      castingAbilityId: null,
+    })]))
+
+    const lightningCastTicks = Math.ceil(
+      getSpellAnimationConfig("yen", "lightning_bolt").durationMs / TICK_MS,
+    )
+    for (let seq = 1; seq <= lightningCastTicks; seq += 1) {
+      sys.update(
+        TICK_MS,
+        { up: true, down: false, left: false, right: false },
+        undefined,
+        () => input({
+          seq,
+          up: true,
+          abilitySlot: seq === 1 ? 2 : null,
+          abilityTargetX: OPEN_TEST_POINT.x + 200,
+          abilityTargetY: OPEN_TEST_POINT.y,
+        }),
+      )
+    }
+
+    sys.update(
+      TICK_MS,
+      { up: true, down: false, left: false, right: false },
+      undefined,
+      () => input({
+        seq: lightningCastTicks + 1,
+        up: true,
+        abilitySlot: 2,
+        abilityTargetX: OPEN_TEST_POINT.x + 200,
+        abilityTargetY: OPEN_TEST_POINT.y,
       }),
     )
 
@@ -1476,6 +1623,68 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     })
   })
 
+  it("uses ACK-relative server time when replay checks pending input cooldowns", () => {
+    const { scene, group, registryValues } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    const corrections: string[] = []
+    sys.localPlayerId = "p1"
+    sys.setPredictionCorrectionHandler((correction) => {
+      corrections.push(correction)
+    })
+    registryValues.set(
+      WW_ABILITY_SLOTS_REGISTRY_KEY,
+      ["fireball", null, "lightning_bolt", null, null],
+    )
+    sys.applyFullSync(sync([snap({
+      id: 1,
+      playerId: "p1",
+      x: OPEN_TEST_POINT.x,
+      y: OPEN_TEST_POINT.y,
+      moveState: "idle",
+      castingAbilityId: null,
+      abilityStates: {
+        ...abilityStates(),
+        lightning_bolt: {
+          ...abilityStates().lightning_bolt,
+          cooldownEndsAtServerTimeMs: 1_000,
+          cooldownDurationMs: 4_000,
+        },
+      },
+    })]))
+
+    vi.setSystemTime(900)
+    sys.update(
+      TICK_MS,
+      { up: true, down: false, left: false, right: false },
+      (fullInput) => {
+        if (fullInput) sys.localInputHistory.append(fullInput)
+      },
+      () => input({
+        seq: 1,
+        up: true,
+        abilitySlot: 2,
+        abilityTargetX: OPEN_TEST_POINT.x + 200,
+        abilityTargetY: OPEN_TEST_POINT.y,
+      }),
+    )
+    expect(sys._getLocalSimForTest(1)?.simCurrY).toBeCloseTo(
+      OPEN_TEST_POINT.y - BASE_MOVE_SPEED_PX_PER_SEC * TICK_DT_SEC,
+      5,
+    )
+
+    vi.setSystemTime(2_000)
+    sys.onLocalAck(1, {
+      x: OPEN_TEST_POINT.x,
+      y: OPEN_TEST_POINT.y,
+      lastProcessedInputSeq: 0,
+      serverTimeMs: 900,
+      replayContext: replayCtx(),
+    } as LocalAckState & { readonly serverTimeMs: number })
+
+    expect(corrections).toEqual(["none"])
+    expect(sys._getLocalSimForTest(1)?.smoothRemainingMs).toBe(0)
+  })
+
   it("keeps ACK replay moving for pending mobile fireball cast inputs", () => {
     const { scene, group, registryValues } = mockSceneAndGroup()
     const sys = new PlayerRenderSystem(scene as never, group as never)
@@ -1565,6 +1774,66 @@ describe("PlayerRenderSystem.applyFullSync", () => {
       abilityTargetX: OPEN_TEST_POINT.x + 200,
       abilityTargetY: OPEN_TEST_POINT.y,
     }))
+
+    sys.onLocalAck(1, {
+      x: OPEN_TEST_POINT.x,
+      y: OPEN_TEST_POINT.y,
+      lastProcessedInputSeq: 0,
+      replayContext: replayCtx(),
+    })
+
+    expect(corrections).toEqual(["none"])
+    expect(sys._getLocalSimForTest(1)).toMatchObject({
+      simCurrX: OPEN_TEST_POINT.x,
+      simCurrY: OPEN_TEST_POINT.y,
+      smoothRemainingMs: 0,
+    })
+  })
+
+  it("replays pending ability inputs with the ability id captured when sent", () => {
+    const { scene, group, registryValues } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    const corrections: string[] = []
+    sys.localPlayerId = "p1"
+    sys.setPredictionCorrectionHandler((correction) => {
+      corrections.push(correction)
+    })
+    registryValues.set(
+      WW_ABILITY_SLOTS_REGISTRY_KEY,
+      ["fireball", null, "lightning_bolt", null, null],
+    )
+    sys.applyFullSync(sync([snap({
+      id: 1,
+      playerId: "p1",
+      x: OPEN_TEST_POINT.x,
+      y: OPEN_TEST_POINT.y,
+      moveState: "idle",
+      castingAbilityId: null,
+    })]))
+
+    const lightningInput = input({
+      seq: 1,
+      up: true,
+      abilitySlot: 2,
+      abilityTargetX: OPEN_TEST_POINT.x + 200,
+      abilityTargetY: OPEN_TEST_POINT.y,
+    })
+    sys.update(
+      TICK_MS,
+      { up: true, down: false, left: false, right: false },
+      (fullInput) => {
+        if (!fullInput) return
+        ;(sys.localInputHistory.append as (
+          input: PlayerInputPayload,
+          metadata: { readonly resolvedAbilityId: string | null },
+        ) => void)(fullInput, { resolvedAbilityId: "lightning_bolt" })
+      },
+      () => lightningInput,
+    )
+    registryValues.set(
+      WW_ABILITY_SLOTS_REGISTRY_KEY,
+      ["fireball", null, null, null, null],
+    )
 
     sys.onLocalAck(1, {
       x: OPEN_TEST_POINT.x,
@@ -1953,6 +2222,71 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     registryValues.delete(WW_ABILITY_SLOTS_REGISTRY_KEY)
     expect(resolver._abilityIdForSlot(0)).toBe("fireball")
     expect(resolver._abilityIdForSlot(1)).toBeNull()
+  })
+
+  it("resolves outbound input slots for send-time history metadata", () => {
+    const { scene, group, registryValues } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    const resolver = sys as unknown as LocalCastResolver
+    registryValues.set(
+      WW_ABILITY_SLOTS_REGISTRY_KEY,
+      ["fireball", null, "lightning_bolt", null, null],
+    )
+
+    expect(
+      resolver.resolveLocalAbilityIdForInput(input({ seq: 1, abilitySlot: null })),
+    ).toBeNull()
+    expect(
+      resolver.resolveLocalAbilityIdForInput(input({ seq: 1, abilitySlot: 2 })),
+    ).toBe("lightning_bolt")
+  })
+
+  it("uses captured pending-input ability ids even after live slot mappings change", () => {
+    const { scene, group, registryValues } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    const resolver = sys as unknown as LocalCastResolver
+    registryValues.set(
+      WW_ABILITY_SLOTS_REGISTRY_KEY,
+      ["fireball", null, null, null, null],
+    )
+    const capturedInput = {
+      ...input({ seq: 1, abilitySlot: 2 }),
+      resolvedAbilityId: "lightning_bolt",
+    } as PlayerInputPayload & { readonly resolvedAbilityId: string }
+
+    expect(
+      resolver._localReplayContextForInput(
+        snap({ id: 1, playerId: "p1" }),
+        capturedInput,
+        replayCtx(),
+      ),
+    ).toMatchObject({
+      castingAbilityId: "lightning_bolt",
+      moveState: "rooted",
+    })
+  })
+
+  it("prunes expired local predicted cooldowns before accepting another cast", () => {
+    const { scene, group, registryValues } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    const resolver = sys as unknown as LocalCastResolver
+    registryValues.set(
+      WW_ABILITY_SLOTS_REGISTRY_KEY,
+      ["fireball", null, "lightning_bolt", null, null],
+    )
+    resolver.localPredictedAbilityCooldowns.set("lightning_bolt", {
+      endsAtServerTimeMs: Date.now() - 1,
+    })
+
+    expect(
+      resolver._localCastAbilityIdForInput(
+        snap({ id: 1, playerId: "p1" }),
+        input({ seq: 2, abilitySlot: 2 }),
+      ),
+    ).toBe("lightning_bolt")
+    expect(resolver.localPredictedAbilityCooldowns.has("lightning_bolt")).toBe(
+      false,
+    )
   })
 
   it("only applies same-tick cast movement prediction when the outbound cast can start", () => {

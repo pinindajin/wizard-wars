@@ -391,6 +391,7 @@ describe("NetworkSyncSystem.applyBatchUpdate", () => {
       x: 15,
       y: 25,
       lastProcessedInputSeq: 3,
+      serverTimeMs: 2,
     })
   })
 
@@ -417,6 +418,7 @@ describe("NetworkSyncSystem.applyBatchUpdate", () => {
       x: 15,
       y: 25,
       lastProcessedInputSeq: 0,
+      serverTimeMs: 2,
     })
   })
 })
@@ -449,6 +451,7 @@ describe("NetworkSyncSystem.applyOwnerAck", () => {
       vx: ack.vx,
       vy: ack.vy,
       lastProcessedInputSeq: ack.lastProcessedInputSeq,
+      serverTimeMs: ack.serverTimeMs,
       replayContext: ack.replayContext,
     })
     expect(ClientPosition[1]).toEqual({ x: 10, y: 20 })

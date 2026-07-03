@@ -43,6 +43,7 @@ const playerRenderMock = vi.hoisted(() => ({
   onPlayerRespawn: vi.fn(),
   triggerHitFeedbackFlashForPlayerUserId: vi.fn(),
   getEstimatedServerTimeMs: vi.fn(() => 0),
+  resolveLocalAbilityIdForInput: vi.fn((): string | null => null),
   update: vi.fn(),
   getLocalPlayerRenderPos: vi.fn(() => null),
   localInputHistory: { append: vi.fn() },
@@ -82,6 +83,7 @@ const networkSyncHooks = vi.hoisted(() => ({
       readonly x: number
       readonly y: number
       readonly lastProcessedInputSeq: number
+      readonly serverTimeMs?: number
       readonly replayContext?: {
         readonly moveState: "idle" | "moving" | "casting" | "rooted" | "swinging"
         readonly terrainState: "land" | "lava" | "cliff"
@@ -367,6 +369,7 @@ describe("ArenaRuntime lifecycle", () => {
     playerRenderMock.onPrimaryMeleeSwing.mockClear()
     networkSyncHooks.current = null
     networkSyncMock.applyOwnerAck.mockClear()
+    playerRenderMock.resolveLocalAbilityIdForInput.mockReturnValue(null)
     keyboardControllerMock.collectMoveIntent.mockReturnValue({
       up: false,
       down: false,
@@ -698,6 +701,35 @@ describe("ArenaRuntime lifecycle", () => {
         lastCoveredInputSeq(payload),
       ),
     ).toEqual([0])
+  })
+
+  it("records send-time ability ids with local history without changing the sent input", () => {
+    const { runtime, connection } = makeRuntime()
+    connection.nextSeq.mockReturnValue(7)
+    playerRenderMock.resolveLocalAbilityIdForInput.mockReturnValue("lightning_bolt")
+    keyboardControllerMock.collectInput.mockImplementation((nextSeq: number) => ({
+      up: true,
+      down: false,
+      left: false,
+      right: false,
+      abilitySlot: 2,
+      abilityTargetX: 12,
+      abilityTargetY: 34,
+      useQuickItemSlot: null,
+      seq: nextSeq,
+    }))
+    mockPlayerRenderSimSteps(() => 1)
+
+    runtime.start()
+    connection.emit({ type: WsEvent.MatchGo, payload: {} })
+    runtime.update(0, 17)
+
+    const sentInput = connection.sendPlayerInput.mock.calls[0]![0]
+    expect(playerRenderMock.localInputHistory.append).toHaveBeenCalledWith(
+      sentInput,
+      { resolvedAbilityId: "lightning_bolt" },
+    )
+    expect(sentInput).not.toHaveProperty("resolvedAbilityId")
   })
 
   it("preserves pending compact runs when full sync repeats unchanged input protocol", () => {

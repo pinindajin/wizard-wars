@@ -232,6 +232,7 @@ export class ArenaRuntime {
           x: sample.x,
           y: sample.y,
           lastProcessedInputSeq: sample.lastProcessedInputSeq,
+          serverTimeMs: sample.serverTimeMs,
           replayContext: sample.replayContext,
         })
       },
@@ -568,7 +569,11 @@ export class ArenaRuntime {
     this.playerRenderSystem.update(delta, localMoveIntent, (fullInput) => {
       if (!fullInput) return
       if (!this.connection.isConnected()) return
-      this.playerRenderSystem.localInputHistory.append(fullInput)
+      const resolvedAbilityId =
+        this.playerRenderSystem.resolveLocalAbilityIdForInput(fullInput)
+      this.playerRenderSystem.localInputHistory.append(fullInput, {
+        resolvedAbilityId,
+      })
       if (this.inputTransport === "compact") {
         const state = this.compactInputScheduler.maybeBuildState(
           fullInput,

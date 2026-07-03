@@ -58,6 +58,7 @@ export type LocalAckState = {
   readonly vx?: number
   readonly vy?: number
   readonly lastProcessedInputSeq: number
+  readonly serverTimeMs?: number
   readonly replayContext?: LocalReplayContext
 }
 
