@@ -3,6 +3,7 @@ import Phaser from "phaser"
 import { gameConfig } from "./config"
 import {
   WW_ACTIVE_LOCAL_INPUT_CALLBACK_REGISTRY_KEY,
+  WW_ABILITY_SLOTS_REGISTRY_KEY,
   WW_GAME_CONNECTION_REGISTRY_KEY,
   WW_KEYBIND_CONFIG_REGISTRY_KEY,
   WW_LOCAL_PLAYER_ID_REGISTRY_KEY,
@@ -23,6 +24,8 @@ export type CreateGameOptions = {
   readonly keybinds?: KeybindConfig
   /** Persisted compact minimap corner from React settings. */
   readonly minimapCorner?: MinimapCorner
+  /** Current local ability-bar slot ids from React shop state. */
+  readonly abilitySlots?: readonly (string | null)[]
   /** Reports local prediction reconciliation classifications to React. */
   readonly onPredictionCorrection?: (correction: RubberbandCorrection) => void
   /** Reports active local input samples to React for stale-message gating. */
@@ -44,6 +47,7 @@ export const createGame = (
   const localPlayerId = options?.localPlayerId
   const keybinds = options?.keybinds
   const minimapCorner = options?.minimapCorner
+  const abilitySlots = options?.abilitySlots
   const onPredictionCorrection = options?.onPredictionCorrection
   const onActiveLocalInput = options?.onActiveLocalInput
   const needRegistryBoot =
@@ -51,6 +55,7 @@ export const createGame = (
     localPlayerId != null ||
     keybinds != null ||
     minimapCorner != null ||
+    abilitySlots != null ||
     onPredictionCorrection != null ||
     onActiveLocalInput != null
   const callbacks: Phaser.Types.Core.GameConfig["callbacks"] = {
@@ -67,6 +72,9 @@ export const createGame = (
         }
         if (minimapCorner) {
           game.registry.set(WW_MINIMAP_CORNER_REGISTRY_KEY, minimapCorner)
+        }
+        if (abilitySlots) {
+          game.registry.set(WW_ABILITY_SLOTS_REGISTRY_KEY, [...abilitySlots])
         }
         if (onPredictionCorrection) {
           game.registry.set(

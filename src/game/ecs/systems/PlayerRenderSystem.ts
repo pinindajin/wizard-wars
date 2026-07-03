@@ -2,7 +2,11 @@ import Phaser from "phaser"
 
 import { clientLogger } from "@/lib/clientLogger"
 import { HERO_CONFIGS, normalizeHeroId, type HeroId } from "@/shared/balance-config/heroes"
-import { ABILITY_CONFIGS } from "@/shared/balance-config/abilities"
+import { ABILITY_CONFIGS, DEFAULT_ABILITY_SLOT_0_ID } from "@/shared/balance-config/abilities"
+import {
+  getSpellAnimationConfig,
+  msToTickOffset,
+} from "@/shared/balance-config/animationConfig"
 import {
   PREDICTION_SNAP_THRESHOLD_PX,
   REPLAY_SMOOTHING_MS,
@@ -21,6 +25,9 @@ import {
   PLAYER_WORLD_COLLISION_FOOTPRINT,
   SWING_MOVE_SPEED_MULTIPLIER,
   SWIFT_BOOTS_SPEED_BONUS,
+  JUMP_AIRBORNE_COLLIDER_EPSILON_PX,
+  JUMP_GRAVITY_PX_PER_SEC2,
+  JUMP_INITIAL_VZ_PX_PER_SEC,
   JUMP_SPRITE_Y_PIXELS_PER_SIM_Z,
 } from "@/shared/balance-config/combat"
 import type {
@@ -28,6 +35,8 @@ import type {
   GameNetTimingPayload,
   PlayerAnimState,
   PlayerDeathPayload,
+  PlayerInputPayload,
+  PlayerTerrainState,
   PlayerRespawnPayload,
   PrimaryMeleeAttackPayload,
 } from "@/shared/types"
@@ -46,7 +55,10 @@ import {
   ClientPlayerState,
   ClientRenderPos,
 } from "../components"
-import { WW_LOCAL_PLAYER_ID_REGISTRY_KEY } from "../../constants"
+import {
+  WW_ABILITY_SLOTS_REGISTRY_KEY,
+  WW_LOCAL_PLAYER_ID_REGISTRY_KEY,
+} from "../../constants"
 import { addEntity, removeEntity } from "../world"
 import { animUsesMouseAim } from "@/shared/playerAnimAim"
 import {
@@ -64,10 +76,13 @@ import {
 import {
   reconcileLocal,
   type LocalAckState,
+  type LocalReplayInputContextResolver,
   type LocalReplayContext,
 } from "./ReconciliationSystem"
 import type { RubberbandCorrection } from "@/shared/performanceIndicators"
-import { LocalInputHistory } from "../../network/LocalInputHistory"
+import {
+  LocalInputHistory,
+} from "../../network/LocalInputHistory"
 import { RemoteInterpolationBuffer } from "./RemoteInterpolationBuffer"
 
 /**
@@ -78,6 +93,62 @@ import { RemoteInterpolationBuffer } from "./RemoteInterpolationBuffer"
  */
 const MAX_SIM_LAG_MS = 250
 const ARENA_BOUNDS = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
+
+type LocalInputForSimStep = PlayerInputPayload | null | undefined
+type LocalInputForSimStepProvider = () => LocalInputForSimStep
+
+type LocalPredictedCast = {
+  abilityId: string
+  startedInputSeq: number
+  totalTicks: number
+  remainingTicks: number
+}
+
+type LocalPredictedAbilityCooldown = {
+  endsAtServerTimeMs: number
+  startedInputSeq: number
+}
+
+type LocalPredictedAbilityChargeReservation = {
+  startedInputSeq: number
+  remainingChargesAfterReservation: number
+}
+
+type LocalPredictionTerrainContext = {
+  readonly jumpZ: number
+  readonly terrainState: PlayerTerrainState
+  readonly jumpStartedInLava: boolean
+}
+
+function hasJumpAirLockZ(jumpZ: number | null | undefined): boolean {
+  return (jumpZ ?? 0) > JUMP_AIRBORNE_COLLIDER_EPSILON_PX
+}
+
+function predictedJumpZForElapsedTicks(elapsedTicks: number): number {
+  let z = JUMP_AIRBORNE_COLLIDER_EPSILON_PX + 1
+  let vz = JUMP_INITIAL_VZ_PX_PER_SEC
+  for (let i = 0; i < elapsedTicks; i++) {
+    vz -= JUMP_GRAVITY_PX_PER_SEC2 * TICK_DT_SEC
+    z += vz * TICK_DT_SEC
+    if (z <= 0) return 0
+  }
+  return z
+}
+
+function predictedJumpAirLockTicks(): number {
+  let totalTicks = 1
+  let airborne = true
+
+  while (airborne) {
+    const z = predictedJumpZForElapsedTicks(totalTicks)
+    airborne = hasJumpAirLockZ(z)
+    if (airborne) totalTicks += 1
+  }
+
+  return totalTicks
+}
+
+const PREDICTED_JUMP_AIR_LOCK_TICKS = predictedJumpAirLockTicks()
 
 /** Oscillation frequency for invulnerability alpha pulse (Hz). */
 const INVULN_PULSE_HZ = 4
@@ -245,6 +316,21 @@ export class PlayerRenderSystem {
   /** Optional React bridge for local correction classifications. */
   private predictionCorrectionHandler?: (correction: RubberbandCorrection) => void
 
+  /** Local-only cast window used until authoritative casting state catches up. */
+  private localPredictedCast: LocalPredictedCast | null = null
+
+  /** Same-ability cooldown windows predicted before authoritative state catches up. */
+  private readonly localPredictedAbilityCooldowns = new Map<
+    string,
+    LocalPredictedAbilityCooldown
+  >()
+
+  /** Charge budgets reserved by local prediction before ability-state deltas arrive. */
+  private readonly localPredictedAbilityCharges = new Map<
+    string,
+    LocalPredictedAbilityChargeReservation[]
+  >()
+
   /**
    * Offset from server clock to local clock, roughly `serverTime - Date.now()`.
    * Updated on every authoritative batch so remote interpolation can map
@@ -280,6 +366,7 @@ export class PlayerRenderSystem {
   applyFullSync(payload: GameStateSyncPayload): void {
     this.applyNetTiming(payload.timing)
     this.updateServerTimeOffset(payload.serverTimeMs)
+    this._clearAllLocalPredictedAbilityGuards()
     const keep = new Set(payload.players.map((p) => p.id))
     for (const id of [...this.entries.keys()]) {
       if (!keep.has(id)) {
@@ -457,7 +544,15 @@ export class PlayerRenderSystem {
       moveState: state.moveState,
     }
     const simCurr = { x: entry.simCurrX, y: entry.simCurrY }
-    const result = reconcileLocal(ack, this.localInputHistory, simCurr, ctx)
+    this._clearLocalPredictedCastFromAck(state, ack, ctx)
+    this._reconcileLocalPredictedAbilityGuardsFromAuthority(state, ack, ctx)
+    const result = reconcileLocal(
+      ack,
+      this.localInputHistory,
+      simCurr,
+      ctx,
+      this._localReplayContextResolver(state, ctx, ack),
+    )
     this.predictionCorrectionHandler?.(result.correction)
 
     if (result.correction === "snap") {
@@ -792,6 +887,9 @@ export class PlayerRenderSystem {
           payload.spawnY,
           "respawn",
         )
+        if (state.playerId === this.localPlayerId) {
+          this._clearAllLocalPredictedAbilityGuards()
+        }
         break
       }
     }
@@ -877,8 +975,8 @@ export class PlayerRenderSystem {
    * accumulator as `alpha`. Remote players are sampled from the
    * interpolation buffer at `now - remoteRenderDelayMs`.
    *
-   * Arena threads an `onSimStep` callback through here so input send +
-   * history append happen exactly **once per committed sim tick**,
+   * Arena threads an input provider and `onSimStep` callback through here
+   * so prediction, input send, and history append happen exactly **once per committed sim tick**,
    * matching the server's 60 Hz tick cadence regardless of client
    * render FPS. Variable-delta drift between prediction and replay is
    * therefore eliminated.
@@ -886,14 +984,16 @@ export class PlayerRenderSystem {
    * @param delta - Frame delta time in ms.
    * @param localMoveIntent - Local player's current movement intent for prediction.
    * @param onSimStep - Optional callback invoked once per sim tick
-   *   after prediction has advanced, used by Arena to append to the
-   *   local input history and `sendPlayerInput` so each network
-   *   payload corresponds to exactly one committed prediction tick.
+   *   after prediction has advanced with the same input, used by Arena
+   *   to append to the local input history and `sendPlayerInput`.
+   * @param localInputForSimStep - Optional callback that builds the
+   *   outbound input before prediction for this committed sim tick.
    */
   update(
     delta: number,
     localMoveIntent: MoveIntent,
-    onSimStep?: () => void,
+    onSimStep?: (input: PlayerInputPayload | null) => void,
+    localInputForSimStep?: LocalInputForSimStepProvider,
   ): void {
     this.simAccumulatorMs = Math.min(
       this.simAccumulatorMs + delta,
@@ -901,11 +1001,12 @@ export class PlayerRenderSystem {
     )
     while (this.simAccumulatorMs >= TICK_MS) {
       this.simAccumulatorMs -= TICK_MS
-      this._simStep(localMoveIntent)
-      onSimStep?.()
+      const inputForStep = localInputForSimStep?.() ?? null
+      this._simStep(localMoveIntent, inputForStep)
+      onSimStep?.(inputForStep)
     }
 
-    const alpha = TICK_MS > 0 ? this.simAccumulatorMs / TICK_MS : 0
+    const alpha = this.simAccumulatorMs / TICK_MS
     this._renderStep(delta, alpha, localMoveIntent)
   }
 
@@ -917,7 +1018,10 @@ export class PlayerRenderSystem {
    * first so the subsequent render step can interpolate visually across
    * the newly-committed tick.
    */
-  private _simStep(localMoveIntent: MoveIntent): void {
+  private _simStep(
+    localMoveIntent: MoveIntent,
+    inputForStep: PlayerInputPayload | null,
+  ): void {
     for (const [id, entry] of this.entries) {
       const state = ClientPlayerState[id]
       if (!state) continue
@@ -927,7 +1031,16 @@ export class PlayerRenderSystem {
       entry.simPrevX = entry.simCurrX
       entry.simPrevY = entry.simCurrY
 
-      const castMoveMult = this._clientCastMoveMultiplier(state)
+      this._clearLocalPredictedCastFromAuthority(state)
+      const localCastAbilityId = this._localCastAbilityIdForInput(state, inputForStep)
+      if (localCastAbilityId && inputForStep) {
+        this._startLocalPredictedCast(state, inputForStep, localCastAbilityId)
+      }
+      const activeLocalPredictedCast = this._activeLocalPredictedCast(state)
+      const activeLocalCastAbilityId =
+        localCastAbilityId ?? activeLocalPredictedCast?.abilityId ?? null
+      const predictionMoveIntent = inputForStep ?? localMoveIntent
+      const castMoveMult = this._clientCastMoveMultiplier(state, activeLocalCastAbilityId)
       const swingMult =
         state.animState === "primary_melee_attack"
           ? SWING_MOVE_SPEED_MULTIPLIER
@@ -936,17 +1049,27 @@ export class PlayerRenderSystem {
         state.animState === "primary_melee_attack" || !state.hasSwiftBoots
           ? 1
           : 1 + SWIFT_BOOTS_SPEED_BONUS
-      const colliderSet = terrainColliderSetForPlayerState(state.jumpZ ?? 0, state.terrainState, {
-        jumpStartedInLava: state.jumpStartedInLava ?? false,
+      const terrainContext = this._localPredictionTerrainContext(
+        state,
+        activeLocalCastAbilityId,
+        activeLocalPredictedCast,
+      )
+      const colliderSet = terrainColliderSetForPlayerState(terrainContext.jumpZ, terrainContext.terrainState, {
+        jumpStartedInLava: terrainContext.jumpStartedInLava,
       })
       const candidateGate = worldCandidateGateForPlayerState(
-        state.jumpZ ?? 0,
-        state.terrainState,
+        terrainContext.jumpZ,
+        terrainContext.terrainState,
       )
       if (
-        this._canPredictMovement(state, localMoveIntent, castMoveMult)
+        this._canPredictMovement(
+          state,
+          predictionMoveIntent,
+          castMoveMult,
+          activeLocalCastAbilityId,
+        )
       ) {
-        const { dx, dy } = normalizedMoveFromWASD(localMoveIntent)
+        const { dx, dy } = normalizedMoveFromWASD(predictionMoveIntent)
         const step = worldStepFromIntent(
           dx,
           dy,
@@ -1006,6 +1129,7 @@ export class PlayerRenderSystem {
           entry.simCurrY = entry.smoothTargetY
         }
       }
+      this._consumeLocalPredictedCastTick(state)
     }
   }
 
@@ -1245,9 +1369,14 @@ export class PlayerRenderSystem {
    */
   private _clientCastMoveMultiplier(
     state: (typeof ClientPlayerState)[number],
+    localCastAbilityId: string | null = null,
   ): number {
     if (state.castingAbilityId) {
       const cfg = ABILITY_CONFIGS[state.castingAbilityId]
+      if (cfg) return cfg.castMoveSpeedMultiplier
+    }
+    if (localCastAbilityId) {
+      const cfg = ABILITY_CONFIGS[localCastAbilityId]
       if (cfg) return cfg.castMoveSpeedMultiplier
     }
     if (state.animState === "heavy_cast") {
@@ -1264,6 +1393,7 @@ export class PlayerRenderSystem {
     state: (typeof ClientPlayerState)[number],
     moveIntent: MoveIntent,
     castMoveMult: number,
+    localCastAbilityId: string | null = null,
   ): boolean {
     const { dx, dy } = normalizedMoveFromWASD(moveIntent)
     if (dx === 0 && dy === 0) return false
@@ -1274,10 +1404,619 @@ export class PlayerRenderSystem {
       return false
     }
     if (state.moveState === "rooted") return false
+    if (localCastAbilityId) return castMoveMult > 0
     if (state.animState === "light_cast" || state.animState === "heavy_cast") {
       return castMoveMult > 0
     }
     return true
+  }
+
+  /**
+   * Resolves an outbound local ability-slot input to an ability id that should
+   * affect this tick's optimistic movement. Returns null when the current
+   * authoritative state suggests the server will reject or ignore the cast.
+   */
+  private _localCastAbilityIdForInput(
+    state: (typeof ClientPlayerState)[number],
+    input: PlayerInputPayload | null,
+    options: {
+      readonly ignorePredictedCast?: boolean
+      readonly ignorePredictedAbilityCooldown?: boolean
+      readonly ignorePredictedAbilityCharges?: boolean
+      readonly currentServerTimeMs?: number
+    } = {},
+  ): string | null {
+    if (!input || input.abilitySlot === null) return null
+    if (
+      state.animState === "dying" ||
+      state.animState === "dead" ||
+      state.animState === "light_cast" ||
+      state.animState === "heavy_cast" ||
+      state.castingAbilityId
+    ) {
+      return null
+    }
+    if (this._hasAuthoritativeJumpAirLock(state)) {
+      return null
+    }
+    if (
+      !options.ignorePredictedCast &&
+      this._activeLocalPredictedCastAbilityId(state)
+    ) {
+      return null
+    }
+
+    const abilityId = this._abilityIdForSlot(input.abilitySlot)
+    if (!abilityId || !ABILITY_CONFIGS[abilityId]) return null
+    if (this._serverRejectsJumpCast(state, abilityId)) return null
+
+    const currentServerTimeMs =
+      options.currentServerTimeMs ?? this.getEstimatedServerTimeMs()
+    if (
+      !options.ignorePredictedAbilityCooldown &&
+      this._isLocalPredictedAbilityCooldownActive(
+        abilityId,
+        currentServerTimeMs,
+      )
+    ) {
+      return null
+    }
+
+    const runtime = state.abilityStates[abilityId]
+    if (
+      runtime?.cooldownEndsAtServerTimeMs !== null &&
+      runtime?.cooldownEndsAtServerTimeMs !== undefined &&
+      runtime.cooldownEndsAtServerTimeMs > currentServerTimeMs
+    ) {
+      return null
+    }
+    if (
+      runtime?.charges !== null &&
+      runtime?.charges !== undefined &&
+      !this._hasLocalPredictedAbilityChargeAvailable(
+        abilityId,
+        runtime.charges,
+        options.ignorePredictedAbilityCharges === true,
+      )
+    ) {
+      return null
+    }
+
+    return abilityId
+  }
+
+  private _activeLocalPredictedCast(
+    state: (typeof ClientPlayerState)[number],
+  ): LocalPredictedCast | null {
+    this._clearLocalPredictedCastFromAuthority(state)
+    if (
+      this.localPredictedCast &&
+      this.localPredictedCast.remainingTicks <= 0
+    ) {
+      this.localPredictedCast = null
+    }
+    return this.localPredictedCast
+  }
+
+  private _activeLocalPredictedCastAbilityId(
+    state: (typeof ClientPlayerState)[number],
+  ): string | null {
+    return this._activeLocalPredictedCast(state)?.abilityId ?? null
+  }
+
+  private _startLocalPredictedCast(
+    state: (typeof ClientPlayerState)[number],
+    input: PlayerInputPayload,
+    abilityId: string,
+  ): void {
+    const totalTicks = this._localPredictedCastTicks(state, abilityId)
+    if (totalTicks <= 0) return
+    this.localPredictedCast = {
+      abilityId,
+      startedInputSeq: input.seq,
+      totalTicks,
+      remainingTicks: totalTicks,
+    }
+    this._startLocalPredictedAbilityCooldown(
+      abilityId,
+      totalTicks,
+      input.seq,
+    )
+    this._reserveLocalPredictedAbilityCharge(state, abilityId, input.seq)
+  }
+
+  private _localPredictedCastTicks(
+    state: (typeof ClientPlayerState)[number],
+    abilityId: string,
+  ): number {
+    const cfg = ABILITY_CONFIGS[abilityId]
+    if (!cfg) return 0
+    if (abilityId === "jump") return PREDICTED_JUMP_AIR_LOCK_TICKS
+    if (cfg.castMs <= 0) return 0
+
+    const heroId = normalizeHeroId(state.heroId)
+    return Math.max(
+      1,
+      msToTickOffset(getSpellAnimationConfig(heroId, abilityId).durationMs),
+    )
+  }
+
+  private _consumeLocalPredictedCastTick(
+    state: (typeof ClientPlayerState)[number],
+  ): void {
+    if (!this._activeLocalPredictedCastAbilityId(state)) return
+    this.localPredictedCast!.remainingTicks -= 1
+    if (this.localPredictedCast!.remainingTicks <= 0) {
+      this.localPredictedCast = null
+    }
+  }
+
+  private _clearLocalPredictedCastFromAuthority(
+    state: (typeof ClientPlayerState)[number],
+  ): void {
+    if (
+      state.castingAbilityId ||
+      state.moveState === "rooted" ||
+      this._hasAuthoritativeJumpAirLock(state)
+    ) {
+      this.localPredictedCast = null
+    }
+  }
+
+  private _clearAllLocalPredictedAbilityGuards(): void {
+    this.localPredictedCast = null
+    this.localPredictedAbilityCooldowns.clear()
+    this.localPredictedAbilityCharges.clear()
+  }
+
+  private _clearLocalPredictedAbilityGuardsForInput(
+    abilityId: string,
+    startedInputSeq: number,
+  ): void {
+    const cooldown = this.localPredictedAbilityCooldowns.get(abilityId)
+    if (cooldown && cooldown.startedInputSeq <= startedInputSeq) {
+      this.localPredictedAbilityCooldowns.delete(abilityId)
+    }
+
+    const charges = this.localPredictedAbilityCharges.get(abilityId)
+    if (charges) {
+      const remainingCharges = charges.filter(
+        (charge) => charge.startedInputSeq !== startedInputSeq,
+      )
+      if (remainingCharges.length > 0) {
+        this.localPredictedAbilityCharges.set(abilityId, remainingCharges)
+      } else {
+        this.localPredictedAbilityCharges.delete(abilityId)
+      }
+    }
+  }
+
+  private _setLocalPredictedAbilityChargeReservations(
+    abilityId: string,
+    reservations: LocalPredictedAbilityChargeReservation[],
+  ): void {
+    if (reservations.length > 0) {
+      this.localPredictedAbilityCharges.set(abilityId, reservations)
+    } else {
+      this.localPredictedAbilityCharges.delete(abilityId)
+    }
+  }
+
+  private _clearLocalPredictedCastFromAck(
+    state: (typeof ClientPlayerState)[number],
+    ack: LocalAckState,
+    ctx: LocalReplayContext,
+  ): void {
+    this._clearLocalPredictedCastFromAuthority(state)
+    if (!this.localPredictedCast) return
+    if (
+      ctx.castingAbilityId ||
+      ctx.moveState === "rooted" ||
+      this._replayContextHasJumpAirLock(ctx)
+    ) {
+      return
+    }
+    if (ack.lastProcessedInputSeq >= this.localPredictedCast.startedInputSeq) {
+      const rejectedCast = this.localPredictedCast
+      this.localPredictedCast = null
+      this._clearLocalPredictedAbilityGuardsForInput(
+        rejectedCast.abilityId,
+        rejectedCast.startedInputSeq,
+      )
+    }
+  }
+
+  private _reconcileLocalPredictedAbilityGuardsFromAuthority(
+    state: (typeof ClientPlayerState)[number],
+    ack: LocalAckState,
+    ctx: LocalReplayContext,
+  ): void {
+    const currentServerTimeMs = ack.serverTimeMs ?? this.getEstimatedServerTimeMs()
+    const allowReadyStateClear = ack.abilityStatesChanged === true
+
+    for (const [abilityId, cooldown] of this.localPredictedAbilityCooldowns) {
+      if (ack.lastProcessedInputSeq < cooldown.startedInputSeq) continue
+
+      const runtime = state.abilityStates[abilityId]
+      const cooldownEndsAtServerTimeMs = runtime?.cooldownEndsAtServerTimeMs
+      if (
+        cooldownEndsAtServerTimeMs !== null &&
+        cooldownEndsAtServerTimeMs !== undefined &&
+        cooldownEndsAtServerTimeMs > currentServerTimeMs
+      ) {
+        this.localPredictedAbilityCooldowns.delete(abilityId)
+        continue
+      }
+
+      if (
+        allowReadyStateClear &&
+        this._authoritativeAbilityCooldownReady(runtime, currentServerTimeMs) &&
+        !this._hasAbilityActiveInPredictionOrAuthority(state, abilityId, ctx)
+      ) {
+        this.localPredictedAbilityCooldowns.delete(abilityId)
+      }
+    }
+
+    for (const [abilityId, reservations] of this.localPredictedAbilityCharges) {
+      const runtime = state.abilityStates[abilityId]
+      const charges = runtime?.charges
+      if (charges === null || charges === undefined) {
+        this.localPredictedAbilityCharges.delete(abilityId)
+        continue
+      }
+      if (
+        allowReadyStateClear &&
+        runtime.maxCharges !== null &&
+        runtime.maxCharges !== undefined &&
+        charges >= runtime.maxCharges &&
+        !this._hasAbilityActiveInPredictionOrAuthority(state, abilityId, ctx)
+      ) {
+        this.localPredictedAbilityCharges.delete(abilityId)
+        continue
+      }
+
+      this._setLocalPredictedAbilityChargeReservations(
+        abilityId,
+        reservations.filter(
+          (reservation) =>
+            ack.lastProcessedInputSeq < reservation.startedInputSeq ||
+            charges > reservation.remainingChargesAfterReservation,
+        ),
+      )
+    }
+  }
+
+  private _authoritativeAbilityCooldownReady(
+    runtime:
+      | (typeof ClientPlayerState)[number]["abilityStates"][string]
+      | undefined,
+    currentServerTimeMs: number,
+  ): boolean {
+    if (!runtime) return false
+    return (
+      runtime.cooldownEndsAtServerTimeMs === null ||
+      runtime.cooldownEndsAtServerTimeMs === undefined ||
+      runtime.cooldownEndsAtServerTimeMs <= currentServerTimeMs
+    )
+  }
+
+  private _hasAbilityActiveInPredictionOrAuthority(
+    state: (typeof ClientPlayerState)[number],
+    abilityId: string,
+    ctx: LocalReplayContext,
+  ): boolean {
+    if (
+      this.localPredictedCast?.abilityId === abilityId &&
+      this.localPredictedCast.remainingTicks > 0
+    ) {
+      return true
+    }
+    if (state.castingAbilityId === abilityId || ctx.castingAbilityId === abilityId) {
+      return true
+    }
+    if (abilityId === "jump") {
+      return (
+        this._hasAuthoritativeJumpAirLock(state) ||
+        this._replayContextHasJumpAirLock(ctx)
+      )
+    }
+    return (
+      state.moveState === "rooted" ||
+      state.moveState === "casting" ||
+      ctx.moveState === "rooted" ||
+      ctx.moveState === "casting"
+    )
+  }
+
+  private _localReplayContextResolver(
+    state: (typeof ClientPlayerState)[number],
+    ctx: LocalReplayContext,
+    ack?: LocalAckState,
+  ): LocalReplayInputContextResolver {
+    let replayCast =
+      ctx.castingAbilityId ||
+      ctx.moveState === "rooted" ||
+      this._replayContextHasJumpAirLock(ctx)
+        ? null
+        : this.localPredictedCast
+          ? {
+            ...this.localPredictedCast,
+            remainingTicks: this.localPredictedCast.totalTicks,
+          }
+          : null
+
+    return (input, baseCtx) => {
+      if (
+        baseCtx.castingAbilityId ||
+        baseCtx.moveState === "rooted" ||
+        this._replayContextHasJumpAirLock(baseCtx)
+      ) {
+        return baseCtx
+      }
+
+      const replayCastActive =
+        replayCast &&
+        replayCast.remainingTicks > 0 &&
+        input.seq >= replayCast.startedInputSeq
+
+      if (!replayCastActive) {
+        const localCastAbilityId = this._localCastAbilityIdForInput(
+          state,
+          input,
+          {
+            ignorePredictedCast: true,
+            ignorePredictedAbilityCooldown: true,
+            ignorePredictedAbilityCharges: true,
+            currentServerTimeMs: this._serverTimeForReplayedInput(ack, input),
+          },
+        )
+        if (localCastAbilityId) {
+          const totalTicks = this._localPredictedCastTicks(
+            state,
+            localCastAbilityId,
+          )
+          replayCast =
+            totalTicks > 0
+              ? {
+                abilityId: localCastAbilityId,
+                startedInputSeq: input.seq,
+                totalTicks,
+                remainingTicks: totalTicks,
+              }
+              : null
+        }
+      }
+
+      if (
+        !replayCast ||
+        replayCast.remainingTicks <= 0 ||
+        input.seq < replayCast.startedInputSeq
+      ) {
+        return baseCtx
+      }
+
+      const elapsedTicks = replayCast.totalTicks - replayCast.remainingTicks
+      replayCast.remainingTicks -= 1
+      return this._localReplayContextForAbility(
+        baseCtx,
+        replayCast.abilityId,
+        elapsedTicks,
+      )
+    }
+  }
+
+  private _localReplayContextForInput(
+    state: (typeof ClientPlayerState)[number],
+    input: PlayerInputPayload,
+    baseCtx: LocalReplayContext,
+  ): LocalReplayContext {
+    if (
+      baseCtx.castingAbilityId ||
+      baseCtx.moveState === "rooted" ||
+      this._replayContextHasJumpAirLock(baseCtx)
+    ) {
+      return baseCtx
+    }
+
+    const localCastAbilityId = this._localCastAbilityIdForInput(
+      state,
+      input,
+      {
+        ignorePredictedCast: true,
+        ignorePredictedAbilityCooldown: true,
+        ignorePredictedAbilityCharges: true,
+      },
+    )
+    if (!localCastAbilityId) return baseCtx
+
+    return this._localReplayContextForAbility(baseCtx, localCastAbilityId, 0)
+  }
+
+  private _localReplayContextForAbility(
+    baseCtx: LocalReplayContext,
+    abilityId: string,
+    predictedElapsedTicks: number,
+  ): LocalReplayContext {
+    if (abilityId === "jump") {
+      return {
+        ...baseCtx,
+        ...this._predictedJumpTerrainContext(
+          baseCtx.terrainState,
+          predictedElapsedTicks,
+        ),
+        castingAbilityId: null,
+      }
+    }
+
+    const castMoveMult =
+      ABILITY_CONFIGS[abilityId].castMoveSpeedMultiplier
+    return {
+      ...baseCtx,
+      castingAbilityId: abilityId,
+      moveState: castMoveMult === 0 ? "rooted" : "casting",
+    }
+  }
+
+  private _localPredictionTerrainContext(
+    state: (typeof ClientPlayerState)[number],
+    activeLocalCastAbilityId: string | null,
+    activeLocalPredictedCast: LocalPredictedCast | null,
+  ): LocalPredictionTerrainContext {
+    if (activeLocalCastAbilityId === "jump") {
+      const elapsedTicks =
+        activeLocalPredictedCast?.abilityId === "jump"
+          ? activeLocalPredictedCast.totalTicks -
+            activeLocalPredictedCast.remainingTicks
+          : 0
+      return this._predictedJumpTerrainContext(state.terrainState, elapsedTicks)
+    }
+
+    return {
+      jumpZ: state.jumpZ ?? 0,
+      terrainState: state.terrainState,
+      jumpStartedInLava: state.jumpStartedInLava ?? false,
+    }
+  }
+
+  private _predictedJumpTerrainContext(
+    terrainState: PlayerTerrainState,
+    elapsedTicks: number,
+  ): LocalPredictionTerrainContext {
+    return {
+      jumpZ: predictedJumpZForElapsedTicks(elapsedTicks),
+      terrainState: "land",
+      jumpStartedInLava: terrainState === "lava",
+    }
+  }
+
+  private _hasAuthoritativeJumpAirLock(
+    state: (typeof ClientPlayerState)[number],
+  ): boolean {
+    return state.animState === "jump" && hasJumpAirLockZ(state.jumpZ)
+  }
+
+  private _replayContextHasJumpAirLock(ctx: LocalReplayContext): boolean {
+    return hasJumpAirLockZ(ctx.jumpZ)
+  }
+
+  private _serverRejectsJumpCast(
+    state: (typeof ClientPlayerState)[number],
+    abilityId: string,
+  ): boolean {
+    return (
+      abilityId === "jump" &&
+      (state.moveState === "swinging" ||
+        state.moveState === "knockback" ||
+        state.animState === "primary_melee_attack")
+    )
+  }
+
+  private _startLocalPredictedAbilityCooldown(
+    abilityId: string,
+    castTicks: number,
+    startedInputSeq: number,
+  ): void {
+    const cfg = ABILITY_CONFIGS[abilityId]
+    if (!cfg || cfg.cooldownMs <= 0) return
+
+    this.localPredictedAbilityCooldowns.set(abilityId, {
+      endsAtServerTimeMs:
+        this.getEstimatedServerTimeMs() + castTicks * TICK_MS + cfg.cooldownMs,
+      startedInputSeq,
+    })
+  }
+
+  private _reserveLocalPredictedAbilityCharge(
+    state: (typeof ClientPlayerState)[number],
+    abilityId: string,
+    startedInputSeq: number,
+  ): void {
+    const runtime = state.abilityStates[abilityId]
+    if (
+      runtime?.charges === null ||
+      runtime?.charges === undefined ||
+      runtime.charges <= 0
+    ) {
+      return
+    }
+
+    const reservations = this._activeLocalPredictedAbilityChargeReservations(
+      abilityId,
+      runtime.charges,
+    )
+    reservations.push({
+      startedInputSeq,
+      remainingChargesAfterReservation: Math.max(
+        0,
+        runtime.charges - reservations.length - 1,
+      ),
+    })
+    this._setLocalPredictedAbilityChargeReservations(abilityId, reservations)
+  }
+
+  private _isLocalPredictedAbilityCooldownActive(
+    abilityId: string,
+    currentServerTimeMs: number,
+  ): boolean {
+    this._pruneLocalPredictedAbilityCooldowns(currentServerTimeMs)
+    const cooldown = this.localPredictedAbilityCooldowns.get(abilityId)
+    return cooldown ? cooldown.endsAtServerTimeMs > currentServerTimeMs : false
+  }
+
+  private _pruneLocalPredictedAbilityCooldowns(
+    currentServerTimeMs: number,
+  ): void {
+    for (const [abilityId, cooldown] of this.localPredictedAbilityCooldowns) {
+      if (cooldown.endsAtServerTimeMs <= currentServerTimeMs) {
+        this.localPredictedAbilityCooldowns.delete(abilityId)
+      }
+    }
+  }
+
+  private _hasLocalPredictedAbilityChargeAvailable(
+    abilityId: string,
+    charges: number,
+    ignorePredictedAbilityCharges: boolean,
+  ): boolean {
+    if (ignorePredictedAbilityCharges) return charges > 0
+
+    const reservations = this._activeLocalPredictedAbilityChargeReservations(
+      abilityId,
+      charges,
+    )
+    this._setLocalPredictedAbilityChargeReservations(abilityId, reservations)
+    if (charges <= 0) return false
+
+    return charges - reservations.length > 0
+  }
+
+  private _activeLocalPredictedAbilityChargeReservations(
+    abilityId: string,
+    charges: number,
+  ): LocalPredictedAbilityChargeReservation[] {
+    const reservations = this.localPredictedAbilityCharges.get(abilityId) ?? []
+    return reservations.filter(
+      (reservation) => charges > reservation.remainingChargesAfterReservation,
+    )
+  }
+
+  private _serverTimeForReplayedInput(
+    ack: LocalAckState | undefined,
+    input: PlayerInputPayload,
+  ): number | undefined {
+    if (ack?.serverTimeMs === undefined) return undefined
+    const replayedTicks = Math.max(0, input.seq - ack.lastProcessedInputSeq)
+    return ack.serverTimeMs + replayedTicks * TICK_MS
+  }
+
+  /** Resolves a local ability-bar index through React-owned shop state. */
+  private _abilityIdForSlot(slotIndex: number): string | null {
+    const raw = this.scene.game.registry.get(WW_ABILITY_SLOTS_REGISTRY_KEY)
+    if (Array.isArray(raw)) {
+      const value = raw[slotIndex]
+      return typeof value === "string" ? value : null
+    }
+    return slotIndex === 0 ? DEFAULT_ABILITY_SLOT_0_ID : null
   }
 
   /**
@@ -1315,6 +2054,7 @@ export class PlayerRenderSystem {
     for (const [id] of this.entries) {
       this._despawnPlayer(id)
     }
+    this._clearAllLocalPredictedAbilityGuards()
     this.localInputHistory.clear()
     this.remoteBuffer.clear()
   }

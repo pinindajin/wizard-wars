@@ -3,6 +3,8 @@ import { act, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { mountGame } from "@/game/main"
+import { WW_ABILITY_SLOTS_REGISTRY_KEY } from "@/game/constants"
+import { DEFAULT_ABILITY_SLOT_0_ID } from "@/shared/balance-config/abilities"
 import { WsEvent } from "@/shared/events"
 import type {
   AnyWsMessage,
@@ -19,6 +21,16 @@ const testState = vi.hoisted(() => ({
     replace: vi.fn(),
   },
   handlers: new Set<MessageHandler>(),
+  mountedGame: {
+    registry: {
+      set: vi.fn(),
+      get: vi.fn(() => null),
+      events: {
+        on: vi.fn(),
+        off: vi.fn(),
+      },
+    },
+  },
 }))
 
 vi.mock("next/navigation", () => ({
@@ -42,7 +54,7 @@ vi.mock("@/lib/trpc", () => ({
 vi.mock("@/game/main", () => ({
   mountGame: vi.fn(() => ({
     destroy: vi.fn(),
-    game: null,
+    game: testState.mountedGame,
   })),
 }))
 
@@ -164,6 +176,20 @@ describe("LobbyGameHost performance indicators", () => {
     }
   })
 
+  it("mounts Phaser with the default fireball slot before shop state arrives", async () => {
+    render(<LobbyGameHost lobbyId="room-1" />)
+    await waitFor(() => expect(mountGame).toHaveBeenCalled())
+
+    const mountOptions = vi.mocked(mountGame).mock.calls[0]![0]
+    expect(mountOptions.abilitySlots).toEqual([
+      DEFAULT_ABILITY_SLOT_0_ID,
+      null,
+      null,
+      null,
+      null,
+    ])
+  })
+
   it("clears degraded server status when the match leaves active play", async () => {
     render(<LobbyGameHost lobbyId="room-1" />)
     await waitFor(() => expect(testState.handlers.size).toBeGreaterThan(0))
@@ -190,5 +216,37 @@ describe("LobbyGameHost performance indicators", () => {
     await waitFor(() => {
       expect(screen.queryByTestId("performance-issue-server_cpu")).toBeNull()
     })
+  })
+
+  it("mirrors shop ability slots into the Phaser registry without remounting", async () => {
+    render(<LobbyGameHost lobbyId="room-1" />)
+    await waitFor(() => expect(mountGame).toHaveBeenCalled())
+    await waitFor(() => expect(testState.handlers.size).toBeGreaterThan(0))
+
+    act(() => {
+      emit({
+        type: WsEvent.ShopState,
+        payload: {
+          gold: 10,
+          items: [{ itemId: "lightning_bolt" }],
+          augmentItemIds: [],
+          abilitySlots: ["fireball", null, "lightning_bolt", null, null],
+          quickItemSlots: [
+            { itemId: null, charges: 0 },
+            { itemId: null, charges: 0 },
+            { itemId: null, charges: 0 },
+            { itemId: null, charges: 0 },
+          ],
+        },
+      })
+    })
+
+    await waitFor(() => {
+      expect(testState.mountedGame.registry.set).toHaveBeenCalledWith(
+        WW_ABILITY_SLOTS_REGISTRY_KEY,
+        ["fireball", null, "lightning_bolt", null, null],
+      )
+    })
+    expect(mountGame).toHaveBeenCalledTimes(1)
   })
 })

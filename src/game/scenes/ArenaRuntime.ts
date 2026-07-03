@@ -23,6 +23,7 @@ import type {
   PlayerRespawnPayload,
   DamageFloatPayload,
   AbilitySfxPayload,
+  PlayerInputPayload,
 } from "@/shared/types"
 import {
   WW_GAME_CONNECTION_REGISTRY_KEY,
@@ -227,12 +228,17 @@ export class ArenaRuntime {
         this.playerRenderSystem.onRemoteSnapshot(sample.id, sample)
       },
       onLocalAck: (sample) => {
-        this.playerRenderSystem.onLocalAck(sample.id, {
+        const ack = {
           x: sample.x,
           y: sample.y,
           lastProcessedInputSeq: sample.lastProcessedInputSeq,
+          serverTimeMs: sample.serverTimeMs,
           replayContext: sample.replayContext,
-        })
+        }
+        if (sample.abilityStatesChanged !== undefined) {
+          Object.assign(ack, { abilityStatesChanged: sample.abilityStatesChanged })
+        }
+        this.playerRenderSystem.onLocalAck(sample.id, ack)
       },
       onServerTime: (serverTimeMs) => {
         this.playerRenderSystem.updateServerTimeOffset(serverTimeMs)
@@ -564,17 +570,9 @@ export class ArenaRuntime {
     // not per render frame. Threading the callback through
     // `PlayerRenderSystem.update` keeps the accumulator + sim + send
     // loop synchronized inside a single system boundary.
-    this.playerRenderSystem.update(delta, localMoveIntent, () => {
+    this.playerRenderSystem.update(delta, localMoveIntent, (fullInput) => {
+      if (!fullInput) return
       if (!this.connection.isConnected()) return
-      const keyboardInput = this.keyboardController.collectInput(
-        this.connection.nextSeq(),
-      )
-      const mouseInput = this.mouseController.collectInput()
-      const fullInput = {
-        ...keyboardInput,
-        ...mouseInput,
-        ...stampClientSendTime(),
-      }
       this.playerRenderSystem.localInputHistory.append(fullInput)
       if (this.inputTransport === "compact") {
         const state = this.compactInputScheduler.maybeBuildState(
@@ -587,6 +585,17 @@ export class ArenaRuntime {
       }
       if (isActiveLocalInput(fullInput)) {
         this.activeLocalInputHandler?.()
+      }
+    }, (): PlayerInputPayload | null => {
+      if (!this.connection.isConnected()) return null
+      const keyboardInput = this.keyboardController.collectInput(
+        this.connection.nextSeq(),
+      )
+      const mouseInput = this.mouseController.collectInput()
+      return {
+        ...keyboardInput,
+        ...mouseInput,
+        ...stampClientSendTime(),
       }
     })
     this.walkFootstep.tick(delta, localMoveIntent)

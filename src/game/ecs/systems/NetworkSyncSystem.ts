@@ -57,7 +57,9 @@ export type LocalAckSample = {
   readonly vx?: number
   readonly vy?: number
   readonly lastProcessedInputSeq: number
+  readonly serverTimeMs?: number
   readonly replayContext?: PlayerOwnerAckPayload["replayContext"]
+  readonly abilityStatesChanged?: boolean
 }
 
 type NetworkSyncHooks = {
@@ -298,6 +300,8 @@ export class NetworkSyncSystem {
             x: nextX,
             y: nextY,
             lastProcessedInputSeq: delta.lastProcessedInputSeq,
+            serverTimeMs: payload.serverTimeMs,
+            abilityStatesChanged: delta.abilityStates !== undefined,
           })
         }
       }
@@ -328,6 +332,7 @@ export class NetworkSyncSystem {
         vx: payload.vx,
         vy: payload.vy,
         lastProcessedInputSeq: payload.lastProcessedInputSeq,
+        serverTimeMs: payload.serverTimeMs,
         replayContext: payload.replayContext,
       })
     }

@@ -248,6 +248,30 @@ describe("movement system", () => {
     expect(sync.activeTelegraphs![0]!.sourceId).toBe("lightning_bolt")
   })
 
+  it("resolves queued ability-slot inputs through the slot mapping at consume time", () => {
+    const sim = createGameSimulation(Date.now())
+    const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    const spawn = ARENA_SPAWN_POINTS[0]
+    const queue = new PlayerInputQueue([
+      emptyInput({
+        up: true,
+        abilitySlot: 1,
+        abilityTargetX: spawn.x + 200,
+        abilityTargetY: spawn.y,
+      }),
+    ])
+
+    expect(AbilitySlots.slot1[eid]).toBe(-1)
+    AbilitySlots.slot1[eid] = ABILITY_INDEX.lightning_bolt
+    sim.tick(new Map([["user1", queue]]), Date.now())
+
+    const sync = sim.buildGameStateSyncPayload(Date.now())
+    expect(sync.players[0]!.x).toBe(spawn.x)
+    expect(sync.players[0]!.y).toBe(spawn.y)
+    expect(sync.activeTelegraphs).toHaveLength(1)
+    expect(sync.activeTelegraphs![0]!.sourceId).toBe("lightning_bolt")
+  })
+
   it("player cannot leave arena bounds", () => {
     const sim = createGameSimulation(Date.now())
     sim.addPlayer("user1", "Alice", "red_wizard", 0)
