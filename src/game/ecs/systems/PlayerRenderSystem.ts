@@ -4,6 +4,7 @@ import { clientLogger } from "@/lib/clientLogger"
 import { HERO_CONFIGS, normalizeHeroId, type HeroId } from "@/shared/balance-config/heroes"
 import { ABILITY_CONFIGS, DEFAULT_ABILITY_SLOT_0_ID } from "@/shared/balance-config/abilities"
 import {
+  getPrimaryAttackAnimationConfig,
   getSpellAnimationConfig,
   msToTickOffset,
 } from "@/shared/balance-config/animationConfig"
@@ -102,6 +103,17 @@ type LocalPredictedCast = {
   startedInputSeq: number
   totalTicks: number
   remainingTicks: number
+}
+
+type LocalPredictedCastReplayWindow = {
+  abilityId: string
+  startedInputSeq: number
+  totalTicks: number
+}
+
+type LocalPredictedPrimaryMeleeSwing = {
+  startedInputSeq: number
+  totalTicks: number
 }
 
 type LocalPredictedAbilityCooldown = {
@@ -318,6 +330,12 @@ export class PlayerRenderSystem {
 
   /** Local-only cast window used until authoritative casting state catches up. */
   private localPredictedCast: LocalPredictedCast | null = null
+
+  /** Recently-started cast window retained after local expiry for ACK replay. */
+  private localPredictedCastReplayWindow: LocalPredictedCastReplayWindow | null = null
+
+  /** Local-only primary melee swing window used until authoritative state catches up. */
+  private localPredictedPrimaryMeleeSwing: LocalPredictedPrimaryMeleeSwing | null = null
 
   /** Same-ability cooldown windows predicted before authoritative state catches up. */
   private readonly localPredictedAbilityCooldowns = new Map<
@@ -1040,13 +1058,17 @@ export class PlayerRenderSystem {
       const activeLocalCastAbilityId =
         localCastAbilityId ?? activeLocalPredictedCast?.abilityId ?? null
       const predictionMoveIntent = inputForStep ?? localMoveIntent
+      const predictedPrimaryMeleeActive =
+        this._localPredictedPrimaryMeleeActiveForInput(state, inputForStep)
       const castMoveMult = this._clientCastMoveMultiplier(state, activeLocalCastAbilityId)
       const swingMult =
-        state.animState === "primary_melee_attack"
+        state.animState === "primary_melee_attack" || predictedPrimaryMeleeActive
           ? SWING_MOVE_SPEED_MULTIPLIER
           : 1
       const swiftBootsMult =
-        state.animState === "primary_melee_attack" || !state.hasSwiftBoots
+        state.animState === "primary_melee_attack" ||
+        predictedPrimaryMeleeActive ||
+        !state.hasSwiftBoots
           ? 1
           : 1 + SWIFT_BOOTS_SPEED_BONUS
       const terrainContext = this._localPredictionTerrainContext(
@@ -1089,6 +1111,10 @@ export class PlayerRenderSystem {
         )
         entry.simCurrX = moved.x
         entry.simCurrY = moved.y
+      }
+
+      if (this._shouldStartLocalPredictedPrimaryMeleeSwingAfterMovement(state, inputForStep)) {
+        this._startLocalPredictedPrimaryMeleeSwing(state, inputForStep!)
       }
 
       if (entry.smoothRemainingMs > 0) {
@@ -1517,6 +1543,11 @@ export class PlayerRenderSystem {
       totalTicks,
       remainingTicks: totalTicks,
     }
+    this.localPredictedCastReplayWindow = {
+      abilityId,
+      startedInputSeq: input.seq,
+      totalTicks,
+    }
     this._startLocalPredictedAbilityCooldown(
       abilityId,
       totalTicks,
@@ -1551,6 +1582,69 @@ export class PlayerRenderSystem {
     }
   }
 
+  private _primaryMeleeSwingTicks(state: (typeof ClientPlayerState)[number]): number {
+    const heroId = normalizeHeroId(state.heroId)
+    const attackId = HERO_CONFIGS[heroId].primaryMeleeAttackId
+    return Math.max(
+      1,
+      msToTickOffset(getPrimaryAttackAnimationConfig(heroId, attackId).durationMs),
+    )
+  }
+
+  private _localPredictedPrimaryMeleeActiveForInput(
+    state: (typeof ClientPlayerState)[number],
+    input: PlayerInputPayload | null,
+  ): boolean {
+    if (!input || !this.localPredictedPrimaryMeleeSwing) return false
+    if (state.animState === "primary_melee_attack" || state.moveState === "swinging") {
+      return false
+    }
+    return this._inputSeqInsidePredictedPrimaryMeleeMovementWindow(
+      input.seq,
+      this.localPredictedPrimaryMeleeSwing,
+    )
+  }
+
+  private _shouldStartLocalPredictedPrimaryMeleeSwingAfterMovement(
+    state: (typeof ClientPlayerState)[number],
+    input: PlayerInputPayload | null,
+  ): boolean {
+    if (!input?.weaponPrimary) return false
+    if (
+      state.animState === "dying" ||
+      state.animState === "dead" ||
+      this._hasAuthoritativeJumpAirLock(state)
+    ) {
+      return false
+    }
+    if (state.animState === "primary_melee_attack" || state.moveState === "swinging") {
+      return false
+    }
+    const active = this.localPredictedPrimaryMeleeSwing
+    if (!active) return true
+    return input.seq >= active.startedInputSeq + active.totalTicks
+  }
+
+  private _startLocalPredictedPrimaryMeleeSwing(
+    state: (typeof ClientPlayerState)[number],
+    input: PlayerInputPayload,
+  ): void {
+    this.localPredictedPrimaryMeleeSwing = {
+      startedInputSeq: input.seq,
+      totalTicks: this._primaryMeleeSwingTicks(state),
+    }
+  }
+
+  private _inputSeqInsidePredictedPrimaryMeleeMovementWindow(
+    seq: number,
+    swing: LocalPredictedPrimaryMeleeSwing,
+  ): boolean {
+    return (
+      seq > swing.startedInputSeq &&
+      seq <= swing.startedInputSeq + swing.totalTicks
+    )
+  }
+
   private _clearLocalPredictedCastFromAuthority(
     state: (typeof ClientPlayerState)[number],
   ): void {
@@ -1565,6 +1659,8 @@ export class PlayerRenderSystem {
 
   private _clearAllLocalPredictedAbilityGuards(): void {
     this.localPredictedCast = null
+    this.localPredictedCastReplayWindow = null
+    this.localPredictedPrimaryMeleeSwing = null
     this.localPredictedAbilityCooldowns.clear()
     this.localPredictedAbilityCharges.clear()
   }
@@ -1573,6 +1669,13 @@ export class PlayerRenderSystem {
     abilityId: string,
     startedInputSeq: number,
   ): void {
+    if (
+      this.localPredictedCastReplayWindow?.abilityId === abilityId &&
+      this.localPredictedCastReplayWindow.startedInputSeq <= startedInputSeq
+    ) {
+      this.localPredictedCastReplayWindow = null
+    }
+
     const cooldown = this.localPredictedAbilityCooldowns.get(abilityId)
     if (cooldown && cooldown.startedInputSeq <= startedInputSeq) {
       this.localPredictedAbilityCooldowns.delete(abilityId)
@@ -1608,7 +1711,9 @@ export class PlayerRenderSystem {
     ctx: LocalReplayContext,
   ): void {
     this._clearLocalPredictedCastFromAuthority(state)
-    if (!this.localPredictedCast) return
+    const predictedCast =
+      this.localPredictedCast ?? this.localPredictedCastReplayWindow
+    if (!predictedCast) return
     if (
       ctx.castingAbilityId ||
       ctx.moveState === "rooted" ||
@@ -1616,12 +1721,21 @@ export class PlayerRenderSystem {
     ) {
       return
     }
-    if (ack.lastProcessedInputSeq >= this.localPredictedCast.startedInputSeq) {
-      const rejectedCast = this.localPredictedCast
+    if (ack.lastProcessedInputSeq < predictedCast.startedInputSeq) return
+
+    const endSeq = this._predictedCastEndSeq(predictedCast)
+    if (ack.lastProcessedInputSeq >= endSeq) {
       this.localPredictedCast = null
+      this.localPredictedCastReplayWindow = null
+      return
+    }
+
+    if (ack.lastProcessedInputSeq >= predictedCast.startedInputSeq) {
+      this.localPredictedCast = null
+      this.localPredictedCastReplayWindow = null
       this._clearLocalPredictedAbilityGuardsForInput(
-        rejectedCast.abilityId,
-        rejectedCast.startedInputSeq,
+        predictedCast.abilityId,
+        predictedCast.startedInputSeq,
       )
     }
   }
@@ -1711,6 +1825,9 @@ export class PlayerRenderSystem {
     ) {
       return true
     }
+    if (this.localPredictedCastReplayWindow?.abilityId === abilityId) {
+      return true
+    }
     if (state.castingAbilityId === abilityId || ctx.castingAbilityId === abilityId) {
       return true
     }
@@ -1733,31 +1850,57 @@ export class PlayerRenderSystem {
     ctx: LocalReplayContext,
     ack?: LocalAckState,
   ): LocalReplayInputContextResolver {
-    let replayCast =
-      ctx.castingAbilityId ||
-      ctx.moveState === "rooted" ||
-      this._replayContextHasJumpAirLock(ctx)
-        ? null
-        : this.localPredictedCast
-          ? {
-            ...this.localPredictedCast,
-            remainingTicks: this.localPredictedCast.totalTicks,
-          }
+    let replayCast: LocalPredictedCastReplayWindow | null =
+      this.localPredictedCast !== null
+        ? {
+          abilityId: this.localPredictedCast.abilityId,
+          startedInputSeq: this.localPredictedCast.startedInputSeq,
+          totalTicks: this.localPredictedCast.totalTicks,
+        }
+        : this.localPredictedCastReplayWindow
+          ? { ...this.localPredictedCastReplayWindow }
           : null
+    let replayPrimaryMelee =
+      this.localPredictedPrimaryMeleeSwing !== null
+        ? { ...this.localPredictedPrimaryMeleeSwing }
+        : null
 
     return (input, baseCtx) => {
-      if (
-        baseCtx.castingAbilityId ||
+      let replayCtx = baseCtx
+      const baseCtxHasBlockingAuthority =
+        baseCtx.castingAbilityId !== null ||
         baseCtx.moveState === "rooted" ||
         this._replayContextHasJumpAirLock(baseCtx)
+      const baseCtxMatchesReplayCast =
+        replayCast !== null &&
+        this._replayContextMatchesPredictedCast(baseCtx, replayCast)
+
+      if (baseCtxHasBlockingAuthority && !baseCtxMatchesReplayCast) {
+        return baseCtx
+      }
+
+      if (
+        replayCast &&
+        this._inputSeqInsidePredictedCastWindow(input.seq, replayCast)
       ) {
+        replayCtx = this._localReplayContextForAbility(
+          baseCtx,
+          replayCast.abilityId,
+          input.seq - replayCast.startedInputSeq,
+        )
+      } else if (
+        replayCast &&
+        input.seq > this._predictedCastEndSeq(replayCast) &&
+        baseCtxMatchesReplayCast
+      ) {
+        replayCtx = this._replayContextAfterPredictedCast(baseCtx, replayCast)
+      } else if (baseCtxHasBlockingAuthority) {
         return baseCtx
       }
 
       const replayCastActive =
         replayCast &&
-        replayCast.remainingTicks > 0 &&
-        input.seq >= replayCast.startedInputSeq
+        this._inputSeqInsidePredictedCastWindow(input.seq, replayCast)
 
       if (!replayCastActive) {
         const localCastAbilityId = this._localCastAbilityIdForInput(
@@ -1781,28 +1924,96 @@ export class PlayerRenderSystem {
                 abilityId: localCastAbilityId,
                 startedInputSeq: input.seq,
                 totalTicks,
-                remainingTicks: totalTicks,
               }
               : null
+          if (replayCast) {
+            replayCtx = this._localReplayContextForAbility(
+              replayCtx,
+              replayCast.abilityId,
+              0,
+            )
+          }
         }
       }
 
+      const meleeActive =
+        replayPrimaryMelee !== null &&
+        this._inputSeqInsidePredictedPrimaryMeleeMovementWindow(
+          input.seq,
+          replayPrimaryMelee,
+        )
+      const outputCtx = meleeActive
+        ? { ...replayCtx, isSwinging: true }
+        : replayCtx
+
       if (
-        !replayCast ||
-        replayCast.remainingTicks <= 0 ||
-        input.seq < replayCast.startedInputSeq
+        this._shouldStartLocalPredictedPrimaryMeleeSwingForReplay(
+          state,
+          input,
+          replayPrimaryMelee,
+          replayCtx,
+        )
       ) {
-        return baseCtx
+        replayPrimaryMelee = {
+          startedInputSeq: input.seq,
+          totalTicks: this._primaryMeleeSwingTicks(state),
+        }
       }
 
-      const elapsedTicks = replayCast.totalTicks - replayCast.remainingTicks
-      replayCast.remainingTicks -= 1
-      return this._localReplayContextForAbility(
-        baseCtx,
-        replayCast.abilityId,
-        elapsedTicks,
-      )
+      return outputCtx
     }
+  }
+
+  private _predictedCastEndSeq(cast: LocalPredictedCastReplayWindow): number {
+    return cast.startedInputSeq + cast.totalTicks - 1
+  }
+
+  private _inputSeqInsidePredictedCastWindow(
+    seq: number,
+    cast: LocalPredictedCastReplayWindow,
+  ): boolean {
+    return seq >= cast.startedInputSeq && seq <= this._predictedCastEndSeq(cast)
+  }
+
+  private _replayContextMatchesPredictedCast(
+    ctx: LocalReplayContext,
+    cast: LocalPredictedCastReplayWindow,
+  ): boolean {
+    return ctx.castingAbilityId === cast.abilityId
+  }
+
+  private _replayContextAfterPredictedCast(
+    ctx: LocalReplayContext,
+    cast: LocalPredictedCastReplayWindow,
+  ): LocalReplayContext {
+    if (!this._replayContextMatchesPredictedCast(ctx, cast)) return ctx
+    return {
+      ...ctx,
+      castingAbilityId: null,
+      moveState:
+        ctx.moveState === "rooted" || ctx.moveState === "casting"
+          ? "idle"
+          : ctx.moveState,
+    }
+  }
+
+  private _shouldStartLocalPredictedPrimaryMeleeSwingForReplay(
+    state: (typeof ClientPlayerState)[number],
+    input: PlayerInputPayload,
+    activeSwing: LocalPredictedPrimaryMeleeSwing | null,
+    ctx: LocalReplayContext,
+  ): boolean {
+    if (!input.weaponPrimary) return false
+    if (
+      state.animState === "dying" ||
+      state.animState === "dead" ||
+      this._replayContextHasJumpAirLock(ctx)
+    ) {
+      return false
+    }
+    if (ctx.isSwinging && activeSwing === null) return false
+    if (!activeSwing) return true
+    return input.seq >= activeSwing.startedInputSeq + activeSwing.totalTicks
   }
 
   private _localReplayContextForInput(

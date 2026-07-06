@@ -204,6 +204,15 @@ type LocalCastResolver = {
     totalTicks: number
     remainingTicks: number
   } | null
+  localPredictedCastReplayWindow: {
+    abilityId: string
+    startedInputSeq: number
+    totalTicks: number
+  } | null
+  localPredictedPrimaryMeleeSwing: {
+    startedInputSeq: number
+    totalTicks: number
+  } | null
   localPredictedAbilityCooldowns: Map<
     string,
     {
@@ -259,9 +268,26 @@ type LocalCastResolver = {
     state: PlayerSnapshot,
     ctx: LocalReplayContext,
   ) => (input: PlayerInputPayload, baseCtx: LocalReplayContext) => LocalReplayContext
+  _localPredictedPrimaryMeleeActiveForInput: (
+    state: PlayerSnapshot,
+    input: PlayerInputPayload | null,
+  ) => boolean
+  _shouldStartLocalPredictedPrimaryMeleeSwingAfterMovement: (
+    state: PlayerSnapshot,
+    input: PlayerInputPayload | null,
+  ) => boolean
+  _startLocalPredictedPrimaryMeleeSwing: (
+    state: PlayerSnapshot,
+    input: PlayerInputPayload,
+  ) => void
   _clearLocalPredictedAbilityGuardsForInput: (
     abilityId: string,
     startedInputSeq: number,
+  ) => void
+  _clearLocalPredictedCastFromAck: (
+    state: PlayerSnapshot,
+    ack: LocalAckState,
+    ctx: LocalReplayContext,
   ) => void
   _reconcileLocalPredictedAbilityGuardsFromAuthority: (
     state: PlayerSnapshot,
@@ -286,6 +312,23 @@ type LocalCastResolver = {
     readonly terrainState: PlayerSnapshot["terrainState"]
     readonly jumpStartedInLava: boolean
   }
+  _replayContextAfterPredictedCast: (
+    ctx: LocalReplayContext,
+    cast: {
+      abilityId: string
+      startedInputSeq: number
+      totalTicks: number
+    },
+  ) => LocalReplayContext
+  _shouldStartLocalPredictedPrimaryMeleeSwingForReplay: (
+    state: PlayerSnapshot,
+    input: PlayerInputPayload,
+    activeSwing: {
+      startedInputSeq: number
+      totalTicks: number
+    } | null,
+    ctx: LocalReplayContext,
+  ) => boolean
 }
 
 function abilityStates() {
@@ -1876,6 +1919,167 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     })
   })
 
+  it("replays movement after the final rooted lightning ACK tick at normal speed", () => {
+    const { scene, group, registryValues } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    const corrections: string[] = []
+    sys.localPlayerId = "p1"
+    sys.setPredictionCorrectionHandler((correction) => {
+      corrections.push(correction)
+    })
+    registryValues.set(
+      WW_ABILITY_SLOTS_REGISTRY_KEY,
+      ["fireball", null, "lightning_bolt", null, null],
+    )
+    sys.applyFullSync(sync([snap({
+      id: 1,
+      playerId: "p1",
+      x: OPEN_TEST_POINT.x,
+      y: OPEN_TEST_POINT.y,
+      heroId: "yen",
+      moveState: "idle",
+      castingAbilityId: null,
+    })]))
+
+    const lightningCastTicks = Math.ceil(
+      getSpellAnimationConfig("yen", "lightning_bolt").durationMs / TICK_MS,
+    )
+    for (let seq = 1; seq <= lightningCastTicks + 1; seq += 1) {
+      sys.update(
+        TICK_MS,
+        { up: true, down: false, left: false, right: false },
+        (fullInput) => {
+          if (fullInput) sys.localInputHistory.append(fullInput)
+        },
+        () => input({
+          seq,
+          up: true,
+          abilitySlot: seq === 1 ? 2 : null,
+          abilityTargetX: OPEN_TEST_POINT.x + 200,
+          abilityTargetY: OPEN_TEST_POINT.y,
+        }),
+      )
+    }
+
+    const expectedAfterFirstPostCastMove =
+      OPEN_TEST_POINT.y - BASE_MOVE_SPEED_PX_PER_SEC * TICK_DT_SEC
+    expect(sys._getLocalSimForTest(1)?.simCurrY).toBeCloseTo(
+      expectedAfterFirstPostCastMove,
+      5,
+    )
+
+    sys.onLocalAck(1, {
+      x: OPEN_TEST_POINT.x,
+      y: OPEN_TEST_POINT.y,
+      lastProcessedInputSeq: lightningCastTicks,
+      replayContext: replayCtx({
+        castingAbilityId: "lightning_bolt",
+        moveState: "rooted",
+      }),
+    })
+
+    expect(corrections).toEqual(["none"])
+    expect(sys._getLocalSimForTest(1)).toMatchObject({
+      simCurrX: OPEN_TEST_POINT.x,
+      simCurrY: expectedAfterFirstPostCastMove,
+      smoothRemainingMs: 0,
+    })
+  })
+
+  it("predicts primary melee movement slowdown after the swing start tick", () => {
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    sys.localPlayerId = "p1"
+    sys.applyFullSync(sync([snap({
+      id: 1,
+      playerId: "p1",
+      x: OPEN_TEST_POINT.x,
+      y: OPEN_TEST_POINT.y,
+      heroId: "yen",
+      moveState: "idle",
+      animState: "idle",
+      castingAbilityId: null,
+    })]))
+
+    for (let seq = 1; seq <= 2; seq += 1) {
+      sys.update(
+        TICK_MS,
+        { up: true, down: false, left: false, right: false },
+        (fullInput) => {
+          if (fullInput) sys.localInputHistory.append(fullInput)
+        },
+        () => input({
+          seq,
+          up: true,
+          weaponPrimary: true,
+          weaponTargetX: OPEN_TEST_POINT.x + 200,
+          weaponTargetY: OPEN_TEST_POINT.y,
+        }),
+      )
+    }
+
+    const fullSpeedStep = BASE_MOVE_SPEED_PX_PER_SEC * TICK_DT_SEC
+    const slowedStep = fullSpeedStep * SWING_MOVE_SPEED_MULTIPLIER
+    expect(sys._getLocalSimForTest(1)?.simCurrY).toBeCloseTo(
+      OPEN_TEST_POINT.y - fullSpeedStep - slowedStep,
+      5,
+    )
+  })
+
+  it("lets authoritative melee state take over local melee slowdown", () => {
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    const resolver = sys as unknown as LocalCastResolver
+    sys.localPlayerId = "p1"
+    sys.applyFullSync(sync([snap({
+      id: 1,
+      playerId: "p1",
+      x: OPEN_TEST_POINT.x,
+      y: OPEN_TEST_POINT.y,
+      heroId: "yen",
+      moveState: "idle",
+      animState: "idle",
+      castingAbilityId: null,
+    })]))
+
+    sys.update(
+      TICK_MS,
+      { up: true, down: false, left: false, right: false },
+      undefined,
+      () => input({
+        seq: 1,
+        up: true,
+        weaponPrimary: true,
+        weaponTargetX: OPEN_TEST_POINT.x + 200,
+        weaponTargetY: OPEN_TEST_POINT.y,
+      }),
+    )
+    expect(resolver.localPredictedPrimaryMeleeSwing?.startedInputSeq).toBe(1)
+
+    ClientPlayerState[1]!.animState = "primary_melee_attack"
+    ClientPlayerState[1]!.moveState = "swinging"
+    sys.update(
+      TICK_MS,
+      { up: true, down: false, left: false, right: false },
+      undefined,
+      () => input({
+        seq: 2,
+        up: true,
+        weaponPrimary: true,
+        weaponTargetX: OPEN_TEST_POINT.x + 200,
+        weaponTargetY: OPEN_TEST_POINT.y,
+      }),
+    )
+
+    const fullSpeedStep = BASE_MOVE_SPEED_PX_PER_SEC * TICK_DT_SEC
+    const slowedStep = fullSpeedStep * SWING_MOVE_SPEED_MULTIPLIER
+    expect(sys._getLocalSimForTest(1)?.simCurrY).toBeCloseTo(
+      OPEN_TEST_POINT.y - fullSpeedStep - slowedStep,
+      5,
+    )
+    expect(resolver.localPredictedPrimaryMeleeSwing?.startedInputSeq).toBe(1)
+  })
+
   it("uses ACK-relative server time when replay checks pending input cooldowns", () => {
     const { scene, group, registryValues } = mockSceneAndGroup()
     const sys = new PlayerRenderSystem(scene as never, group as never)
@@ -2356,6 +2560,70 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     ).toBe(airborneCtx)
   })
 
+  it("keeps unrelated authoritative ACK contexts ahead of predicted replay windows", () => {
+    const { scene, group, registryValues } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    const resolver = sys as unknown as LocalCastResolver
+    registryValues.set(
+      WW_ABILITY_SLOTS_REGISTRY_KEY,
+      ["fireball", null, "lightning_bolt", null, null],
+    )
+    resolver.localPredictedCast = {
+      abilityId: "lightning_bolt",
+      startedInputSeq: 1,
+      totalTicks: 2,
+      remainingTicks: 2,
+    }
+    const state = snap({ id: 1, playerId: "p1" })
+    const lightningInput = input({ seq: 1, abilitySlot: 2 })
+
+    const castingCtx = replayCtx({
+      castingAbilityId: "fireball",
+      moveState: "casting",
+    })
+    expect(
+      resolver._localReplayContextResolver(state, castingCtx)(
+        lightningInput,
+        castingCtx,
+      ),
+    ).toBe(castingCtx)
+
+    const rootedCtx = replayCtx({ moveState: "rooted" })
+    expect(
+      resolver._localReplayContextResolver(state, rootedCtx)(
+        lightningInput,
+        rootedCtx,
+      ),
+    ).toBe(rootedCtx)
+
+    const airborneCtx = replayCtx({
+      jumpZ: JUMP_AIRBORNE_COLLIDER_EPSILON_PX + 1,
+    })
+    expect(
+      resolver._localReplayContextResolver(state, airborneCtx)(
+        lightningInput,
+        airborneCtx,
+      ),
+    ).toBe(airborneCtx)
+
+    resolver.localPredictedCast = {
+      abilityId: "lightning_bolt",
+      startedInputSeq: 2,
+      totalTicks: 2,
+      remainingTicks: 2,
+    }
+    const matchingCtx = replayCtx({
+      castingAbilityId: "lightning_bolt",
+      moveState: "rooted",
+    })
+    expect(
+      resolver._localReplayContextResolver(state, matchingCtx)(
+        input({ seq: 1 }),
+        matchingCtx,
+      ),
+    ).toBe(matchingCtx)
+  })
+
   it("cleans up stale predicted cast state and builds idle replay contexts", () => {
     const { scene, group, registryValues } = mockSceneAndGroup()
     const sys = new PlayerRenderSystem(scene as never, group as never)
@@ -2394,6 +2662,257 @@ describe("PlayerRenderSystem.applyFullSync", () => {
       castingAbilityId: "lightning_bolt",
       moveState: "rooted",
     })
+  })
+
+  it("bounds post-cast replay context to the predicted cast sequence window", () => {
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    const resolver = sys as unknown as LocalCastResolver
+    const castWindow = {
+      abilityId: "lightning_bolt",
+      startedInputSeq: 1,
+      totalTicks: 2,
+    }
+
+    const mismatchedCtx = replayCtx({
+      castingAbilityId: "fireball",
+      moveState: "casting",
+    })
+    expect(
+      resolver._replayContextAfterPredictedCast(mismatchedCtx, castWindow),
+    ).toBe(mismatchedCtx)
+    expect(
+      resolver._replayContextAfterPredictedCast(
+        replayCtx({
+          castingAbilityId: "lightning_bolt",
+          moveState: "rooted",
+        }),
+        castWindow,
+      ),
+    ).toMatchObject({
+      castingAbilityId: null,
+      moveState: "idle",
+    })
+    expect(
+      resolver._replayContextAfterPredictedCast(
+        replayCtx({
+          castingAbilityId: "lightning_bolt",
+          moveState: "casting",
+        }),
+        castWindow,
+      ),
+    ).toMatchObject({
+      castingAbilityId: null,
+      moveState: "idle",
+    })
+    expect(
+      resolver._replayContextAfterPredictedCast(
+        replayCtx({
+          castingAbilityId: "lightning_bolt",
+          moveState: "idle",
+        }),
+        castWindow,
+      ),
+    ).toMatchObject({
+      castingAbilityId: null,
+      moveState: "idle",
+    })
+  })
+
+  it("replays local primary melee windows by input sequence", () => {
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    const resolver = sys as unknown as LocalCastResolver
+    const state = snap({ id: 1, playerId: "p1" })
+    const baseCtx = replayCtx()
+    const replayResolver = resolver._localReplayContextResolver(state, baseCtx)
+
+    expect(
+      replayResolver(
+        input({ seq: 1, up: true, weaponPrimary: true }),
+        baseCtx,
+      ),
+    ).toBe(baseCtx)
+    expect(
+      replayResolver(
+        input({ seq: 2, up: true, weaponPrimary: true }),
+        baseCtx,
+      ),
+    ).toMatchObject({ isSwinging: true })
+
+    resolver.localPredictedPrimaryMeleeSwing = {
+      startedInputSeq: 10,
+      totalTicks: 2,
+    }
+    const seededReplayResolver = resolver._localReplayContextResolver(
+      state,
+      baseCtx,
+    )
+    expect(
+      seededReplayResolver(input({ seq: 11, up: true }), baseCtx),
+    ).toMatchObject({ isSwinging: true })
+  })
+
+  it("does not locally predict primary melee in states the server rejects", () => {
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    const resolver = sys as unknown as LocalCastResolver
+    const state = snap({ id: 1, playerId: "p1" })
+    const primaryInput = input({ seq: 1, weaponPrimary: true })
+
+    expect(
+      resolver._shouldStartLocalPredictedPrimaryMeleeSwingAfterMovement(
+        state,
+        null,
+      ),
+    ).toBe(false)
+    expect(
+      resolver._shouldStartLocalPredictedPrimaryMeleeSwingAfterMovement(
+        state,
+        input({ seq: 1, weaponPrimary: false }),
+      ),
+    ).toBe(false)
+    expect(
+      resolver._shouldStartLocalPredictedPrimaryMeleeSwingAfterMovement(
+        state,
+        primaryInput,
+      ),
+    ).toBe(true)
+    expect(
+      resolver._shouldStartLocalPredictedPrimaryMeleeSwingAfterMovement(
+        snap({ id: 1, playerId: "p1", animState: "dying" }),
+        primaryInput,
+      ),
+    ).toBe(false)
+    expect(
+      resolver._shouldStartLocalPredictedPrimaryMeleeSwingAfterMovement(
+        snap({ id: 1, playerId: "p1", animState: "dead" }),
+        primaryInput,
+      ),
+    ).toBe(false)
+    expect(
+      resolver._shouldStartLocalPredictedPrimaryMeleeSwingAfterMovement(
+        snap({
+          id: 1,
+          playerId: "p1",
+          animState: "jump",
+          jumpZ: JUMP_AIRBORNE_COLLIDER_EPSILON_PX + 1,
+        }),
+        primaryInput,
+      ),
+    ).toBe(false)
+
+    resolver.localPredictedPrimaryMeleeSwing = {
+      startedInputSeq: 1,
+      totalTicks: 3,
+    }
+    expect(
+      resolver._localPredictedPrimaryMeleeActiveForInput(
+        state,
+        input({ seq: 2 }),
+      ),
+    ).toBe(true)
+    expect(
+      resolver._localPredictedPrimaryMeleeActiveForInput(
+        snap({ id: 1, playerId: "p1", animState: "primary_melee_attack" }),
+        input({ seq: 2 }),
+      ),
+    ).toBe(false)
+    expect(
+      resolver._localPredictedPrimaryMeleeActiveForInput(
+        snap({ id: 1, playerId: "p1", moveState: "swinging" }),
+        input({ seq: 2 }),
+      ),
+    ).toBe(false)
+    expect(
+      resolver._shouldStartLocalPredictedPrimaryMeleeSwingAfterMovement(
+        state,
+        input({ seq: 3, weaponPrimary: true }),
+      ),
+    ).toBe(false)
+    expect(
+      resolver._shouldStartLocalPredictedPrimaryMeleeSwingAfterMovement(
+        state,
+        input({ seq: 4, weaponPrimary: true }),
+      ),
+    ).toBe(true)
+  })
+
+  it("does not start primary melee replay in blocked replay contexts", () => {
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    const resolver = sys as unknown as LocalCastResolver
+    const state = snap({ id: 1, playerId: "p1" })
+    const primaryInput = input({ seq: 1, weaponPrimary: true })
+    const activeSwing = {
+      startedInputSeq: 1,
+      totalTicks: 3,
+    }
+
+    expect(
+      resolver._shouldStartLocalPredictedPrimaryMeleeSwingForReplay(
+        state,
+        input({ seq: 1, weaponPrimary: false }),
+        null,
+        replayCtx(),
+      ),
+    ).toBe(false)
+    expect(
+      resolver._shouldStartLocalPredictedPrimaryMeleeSwingForReplay(
+        snap({ id: 1, playerId: "p1", animState: "dying" }),
+        primaryInput,
+        null,
+        replayCtx(),
+      ),
+    ).toBe(false)
+    expect(
+      resolver._shouldStartLocalPredictedPrimaryMeleeSwingForReplay(
+        snap({ id: 1, playerId: "p1", animState: "dead" }),
+        primaryInput,
+        null,
+        replayCtx(),
+      ),
+    ).toBe(false)
+    expect(
+      resolver._shouldStartLocalPredictedPrimaryMeleeSwingForReplay(
+        state,
+        primaryInput,
+        null,
+        replayCtx({ jumpZ: JUMP_AIRBORNE_COLLIDER_EPSILON_PX + 1 }),
+      ),
+    ).toBe(false)
+    expect(
+      resolver._shouldStartLocalPredictedPrimaryMeleeSwingForReplay(
+        state,
+        primaryInput,
+        null,
+        replayCtx({ isSwinging: true }),
+      ),
+    ).toBe(false)
+    expect(
+      resolver._shouldStartLocalPredictedPrimaryMeleeSwingForReplay(
+        state,
+        primaryInput,
+        null,
+        replayCtx(),
+      ),
+    ).toBe(true)
+    expect(
+      resolver._shouldStartLocalPredictedPrimaryMeleeSwingForReplay(
+        state,
+        input({ seq: 3, weaponPrimary: true }),
+        activeSwing,
+        replayCtx(),
+      ),
+    ).toBe(false)
+    expect(
+      resolver._shouldStartLocalPredictedPrimaryMeleeSwingForReplay(
+        state,
+        input({ seq: 4, weaponPrimary: true }),
+        activeSwing,
+        replayCtx(),
+      ),
+    ).toBe(true)
   })
 
   it("does not seed predicted cast blockers for unknown or zero-duration non-jump abilities", () => {
@@ -2840,6 +3359,83 @@ describe("PlayerRenderSystem.applyFullSync", () => {
 
     resolver._clearLocalPredictedAbilityGuardsForInput("jump", 1)
     expect(resolver.localPredictedAbilityCharges.has("jump")).toBe(false)
+  })
+
+  it("keeps ready predicted cooldowns while a matching cast replay window is active", () => {
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    const resolver = sys as unknown as LocalCastResolver
+    const now = Date.now()
+    resolver.localPredictedCastReplayWindow = {
+      abilityId: "lightning_bolt",
+      startedInputSeq: 1,
+      totalTicks: 2,
+    }
+    resolver.localPredictedAbilityCooldowns.set("lightning_bolt", {
+      endsAtServerTimeMs: now + 1_000,
+      startedInputSeq: 1,
+    })
+
+    expect(
+      resolver._hasAbilityActiveInPredictionOrAuthority(
+        snap({ id: 1, playerId: "p1" }),
+        "lightning_bolt",
+        replayCtx(),
+      ),
+    ).toBe(true)
+
+    resolver._reconcileLocalPredictedAbilityGuardsFromAuthority(
+      snap({ id: 1, playerId: "p1" }),
+      {
+        x: 0,
+        y: 0,
+        lastProcessedInputSeq: 1,
+        serverTimeMs: now,
+        abilityStatesChanged: true,
+      },
+      replayCtx(),
+    )
+    expect(resolver.localPredictedAbilityCooldowns.has("lightning_bolt")).toBe(
+      true,
+    )
+
+    resolver._clearLocalPredictedAbilityGuardsForInput("lightning_bolt", 1)
+    expect(resolver.localPredictedCastReplayWindow).toBeNull()
+    expect(resolver.localPredictedAbilityCooldowns.has("lightning_bolt")).toBe(
+      false,
+    )
+  })
+
+  it("clears a naturally finished cast replay window without rejecting its cooldown", () => {
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    const resolver = sys as unknown as LocalCastResolver
+    resolver.localPredictedCastReplayWindow = {
+      abilityId: "lightning_bolt",
+      startedInputSeq: 1,
+      totalTicks: 2,
+    }
+    resolver.localPredictedAbilityCooldowns.set("lightning_bolt", {
+      endsAtServerTimeMs: Date.now() + 1_000,
+      startedInputSeq: 1,
+    })
+
+    resolver._clearLocalPredictedCastFromAck(
+      snap({ id: 1, playerId: "p1" }),
+      {
+        x: 0,
+        y: 0,
+        lastProcessedInputSeq: 2,
+        replayContext: replayCtx(),
+      },
+      replayCtx(),
+    )
+
+    expect(resolver.localPredictedCast).toBeNull()
+    expect(resolver.localPredictedCastReplayWindow).toBeNull()
+    expect(resolver.localPredictedAbilityCooldowns.has("lightning_bolt")).toBe(
+      true,
+    )
   })
 
   it("reconciles predicted ability guards from fresh authoritative ability state", () => {
