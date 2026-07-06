@@ -247,6 +247,13 @@ type LocalCastResolver = {
   _localCastAbilityIdForInput: (
     state: PlayerSnapshot,
     input: PlayerInputPayload | null,
+    options?: {
+      readonly ignorePredictedCast?: boolean
+      readonly ignorePredictedAbilityCooldown?: boolean
+      readonly ignorePredictedAbilityCharges?: boolean
+      readonly rejectJumpForPredictedPrimaryMelee?: boolean
+      readonly currentServerTimeMs?: number
+    },
   ) => string | null
   _abilityIdForSlot: (slotIndex: number) => string | null
   _clientCastMoveMultiplier: (
@@ -2091,6 +2098,68 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     expect(resolver.localPredictedPrimaryMeleeSwing?.startedInputSeq).toBe(1)
   })
 
+  it("does not start local jump prediction during a predicted melee swing", () => {
+    const { scene, group, registryValues } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    const resolver = sys as unknown as LocalCastResolver
+    sys.localPlayerId = "p1"
+    registryValues.set(
+      WW_ABILITY_SLOTS_REGISTRY_KEY,
+      ["fireball", "jump", null, null, null],
+    )
+    sys.applyFullSync(sync([snap({
+      id: 1,
+      playerId: "p1",
+      x: OPEN_TEST_POINT.x,
+      y: OPEN_TEST_POINT.y,
+      heroId: "yen",
+      abilityStates: {
+        ...abilityStates(),
+        jump: {
+          ...abilityStates().jump,
+          charges: 1,
+          maxCharges: 4,
+        },
+      },
+    })]))
+
+    sys.update(
+      TICK_MS,
+      { up: false, down: false, left: false, right: false },
+      undefined,
+      () => input({
+        seq: 1,
+        weaponPrimary: true,
+        weaponTargetX: OPEN_TEST_POINT.x + 200,
+        weaponTargetY: OPEN_TEST_POINT.y,
+      }),
+    )
+    expect(resolver.localPredictedPrimaryMeleeSwing?.startedInputSeq).toBe(1)
+
+    sys.update(
+      TICK_MS,
+      { up: true, down: false, left: false, right: false },
+      undefined,
+      () => input({
+        seq: 2,
+        up: true,
+        abilitySlot: 1,
+        abilityTargetX: OPEN_TEST_POINT.x + 200,
+        abilityTargetY: OPEN_TEST_POINT.y,
+      }),
+    )
+
+    expect(resolver.localPredictedCast?.abilityId).not.toBe("jump")
+    expect(resolver.localPredictedAbilityCharges.has("jump")).toBe(false)
+    expect(sys._getLocalSimForTest(1)?.simCurrY).toBeCloseTo(
+      OPEN_TEST_POINT.y -
+        BASE_MOVE_SPEED_PX_PER_SEC *
+          TICK_DT_SEC *
+          SWING_MOVE_SPEED_MULTIPLIER,
+      5,
+    )
+  })
+
   it("uses ACK-relative server time when replay checks pending input cooldowns", () => {
     const { scene, group, registryValues } = mockSceneAndGroup()
     const sys = new PlayerRenderSystem(scene as never, group as never)
@@ -2836,6 +2905,43 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     ).toMatchObject({
       castingAbilityId: "fireball",
       moveState: "casting",
+      isSwinging: true,
+    })
+  })
+
+  it("does not replay jump casts during predicted primary melee windows", () => {
+    const { scene, group, registryValues } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    const resolver = sys as unknown as LocalCastResolver
+    registryValues.set(
+      WW_ABILITY_SLOTS_REGISTRY_KEY,
+      ["fireball", "jump", null, null, null],
+    )
+    const state = snap({ id: 1, playerId: "p1" })
+    const baseCtx = replayCtx()
+    const replayResolver = resolver._localReplayContextResolver(state, baseCtx)
+
+    expect(
+      replayResolver(
+        input({ seq: 1, up: true, weaponPrimary: true }),
+        baseCtx,
+      ),
+    ).toBe(baseCtx)
+    expect(
+      replayResolver(
+        input({
+          seq: 2,
+          up: true,
+          abilitySlot: 1,
+          abilityTargetX: OPEN_TEST_POINT.x + 200,
+          abilityTargetY: OPEN_TEST_POINT.y,
+        }),
+        baseCtx,
+      ),
+    ).toMatchObject({
+      castingAbilityId: null,
+      jumpZ: 0,
+      moveState: "idle",
       isSwinging: true,
     })
   })

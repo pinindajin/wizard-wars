@@ -1061,7 +1061,13 @@ export class PlayerRenderSystem {
       entry.simPrevY = entry.simCurrY
 
       this._clearLocalPredictedCastFromAuthority(state)
-      const localCastAbilityId = this._localCastAbilityIdForInput(state, inputForStep)
+      const predictedPrimaryMeleeActive =
+        this._localPredictedPrimaryMeleeActiveForInput(state, inputForStep)
+      const localCastAbilityId = this._localCastAbilityIdForInput(
+        state,
+        inputForStep,
+        { rejectJumpForPredictedPrimaryMelee: predictedPrimaryMeleeActive },
+      )
       if (localCastAbilityId && inputForStep) {
         this._startLocalPredictedCast(state, inputForStep, localCastAbilityId)
       }
@@ -1069,8 +1075,6 @@ export class PlayerRenderSystem {
       const activeLocalCastAbilityId =
         localCastAbilityId ?? activeLocalPredictedCast?.abilityId ?? null
       const predictionMoveIntent = inputForStep ?? localMoveIntent
-      const predictedPrimaryMeleeActive =
-        this._localPredictedPrimaryMeleeActiveForInput(state, inputForStep)
       const castMoveMult = this._clientCastMoveMultiplier(state, activeLocalCastAbilityId)
       const swingMult =
         state.animState === "primary_melee_attack" || predictedPrimaryMeleeActive
@@ -1460,6 +1464,7 @@ export class PlayerRenderSystem {
       readonly ignorePredictedCast?: boolean
       readonly ignorePredictedAbilityCooldown?: boolean
       readonly ignorePredictedAbilityCharges?: boolean
+      readonly rejectJumpForPredictedPrimaryMelee?: boolean
       readonly currentServerTimeMs?: number
     } = {},
   ): string | null {
@@ -1485,7 +1490,15 @@ export class PlayerRenderSystem {
 
     const abilityId = this._abilityIdForSlot(input.abilitySlot)
     if (!abilityId || !ABILITY_CONFIGS[abilityId]) return null
-    if (this._serverRejectsJumpCast(state, abilityId)) return null
+    if (
+      this._serverRejectsJumpCast(
+        state,
+        abilityId,
+        options.rejectJumpForPredictedPrimaryMelee === true,
+      )
+    ) {
+      return null
+    }
 
     const currentServerTimeMs =
       options.currentServerTimeMs ?? this.getEstimatedServerTimeMs()
@@ -1903,6 +1916,12 @@ export class PlayerRenderSystem {
       }
 
       const activeReplayCast = this._replayCastForInput(replayCasts, input.seq)
+      const replayPrimaryMeleeActive =
+        replayPrimaryMelee !== null &&
+        this._inputSeqInsidePredictedPrimaryMeleeMovementWindow(
+          input.seq,
+          replayPrimaryMelee,
+        )
       if (
         activeReplayCast &&
         !baseCtxHasUnrelatedCastAuthority
@@ -1934,6 +1953,7 @@ export class PlayerRenderSystem {
             ignorePredictedCast: true,
             ignorePredictedAbilityCooldown: true,
             ignorePredictedAbilityCharges: true,
+            rejectJumpForPredictedPrimaryMelee: replayPrimaryMeleeActive,
             currentServerTimeMs: this._serverTimeForReplayedInput(ack, input),
           },
         )
@@ -1958,13 +1978,7 @@ export class PlayerRenderSystem {
         }
       }
 
-      const meleeActive =
-        replayPrimaryMelee !== null &&
-        this._inputSeqInsidePredictedPrimaryMeleeMovementWindow(
-          input.seq,
-          replayPrimaryMelee,
-        )
-      const outputCtx = meleeActive
+      const outputCtx = replayPrimaryMeleeActive
         ? { ...replayCtx, isSwinging: true }
         : replayCtx
 
@@ -2231,12 +2245,14 @@ export class PlayerRenderSystem {
   private _serverRejectsJumpCast(
     state: (typeof ClientPlayerState)[number],
     abilityId: string,
+    predictedPrimaryMeleeActive = false,
   ): boolean {
     return (
       abilityId === "jump" &&
       (state.moveState === "swinging" ||
         state.moveState === "knockback" ||
-        state.animState === "primary_melee_attack")
+        state.animState === "primary_melee_attack" ||
+        predictedPrimaryMeleeActive)
     )
   }
 
