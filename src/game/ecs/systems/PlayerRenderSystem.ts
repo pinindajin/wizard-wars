@@ -573,6 +573,7 @@ export class PlayerRenderSystem {
       moveState: state.moveState,
     }
     const simCurr = { x: entry.simCurrX, y: entry.simCurrY }
+    const replayContextResolver = this._localReplayContextResolver(state, ctx, ack)
     this._clearLocalPredictedCastFromAck(state, ack, ctx)
     this._reconcileLocalPredictedAbilityGuardsFromAuthority(state, ack, ctx)
     const result = reconcileLocal(
@@ -580,7 +581,7 @@ export class PlayerRenderSystem {
       this.localInputHistory,
       simCurr,
       ctx,
-      this._localReplayContextResolver(state, ctx, ack),
+      replayContextResolver,
     )
     this.predictionCorrectionHandler?.(result.correction)
 
@@ -1480,6 +1481,7 @@ export class PlayerRenderSystem {
       readonly ignorePredictedAbilityCooldown?: boolean
       readonly ignorePredictedAbilityCharges?: boolean
       readonly rejectJumpForPredictedPrimaryMelee?: boolean
+      readonly rejectJumpForAuthoritativeSwing?: boolean
       readonly currentServerTimeMs?: number
     } = {},
   ): string | null {
@@ -1509,7 +1511,8 @@ export class PlayerRenderSystem {
       this._serverRejectsJumpCast(
         state,
         abilityId,
-        options.rejectJumpForPredictedPrimaryMelee === true,
+        options.rejectJumpForPredictedPrimaryMelee === true ||
+          options.rejectJumpForAuthoritativeSwing === true,
       )
     ) {
       return null
@@ -1749,13 +1752,10 @@ export class PlayerRenderSystem {
     ctx: LocalReplayContext,
   ): void {
     this._clearLocalPredictedCastFromAuthority(state)
-    if (
-      ctx.castingAbilityId ||
+    const hasActiveReplayAuthority =
+      ctx.castingAbilityId !== null ||
       ctx.moveState === "rooted" ||
       this._replayContextHasJumpAirLock(ctx)
-    ) {
-      return
-    }
 
     const currentServerTimeMs = ack.serverTimeMs ?? this.getEstimatedServerTimeMs()
     const ackedCasts = this._localPredictedCastReplaySnapshot().filter(
@@ -1763,6 +1763,24 @@ export class PlayerRenderSystem {
     )
 
     for (const predictedCast of ackedCasts) {
+      const serverAcceptedCast =
+        this._hasAuthoritativeAbilityActiveOrCooldown(
+          state,
+          predictedCast.abilityId,
+          ctx,
+          currentServerTimeMs,
+        )
+      const castCouldStillBeRunning =
+        ack.lastProcessedInputSeq < this._predictedCastEndSeq(predictedCast)
+
+      if (
+        hasActiveReplayAuthority &&
+        serverAcceptedCast &&
+        castCouldStillBeRunning
+      ) {
+        continue
+      }
+
       if (
         this.localPredictedCast?.startedInputSeq ===
         predictedCast.startedInputSeq
@@ -1774,16 +1792,6 @@ export class PlayerRenderSystem {
         predictedCast.abilityId,
         predictedCast.startedInputSeq,
       )
-
-      const serverAcceptedCast =
-        this._hasAuthoritativeAbilityActiveOrCooldown(
-          state,
-          predictedCast.abilityId,
-          ctx,
-          currentServerTimeMs,
-        )
-      const castCouldStillBeRunning =
-        ack.lastProcessedInputSeq < this._predictedCastEndSeq(predictedCast)
 
       if (!serverAcceptedCast || castCouldStillBeRunning) {
         this._clearLocalPredictedAbilityGuardsForInput(
@@ -1955,11 +1963,14 @@ export class PlayerRenderSystem {
           matchingBaseCtxReplayCast,
         )
       }
+      const replayCtxHasFullyBlockingAuthority =
+        replayCtx.moveState === "rooted" ||
+        this._replayContextHasJumpAirLock(replayCtx)
 
       if (
         !activeReplayCast &&
         !baseCtxHasUnrelatedCastAuthority &&
-        !baseCtxHasFullyBlockingAuthority
+        !replayCtxHasFullyBlockingAuthority
       ) {
         const localCastAbilityId = this._localCastAbilityIdForInput(
           state,
@@ -1969,6 +1980,7 @@ export class PlayerRenderSystem {
             ignorePredictedAbilityCooldown: true,
             ignorePredictedAbilityCharges: true,
             rejectJumpForPredictedPrimaryMelee: replayPrimaryMeleeActive,
+            rejectJumpForAuthoritativeSwing: replayCtx.isSwinging,
             currentServerTimeMs: this._serverTimeForReplayedInput(ack, input),
           },
         )
@@ -2031,13 +2043,24 @@ export class PlayerRenderSystem {
     input: PlayerInputPayload | null,
   ): boolean {
     if (!input || !state.castingAbilityId) return false
-    const matchingCast = this.localPredictedCastReplayWindows.find(
-      (cast) => cast.abilityId === state.castingAbilityId,
-    )
+    const matchingCast =
+      this._latestLocalPredictedCastReplayWindowForAbility(
+        state.castingAbilityId,
+      )
     return (
       matchingCast !== undefined &&
       input.seq > this._predictedCastEndSeq(matchingCast)
     )
+  }
+
+  private _latestLocalPredictedCastReplayWindowForAbility(
+    abilityId: string,
+  ): LocalPredictedCastReplayWindow | undefined {
+    for (let i = this.localPredictedCastReplayWindows.length - 1; i >= 0; i--) {
+      const cast = this.localPredictedCastReplayWindows[i]!
+      if (cast.abilityId === abilityId) return cast
+    }
+    return undefined
   }
 
   private _retainLocalPredictedCastReplayWindow(

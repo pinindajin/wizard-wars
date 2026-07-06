@@ -252,6 +252,7 @@ type LocalCastResolver = {
       readonly ignorePredictedAbilityCooldown?: boolean
       readonly ignorePredictedAbilityCharges?: boolean
       readonly rejectJumpForPredictedPrimaryMelee?: boolean
+      readonly rejectJumpForAuthoritativeSwing?: boolean
       readonly currentServerTimeMs?: number
     },
   ) => string | null
@@ -281,6 +282,10 @@ type LocalCastResolver = {
     ctx: LocalReplayContext,
   ) => (input: PlayerInputPayload, baseCtx: LocalReplayContext) => LocalReplayContext
   _localPredictedPrimaryMeleeActiveForInput: (
+    state: PlayerSnapshot,
+    input: PlayerInputPayload | null,
+  ) => boolean
+  _authoritativeCastEndedForLocalPrediction: (
     state: PlayerSnapshot,
     input: PlayerInputPayload | null,
   ) => boolean
@@ -2932,6 +2937,66 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     })
   })
 
+  it("replays follow-up ability casts after a predicted root has ended", () => {
+    const { scene, group, registryValues } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    const resolver = sys as unknown as LocalCastResolver
+    registryValues.set(
+      WW_ABILITY_SLOTS_REGISTRY_KEY,
+      ["fireball", "jump", "lightning_bolt", null, null],
+    )
+    resolver.localPredictedCastReplayWindows = [
+      { abilityId: "lightning_bolt", startedInputSeq: 1, totalTicks: 2 },
+    ]
+    const state = snap({ id: 1, playerId: "p1" })
+    const lightningAckCtx = replayCtx({
+      castingAbilityId: "lightning_bolt",
+      moveState: "rooted",
+    })
+    const replayResult = resolver._localReplayContextResolver(
+      state,
+      lightningAckCtx,
+    )(
+      input({
+        seq: 3,
+        abilitySlot: 1,
+        abilityTargetX: OPEN_TEST_POINT.x + 200,
+        abilityTargetY: OPEN_TEST_POINT.y,
+      }),
+      lightningAckCtx,
+    )
+
+    expect(replayResult).toMatchObject({
+      castingAbilityId: null,
+      moveState: "idle",
+      jumpStartedInLava: false,
+    })
+    expect(replayResult.jumpZ).toBeGreaterThan(
+      JUMP_AIRBORNE_COLLIDER_EPSILON_PX,
+    )
+  })
+
+  it("does not clear authoritative casts from unrelated replay windows", () => {
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    const resolver = sys as unknown as LocalCastResolver
+    resolver.localPredictedCastReplayWindows = [
+      { abilityId: "fireball", startedInputSeq: 1, totalTicks: 2 },
+    ]
+
+    expect(
+      resolver._authoritativeCastEndedForLocalPrediction(
+        snap({
+          id: 1,
+          playerId: "p1",
+          castingAbilityId: "lightning_bolt",
+          moveState: "rooted",
+        }),
+        input({ seq: 5, up: true }),
+      ),
+    ).toBe(false)
+  })
+
   it("replays local primary melee windows by input sequence", () => {
     const { scene, group } = mockSceneAndGroup()
     const sys = new PlayerRenderSystem(scene as never, group as never)
@@ -3023,6 +3088,42 @@ describe("PlayerRenderSystem.applyFullSync", () => {
           abilityTargetY: OPEN_TEST_POINT.y,
         }),
         baseCtx,
+      ),
+    ).toMatchObject({
+      castingAbilityId: null,
+      jumpZ: 0,
+      moveState: "idle",
+      isSwinging: true,
+    })
+  })
+
+  it("does not replay jump casts while authoritative replay context is swinging", () => {
+    const { scene, group, registryValues } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    const resolver = sys as unknown as LocalCastResolver
+    registryValues.set(
+      WW_ABILITY_SLOTS_REGISTRY_KEY,
+      ["fireball", "jump", null, null, null],
+    )
+    resolver.localPredictedCastReplayWindows = [
+      { abilityId: "fireball", startedInputSeq: 1, totalTicks: 1 },
+    ]
+    const state = snap({ id: 1, playerId: "p1" })
+    const movableSwingCtx = replayCtx({
+      castingAbilityId: "fireball",
+      moveState: "casting",
+      isSwinging: true,
+    })
+
+    expect(
+      resolver._localReplayContextResolver(state, movableSwingCtx)(
+        input({
+          seq: 2,
+          abilitySlot: 1,
+          abilityTargetX: OPEN_TEST_POINT.x + 200,
+          abilityTargetY: OPEN_TEST_POINT.y,
+        }),
+        movableSwingCtx,
       ),
     ).toMatchObject({
       castingAbilityId: null,
@@ -3736,6 +3837,43 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     )
 
     expect(resolver.localPredictedCast).toBeNull()
+    expect(resolver.localPredictedCastReplayWindow).toBeNull()
+    expect(resolver.localPredictedAbilityCooldowns.has("lightning_bolt")).toBe(
+      true,
+    )
+  })
+
+  it("clears accepted cast replay windows when active ACK reaches the predicted end", () => {
+    const { scene, group } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    const resolver = sys as unknown as LocalCastResolver
+    const now = Date.now()
+    resolver.localPredictedCastReplayWindow = {
+      abilityId: "lightning_bolt",
+      startedInputSeq: 1,
+      totalTicks: 2,
+    }
+    resolver.localPredictedAbilityCooldowns.set("lightning_bolt", {
+      endsAtServerTimeMs: now + 1_000,
+      startedInputSeq: 1,
+    })
+    const activeLightningCtx = replayCtx({
+      castingAbilityId: "lightning_bolt",
+      moveState: "rooted",
+    })
+
+    resolver._clearLocalPredictedCastFromAck(
+      snap({ id: 1, playerId: "p1" }),
+      {
+        x: 0,
+        y: 0,
+        lastProcessedInputSeq: 2,
+        serverTimeMs: now,
+        replayContext: activeLightningCtx,
+      },
+      activeLightningCtx,
+    )
+
     expect(resolver.localPredictedCastReplayWindow).toBeNull()
     expect(resolver.localPredictedAbilityCooldowns.has("lightning_bolt")).toBe(
       true,
