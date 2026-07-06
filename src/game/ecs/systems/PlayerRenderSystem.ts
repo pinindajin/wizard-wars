@@ -331,8 +331,19 @@ export class PlayerRenderSystem {
   /** Local-only cast window used until authoritative casting state catches up. */
   private localPredictedCast: LocalPredictedCast | null = null
 
-  /** Recently-started cast window retained after local expiry for ACK replay. */
-  private localPredictedCastReplayWindow: LocalPredictedCastReplayWindow | null = null
+  /** Recently-started cast windows retained after local expiry for ACK replay. */
+  private localPredictedCastReplayWindows: LocalPredictedCastReplayWindow[] = []
+
+  private get localPredictedCastReplayWindow(): LocalPredictedCastReplayWindow | null {
+    const lastIndex = this.localPredictedCastReplayWindows.length - 1
+    return lastIndex >= 0 ? this.localPredictedCastReplayWindows[lastIndex]! : null
+  }
+
+  private set localPredictedCastReplayWindow(
+    window: LocalPredictedCastReplayWindow | null,
+  ) {
+    this.localPredictedCastReplayWindows = window ? [window] : []
+  }
 
   /** Local-only primary melee swing window used until authoritative state catches up. */
   private localPredictedPrimaryMeleeSwing: LocalPredictedPrimaryMeleeSwing | null = null
@@ -1543,11 +1554,11 @@ export class PlayerRenderSystem {
       totalTicks,
       remainingTicks: totalTicks,
     }
-    this.localPredictedCastReplayWindow = {
+    this._retainLocalPredictedCastReplayWindow({
       abilityId,
       startedInputSeq: input.seq,
       totalTicks,
-    }
+    })
     this._startLocalPredictedAbilityCooldown(
       abilityId,
       totalTicks,
@@ -1613,7 +1624,8 @@ export class PlayerRenderSystem {
     if (
       state.animState === "dying" ||
       state.animState === "dead" ||
-      this._hasAuthoritativeJumpAirLock(state)
+      this._hasAuthoritativeJumpAirLock(state) ||
+      this._activeLocalPredictedCastAbilityId(state) === "jump"
     ) {
       return false
     }
@@ -1659,7 +1671,7 @@ export class PlayerRenderSystem {
 
   private _clearAllLocalPredictedAbilityGuards(): void {
     this.localPredictedCast = null
-    this.localPredictedCastReplayWindow = null
+    this.localPredictedCastReplayWindows = []
     this.localPredictedPrimaryMeleeSwing = null
     this.localPredictedAbilityCooldowns.clear()
     this.localPredictedAbilityCharges.clear()
@@ -1669,12 +1681,10 @@ export class PlayerRenderSystem {
     abilityId: string,
     startedInputSeq: number,
   ): void {
-    if (
-      this.localPredictedCastReplayWindow?.abilityId === abilityId &&
-      this.localPredictedCastReplayWindow.startedInputSeq <= startedInputSeq
-    ) {
-      this.localPredictedCastReplayWindow = null
-    }
+    this._clearLocalPredictedCastReplayWindowsForInput(
+      abilityId,
+      startedInputSeq,
+    )
 
     const cooldown = this.localPredictedAbilityCooldowns.get(abilityId)
     if (cooldown && cooldown.startedInputSeq <= startedInputSeq) {
@@ -1711,9 +1721,6 @@ export class PlayerRenderSystem {
     ctx: LocalReplayContext,
   ): void {
     this._clearLocalPredictedCastFromAuthority(state)
-    const predictedCast =
-      this.localPredictedCast ?? this.localPredictedCastReplayWindow
-    if (!predictedCast) return
     if (
       ctx.castingAbilityId ||
       ctx.moveState === "rooted" ||
@@ -1721,22 +1728,41 @@ export class PlayerRenderSystem {
     ) {
       return
     }
-    if (ack.lastProcessedInputSeq < predictedCast.startedInputSeq) return
 
-    const endSeq = this._predictedCastEndSeq(predictedCast)
-    if (ack.lastProcessedInputSeq >= endSeq) {
-      this.localPredictedCast = null
-      this.localPredictedCastReplayWindow = null
-      return
-    }
+    const currentServerTimeMs = ack.serverTimeMs ?? this.getEstimatedServerTimeMs()
+    const ackedCasts = this._localPredictedCastReplaySnapshot().filter(
+      (cast) => ack.lastProcessedInputSeq >= cast.startedInputSeq,
+    )
 
-    if (ack.lastProcessedInputSeq >= predictedCast.startedInputSeq) {
-      this.localPredictedCast = null
-      this.localPredictedCastReplayWindow = null
-      this._clearLocalPredictedAbilityGuardsForInput(
+    for (const predictedCast of ackedCasts) {
+      if (
+        this.localPredictedCast?.startedInputSeq ===
+        predictedCast.startedInputSeq
+      ) {
+        this.localPredictedCast = null
+      }
+
+      this._clearLocalPredictedCastReplayWindowsForInput(
         predictedCast.abilityId,
         predictedCast.startedInputSeq,
       )
+
+      const serverAcceptedCast =
+        this._hasAuthoritativeAbilityActiveOrCooldown(
+          state,
+          predictedCast.abilityId,
+          ctx,
+          currentServerTimeMs,
+        )
+      const castCouldStillBeRunning =
+        ack.lastProcessedInputSeq < this._predictedCastEndSeq(predictedCast)
+
+      if (!serverAcceptedCast || castCouldStillBeRunning) {
+        this._clearLocalPredictedAbilityGuardsForInput(
+          predictedCast.abilityId,
+          predictedCast.startedInputSeq,
+        )
+      }
     }
   }
 
@@ -1825,7 +1851,11 @@ export class PlayerRenderSystem {
     ) {
       return true
     }
-    if (this.localPredictedCastReplayWindow?.abilityId === abilityId) {
+    if (
+      this.localPredictedCastReplayWindows.some(
+        (window) => window.abilityId === abilityId,
+      )
+    ) {
       return true
     }
     if (state.castingAbilityId === abilityId || ctx.castingAbilityId === abilityId) {
@@ -1850,16 +1880,7 @@ export class PlayerRenderSystem {
     ctx: LocalReplayContext,
     ack?: LocalAckState,
   ): LocalReplayInputContextResolver {
-    let replayCast: LocalPredictedCastReplayWindow | null =
-      this.localPredictedCast !== null
-        ? {
-          abilityId: this.localPredictedCast.abilityId,
-          startedInputSeq: this.localPredictedCast.startedInputSeq,
-          totalTicks: this.localPredictedCast.totalTicks,
-        }
-        : this.localPredictedCastReplayWindow
-          ? { ...this.localPredictedCastReplayWindow }
-          : null
+    const replayCasts = this._localPredictedCastReplaySnapshot()
     let replayPrimaryMelee =
       this.localPredictedPrimaryMeleeSwing !== null
         ? { ...this.localPredictedPrimaryMeleeSwing }
@@ -1867,42 +1888,45 @@ export class PlayerRenderSystem {
 
     return (input, baseCtx) => {
       let replayCtx = baseCtx
-      const baseCtxHasBlockingAuthority =
-        baseCtx.castingAbilityId !== null ||
+      const matchingBaseCtxReplayCast = this._replayCastMatchingContext(
+        baseCtx,
+        replayCasts,
+      )
+      const baseCtxHasFullyBlockingAuthority =
         baseCtx.moveState === "rooted" ||
         this._replayContextHasJumpAirLock(baseCtx)
-      const baseCtxMatchesReplayCast =
-        replayCast !== null &&
-        this._replayContextMatchesPredictedCast(baseCtx, replayCast)
+      const baseCtxHasUnrelatedCastAuthority =
+        baseCtx.castingAbilityId !== null && matchingBaseCtxReplayCast === null
 
-      if (baseCtxHasBlockingAuthority && !baseCtxMatchesReplayCast) {
+      if (baseCtxHasFullyBlockingAuthority && !matchingBaseCtxReplayCast) {
         return baseCtx
       }
 
+      const activeReplayCast = this._replayCastForInput(replayCasts, input.seq)
       if (
-        replayCast &&
-        this._inputSeqInsidePredictedCastWindow(input.seq, replayCast)
+        activeReplayCast &&
+        !baseCtxHasUnrelatedCastAuthority
       ) {
         replayCtx = this._localReplayContextForAbility(
           baseCtx,
-          replayCast.abilityId,
-          input.seq - replayCast.startedInputSeq,
+          activeReplayCast.abilityId,
+          input.seq - activeReplayCast.startedInputSeq,
         )
       } else if (
-        replayCast &&
-        input.seq > this._predictedCastEndSeq(replayCast) &&
-        baseCtxMatchesReplayCast
+        matchingBaseCtxReplayCast &&
+        input.seq > this._predictedCastEndSeq(matchingBaseCtxReplayCast)
       ) {
-        replayCtx = this._replayContextAfterPredictedCast(baseCtx, replayCast)
-      } else if (baseCtxHasBlockingAuthority) {
-        return baseCtx
+        replayCtx = this._replayContextAfterPredictedCast(
+          baseCtx,
+          matchingBaseCtxReplayCast,
+        )
       }
 
-      const replayCastActive =
-        replayCast &&
-        this._inputSeqInsidePredictedCastWindow(input.seq, replayCast)
-
-      if (!replayCastActive) {
+      if (
+        !activeReplayCast &&
+        !baseCtxHasUnrelatedCastAuthority &&
+        !baseCtxHasFullyBlockingAuthority
+      ) {
         const localCastAbilityId = this._localCastAbilityIdForInput(
           state,
           input,
@@ -1918,15 +1942,13 @@ export class PlayerRenderSystem {
             state,
             localCastAbilityId,
           )
-          replayCast =
-            totalTicks > 0
-              ? {
-                abilityId: localCastAbilityId,
-                startedInputSeq: input.seq,
-                totalTicks,
-              }
-              : null
-          if (replayCast) {
+          if (totalTicks > 0) {
+            const replayCast = {
+              abilityId: localCastAbilityId,
+              startedInputSeq: input.seq,
+              totalTicks,
+            }
+            this._retainReplayCastWindowSnapshot(replayCasts, replayCast)
             replayCtx = this._localReplayContextForAbility(
               replayCtx,
               replayCast.abilityId,
@@ -1975,6 +1997,77 @@ export class PlayerRenderSystem {
     return seq >= cast.startedInputSeq && seq <= this._predictedCastEndSeq(cast)
   }
 
+  private _retainLocalPredictedCastReplayWindow(
+    window: LocalPredictedCastReplayWindow,
+  ): void {
+    this._retainReplayCastWindowSnapshot(
+      this.localPredictedCastReplayWindows,
+      window,
+    )
+  }
+
+  private _retainReplayCastWindowSnapshot(
+    windows: LocalPredictedCastReplayWindow[],
+    window: LocalPredictedCastReplayWindow,
+  ): void {
+    const existingIndex = windows.findIndex(
+      (candidate) => candidate.startedInputSeq === window.startedInputSeq,
+    )
+    if (existingIndex >= 0) {
+      windows[existingIndex] = window
+    } else {
+      windows.push(window)
+    }
+    windows.sort((a, b) => a.startedInputSeq - b.startedInputSeq)
+  }
+
+  private _clearLocalPredictedCastReplayWindowsForInput(
+    abilityId: string,
+    startedInputSeq: number,
+  ): void {
+    this.localPredictedCastReplayWindows =
+      this.localPredictedCastReplayWindows.filter(
+        (window) =>
+          window.abilityId !== abilityId ||
+          window.startedInputSeq > startedInputSeq,
+      )
+  }
+
+  private _localPredictedCastReplaySnapshot(): LocalPredictedCastReplayWindow[] {
+    const windows = this.localPredictedCastReplayWindows.map((window) => ({
+      ...window,
+    }))
+    if (this.localPredictedCast) {
+      this._retainReplayCastWindowSnapshot(windows, {
+        abilityId: this.localPredictedCast.abilityId,
+        startedInputSeq: this.localPredictedCast.startedInputSeq,
+        totalTicks: this.localPredictedCast.totalTicks,
+      })
+    }
+    return windows
+  }
+
+  private _replayCastForInput(
+    casts: LocalPredictedCastReplayWindow[],
+    seq: number,
+  ): LocalPredictedCastReplayWindow | null {
+    return (
+      casts.find((cast) =>
+        this._inputSeqInsidePredictedCastWindow(seq, cast),
+      ) ?? null
+    )
+  }
+
+  private _replayCastMatchingContext(
+    ctx: LocalReplayContext,
+    casts: LocalPredictedCastReplayWindow[],
+  ): LocalPredictedCastReplayWindow | null {
+    return (
+      casts.find((cast) => this._replayContextMatchesPredictedCast(ctx, cast)) ??
+      null
+    )
+  }
+
   private _replayContextMatchesPredictedCast(
     ctx: LocalReplayContext,
     cast: LocalPredictedCastReplayWindow,
@@ -2014,6 +2107,31 @@ export class PlayerRenderSystem {
     if (ctx.isSwinging && activeSwing === null) return false
     if (!activeSwing) return true
     return input.seq >= activeSwing.startedInputSeq + activeSwing.totalTicks
+  }
+
+  private _hasAuthoritativeAbilityActiveOrCooldown(
+    state: (typeof ClientPlayerState)[number],
+    abilityId: string,
+    ctx: LocalReplayContext,
+    currentServerTimeMs: number,
+  ): boolean {
+    if (state.castingAbilityId === abilityId || ctx.castingAbilityId === abilityId) {
+      return true
+    }
+    if (
+      abilityId === "jump" &&
+      (this._hasAuthoritativeJumpAirLock(state) ||
+        this._replayContextHasJumpAirLock(ctx))
+    ) {
+      return true
+    }
+    const cooldownEndsAtServerTimeMs =
+      state.abilityStates[abilityId]?.cooldownEndsAtServerTimeMs
+    return (
+      cooldownEndsAtServerTimeMs !== null &&
+      cooldownEndsAtServerTimeMs !== undefined &&
+      cooldownEndsAtServerTimeMs > currentServerTimeMs
+    )
   }
 
   private _localReplayContextForInput(
