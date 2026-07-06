@@ -2004,6 +2004,92 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     })
   })
 
+  it("keeps live prediction aligned when authoritative lightning root lags past the predicted end", () => {
+    const { scene, group, registryValues } = mockSceneAndGroup()
+    const sys = new PlayerRenderSystem(scene as never, group as never)
+    const corrections: string[] = []
+    sys.localPlayerId = "p1"
+    sys.setPredictionCorrectionHandler((correction) => {
+      corrections.push(correction)
+    })
+    registryValues.set(
+      WW_ABILITY_SLOTS_REGISTRY_KEY,
+      ["fireball", null, "lightning_bolt", null, null],
+    )
+    sys.applyFullSync(sync([snap({
+      id: 1,
+      playerId: "p1",
+      x: OPEN_TEST_POINT.x,
+      y: OPEN_TEST_POINT.y,
+      heroId: "yen",
+      moveState: "idle",
+      animState: "idle",
+      castingAbilityId: null,
+    })]))
+
+    const lightningCastTicks = Math.ceil(
+      getSpellAnimationConfig("yen", "lightning_bolt").durationMs / TICK_MS,
+    )
+    for (let seq = 1; seq <= lightningCastTicks; seq += 1) {
+      sys.update(
+        TICK_MS,
+        { left: true, up: false, down: false, right: false },
+        (fullInput) => {
+          if (fullInput) sys.localInputHistory.append(fullInput)
+        },
+        () => input({
+          seq,
+          left: true,
+          abilitySlot: seq === 1 ? 2 : null,
+          abilityTargetX: OPEN_TEST_POINT.x + 200,
+          abilityTargetY: OPEN_TEST_POINT.y,
+        }),
+      )
+    }
+    expect(sys._getLocalSimForTest(1)?.simCurrX).toBeCloseTo(
+      OPEN_TEST_POINT.x,
+      5,
+    )
+
+    ClientPlayerState[1]!.castingAbilityId = "lightning_bolt"
+    ClientPlayerState[1]!.moveState = "rooted"
+    ClientPlayerState[1]!.animState = "heavy_cast"
+
+    sys.update(
+      TICK_MS,
+      { left: true, up: false, down: false, right: false },
+      (fullInput) => {
+        if (fullInput) sys.localInputHistory.append(fullInput)
+      },
+      () => input({
+        seq: lightningCastTicks + 1,
+        left: true,
+      }),
+    )
+
+    const expectedAfterFirstPostCastMove =
+      OPEN_TEST_POINT.x - BASE_MOVE_SPEED_PX_PER_SEC * TICK_DT_SEC
+    expect(sys._getLocalSimForTest(1)?.simCurrX).toBeCloseTo(
+      expectedAfterFirstPostCastMove,
+      5,
+    )
+
+    sys.onLocalAck(1, {
+      x: OPEN_TEST_POINT.x,
+      y: OPEN_TEST_POINT.y,
+      lastProcessedInputSeq: lightningCastTicks - 8,
+      replayContext: replayCtx({
+        castingAbilityId: "lightning_bolt",
+        moveState: "rooted",
+      }),
+    })
+
+    expect(corrections).toEqual(["none"])
+    expect(sys._getLocalSimForTest(1)).toMatchObject({
+      smoothRemainingMs: 0,
+    })
+  })
+
   it("predicts primary melee movement slowdown after the swing start tick", () => {
     const { scene, group } = mockSceneAndGroup()
     const sys = new PlayerRenderSystem(scene as never, group as never)

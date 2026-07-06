@@ -1072,10 +1072,16 @@ export class PlayerRenderSystem {
         this._startLocalPredictedCast(state, inputForStep, localCastAbilityId)
       }
       const activeLocalPredictedCast = this._activeLocalPredictedCast(state)
+      const authoritativeCastEndedForPrediction =
+        this._authoritativeCastEndedForLocalPrediction(state, inputForStep)
       const activeLocalCastAbilityId =
-        localCastAbilityId ?? activeLocalPredictedCast?.abilityId ?? null
+        authoritativeCastEndedForPrediction
+          ? null
+          : localCastAbilityId ?? activeLocalPredictedCast?.abilityId ?? null
       const predictionMoveIntent = inputForStep ?? localMoveIntent
-      const castMoveMult = this._clientCastMoveMultiplier(state, activeLocalCastAbilityId)
+      const castMoveMult = authoritativeCastEndedForPrediction
+        ? 1
+        : this._clientCastMoveMultiplier(state, activeLocalCastAbilityId)
       const swingMult =
         state.animState === "primary_melee_attack" || predictedPrimaryMeleeActive
           ? SWING_MOVE_SPEED_MULTIPLIER
@@ -1104,6 +1110,7 @@ export class PlayerRenderSystem {
           predictionMoveIntent,
           castMoveMult,
           activeLocalCastAbilityId,
+          { ignoreAuthoritativeRoot: authoritativeCastEndedForPrediction },
         )
       ) {
         const { dx, dy } = normalizedMoveFromWASD(predictionMoveIntent)
@@ -1435,6 +1442,9 @@ export class PlayerRenderSystem {
     moveIntent: MoveIntent,
     castMoveMult: number,
     localCastAbilityId: string | null = null,
+    options: {
+      readonly ignoreAuthoritativeRoot?: boolean
+    } = {},
   ): boolean {
     const { dx, dy } = normalizedMoveFromWASD(moveIntent)
     if (dx === 0 && dy === 0) return false
@@ -1444,7 +1454,12 @@ export class PlayerRenderSystem {
     ) {
       return false
     }
-    if (state.moveState === "rooted") return false
+    if (
+      state.moveState === "rooted" &&
+      options.ignoreAuthoritativeRoot !== true
+    ) {
+      return false
+    }
     if (localCastAbilityId) return castMoveMult > 0
     if (state.animState === "light_cast" || state.animState === "heavy_cast") {
       return castMoveMult > 0
@@ -2009,6 +2024,20 @@ export class PlayerRenderSystem {
     cast: LocalPredictedCastReplayWindow,
   ): boolean {
     return seq >= cast.startedInputSeq && seq <= this._predictedCastEndSeq(cast)
+  }
+
+  private _authoritativeCastEndedForLocalPrediction(
+    state: (typeof ClientPlayerState)[number],
+    input: PlayerInputPayload | null,
+  ): boolean {
+    if (!input || !state.castingAbilityId) return false
+    const matchingCast = this.localPredictedCastReplayWindows.find(
+      (cast) => cast.abilityId === state.castingAbilityId,
+    )
+    return (
+      matchingCast !== undefined &&
+      input.seq > this._predictedCastEndSeq(matchingCast)
+    )
   }
 
   private _retainLocalPredictedCastReplayWindow(
