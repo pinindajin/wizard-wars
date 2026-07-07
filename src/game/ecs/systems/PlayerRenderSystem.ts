@@ -348,6 +348,9 @@ export class PlayerRenderSystem {
   /** Local-only primary melee swing window used until authoritative state catches up. */
   private localPredictedPrimaryMeleeSwing: LocalPredictedPrimaryMeleeSwing | null = null
 
+  /** Recently-started primary melee windows retained after local expiry for ACK replay. */
+  private localPredictedPrimaryMeleeSwingReplayWindows: LocalPredictedPrimaryMeleeSwing[] = []
+
   /** Same-ability cooldown windows predicted before authoritative state catches up. */
   private readonly localPredictedAbilityCooldowns = new Map<
     string,
@@ -1071,6 +1074,9 @@ export class PlayerRenderSystem {
       entry.simPrevX = entry.simCurrX
       entry.simPrevY = entry.simCurrY
 
+      this._pruneAcceptedFinishedLocalPredictedCastReplayWindowsFromAuthority(
+        state,
+      )
       const authoritativeCastEndedForPrediction =
         this._authoritativeCastEndedForLocalPrediction(state, inputForStep)
       if (!authoritativeCastEndedForPrediction) {
@@ -1487,6 +1493,7 @@ export class PlayerRenderSystem {
     ) {
       return false
     }
+    if (state.terrainState === "cliff") return false
     if (
       state.moveState === "rooted" &&
       options.ignoreAuthoritativeRoot !== true
@@ -1722,6 +1729,9 @@ export class PlayerRenderSystem {
       startedInputSeq: input.seq,
       totalTicks: this._primaryMeleeSwingTicks(state),
     }
+    this._retainLocalPredictedPrimaryMeleeReplayWindow(
+      this.localPredictedPrimaryMeleeSwing,
+    )
   }
 
   private _inputSeqInsidePredictedPrimaryMeleeMovementWindow(
@@ -1750,6 +1760,7 @@ export class PlayerRenderSystem {
     this.localPredictedCast = null
     this.localPredictedCastReplayWindows = []
     this.localPredictedPrimaryMeleeSwing = null
+    this.localPredictedPrimaryMeleeSwingReplayWindows = []
     this.localPredictedAbilityCooldowns.clear()
     this.localPredictedAbilityCharges.clear()
   }
@@ -1850,6 +1861,7 @@ export class PlayerRenderSystem {
         )
       }
     }
+    this._clearLocalPredictedPrimaryMeleeSwingReplayWindowsFromAck(ack)
   }
 
   private _reconcileLocalPredictedAbilityGuardsFromAuthority(
@@ -1971,10 +1983,8 @@ export class PlayerRenderSystem {
       replayCastsOverride !== undefined
         ? replayCastsOverride.map((cast) => ({ ...cast }))
         : this._localPredictedCastReplaySnapshot()
-    let replayPrimaryMelee =
-      this.localPredictedPrimaryMeleeSwing !== null
-        ? { ...this.localPredictedPrimaryMeleeSwing }
-        : null
+    const replayPrimaryMeleeWindows =
+      this._localPredictedPrimaryMeleeReplaySnapshot()
 
     return (input, baseCtx) => {
       let replayCtx = baseCtx
@@ -1994,12 +2004,9 @@ export class PlayerRenderSystem {
       }
 
       const activeReplayCast = this._replayCastForInput(replayCasts, input.seq)
-      const replayPrimaryMeleeActive =
-        replayPrimaryMelee !== null &&
-        this._inputSeqInsidePredictedPrimaryMeleeMovementWindow(
-          input.seq,
-          replayPrimaryMelee,
-        )
+      const activeReplayPrimaryMelee =
+        this._replayPrimaryMeleeForInput(replayPrimaryMeleeWindows, input.seq)
+      const replayPrimaryMeleeActive = activeReplayPrimaryMelee !== null
       if (
         activeReplayCast &&
         !baseCtxHasUnrelatedCastAuthority
@@ -2070,14 +2077,17 @@ export class PlayerRenderSystem {
         this._shouldStartLocalPredictedPrimaryMeleeSwingForReplay(
           state,
           input,
-          replayPrimaryMelee,
+          activeReplayPrimaryMelee,
           replayCtx,
         )
       ) {
-        replayPrimaryMelee = {
-          startedInputSeq: input.seq,
-          totalTicks: this._primaryMeleeSwingTicks(state),
-        }
+        this._retainReplayPrimaryMeleeWindowSnapshot(
+          replayPrimaryMeleeWindows,
+          {
+            startedInputSeq: input.seq,
+            totalTicks: this._primaryMeleeSwingTicks(state),
+          },
+        )
       }
 
       return outputCtx
@@ -2153,6 +2163,154 @@ export class PlayerRenderSystem {
         (window) =>
           window.abilityId !== abilityId ||
           window.startedInputSeq > startedInputSeq,
+      )
+  }
+
+  private _pruneAcceptedFinishedLocalPredictedCastReplayWindowsFromAuthority(
+    state: (typeof ClientPlayerState)[number],
+  ): void {
+    if (this.localPredictedCastReplayWindows.length === 0) return
+    const currentServerTimeMs = this.getEstimatedServerTimeMs()
+    this.localPredictedCastReplayWindows =
+      this.localPredictedCastReplayWindows.filter((window) => {
+        if (
+          !this._authorityShowsAcceptedCastFinished(
+            state,
+            window,
+            currentServerTimeMs,
+          )
+        ) {
+          return true
+        }
+        if (
+          this.localPredictedCast?.abilityId === window.abilityId &&
+          this.localPredictedCast.startedInputSeq === window.startedInputSeq
+        ) {
+          this.localPredictedCast = null
+        }
+        this._reconcileAcceptedChargeSpendFromAuthority(state, window)
+        return false
+      })
+  }
+
+  private _authorityShowsAcceptedCastFinished(
+    state: (typeof ClientPlayerState)[number],
+    window: LocalPredictedCastReplayWindow,
+    currentServerTimeMs: number,
+  ): boolean {
+    if (state.castingAbilityId === window.abilityId) return false
+    if (window.abilityId === "jump" && this._hasAuthoritativeJumpAirLock(state)) {
+      return false
+    }
+    if (this._authorityShowsAcceptedChargeSpend(state, window)) return true
+    const cooldownEndsAtServerTimeMs =
+      state.abilityStates[window.abilityId]?.cooldownEndsAtServerTimeMs
+    return (
+      cooldownEndsAtServerTimeMs !== null &&
+      cooldownEndsAtServerTimeMs !== undefined &&
+      cooldownEndsAtServerTimeMs > currentServerTimeMs
+    )
+  }
+
+  private _authorityShowsAcceptedChargeSpend(
+    state: (typeof ClientPlayerState)[number],
+    window: LocalPredictedCastReplayWindow,
+  ): boolean {
+    const runtime = state.abilityStates[window.abilityId]
+    const charges = runtime?.charges
+    if (charges === null || charges === undefined) return false
+    const reservations = this.localPredictedAbilityCharges.get(window.abilityId)
+    const reservation = reservations?.find(
+      (candidate) => candidate.startedInputSeq === window.startedInputSeq,
+    )
+    return (
+      reservation !== undefined &&
+      charges <= reservation.remainingChargesAfterReservation
+    )
+  }
+
+  private _reconcileAcceptedChargeSpendFromAuthority(
+    state: (typeof ClientPlayerState)[number],
+    window: LocalPredictedCastReplayWindow,
+  ): void {
+    const runtime = state.abilityStates[window.abilityId]
+    const charges = runtime?.charges
+    if (charges === null || charges === undefined) return
+    const reservations =
+      this.localPredictedAbilityCharges.get(window.abilityId) ?? []
+    this._setLocalPredictedAbilityChargeReservations(
+      window.abilityId,
+      reservations.filter(
+        (reservation) =>
+          reservation.startedInputSeq !== window.startedInputSeq ||
+          charges > reservation.remainingChargesAfterReservation,
+      ),
+    )
+  }
+
+  private _retainLocalPredictedPrimaryMeleeReplayWindow(
+    window: LocalPredictedPrimaryMeleeSwing,
+  ): void {
+    this._retainReplayPrimaryMeleeWindowSnapshot(
+      this.localPredictedPrimaryMeleeSwingReplayWindows,
+      window,
+    )
+  }
+
+  private _retainReplayPrimaryMeleeWindowSnapshot(
+    windows: LocalPredictedPrimaryMeleeSwing[],
+    window: LocalPredictedPrimaryMeleeSwing,
+  ): void {
+    const existingIndex = windows.findIndex(
+      (candidate) => candidate.startedInputSeq === window.startedInputSeq,
+    )
+    if (existingIndex >= 0) {
+      windows[existingIndex] = { ...window }
+    } else {
+      windows.push({ ...window })
+    }
+    windows.sort((a, b) => a.startedInputSeq - b.startedInputSeq)
+  }
+
+  private _localPredictedPrimaryMeleeReplaySnapshot(): LocalPredictedPrimaryMeleeSwing[] {
+    const windows = this.localPredictedPrimaryMeleeSwingReplayWindows.map(
+      (window) => ({ ...window }),
+    )
+    if (this.localPredictedPrimaryMeleeSwing) {
+      this._retainReplayPrimaryMeleeWindowSnapshot(windows, {
+        startedInputSeq: this.localPredictedPrimaryMeleeSwing.startedInputSeq,
+        totalTicks: this.localPredictedPrimaryMeleeSwing.totalTicks,
+      })
+    }
+    return windows
+  }
+
+  private _replayPrimaryMeleeForInput(
+    swings: LocalPredictedPrimaryMeleeSwing[],
+    seq: number,
+  ): LocalPredictedPrimaryMeleeSwing | null {
+    return (
+      swings.find((swing) =>
+        this._inputSeqInsidePredictedPrimaryMeleeMovementWindow(seq, swing),
+      ) ?? null
+    )
+  }
+
+  private _clearLocalPredictedPrimaryMeleeSwingReplayWindowsFromAck(
+    ack: LocalAckState,
+  ): void {
+    const fullyProcessed = (swing: LocalPredictedPrimaryMeleeSwing) =>
+      ack.lastProcessedInputSeq >= swing.startedInputSeq + swing.totalTicks
+
+    if (
+      this.localPredictedPrimaryMeleeSwing &&
+      fullyProcessed(this.localPredictedPrimaryMeleeSwing)
+    ) {
+      this.localPredictedPrimaryMeleeSwing = null
+    }
+    this.localPredictedPrimaryMeleeSwingReplayWindows =
+      this.localPredictedPrimaryMeleeSwingReplayWindows.filter(
+        (swing) => !fullyProcessed(swing),
       )
   }
 
