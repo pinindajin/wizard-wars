@@ -22,88 +22,363 @@
             },
             {
                 "type": "image",
-                "key": "arena-prop-large-obelisk",
-                "url": "assets/sprites/arena-props/large-obelisk.png"
+                "key": "arena-prop-instance-000",
+                "url": "assets/sprites/arena-props/instance-000.png"
             },
             {
                 "type": "image",
-                "key": "arena-prop-medium-obelisk",
-                "url": "assets/sprites/arena-props/medium-obelisk.png"
+                "key": "arena-prop-instance-001",
+                "url": "assets/sprites/arena-props/instance-001.png"
             },
             {
                 "type": "image",
-                "key": "arena-prop-tall-rune-pillar",
-                "url": "assets/sprites/arena-props/tall-rune-pillar.png"
+                "key": "arena-prop-instance-002",
+                "url": "assets/sprites/arena-props/instance-002.png"
             },
             {
                 "type": "image",
-                "key": "arena-prop-brazier-tower",
-                "url": "assets/sprites/arena-props/brazier-tower.png"
+                "key": "arena-prop-instance-003",
+                "url": "assets/sprites/arena-props/instance-003.png"
             },
             {
                 "type": "image",
-                "key": "arena-prop-small-obelisk",
-                "url": "assets/sprites/arena-props/small-obelisk.png"
+                "key": "arena-prop-instance-004",
+                "url": "assets/sprites/arena-props/instance-004.png"
             },
             {
                 "type": "image",
-                "key": "arena-prop-squat-plinth",
-                "url": "assets/sprites/arena-props/squat-plinth.png"
+                "key": "arena-prop-instance-005",
+                "url": "assets/sprites/arena-props/instance-005.png"
             },
             {
                 "type": "image",
-                "key": "arena-prop-curved-wall",
-                "url": "assets/sprites/arena-props/curved-wall.png"
+                "key": "arena-prop-instance-006",
+                "url": "assets/sprites/arena-props/instance-006.png"
             },
             {
                 "type": "image",
-                "key": "arena-prop-broken-wall",
-                "url": "assets/sprites/arena-props/broken-wall.png"
+                "key": "arena-prop-instance-007",
+                "url": "assets/sprites/arena-props/instance-007.png"
             },
             {
                 "type": "image",
-                "key": "arena-prop-straight-wall",
-                "url": "assets/sprites/arena-props/straight-wall.png"
+                "key": "arena-prop-instance-008",
+                "url": "assets/sprites/arena-props/instance-008.png"
             },
             {
                 "type": "image",
-                "key": "arena-prop-square-wall-block",
-                "url": "assets/sprites/arena-props/square-wall-block.png"
+                "key": "arena-prop-instance-009",
+                "url": "assets/sprites/arena-props/instance-009.png"
             },
             {
                 "type": "image",
-                "key": "arena-prop-lava-spire-cluster",
-                "url": "assets/sprites/arena-props/lava-spire-cluster.png"
+                "key": "arena-prop-instance-010",
+                "url": "assets/sprites/arena-props/instance-010.png"
             },
             {
                 "type": "image",
-                "key": "arena-prop-basalt-cluster",
-                "url": "assets/sprites/arena-props/basalt-cluster.png"
+                "key": "arena-prop-instance-011",
+                "url": "assets/sprites/arena-props/instance-011.png"
             },
             {
                 "type": "image",
-                "key": "arena-prop-round-rune-pillar",
-                "url": "assets/sprites/arena-props/round-rune-pillar.png"
+                "key": "arena-prop-instance-012",
+                "url": "assets/sprites/arena-props/instance-012.png"
             },
             {
                 "type": "image",
-                "key": "arena-prop-short-basalt-cluster",
-                "url": "assets/sprites/arena-props/short-basalt-cluster.png"
+                "key": "arena-prop-instance-013",
+                "url": "assets/sprites/arena-props/instance-013.png"
             },
             {
                 "type": "image",
-                "key": "arena-prop-stone-drum",
-                "url": "assets/sprites/arena-props/stone-drum.png"
+                "key": "arena-prop-instance-014",
+                "url": "assets/sprites/arena-props/instance-014.png"
             },
             {
                 "type": "image",
-                "key": "arena-prop-short-wall-slab",
-                "url": "assets/sprites/arena-props/short-wall-slab.png"
+                "key": "arena-prop-instance-015",
+                "url": "assets/sprites/arena-props/instance-015.png"
             },
             {
                 "type": "image",
-                "key": "arena-prop-small-rocks",
-                "url": "assets/sprites/arena-props/small-rocks.png"
+                "key": "arena-prop-instance-016",
+                "url": "assets/sprites/arena-props/instance-016.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-017",
+                "url": "assets/sprites/arena-props/instance-017.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-018",
+                "url": "assets/sprites/arena-props/instance-018.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-019",
+                "url": "assets/sprites/arena-props/instance-019.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-020",
+                "url": "assets/sprites/arena-props/instance-020.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-021",
+                "url": "assets/sprites/arena-props/instance-021.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-022",
+                "url": "assets/sprites/arena-props/instance-022.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-023",
+                "url": "assets/sprites/arena-props/instance-023.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-024",
+                "url": "assets/sprites/arena-props/instance-024.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-025",
+                "url": "assets/sprites/arena-props/instance-025.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-026",
+                "url": "assets/sprites/arena-props/instance-026.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-027",
+                "url": "assets/sprites/arena-props/instance-027.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-028",
+                "url": "assets/sprites/arena-props/instance-028.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-029",
+                "url": "assets/sprites/arena-props/instance-029.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-030",
+                "url": "assets/sprites/arena-props/instance-030.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-031",
+                "url": "assets/sprites/arena-props/instance-031.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-032",
+                "url": "assets/sprites/arena-props/instance-032.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-033",
+                "url": "assets/sprites/arena-props/instance-033.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-034",
+                "url": "assets/sprites/arena-props/instance-034.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-035",
+                "url": "assets/sprites/arena-props/instance-035.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-036",
+                "url": "assets/sprites/arena-props/instance-036.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-037",
+                "url": "assets/sprites/arena-props/instance-037.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-038",
+                "url": "assets/sprites/arena-props/instance-038.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-039",
+                "url": "assets/sprites/arena-props/instance-039.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-040",
+                "url": "assets/sprites/arena-props/instance-040.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-041",
+                "url": "assets/sprites/arena-props/instance-041.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-042",
+                "url": "assets/sprites/arena-props/instance-042.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-043",
+                "url": "assets/sprites/arena-props/instance-043.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-044",
+                "url": "assets/sprites/arena-props/instance-044.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-045",
+                "url": "assets/sprites/arena-props/instance-045.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-046",
+                "url": "assets/sprites/arena-props/instance-046.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-047",
+                "url": "assets/sprites/arena-props/instance-047.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-048",
+                "url": "assets/sprites/arena-props/instance-048.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-049",
+                "url": "assets/sprites/arena-props/instance-049.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-050",
+                "url": "assets/sprites/arena-props/instance-050.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-051",
+                "url": "assets/sprites/arena-props/instance-051.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-052",
+                "url": "assets/sprites/arena-props/instance-052.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-053",
+                "url": "assets/sprites/arena-props/instance-053.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-054",
+                "url": "assets/sprites/arena-props/instance-054.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-055",
+                "url": "assets/sprites/arena-props/instance-055.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-056",
+                "url": "assets/sprites/arena-props/instance-056.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-057",
+                "url": "assets/sprites/arena-props/instance-057.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-058",
+                "url": "assets/sprites/arena-props/instance-058.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-059",
+                "url": "assets/sprites/arena-props/instance-059.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-060",
+                "url": "assets/sprites/arena-props/instance-060.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-061",
+                "url": "assets/sprites/arena-props/instance-061.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-062",
+                "url": "assets/sprites/arena-props/instance-062.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-063",
+                "url": "assets/sprites/arena-props/instance-063.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-064",
+                "url": "assets/sprites/arena-props/instance-064.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-065",
+                "url": "assets/sprites/arena-props/instance-065.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-066",
+                "url": "assets/sprites/arena-props/instance-066.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-067",
+                "url": "assets/sprites/arena-props/instance-067.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-068",
+                "url": "assets/sprites/arena-props/instance-068.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-069",
+                "url": "assets/sprites/arena-props/instance-069.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-070",
+                "url": "assets/sprites/arena-props/instance-070.png"
+            },
+            {
+                "type": "image",
+                "key": "arena-prop-instance-071",
+                "url": "assets/sprites/arena-props/instance-071.png"
             }
         ]
     },

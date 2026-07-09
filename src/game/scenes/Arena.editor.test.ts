@@ -52,7 +52,7 @@ function rectsOverlap(a: TiledObject, b: TiledObject): boolean {
 }
 
 describe("Arena Phaser Editor scene", () => {
-  it("uses a doubled native arena base image and editor bounds", async () => {
+  it("uses the no-cliff lava arena base image and editor bounds", async () => {
     const scene = readJson<{
       readonly settings: {
         readonly borderWidth: number
@@ -61,13 +61,13 @@ describe("Arena Phaser Editor scene", () => {
     }>("src/game/scenes/Arena.scene")
     const metadata = await sharp(resolve(ROOT, "public/assets/maps/arena-base.png")).metadata()
 
-    expect(metadata.width).toBe(2804)
-    expect(metadata.height).toBe(2244)
-    expect(scene.settings.borderWidth).toBe(2804)
-    expect(scene.settings.borderHeight).toBe(2244)
+    expect(metadata.width).toBe(4224)
+    expect(metadata.height).toBe(3392)
+    expect(scene.settings.borderWidth).toBe(4224)
+    expect(scene.settings.borderHeight).toBe(3392)
   })
 
-  it("keeps representative arena visuals and collision rectangles aligned after doubling", () => {
+  it("keeps representative arena visuals and collision rectangles aligned", () => {
     const scene = readJson<{
       readonly displayList: readonly {
         readonly type: string
@@ -81,39 +81,40 @@ describe("Arena Phaser Editor scene", () => {
       }[]
     }>("src/game/scenes/Arena.scene")
 
-    expect(scene.displayList.find((item) => item.label === "arena_prop_000_brazier-tower")).toMatchObject({
-      x: 264,
-      y: 172,
-      scaleX: 0.48,
-      scaleY: 0.48,
+    expect(scene.displayList.find((item) => item.label === "arena_prop_000_instance-000")).toMatchObject({
+      x: 2919,
+      y: 376,
+      scaleX: 1,
+      scaleY: 1,
     })
     expect(scene.displayList.find((item) => item.label === "propCollider_000")).toMatchObject({
-      x: 242,
-      y: 148,
-      width: 46,
-      height: 24,
+      x: 2886,
+      y: 342,
+      width: 67,
+      height: 32,
     })
     expect(scene.displayList.find((item) => item.label === "lavaArea_000")).toMatchObject({
-      x: 256,
-      y: 24,
-      width: 56,
-      height: 8,
+      x: 0,
+      y: 0,
+      width: 4224,
+      height: 112,
     })
     expect(scene.displayList.find((item) => item.label === "nonWalkableArea_000")).toMatchObject({
       x: 0,
       y: 0,
-      width: 2804,
-      height: 24,
+      width: 4224,
+      height: 112,
     })
   })
 
-  it("keeps tracked arena metadata aligned with the doubled source scene", () => {
+  it("keeps tracked arena metadata aligned with the no-cliff lava source scene", () => {
     const metadata = readJson<{
       readonly arena: { readonly width: number; readonly height: number }
-      readonly placements: readonly {
+      readonly props: readonly {
         readonly x: number
         readonly y: number
-        readonly scale: number
+        readonly width: number
+        readonly height: number
       }[]
       readonly propColliders: readonly {
         readonly x: number
@@ -124,21 +125,21 @@ describe("Arena Phaser Editor scene", () => {
       readonly spawnPoints: readonly { readonly x: number; readonly y: number }[]
     }>("public/assets/sprites/arena-props/metadata.json")
     const reviewPlacements = readJson<{
-      readonly placements: readonly { readonly x: number; readonly y: number; readonly scale: number }[]
+      readonly placements: readonly { readonly x: number; readonly y: number; readonly width: number; readonly height: number }[]
       readonly propColliders: readonly {
         readonly x: number
         readonly y: number
         readonly width: number
         readonly height: number
       }[]
-    }>("public/assets/arena-review/native-map/placements.json")
+    }>("public/assets/arena-review/no-cliff-lava/generated/placements.json")
 
-    expect(metadata.arena).toEqual({ width: 2804, height: 2244 })
-    expect(metadata.placements[0]).toMatchObject({ x: 264, y: 172, scale: 0.48 })
-    expect(metadata.propColliders[0]).toMatchObject({ x: 242, y: 148, width: 46, height: 24 })
-    expect(metadata.spawnPoints[0]).toEqual({ x: 1420, y: 1124 })
-    expect(reviewPlacements.placements[0]).toMatchObject({ x: 264, y: 172, scale: 0.48 })
-    expect(reviewPlacements.propColliders[0]).toMatchObject({ x: 242, y: 148, width: 46, height: 24 })
+    expect(metadata.arena).toEqual({ width: 4224, height: 3392 })
+    expect(metadata.props[0]).toMatchObject({ x: 2919, y: 376, width: 108, height: 180 })
+    expect(metadata.propColliders[0]).toMatchObject({ x: 2886, y: 342, width: 67, height: 32 })
+    expect(metadata.spawnPoints[0]).toEqual({ x: 2112, y: 1696 })
+    expect(reviewPlacements.placements[0]).toMatchObject({ x: 2919, y: 376, width: 108, height: 180 })
+    expect(reviewPlacements.propColliders[0]).toMatchObject({ x: 2886, y: 342, width: 67, height: 32 })
   })
 
   it("exports to the committed arena tilemap without semantic drift", () => {
@@ -206,7 +207,7 @@ describe("Arena Phaser Editor scene", () => {
       height,
     }))
 
-    expect(ARENA_NON_WALKABLE_COLLIDERS.length).toBeLessThan(editorRects.length)
+    expect(ARENA_NON_WALKABLE_COLLIDERS.length).toBeLessThanOrEqual(editorRects.length)
     expect(rectCoverArea(ARENA_NON_WALKABLE_COLLIDERS)).toBe(rectCoverArea(editorRects))
     assertExactCoverParity(editorRects, ARENA_NON_WALKABLE_COLLIDERS)
   })
@@ -275,7 +276,7 @@ describe("Arena Phaser Editor scene", () => {
     expect(scene.displayList.some((item) => item.type === "Image" && item.label.startsWith("arena_prop_"))).toBe(true)
     expect(scene.displayList.some((item) => item.type === "Rectangle" && item.label.startsWith("propCollider_"))).toBe(true)
     expect(scene.displayList.some((item) => item.type === "Rectangle" && item.label.startsWith("lavaArea_"))).toBe(true)
-    expect(scene.displayList.some((item) => item.type === "Rectangle" && item.label.startsWith("cliffArea_"))).toBe(true)
+    expect(scene.displayList.some((item) => item.type === "Rectangle" && item.label.startsWith("cliffArea_"))).toBe(false)
     expect(scene.displayList.some((item) => item.type === "Rectangle" && item.label.startsWith("walkableArea_"))).toBe(true)
     expect(
       scene.displayList

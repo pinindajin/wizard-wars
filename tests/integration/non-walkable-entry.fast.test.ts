@@ -7,13 +7,15 @@ import {
 } from "@/server/game/playerInputQueue"
 import { createGameSimulation } from "@/server/game/simulation"
 import {
+  ARENA_PROP_COLLIDERS,
   ARENA_HEIGHT,
-  ARENA_NON_WALKABLE_COLLIDERS,
   ARENA_WORLD_COLLIDERS,
   ARENA_WIDTH,
+  BASE_MOVE_SPEED_PX_PER_SEC,
   PLAYER_WORLD_COLLISION_FOOTPRINT,
   PLAYER_WORLD_COLLISION_OFFSET_Y_PX,
   PLAYER_WORLD_COLLISION_RADIUS_Y_PX,
+  TICK_DT_SEC,
 } from "@/shared/balance-config"
 import { canOccupyWorldPosition } from "@/shared/collision/worldCollision"
 import type { PlayerInputPayload } from "@/shared/types"
@@ -57,14 +59,21 @@ function queue(payload: PlayerInputPayload): PlayerInputQueueMap {
 function sampleUpperBlocker(): { x: number; y: number; minY: number } {
   const bounds = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
   const topClearance = PLAYER_WORLD_COLLISION_RADIUS_Y_PX - PLAYER_WORLD_COLLISION_OFFSET_Y_PX
-  const blocker = ARENA_NON_WALKABLE_COLLIDERS
+  const stepY = BASE_MOVE_SPEED_PX_PER_SEC * TICK_DT_SEC
+  const blocker = ARENA_PROP_COLLIDERS
     .filter((rect) => {
-      if (rect.y >= 420) return false
+      if (rect.y >= 1000) return false
       const x = rect.x + rect.width / 2
       const y = rect.y + rect.height + topClearance + 3
       return canOccupyWorldPosition(
         x,
         y,
+        PLAYER_WORLD_COLLISION_FOOTPRINT,
+        bounds,
+        ARENA_WORLD_COLLIDERS,
+      ) && !canOccupyWorldPosition(
+        x,
+        y - stepY,
         PLAYER_WORLD_COLLISION_FOOTPRINT,
         bounds,
         ARENA_WORLD_COLLIDERS,
@@ -77,7 +86,7 @@ function sampleUpperBlocker(): { x: number; y: number; minY: number } {
     const y = rect.y + rect.height + topClearance + 3
     return { x, y, minY: rect.y + rect.height + topClearance }
   }
-  throw new Error("expected upper native non-walkable blocker with legal start")
+  throw new Error("expected upper native prop blocker with legal start")
 }
 
 describe("non-walkable movement integration", () => {

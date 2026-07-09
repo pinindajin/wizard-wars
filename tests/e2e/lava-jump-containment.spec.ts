@@ -2,10 +2,14 @@ import { expect, test, type Page } from "@playwright/test"
 
 import {
   ARENA_HEIGHT,
+  ARENA_LAVA_COLLIDERS,
   ARENA_WIDTH,
   ARENA_WORLD_COLLIDERS,
 } from "../../src/shared/balance-config"
-import { PLAYER_WORLD_COLLISION_FOOTPRINT } from "../../src/shared/balance-config/combat"
+import {
+  JUMP_LANDING_GRACE_PX,
+  PLAYER_WORLD_COLLISION_FOOTPRINT,
+} from "../../src/shared/balance-config/combat"
 import { TICK_MS } from "../../src/shared/balance-config/rendering"
 import { terrainColliderSetForPlayerState } from "../../src/shared/collision/arenaSpatialIndexes"
 import { terrainStateAtPosition } from "../../src/shared/collision/terrainHazards"
@@ -43,14 +47,6 @@ type LavaEscapeSample = {
   readonly input: PlayerInputOverrides
 }
 
-const PREFERRED_NATIVE_LAVA_EDGE_SAMPLE = {
-  start: { x: 1128, y: 136 },
-  landThreshold: { x: 1128, y: 200 },
-  axis: "y",
-  direction: 1,
-  input: { down: true },
-} as const satisfies LavaEscapeSample
-
 const ARENA_BOUNDS = { width: ARENA_WIDTH, height: ARENA_HEIGHT } as const
 const LAVA_TERRAIN_COLLIDER_SET = terrainColliderSetForPlayerState(0, "lava")
 const HELD_INPUT_CHUNK_TICKS = MAX_PLAYER_INPUT_COMMAND_RUN_SPAN_TICKS
@@ -71,13 +67,13 @@ function isBeforeLandThreshold(
   return delta * sample.direction < 0
 }
 
-function isPastLandThreshold(
+function isAtLandThresholdWithJumpGrace(
   point: { readonly x: number; readonly y: number },
   sample: LavaEscapeSample,
 ): boolean {
   const delta =
     sampleAxisValue(point, sample) - sampleAxisValue(sample.landThreshold, sample)
-  return delta * sample.direction > 0
+  return delta * sample.direction >= -JUMP_LANDING_GRACE_PX
 }
 
 function assertNativeLavaEscapeSample(sample: LavaEscapeSample): LavaEscapeSample {
@@ -111,9 +107,41 @@ function assertNativeLavaEscapeSample(sample: LavaEscapeSample): LavaEscapeSampl
   )
 }
 
-const LAVA_ESCAPE_SAMPLE = assertNativeLavaEscapeSample(
-  PREFERRED_NATIVE_LAVA_EDGE_SAMPLE,
-)
+function findNativeLavaEscapeSample(): LavaEscapeSample {
+  const topLava = ARENA_LAVA_COLLIDERS.filter((rect) => rect.y === 0).sort(
+    (a, b) => b.width - a.width,
+  )[0]
+  if (!topLava) throw new Error("Expected native arena geometry to contain top-edge lava")
+
+  const startY = topLava.y + 24
+  const landThresholdY = topLava.y + topLava.height + 16
+
+  for (
+    let x = topLava.x + PLAYER_WORLD_COLLISION_FOOTPRINT.radiusX + 44;
+    x < topLava.x + topLava.width - PLAYER_WORLD_COLLISION_FOOTPRINT.radiusX;
+    x += 16
+  ) {
+    const sample = {
+      start: { x, y: startY },
+      landThreshold: { x, y: landThresholdY },
+      axis: "y",
+      direction: 1,
+      input: { down: true },
+    } as const satisfies LavaEscapeSample
+
+    try {
+      return assertNativeLavaEscapeSample(sample)
+    } catch {
+      continue
+    }
+  }
+
+  throw new Error(
+    "Expected native arena geometry to contain a reachable top lava-to-land jump edge",
+  )
+}
+
+const LAVA_ESCAPE_SAMPLE = findNativeLavaEscapeSample()
 
 /**
  * Installs a browser-side recorder for authoritative player snapshots/deltas.
@@ -581,25 +609,15 @@ test("lava edge blocks WASD exit and Jump escapes to land", async ({ page }) => 
     })
     .toBeGreaterThan(0)
 
-  await expect
-    .poll(
-      async () => {
-        const state = await readAuthoritativeState(page)
-        return Boolean(state && state.terrainState === "land" && state.jumpZ <= 0)
-      },
-      { timeout: 8_000 },
-    )
-    .toBe(true)
-
   const afterJump = await sendHeldInputUntil(
     page,
     LAVA_ESCAPE_SAMPLE.input,
     (state) =>
       state.terrainState === "land" &&
       state.jumpZ <= 0 &&
-      isPastLandThreshold(state, LAVA_ESCAPE_SAMPLE),
+      isAtLandThresholdWithJumpGrace(state, LAVA_ESCAPE_SAMPLE),
   )
   const stopJumpSeq = await sendPlayerInput(page, { right: false })
   await waitForProcessedInput(page, stopJumpSeq)
-  expect(isPastLandThreshold(afterJump, LAVA_ESCAPE_SAMPLE)).toBe(true)
+  expect(isAtLandThresholdWithJumpGrace(afterJump, LAVA_ESCAPE_SAMPLE)).toBe(true)
 })

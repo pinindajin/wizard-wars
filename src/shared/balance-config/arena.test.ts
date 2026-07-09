@@ -14,6 +14,7 @@ import {
   ARENA_WORLD_COLLIDERS,
   ARENA_LAVA_COLLIDERS,
   ARENA_CLIFF_COLLIDERS,
+  ARENA_NON_HAZARD_COLLIDERS,
 } from "@/shared/balance-config/arena"
 import {
   PLAYER_WORLD_COLLISION_OFFSET_Y_PX,
@@ -24,9 +25,8 @@ import {
 import {
   ARENA_LAYOUT_IMPORTED_TILE_FIRST_GID,
 } from "@/shared/balance-config/arena-layout"
+import { terrainStateAtPosition } from "@/shared/collision/terrainHazards"
 import { canOccupyWorldPosition } from "@/shared/collision/worldCollision"
-
-const ARENA_SCALE = 2
 
 /**
  * Tests whether a player spawn oval overlaps a generated collider rectangle.
@@ -49,7 +49,7 @@ function spawnOverlapsCollider(
   return dx * dx + dy * dy < 1
 }
 
-function pointOverlapsCollider(
+function pointInRect(
   x: number,
   y: number,
   rect: { x: number; y: number; width: number; height: number },
@@ -57,78 +57,12 @@ function pointOverlapsCollider(
   return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height
 }
 
-function scaledPoint(point: { readonly x: number; readonly y: number }): { x: number; y: number } {
-  return { x: point.x * ARENA_SCALE, y: point.y * ARENA_SCALE }
-}
-
-function hasFootprintReachablePath(
-  start: { x: number; y: number },
-  target: { x: number; y: number },
-  bounds: { minX: number; maxX: number; minY: number; maxY: number },
-  step: number,
+function pointInRects(
+  x: number,
+  y: number,
+  rects: readonly { x: number; y: number; width: number; height: number }[],
 ): boolean {
-  const cols = Math.floor((bounds.maxX - bounds.minX) / step) + 1
-  const rows = Math.floor((bounds.maxY - bounds.minY) / step) + 1
-  const legal = new Uint8Array(cols * rows)
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < cols; col++) {
-      const x = bounds.minX + col * step
-      const y = bounds.minY + row * step
-      legal[row * cols + col] = canOccupyWorldPosition(
-        x,
-        y,
-        PLAYER_WORLD_COLLISION_FOOTPRINT,
-        { width: ARENA_WIDTH, height: ARENA_HEIGHT },
-        ARENA_WORLD_COLLIDERS,
-      )
-        ? 1
-        : 0
-    }
-  }
-
-  const nearestLegal = (point: { x: number; y: number }) => {
-    let best: { col: number; row: number; distSq: number } | null = null
-    for (let row = 0; row < rows; row++) {
-      for (let col = 0; col < cols; col++) {
-        if (!legal[row * cols + col]) continue
-        const x = bounds.minX + col * step
-        const y = bounds.minY + row * step
-        const distSq = (x - point.x) ** 2 + (y - point.y) ** 2
-        if (!best || distSq < best.distSq) best = { col, row, distSq }
-      }
-    }
-    return best
-  }
-
-  const first = nearestLegal(start)
-  const last = nearestLegal(target)
-  expect(first, "start has nearby legal footprint center").not.toBeNull()
-  expect(last, "target has nearby legal footprint center").not.toBeNull()
-  if (!first || !last) return false
-
-  const seen = new Uint8Array(cols * rows)
-  const queue: { col: number; row: number }[] = [first]
-  seen[first.row * cols + first.col] = 1
-  for (let head = 0; head < queue.length; head++) {
-    const current = queue[head]!
-    if (current.col === last.col && current.row === last.row) return true
-    for (const [dc, dr] of [
-      [1, 0],
-      [-1, 0],
-      [0, 1],
-      [0, -1],
-    ] as const) {
-      const col = current.col + dc
-      const row = current.row + dr
-      if (col < 0 || col >= cols || row < 0 || row >= rows) continue
-      const index = row * cols + col
-      if (seen[index] || !legal[index]) continue
-      seen[index] = 1
-      queue.push({ col, row })
-    }
-  }
-
-  return false
+  return rects.some((rect) => pointInRect(x, y, rect))
 }
 
 describe("arena constants", () => {
@@ -148,8 +82,10 @@ describe("arena constants", () => {
   it("exposes editor-authored non-walkable colliders", () => {
     expect(ARENA_NON_WALKABLE_COLLIDERS.length).toBeGreaterThan(0)
     expect(ARENA_WORLD_COLLIDERS.length).toBe(
-      ARENA_PROP_COLLIDERS.length + ARENA_NON_WALKABLE_COLLIDERS.length,
+      ARENA_PROP_COLLIDERS.length + ARENA_NON_HAZARD_COLLIDERS.length + ARENA_CLIFF_COLLIDERS.length,
     )
+    expect(ARENA_WORLD_COLLIDERS).toEqual(ARENA_PROP_COLLIDERS)
+    expect(ARENA_NON_WALKABLE_COLLIDERS).toEqual(ARENA_LAVA_COLLIDERS)
     for (const rect of ARENA_NON_WALKABLE_COLLIDERS) {
       expect(rect.width).toBeGreaterThan(0)
       expect(rect.height).toBeGreaterThan(0)
@@ -160,10 +96,10 @@ describe("arena constants", () => {
     }
   })
 
-  it("exposes explicit native lava and cliff regions", () => {
+  it("exposes lava regions and no native cliff regions", () => {
     expect(ARENA_LAVA_COLLIDERS.length).toBeGreaterThan(0)
-    expect(ARENA_CLIFF_COLLIDERS.length).toBeGreaterThan(0)
-    for (const rect of [...ARENA_LAVA_COLLIDERS, ...ARENA_CLIFF_COLLIDERS]) {
+    expect(ARENA_CLIFF_COLLIDERS).toEqual([])
+    for (const rect of ARENA_LAVA_COLLIDERS) {
       expect(rect.width).toBeGreaterThan(0)
       expect(rect.height).toBeGreaterThan(0)
       expect(rect.x).toBeGreaterThanOrEqual(0)
@@ -173,12 +109,12 @@ describe("arena constants", () => {
     }
   })
 
-  it("has doubled native image dimensions while retaining 64px broadphase cells", () => {
+  it("has no-cliff lava arena dimensions while retaining 64px broadphase cells", () => {
     expect(TILE_SIZE_PX).toBe(64)
-    expect(ARENA_WIDTH).toBe(2804)
-    expect(ARENA_HEIGHT).toBe(2244)
-    expect(ARENA_COLS).toBe(44)
-    expect(ARENA_ROWS).toBe(36)
+    expect(ARENA_WIDTH).toBe(4224)
+    expect(ARENA_HEIGHT).toBe(3392)
+    expect(ARENA_COLS).toBe(66)
+    expect(ARENA_ROWS).toBe(53)
   })
 
   it("has correct center coordinates", () => {
@@ -190,54 +126,29 @@ describe("arena constants", () => {
     expect(ARENA_LAYOUT_IMPORTED_TILE_FIRST_GID).toBe(17)
   })
 
-  it("keeps the top-left platform connected through its diagonal bridge", () => {
+  it("keeps representative stone platforms and bridges walkable", () => {
     const samples = [
-      { label: "platform", x: 164, y: 154 },
-      { label: "platform seam", x: 218, y: 206 },
-      { label: "bridge upper", x: 248, y: 220 },
-      { label: "bridge middle", x: 320, y: 280 },
-      { label: "bridge lower", x: 392, y: 350 },
-      { label: "main arena join", x: 430, y: 365 },
-    ]
-    for (const sample of samples) {
-      const scaled = scaledPoint(sample)
-      const blockingCollider = ARENA_NON_WALKABLE_COLLIDERS.find((rect) =>
-        pointOverlapsCollider(scaled.x, scaled.y, rect),
-      )
-      expect(blockingCollider, sample.label).toBeUndefined()
-    }
-    expect(
-      hasFootprintReachablePath(
-        scaledPoint({ x: 164, y: 154 }),
-        scaledPoint({ x: 430, y: 365 }),
-        { minX: 80, maxX: 1040, minY: 100, maxY: 860 },
-        8,
-      ),
-    ).toBe(true)
-  })
-
-  it("keeps native jump islands, side decks, and horizontal bridges walkable", () => {
-    const samples = [
-      { label: "bottom-left island", x: 452, y: 990 },
-      { label: "bottom-right island", x: 950, y: 990 },
-      { label: "top-left tiny island", x: 393, y: 43 },
-      { label: "top-right tiny island", x: 1009, y: 43 },
-      { label: "left horizontal bridge", x: 103, y: 568 },
-      { label: "right horizontal bridge", x: 1300, y: 568 },
-      { label: "left side deck", x: 104, y: 423 },
-      { label: "right side deck", x: 1298, y: 429 },
+      { label: "center", x: 2112, y: 1696 },
+      { label: "north-west platform", x: 920, y: 520 },
+      { label: "north-east platform", x: 3120, y: 520 },
+      { label: "west platform", x: 680, y: 1584 },
+      { label: "south-west platform", x: 760, y: 2816 },
+      { label: "south platform", x: 2144, y: 2936 },
+      { label: "south-east platform", x: 3264, y: 2688 },
+      { label: "east platform", x: 3512, y: 1888 },
+      { label: "north bridge", x: 2112, y: 1040 },
+      { label: "south bridge", x: 2112, y: 2304 },
+      { label: "west bridge", x: 1320, y: 1696 },
+      { label: "east bridge", x: 2896, y: 1696 },
     ]
 
     for (const sample of samples) {
-      const scaled = scaledPoint(sample)
-      const blockingCollider = ARENA_NON_WALKABLE_COLLIDERS.find((rect) =>
-        pointOverlapsCollider(scaled.x, scaled.y, rect),
-      )
+      const blockingCollider = ARENA_NON_WALKABLE_COLLIDERS.find((rect) => pointInRect(sample.x, sample.y, rect))
       expect(blockingCollider, `${sample.label} point blocker`).toBeUndefined()
       expect(
         canOccupyWorldPosition(
-          scaled.x,
-          scaled.y,
+          sample.x,
+          sample.y,
           PLAYER_WORLD_COLLISION_FOOTPRINT,
           { width: ARENA_WIDTH, height: ARENA_HEIGHT },
           ARENA_WORLD_COLLIDERS,
@@ -247,24 +158,19 @@ describe("arena constants", () => {
     }
   })
 
-  it("does not leave stale broad walkable residue around hand-guided side islands", () => {
+  it("places lava at every outside edge and in internal gaps", () => {
     const samples = [
-      { label: "top-left tiny island old spill", x: 465, y: 40 },
-      { label: "top-right tiny island old spill", x: 937, y: 40 },
-      { label: "left side deck old top crescent", x: 104, y: 340 },
-      { label: "right side deck old top crescent", x: 1298, y: 340 },
-      { label: "left side deck old vertical stem", x: 104, y: 510 },
-      { label: "right side deck old vertical stem", x: 1298, y: 510 },
-      { label: "left side deck old edge sliver", x: 10, y: 390 },
-      { label: "right side deck old edge sliver", x: 1392, y: 390 },
+      { label: "north edge", x: ARENA_WIDTH / 2, y: 8 },
+      { label: "south edge", x: ARENA_WIDTH / 2, y: ARENA_HEIGHT - 8 },
+      { label: "west edge", x: 8, y: ARENA_HEIGHT / 2 },
+      { label: "east edge", x: ARENA_WIDTH - 8, y: ARENA_HEIGHT / 2 },
+      { label: "center-south internal gap", x: 1900, y: 2400 },
+      { label: "east internal gap", x: 3200, y: 2000 },
     ]
 
     for (const sample of samples) {
-      const scaled = scaledPoint(sample)
-      const blockingCollider = ARENA_NON_WALKABLE_COLLIDERS.find((rect) =>
-        pointOverlapsCollider(scaled.x, scaled.y, rect),
-      )
-      expect(blockingCollider, sample.label).toBeDefined()
+      expect(pointInRects(sample.x, sample.y, ARENA_LAVA_COLLIDERS), sample.label).toBe(true)
+      expect(terrainStateAtPosition(sample.x, sample.y), sample.label).toBe("lava")
     }
   })
 })
@@ -284,20 +190,20 @@ describe("spawn points", () => {
     }
   })
 
-  it("scales spawn points with the doubled arena", () => {
+  it("uses generated no-cliff lava arena spawn points", () => {
     expect(ARENA_SPAWN_POINTS).toEqual([
-      { x: 1420, y: 1124 },
-      { x: 1170, y: 1120 },
-      { x: 1670, y: 1120 },
-      { x: 1420, y: 820 },
-      { x: 1420, y: 1420 },
-      { x: 1020, y: 1010 },
-      { x: 1820, y: 1010 },
-      { x: 1024, y: 1250 },
-      { x: 1816, y: 1250 },
-      { x: 372, y: 1712 },
-      { x: 2432, y: 1712 },
-      { x: 1400, y: 1860 },
+      { x: 2112, y: 1696 },
+      { x: 1808, y: 1688 },
+      { x: 2416, y: 1696 },
+      { x: 2112, y: 1392 },
+      { x: 2112, y: 1992 },
+      { x: 1744, y: 1448 },
+      { x: 2480, y: 1448 },
+      { x: 1744, y: 1944 },
+      { x: 2480, y: 1944 },
+      { x: 920, y: 520 },
+      { x: 3120, y: 520 },
+      { x: 680, y: 1584 },
     ])
   })
 
@@ -312,6 +218,7 @@ describe("spawn points", () => {
 
   it("no spawn point overlaps editor-authored blocking colliders", () => {
     for (const sp of ARENA_SPAWN_POINTS) {
+      expect(terrainStateAtPosition(sp.x, sp.y)).toBe("land")
       for (const rect of ARENA_WORLD_COLLIDERS) {
         expect(spawnOverlapsCollider(sp.x, sp.y, rect)).toBe(false)
       }
