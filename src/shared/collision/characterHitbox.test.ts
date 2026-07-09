@@ -49,8 +49,18 @@ describe("capsuleIntersectsRect", () => {
     expect(capsuleIntersectsRect(40, 100, 160, 100, 0, rect)).toBe(true)
   })
 
+  it("hits when a zero-radius segment rides along a hitbox edge", () => {
+    expect(capsuleIntersectsRect(rect.x - 10, rect.y, rect.x + rect.width + 10, rect.y, 0, rect)).toBe(
+      true,
+    )
+  })
+
   it("hits when the capsule radius reaches the hitbox edge", () => {
     expect(capsuleIntersectsRect(40, 40, 160, 40, 20, rect)).toBe(true)
+  })
+
+  it("hits when the capsule end radius reaches the hitbox edge", () => {
+    expect(capsuleIntersectsRect(40, 40, 100, rect.y - 5, 5, rect)).toBe(true)
   })
 
   it("handles zero-length capsules", () => {
@@ -96,6 +106,28 @@ describe("swingConeIntersectsRect", () => {
         y: 70,
         width: 20,
         height: 20,
+      }),
+    ).toBe(true)
+  })
+
+  it("hits when the lower cone boundary crosses a hitbox edge", () => {
+    expect(
+      swingConeIntersectsRect(0, 0, 0, 120, 20, {
+        x: 100,
+        y: -100,
+        width: 10,
+        height: 200,
+      }),
+    ).toBe(true)
+  })
+
+  it("hits when the upper cone boundary crosses a hitbox edge", () => {
+    expect(
+      swingConeIntersectsRect(0, 0, 0, 290, 20, {
+        x: 200,
+        y: 50,
+        width: 120,
+        height: 10,
       }),
     ).toBe(true)
   })

@@ -19,6 +19,7 @@ import {
   worldCandidateGateForPlayerState,
   worldCollidersForPlayerState,
 } from "./terrainHazards"
+import { worldCollidersForJumpZ } from "./worldCollidersForPlayer"
 import { canOccupyWorldPosition, type ArenaPropColliderRect } from "./worldCollision"
 
 const rect: ArenaPropColliderRect = { x: 10, y: 20, width: 30, height: 40 }
@@ -119,5 +120,12 @@ describe("worldCollidersForPlayerState", () => {
     expect(ARENA_CLIFF_COLLIDERS).toEqual([])
     expect(cliffColliders).toBe(ARENA_WORLD_COLLIDERS)
     expect(worldCandidateGateForPlayerState(0, "cliff")).toBeUndefined()
+  })
+})
+
+describe("worldCollidersForJumpZ", () => {
+  it("keeps the legacy jump-height helper aligned with grounded and airborne collider sets", () => {
+    expect(worldCollidersForJumpZ(0)).toBe(ARENA_WORLD_COLLIDERS)
+    expect(worldCollidersForJumpZ(1)).toBe(ARENA_PROP_COLLIDERS)
   })
 })
