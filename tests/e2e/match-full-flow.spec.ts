@@ -1,7 +1,17 @@
 import { test, expect } from "@playwright/test"
 import { randomBytes } from "node:crypto"
 
+import { ARENA_HEIGHT, ARENA_WIDTH } from "../../src/shared/balance-config/arena"
+import {
+  BASE_MOVE_SPEED_PX_PER_SEC,
+  PLAYER_WORLD_COLLISION_FOOTPRINT,
+} from "../../src/shared/balance-config/combat"
 import { ARENA_CAMERA_FOLLOW_ZOOM } from "../../src/shared/balance-config/rendering"
+import {
+  terrainStateAtPosition,
+  worldCollidersForPlayerState,
+} from "../../src/shared/collision/terrainHazards"
+import { moveWithinWorld } from "../../src/shared/collision/worldCollision"
 
 /**
  * Generates a signup-safe username (same constraints as signup.spec).
@@ -297,25 +307,119 @@ test("full match flow: assets, overlay, canvas, movement, shop, abilities", asyn
       .toBeGreaterThanOrEqual(minCount)
   }
 
+  type MovementProbe = {
+    key: "w" | "s" | "a" | "d"
+    label: string
+    axis: "x" | "y"
+    sign: -1 | 1
+    dirX: -1 | 0 | 1
+    dirY: -1 | 0 | 1
+  }
+  type MovementAttempt = MovementProbe & {
+    startAxis: number
+    endAxis: number
+    projectedDelta: number
+  }
+  const MOVEMENT_PROBE_TICKS = 30
+  const MOVEMENT_PROBE_DT_SEC = 1 / 60
+  const MOVEMENT_PROBE_MIN_DELTA_PX = 48
+  const movementProbes: MovementProbe[] = [
+    { key: "w", label: "north", axis: "y", sign: -1, dirX: 0, dirY: -1 },
+    { key: "s", label: "south", axis: "y", sign: 1, dirX: 0, dirY: 1 },
+    { key: "a", label: "west", axis: "x", sign: -1, dirX: -1, dirY: 0 },
+    { key: "d", label: "east", axis: "x", sign: 1, dirX: 1, dirY: 0 },
+  ]
+  const readAxis = (pos: { x: number; y: number }, axis: "x" | "y"): number =>
+    axis === "x" ? pos.x : pos.y
+  const simulateGroundMovementProbe = (
+    start: { x: number; y: number },
+    probe: MovementProbe,
+  ): MovementAttempt => {
+    let x = start.x
+    let y = start.y
+    const stepX = probe.dirX * BASE_MOVE_SPEED_PX_PER_SEC * MOVEMENT_PROBE_DT_SEC
+    const stepY = probe.dirY * BASE_MOVE_SPEED_PX_PER_SEC * MOVEMENT_PROBE_DT_SEC
+
+    for (let tick = 0; tick < MOVEMENT_PROBE_TICKS; tick++) {
+      const terrainState = terrainStateAtPosition(x, y)
+      const worldColliders = worldCollidersForPlayerState(0, terrainState)
+      const resolved = moveWithinWorld(
+        x,
+        y,
+        stepX,
+        stepY,
+        PLAYER_WORLD_COLLISION_FOOTPRINT,
+        { width: ARENA_WIDTH, height: ARENA_HEIGHT },
+        worldColliders,
+      )
+      x = resolved.x
+      y = resolved.y
+    }
+
+    const endAxis = readAxis({ x, y }, probe.axis)
+    const startAxis = readAxis(start, probe.axis)
+    return {
+      ...probe,
+      startAxis,
+      endAxis,
+      projectedDelta: (endAxis - startAxis) * probe.sign,
+    }
+  }
+
   const startPos = await readLocalPos()
-  expect(startPos, "expected local render pos available before W hold").not.toBeNull()
-  const startY = startPos!.y
-
-  await page.keyboard.down("w")
-  await page.waitForTimeout(500)
-  await page.keyboard.up("w")
-
-  const endPos = await readLocalPos()
-  expect(endPos, "expected local render pos available after W hold").not.toBeNull()
-  const endY = endPos!.y
-  // World Y decreases moving north; any smoothing window overwriting
-  // prediction (pre-fix behavior) would leave endY >= startY while W was
-  // held. Some shuffled no-cliff-lava spawns sit near props, so only require
-  // visible movement, not a long run into a hard north barrier.
+  expect(startPos, "expected local render pos available before movement hold").not.toBeNull()
+  const plannedMovementAttempts = movementProbes.map((probe) =>
+    simulateGroundMovementProbe(startPos!, probe),
+  )
+  const movementProbe = plannedMovementAttempts.find(
+    (attempt) => attempt.projectedDelta > MOVEMENT_PROBE_MIN_DELTA_PX,
+  )
   expect(
-    (endY ?? 0) - (startY ?? 0),
-    `expected local Y to decrease under held W (startY=${startY}, endY=${endY})`,
-  ).toBeLessThan(-4)
+    movementProbe,
+    `expected one cardinal direction to be open from spawn: ${JSON.stringify(plannedMovementAttempts)}`,
+  ).toBeTruthy()
+  if (!movementProbe) throw new Error("expected an open movement direction")
+
+  const probeMovement = async (probe: MovementProbe): Promise<MovementAttempt> => {
+    await page.locator("body").focus()
+    const startPos = await readLocalPos()
+    expect(
+      startPos,
+      `expected local render pos available before ${probe.label} hold`,
+    ).not.toBeNull()
+    const startAxis = readAxis(startPos!, probe.axis)
+
+    await page.keyboard.down(probe.key)
+    try {
+      await page.waitForTimeout(500)
+    } finally {
+      await page.keyboard.up(probe.key)
+    }
+
+    const endPos = await readLocalPos()
+    expect(
+      endPos,
+      `expected local render pos available after ${probe.label} hold`,
+    ).not.toBeNull()
+    const endAxis = readAxis(endPos!, probe.axis)
+    return {
+      ...probe,
+      startAxis,
+      endAxis,
+      projectedDelta: (endAxis - startAxis) * probe.sign,
+    }
+  }
+
+  const movementResult = await probeMovement(movementProbe)
+
+  // Any smoothing window overwriting prediction (pre-fix behavior) would leave
+  // the local render static or moving backward while input is held. Some
+  // shuffled no-cliff-lava spawns sit near props, so choose a direction that
+  // shared collision math says has an open lane.
+  expect(
+    movementResult.projectedDelta,
+    `expected local render to move ${movementResult.label}: ${JSON.stringify(movementResult)}`,
+  ).toBeGreaterThan(4)
 
   // Post-release no-pull-back guard (cause B + C fix): after W is
   // released, the render should stay essentially still. Before the
@@ -326,21 +430,25 @@ test("full match flow: assets, overlay, canvas, movement, shop, abilities", asyn
   // render does not drift backward (positive y delta) by more than a
   // small epsilon.
   await page.waitForTimeout(150)
-  const settledY = (await readLocalPos())?.y ?? null
+  const settledPos = await readLocalPos()
+  const settledAxis = settledPos ? readAxis(settledPos, movementResult.axis) : null
   await page.waitForTimeout(250)
-  const afterSettleY = (await readLocalPos())?.y ?? null
+  const afterSettlePos = await readLocalPos()
+  const afterSettleAxis = afterSettlePos
+    ? readAxis(afterSettlePos, movementResult.axis)
+    : null
   expect(
-    settledY,
-    "expected local render pos available shortly after W release",
+    settledAxis,
+    `expected local render pos available shortly after ${movementResult.label} release`,
   ).not.toBeNull()
   expect(
-    afterSettleY,
+    afterSettleAxis,
     "expected local render pos available after post-release settle",
   ).not.toBeNull()
   expect(
-    (afterSettleY ?? 0) - (settledY ?? 0),
-    `expected local Y NOT to drift backward after W release (settledY=${settledY}, afterSettleY=${afterSettleY})`,
-  ).toBeLessThan(4)
+    ((afterSettleAxis ?? 0) - (settledAxis ?? 0)) * movementResult.sign,
+    `expected local render NOT to drift backward after ${movementResult.label} release (settled=${settledAxis}, afterSettle=${afterSettleAxis})`,
+  ).toBeGreaterThan(-4)
   await expect(page.getByTestId("performance-issue-rubberbanding")).toHaveCount(0)
 
   await installInputRecorder()
