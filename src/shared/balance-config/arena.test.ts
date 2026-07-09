@@ -15,6 +15,7 @@ import {
   ARENA_LAVA_COLLIDERS,
   ARENA_CLIFF_COLLIDERS,
   ARENA_NON_HAZARD_COLLIDERS,
+  isArenaNonHazardCollider,
 } from "@/shared/balance-config/arena"
 import {
   PLAYER_WORLD_COLLISION_OFFSET_Y_PX,
@@ -94,6 +95,16 @@ describe("arena constants", () => {
       expect(rect.x + rect.width).toBeLessThanOrEqual(ARENA_WIDTH)
       expect(rect.y + rect.height).toBeLessThanOrEqual(ARENA_HEIGHT)
     }
+  })
+
+  it("classifies non-hazard terrain by lava and cliff overlap", () => {
+    const rect = { x: 10, y: 10, width: 20, height: 20 }
+    const overlapping = { x: 0, y: 0, width: 24, height: 24 }
+    const separate = { x: 100, y: 100, width: 20, height: 20 }
+
+    expect(isArenaNonHazardCollider(rect, [overlapping], [])).toBe(false)
+    expect(isArenaNonHazardCollider(rect, [separate], [overlapping])).toBe(false)
+    expect(isArenaNonHazardCollider(rect, [separate], [separate])).toBe(true)
   })
 
   it("exposes lava regions and no native cliff regions", () => {
