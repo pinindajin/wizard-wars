@@ -11,6 +11,8 @@ import {
   ARENA_LAYOUT_WIDTH,
 } from "./arena-layout"
 
+export type ArenaRect = { x: number; y: number; width: number; height: number }
+
 /**
  * Arena geometry constants.
  * Full playable area comes from the committed Arena layout. No decorative
@@ -92,20 +94,27 @@ export const ARENA_LAVA_TRANSITION_COLLIDERS: readonly {
   height: number
 }[] = GENERATED_ARENA_LAVA_TRANSITION_COLLIDERS
 
+export function isArenaNonHazardCollider(
+  rect: ArenaRect,
+  lavaColliders: readonly ArenaRect[] = ARENA_LAVA_COLLIDERS,
+  cliffColliders: readonly ArenaRect[] = ARENA_CLIFF_COLLIDERS,
+): boolean {
+  const overlaps = (other: ArenaRect) =>
+    rect.x < other.x + other.width &&
+    rect.x + rect.width > other.x &&
+    rect.y < other.y + other.height &&
+    rect.y + rect.height > other.y
+
+  return !lavaColliders.some(overlaps) && !cliffColliders.some(overlaps)
+}
+
 /** Non-walkable rectangles that are neither lava nor cliff. */
 export const ARENA_NON_HAZARD_COLLIDERS: readonly {
   x: number
   y: number
   width: number
   height: number
-}[] = ARENA_NON_WALKABLE_COLLIDERS.filter((rect) => {
-  const overlaps = (other: { x: number; y: number; width: number; height: number }) =>
-    rect.x < other.x + other.width &&
-    rect.x + rect.width > other.x &&
-    rect.y < other.y + other.height &&
-    rect.y + rect.height > other.y
-  return !ARENA_LAVA_COLLIDERS.some(overlaps) && !ARENA_CLIFF_COLLIDERS.some(overlaps)
-})
+}[] = ARENA_NON_WALKABLE_COLLIDERS.filter((rect) => isArenaNonHazardCollider(rect))
 
 /**
  * Static rectangles that block grounded land movement. Lava is excluded so
