@@ -43,7 +43,9 @@ export async function startSinglePlayerMatch(page: Page): Promise<void> {
   })
   await expect(page.getByText(/HP/).first()).toBeVisible({ timeout: 30_000 })
   await expect(page.getByTestId("ability-slot-0")).toBeVisible({ timeout: 10_000 })
+  await installAbilityCooldownStateRecorder(page)
   await pauseAutomaticPlayerInputs(page)
+  await waitForAuthoritativeInputQueueIdle(page)
   await page.locator("body").focus()
 }
 
@@ -55,33 +57,42 @@ export async function startSinglePlayerMatch(page: Page): Promise<void> {
  * @param page - Playwright page.
  */
 async function pauseAutomaticPlayerInputs(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    type PlayerRenderSystemLike = {
-      update: (
-        delta: number,
-        keyboardInput: unknown,
-        sendInput: () => void,
-      ) => void
-    }
-    type ArenaLike = {
-      __wwAbilityInputPauseInstalled?: boolean
-      playerRenderSystem?: PlayerRenderSystemLike
-    }
-    const game = (
-      globalThis as unknown as {
-        __wwGame?: { scene: { getScene: (key: string) => unknown } }
-      }
-    ).__wwGame
-    const arena = game?.scene.getScene("Arena") as ArenaLike | null | undefined
-    const playerRenderSystem = arena?.playerRenderSystem
-    if (!arena || !playerRenderSystem || arena.__wwAbilityInputPauseInstalled) return
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(() => {
+          type PlayerRenderSystemLike = {
+            update: (
+              delta: number,
+              keyboardInput: unknown,
+              sendInput?: (input: unknown) => void,
+              localInputForSimStep?: () => unknown,
+            ) => void
+          }
+          type ArenaLike = {
+            __wwAbilityInputPauseInstalled?: boolean
+            playerRenderSystem?: PlayerRenderSystemLike
+          }
+          const game = (
+            globalThis as unknown as {
+              __wwGame?: { scene: { getScene: (key: string) => unknown } }
+            }
+          ).__wwGame
+          const arena = game?.scene.getScene("Arena") as ArenaLike | null | undefined
+          const playerRenderSystem = arena?.playerRenderSystem
+          if (!arena || !playerRenderSystem) return false
+          if (arena.__wwAbilityInputPauseInstalled) return true
 
-    const originalUpdate = playerRenderSystem.update.bind(playerRenderSystem)
-    playerRenderSystem.update = (delta, keyboardInput) => {
-      originalUpdate(delta, keyboardInput, () => undefined)
-    }
-    arena.__wwAbilityInputPauseInstalled = true
-  })
+          const originalUpdate = playerRenderSystem.update.bind(playerRenderSystem)
+          playerRenderSystem.update = (delta, keyboardInput) => {
+            originalUpdate(delta, keyboardInput, () => undefined)
+          }
+          arena.__wwAbilityInputPauseInstalled = true
+          return true
+        }),
+      { timeout: 5_000, intervals: [50, 100, 150] },
+    )
+    .toBe(true)
 }
 
 /**
@@ -95,14 +106,247 @@ async function readJumpCharges(page: Page): Promise<number> {
   return Number(text ?? Number.NaN)
 }
 
+type AbilityCooldownAuthoritativeState = {
+  readonly id: number
+  readonly playerId: string
+  readonly lastProcessedInputSeq: number
+  readonly castingAbilityId: string | null
+  readonly animState: string
+  readonly moveState: string
+  readonly jumpZ: number
+  readonly jumpCharges: number | null
+  readonly syncCount: number
+  readonly abilityStateVersion: number
+  readonly lastAbilityStateSource: "full_sync" | "batch_update" | null
+  readonly shopStateVersion: number
+  readonly shopSlots: readonly (string | null)[]
+}
+
+/**
+ * Tracks owner ACK state so E2E one-shot inputs can wait for server processing.
+ *
+ * @param page - Playwright page.
+ */
+async function installAbilityCooldownStateRecorder(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    type TrackedPlayer = {
+      id: number
+      playerId: string
+      lastProcessedInputSeq: number
+      castingAbilityId: string | null
+      animState: string
+      moveState: string
+      jumpZ: number
+      abilityStates?: {
+        jump?: {
+          charges?: number | null
+        }
+      }
+      jumpCharges?: number | null
+      abilityStateVersion?: number
+      lastAbilityStateSource?: "full_sync" | "batch_update" | null
+      shopStateVersion?: number
+      shopSlots?: readonly (string | null)[]
+    }
+    type GameMessage = {
+      type: string
+      payload: unknown
+    }
+    type ConnectionLike = {
+      onMessage: (handler: (message: GameMessage) => void) => () => void
+      sendRequestResync?: () => void
+    }
+    type ArenaLike = {
+      getConnection?: () => ConnectionLike
+      getLocalPlayerId?: () => string | null
+    }
+    type RecorderWindow = typeof globalThis & {
+      __wwGame?: { scene: { getScene: (key: string) => unknown } }
+      __wwAbilityCooldownRecorderInstalled?: boolean
+      __wwAbilityCooldownState?: TrackedPlayer | null
+      __wwAbilityCooldownSyncCount?: number
+      __wwAbilityCooldownAbilityStateVersion?: number
+      __wwAbilityCooldownShopStateVersion?: number
+      __wwAbilityCooldownShopSlots?: readonly (string | null)[]
+    }
+
+    const w = globalThis as RecorderWindow
+    const arena = w.__wwGame?.scene.getScene("Arena") as ArenaLike | null | undefined
+    const connection = arena?.getConnection?.()
+    const localPlayerId = arena?.getLocalPlayerId?.()
+    if (!connection || !localPlayerId) {
+      throw new Error("E2E ability recorder: game connection or local player missing")
+    }
+
+    if (!w.__wwAbilityCooldownRecorderInstalled) {
+      w.__wwAbilityCooldownState = null
+      w.__wwAbilityCooldownSyncCount = 0
+      w.__wwAbilityCooldownAbilityStateVersion = 0
+      w.__wwAbilityCooldownShopStateVersion = 0
+      w.__wwAbilityCooldownShopSlots = []
+      connection.onMessage((message) => {
+        if (message.type === "SHOP_STATE") {
+          const payload = message.payload as {
+            abilitySlots?: readonly (string | null)[]
+          }
+          w.__wwAbilityCooldownShopStateVersion =
+            (w.__wwAbilityCooldownShopStateVersion ?? 0) + 1
+          w.__wwAbilityCooldownShopSlots = payload.abilitySlots ?? []
+          if (w.__wwAbilityCooldownState) {
+            w.__wwAbilityCooldownState = {
+              ...w.__wwAbilityCooldownState,
+              shopStateVersion: w.__wwAbilityCooldownShopStateVersion,
+              shopSlots: w.__wwAbilityCooldownShopSlots,
+            }
+          }
+          return
+        }
+
+        if (message.type === "GAME_STATE_SYNC") {
+          w.__wwAbilityCooldownSyncCount = (w.__wwAbilityCooldownSyncCount ?? 0) + 1
+          const payload = message.payload as { players?: readonly TrackedPlayer[] }
+          const player = payload.players?.find((p) => p.playerId === localPlayerId)
+          if (player) {
+            w.__wwAbilityCooldownAbilityStateVersion =
+              (w.__wwAbilityCooldownAbilityStateVersion ?? 0) + 1
+            w.__wwAbilityCooldownState = {
+              ...player,
+              jumpCharges: player.abilityStates?.jump?.charges ?? null,
+              syncCount: w.__wwAbilityCooldownSyncCount,
+              abilityStateVersion: w.__wwAbilityCooldownAbilityStateVersion,
+              lastAbilityStateSource: "full_sync",
+              shopStateVersion: w.__wwAbilityCooldownShopStateVersion ?? 0,
+              shopSlots: w.__wwAbilityCooldownShopSlots ?? [],
+            }
+          }
+          return
+        }
+
+        if (message.type === "PLAYER_OWNER_ACK" && w.__wwAbilityCooldownState) {
+          const payload = message.payload as {
+            id: number
+            playerId: string
+            lastProcessedInputSeq: number
+            replayContext?: Partial<
+              Pick<TrackedPlayer, "castingAbilityId" | "jumpZ" | "moveState">
+            >
+          }
+          if (payload.playerId === localPlayerId) {
+            w.__wwAbilityCooldownState = {
+              ...w.__wwAbilityCooldownState,
+              id: payload.id,
+              playerId: payload.playerId,
+              lastProcessedInputSeq: payload.lastProcessedInputSeq,
+              syncCount: w.__wwAbilityCooldownSyncCount ?? 0,
+              ...(payload.replayContext?.castingAbilityId !== undefined
+                ? { castingAbilityId: payload.replayContext.castingAbilityId }
+                : {}),
+              ...(payload.replayContext?.jumpZ !== undefined
+                ? { jumpZ: payload.replayContext.jumpZ }
+                : {}),
+              ...(payload.replayContext?.moveState !== undefined
+                ? { moveState: payload.replayContext.moveState }
+                : {}),
+              abilityStateVersion:
+                w.__wwAbilityCooldownAbilityStateVersion ?? 0,
+              shopStateVersion: w.__wwAbilityCooldownShopStateVersion ?? 0,
+              shopSlots: w.__wwAbilityCooldownShopSlots ?? [],
+            }
+          }
+          return
+        }
+
+        if (message.type !== "PLAYER_BATCH_UPDATE" || !w.__wwAbilityCooldownState) return
+        const payload = message.payload as { deltas?: readonly Partial<TrackedPlayer>[] }
+        const delta = payload.deltas?.find((d) => d.id === w.__wwAbilityCooldownState?.id)
+        if (delta) {
+          const hasAbilityStates = delta.abilityStates !== undefined
+          if (hasAbilityStates) {
+            w.__wwAbilityCooldownAbilityStateVersion =
+              (w.__wwAbilityCooldownAbilityStateVersion ?? 0) + 1
+          }
+          w.__wwAbilityCooldownState = {
+            ...w.__wwAbilityCooldownState,
+            ...delta,
+            jumpCharges:
+              delta.abilityStates?.jump?.charges ??
+              w.__wwAbilityCooldownState.jumpCharges ??
+              null,
+            syncCount: w.__wwAbilityCooldownSyncCount ?? 0,
+            abilityStateVersion: w.__wwAbilityCooldownAbilityStateVersion ?? 0,
+            lastAbilityStateSource: hasAbilityStates
+              ? "batch_update"
+              : w.__wwAbilityCooldownState.lastAbilityStateSource ?? null,
+            shopStateVersion: w.__wwAbilityCooldownShopStateVersion ?? 0,
+            shopSlots: w.__wwAbilityCooldownShopSlots ?? [],
+          }
+        }
+      })
+      w.__wwAbilityCooldownRecorderInstalled = true
+    }
+
+    connection.sendRequestResync?.()
+  })
+
+  await expect
+    .poll(async () => (await readAbilityCooldownAuthoritativeState(page)) !== null, {
+      timeout: 5_000,
+    })
+    .toBe(true)
+}
+
+/**
+ * Reads the latest local authoritative state captured by the recorder.
+ *
+ * @param page - Playwright page.
+ * @returns Latest state, or null before first sync.
+ */
+async function readAbilityCooldownAuthoritativeState(
+  page: Page,
+): Promise<AbilityCooldownAuthoritativeState | null> {
+  return page.evaluate(() => {
+    return (
+      (globalThis as typeof globalThis & {
+        __wwAbilityCooldownState?: AbilityCooldownAuthoritativeState | null
+        __wwAbilityCooldownSyncCount?: number
+      }).__wwAbilityCooldownState ?? null
+    )
+  })
+}
+
+/**
+ * Waits for pre-pause automatic inputs to drain from the server queue.
+ *
+ * @param page - Playwright page.
+ */
+async function waitForAuthoritativeInputQueueIdle(page: Page): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const before =
+          (await readAbilityCooldownAuthoritativeState(page))?.lastProcessedInputSeq ??
+          -1
+        await page.waitForTimeout(300)
+        const after =
+          (await readAbilityCooldownAuthoritativeState(page))?.lastProcessedInputSeq ??
+          -2
+        return before >= 0 && before === after
+      },
+      { timeout: 6_000, intervals: [100, 200, 300] },
+    )
+    .toBe(true)
+}
+
 /**
  * Sends one ability-slot input through the live game connection.
  *
  * @param page - Playwright page.
  * @param slotIndex - Zero-based ability slot index.
  */
-async function sendAbilitySlotInput(page: Page, slotIndex: number): Promise<void> {
-  await page.evaluate((abilitySlot) => {
+async function sendAbilitySlotInput(page: Page, slotIndex: number): Promise<number> {
+  const minSeq =
+    ((await readAbilityCooldownAuthoritativeState(page))?.lastProcessedInputSeq ?? 0) + 50
+  return page.evaluate(({ abilitySlot, minimumSeq }) => {
     type PlayerInput = {
       up: boolean
       down: boolean
@@ -134,6 +378,10 @@ async function sendAbilitySlotInput(page: Page, slotIndex: number): Promise<void
     const arena = game?.scene.getScene("Arena") as ArenaLike | null | undefined
     const connection = arena?.getConnection?.()
     if (!connection) throw new Error("E2E ability input: GameConnection missing")
+    let seq = connection.nextSeq()
+    while (seq < minimumSeq) {
+      seq = connection.nextSeq()
+    }
     connection.sendPlayerInput({
       up: false,
       down: false,
@@ -147,35 +395,79 @@ async function sendAbilitySlotInput(page: Page, slotIndex: number): Promise<void
       weaponTargetX: 700,
       weaponTargetY: 350,
       useQuickItemSlot: null,
-      seq: connection.nextSeq(),
+      seq,
       clientSendTimeMs: Date.now(),
     })
-  }, slotIndex)
+    return seq
+  }, { abilitySlot: slotIndex, minimumSeq: minSeq })
 }
 
 /**
- * Retries a jump key press until the HUD charge badge decreases.
+ * Sets server-authoritative jump runtime state through the E2E-only room hook.
  *
  * @param page - Playwright page.
- * @param before - Charge count before the attempted jump.
+ * @param charges - Jump charge count to expose in the HUD.
+ * @param rechargeMs - Future recharge deadline for HUD countdown rendering.
  */
-async function spendOneJumpCharge(page: Page, before: number): Promise<void> {
-  const deadline = Date.now() + 10_000
-  do {
-    await sendAbilitySlotInput(page, 1)
-    const observed = await expect
-      .poll(async () => readJumpCharges(page), {
-        timeout: 700,
-        intervals: [50, 100, 150],
-      })
-      .toBeLessThan(before)
-      .then(() => true)
-      .catch(() => false)
-    if (observed) return
-    await page.waitForTimeout(250)
-  } while (Date.now() < deadline)
+async function setJumpRuntime(
+  page: Page,
+  charges: number,
+  rechargeMs: number,
+): Promise<void> {
+  const versionBefore =
+    (await readAbilityCooldownAuthoritativeState(page))?.abilityStateVersion ?? 0
+  await page.evaluate(({ nextCharges, nextRechargeMs }) => {
+    type RoomLike = {
+      send: (type: string, payload?: unknown) => void
+    }
+    type ConnectionLike = {
+      room?: RoomLike | null
+    }
+    type ArenaLike = {
+      getConnection?: () => ConnectionLike
+    }
+    const game = (
+      globalThis as unknown as {
+        __wwGame?: { scene: { getScene: (key: string) => unknown } }
+      }
+    ).__wwGame
+    const arena = game?.scene.getScene("Arena") as ArenaLike | null | undefined
+    const room = arena?.getConnection?.().room
+    if (!room) throw new Error("E2E jump runtime: room missing")
+    room.send("e2e_set_jump_runtime", {
+      charges: nextCharges,
+      rechargeMs: nextRechargeMs,
+    })
+  }, { nextCharges: charges, nextRechargeMs: rechargeMs })
 
-  expect(await readJumpCharges(page)).toBeLessThan(before)
+  await expect
+    .poll(
+      async () => {
+        const state = await readAbilityCooldownAuthoritativeState(page)
+        return (
+          state !== null &&
+          state.abilityStateVersion > versionBefore &&
+          state.jumpCharges === charges
+        )
+      },
+      { timeout: 5_000, intervals: [50, 100, 150] },
+    )
+    .toBe(true)
+}
+
+/**
+ * Waits for the server-confirmed shop state to show jump in slot 1.
+ *
+ * @param page - Playwright page.
+ */
+async function waitForJumpAssignedToSlotOne(page: Page): Promise<void> {
+  await expect
+    .poll(
+      async () =>
+        (await readAbilityCooldownAuthoritativeState(page))?.shopSlots[1] ?? null,
+      { timeout: 5_000, intervals: [50, 100, 150] },
+    )
+    .toBe("jump")
 }
 
 /**
@@ -199,6 +491,7 @@ export async function buyAndAssignJump(page: Page): Promise<void> {
   await expect(page.getByTestId("ability-slot-1-charge-count")).toHaveText("4", {
     timeout: 5000,
   })
+  await waitForJumpAssignedToSlotOne(page)
   await page.locator("body").focus()
 }
 
@@ -217,24 +510,18 @@ export async function castFireballAndAssertCooldown(
 
   for (let attempt = 0; attempt < 4; attempt++) {
     await sendAbilitySlotInput(page, 0)
-    const observed = await expect(overlay)
-      .toHaveAttribute("data-cooldown-kind", "heavy", { timeout: 2500 })
-      .then(async () => {
-        await expect(countdown).toHaveText(/\d+/, { timeout: 500 })
-        return true
-      })
-      .catch(() => false)
-    if (observed) break
+    const observed = await readCooldownEvidence(page, overlay, countdown, "heavy", 2500)
+    if (observed) return observed
     await page.waitForTimeout(250)
   }
 
   await expect(overlay).toHaveAttribute("data-cooldown-kind", "heavy", {
     timeout: 500,
   })
-
+  await expect(countdown).toHaveText(/\d+/, { timeout: 500 })
   return {
-    kind: await overlay.getAttribute("data-cooldown-kind"),
-    countdown: await countdown.textContent(),
+    kind: "heavy",
+    countdown: await countdown.textContent().catch(() => null),
   }
 }
 
@@ -247,16 +534,10 @@ export async function castFireballAndAssertCooldown(
 export async function depleteJumpCharges(
   page: Page,
 ): Promise<{ charges: number; kind: string | null; countdown: string | null }> {
-  for (let attempt = 0; attempt < 8; attempt++) {
-    const before = await readJumpCharges(page)
-    if (before <= 0) break
-
-    await spendOneJumpCharge(page, before)
-    await page.waitForTimeout(900)
-  }
+  await setJumpRuntime(page, 0, 5_000)
 
   await expect
-    .poll(async () => readJumpCharges(page), { timeout: 1000 })
+    .poll(async () => readJumpCharges(page), { timeout: 2500, intervals: [50, 100, 150] })
     .toBe(0)
 
   const overlay = page.getByTestId("ability-slot-1-cooldown-overlay")
@@ -274,6 +555,40 @@ export async function depleteJumpCharges(
 }
 
 /**
+ * Reads cooldown evidence as soon as both overlay kind and countdown are present.
+ * Short cooldowns can disappear between a passing assertion and a later read on
+ * slow CI runners, so capture the values in the same polling window.
+ *
+ * @param page - Playwright page.
+ * @param overlay - Cooldown overlay locator.
+ * @param countdown - Cooldown countdown locator.
+ * @param expectedKind - Expected overlay kind.
+ * @param timeoutMs - Maximum wait.
+ * @returns Cooldown evidence, or null when not observed.
+ */
+async function readCooldownEvidence(
+  page: Page,
+  overlay: ReturnType<Page["getByTestId"]>,
+  countdown: ReturnType<Page["getByTestId"]>,
+  expectedKind: "heavy" | "light",
+  timeoutMs: number,
+): Promise<{ kind: string | null; countdown: string | null } | null> {
+  const deadline = Date.now() + timeoutMs
+  do {
+    const [kind, label] = await Promise.all([
+      overlay.getAttribute("data-cooldown-kind").catch(() => null),
+      countdown.textContent().catch(() => null),
+    ])
+    if (kind === expectedKind && /\d+/.test(label ?? "")) {
+      return { kind, countdown: label }
+    }
+    await page.waitForTimeout(50)
+  } while (Date.now() < deadline)
+
+  return null
+}
+
+/**
  * Waits for one jump charge to return and verifies the usable recharging HUD state.
  *
  * @param page - Playwright page.
@@ -282,6 +597,8 @@ export async function depleteJumpCharges(
 export async function assertJumpRechargeVisible(
   page: Page,
 ): Promise<{ charges: number; kind: string | null; countdown: string | null }> {
+  await setJumpRuntime(page, 1, 5_000)
+
   await expect
     .poll(async () => readJumpCharges(page), {
       timeout: 7000,

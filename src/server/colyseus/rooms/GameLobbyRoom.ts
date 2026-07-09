@@ -11,6 +11,7 @@ import { createGameSimulation, type GameSimulation } from "../../game/simulation
 import { createSessionEconomy, attemptPurchase, buildShopStatePayload } from "../../gameserver/sessionShop"
 import type { SessionEconomy } from "../../gameserver/sessionShop"
 import { ABILITY_CONFIGS } from "../../../shared/balance-config/abilities"
+import { JUMP_MAX_CHARGES } from "../../../shared/balance-config/combat"
 import { TICK_MS } from "../../../shared/balance-config/rendering"
 import { ARENA_SPAWN_POINTS } from "../../../shared/balance-config/arena"
 import { RoomEvent } from "../../../shared/roomEvents"
@@ -59,6 +60,7 @@ import { DEFAULT_HERO_ID } from "../../../shared/balance-config/heroes"
 import { logger } from "../../logger"
 import {
   AbilitySlots,
+  AbilityRuntime,
   Equipment,
   ABILITY_INDEX,
   JumpArc,
@@ -1299,6 +1301,10 @@ export class GameLobbyRoom extends Room {
         if (this.isAdminClosing) return
         this.handleE2eSetPlayerPosition(client, payload)
       })
+      this.onMessage("e2e_set_jump_runtime", (client: Client, payload: unknown) => {
+        if (this.isAdminClosing) return
+        this.handleE2eSetJumpRuntime(client, payload)
+      })
     }
 
     this.onMessage("*", () => {
@@ -1546,6 +1552,49 @@ export class GameLobbyRoom extends Room {
     TerrainState.kind[eid] = TERRAIN_KIND[terrainStateAtPosition(x, y)]
     TerrainState.lavaDamageCarry[eid] = 0
     this.sendInProgressHydrationToClient(client, { includeLobbyState: false })
+  }
+
+  /**
+   * Sets local-player jump runtime state for deterministic Playwright HUD tests.
+   * Registered only when `WIZARD_WARS_E2E=1`; ignored outside live matches.
+   *
+   * @param client - Client whose player entity should be updated.
+   * @param payload - Raw payload with numeric `charges` and optional `rechargeMs`.
+   */
+  private handleE2eSetJumpRuntime(client: Client, payload: unknown): void {
+    if (process.env.WIZARD_WARS_E2E !== "1") return
+    if (this.lobbyPhase !== "IN_PROGRESS" || !this.simulation) return
+
+    const data = payload as {
+      readonly charges?: unknown
+      readonly rechargeMs?: unknown
+    } | null
+    if (typeof data?.charges !== "number") return
+
+    const pd = client.userData as PlayerData | undefined
+    if (!pd) return
+    const eid = this.simulation.playerEntityMap.get(pd.playerId)
+    if (eid === undefined) return
+
+    const charges = Math.max(
+      0,
+      Math.min(JUMP_MAX_CHARGES, Math.trunc(data.charges)),
+    )
+    const rechargeMs =
+      typeof data.rechargeMs === "number" && Number.isFinite(data.rechargeMs)
+        ? Math.max(0, data.rechargeMs)
+        : 0
+
+    AbilityRuntime.jumpCharges[eid] = charges
+    if (charges < JUMP_MAX_CHARGES && rechargeMs > 0) {
+      AbilityRuntime.jumpRechargeReadyTick[eid] = 0xffffffff
+      AbilityRuntime.jumpRechargeEndsAtMs[eid] = Date.now() + rechargeMs
+    } else {
+      AbilityRuntime.jumpRechargeReadyTick[eid] = 0
+      AbilityRuntime.jumpRechargeEndsAtMs[eid] = 0
+    }
+
+    this.sendImmediateGameStateSyncToClient(client)
   }
 
   /**
