@@ -14,6 +14,7 @@ import {
   PlayerInputQueue,
   type PlayerInputQueueMap,
 } from "@/server/game/playerInputQueue"
+import { computePlayerAnimState } from "@/server/game/playerAnimState"
 import { createGameSimulation } from "@/server/game/simulation"
 import {
   ARENA_CLIFF_COLLIDERS,
@@ -253,6 +254,7 @@ describe("jump pit landing (integration)", () => {
     expect(terrainStateAtPosition(Position.x[eid], Position.y[eid])).toBe("lava")
     expect(Position.y[eid]).toBeLessThan(lava.minLandingY)
     expect(TerrainState.kind[eid]).toBe(TERRAIN_KIND.lava)
+    expect(computePlayerAnimState(sim.world, eid)).not.toBe("stumble")
   })
 
   it("lets a lava player escape to land with jump", () => {
@@ -276,6 +278,7 @@ describe("jump pit landing (integration)", () => {
     expect(hasComponent(sim.world, eid, JumpArc)).toBe(false)
     expect(terrainStateAtPosition(Position.x[eid], Position.y[eid])).toBe("land")
     expect(TerrainState.kind[eid]).toBe(TERRAIN_KIND.land)
+    expect(computePlayerAnimState(sim.world, eid)).not.toBe("stumble")
   })
 
   it("keeps a jump landing in lava from walking out afterward", () => {
@@ -299,6 +302,7 @@ describe("jump pit landing (integration)", () => {
     expect(terrainStateAtPosition(Position.x[eid], Position.y[eid])).toBe("lava")
     expect(Position.y[eid]).toBeLessThan(lava.minLandingY)
     expect(TerrainState.kind[eid]).toBe(TERRAIN_KIND.lava)
+    expect(computePlayerAnimState(sim.world, eid)).not.toBe("stumble")
   })
 
   it("keeps the native arena free of cliff landings", () => {
@@ -317,5 +321,6 @@ describe("jump pit landing (integration)", () => {
     sim.tick(new Map(), Date.now())
 
     expect(TerrainState.kind[eid]).toBe(TERRAIN_KIND.land)
+    expect(computePlayerAnimState(sim.world, eid)).not.toBe("stumble")
   })
 })
