@@ -69,6 +69,7 @@ import { WW_ABILITY_SLOTS_REGISTRY_KEY } from "../../constants"
 import { HERO_CONFIGS } from "@/shared/balance-config/heroes"
 import {
   ARENA_HEIGHT,
+  ARENA_CLIFF_COLLIDERS,
   ARENA_LAVA_COLLIDERS,
   ARENA_PROP_COLLIDERS,
   ARENA_SPAWN_POINTS,
@@ -1118,6 +1119,7 @@ describe("PlayerRenderSystem.applyFullSync", () => {
         ignoreAuthoritativeCast: true,
       }),
     ).toBe(ABILITY_CONFIGS.jump.castMoveSpeedMultiplier)
+    expect(ARENA_CLIFF_COLLIDERS).toEqual([])
     expect(resolver._canPredictMovement(
       snap({
         id: 1,
@@ -1131,7 +1133,7 @@ describe("PlayerRenderSystem.applyFullSync", () => {
       1,
       null,
       { ignoreAuthoritativeRoot: true },
-    )).toBe(false)
+    )).toBe(true)
 
     const originalLightningConfig = ABILITY_CONFIGS.lightning_bolt
     try {
@@ -4993,7 +4995,7 @@ describe("PlayerRenderSystem.applyFullSync", () => {
     expect(after?.simCurrY).toBeLessThanOrEqual(start.y)
   })
 
-  it("keeps local lava prediction inside lava instead of walking onto land", () => {
+  it("lets local lava prediction walk back onto land", () => {
     const { scene, group } = mockSceneAndGroup()
     const sys = new PlayerRenderSystem(scene as never, group as never)
     sys.localPlayerId = "p1"
@@ -5014,8 +5016,8 @@ describe("PlayerRenderSystem.applyFullSync", () => {
 
     const after = sys._getLocalSimForTest(1)
     expect(after).not.toBeNull()
-    expect(terrainStateAtPosition(after!.simCurrX, after!.simCurrY)).toBe("lava")
-    expect(after!.simCurrX).toBeLessThanOrEqual(lava.point.x)
+    expect(terrainStateAtPosition(after!.simCurrX, after!.simCurrY)).toBe("land")
+    expect(after!.simCurrX).toBeGreaterThan(lava.point.x)
   })
 
   it("snaps to a legal smooth target when blocker-gated smoothing cannot reach it", () => {

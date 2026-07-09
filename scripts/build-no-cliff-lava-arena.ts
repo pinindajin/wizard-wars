@@ -49,6 +49,7 @@ const LAVA_NO_OBSTACLES = resolve(SOURCE_DIR, "map-lava-no-obstacles.png")
 
 const TILE_SIZE_PX = 64
 const REGION_CELL_PX = 16
+const ARENA_OUTPUT_SCALE = 0.5
 const PROP_DIFF_THRESHOLD = 18
 const PROP_DILATE_RADIUS = 5
 const MIN_PROP_MASK_AREA_PX = 80
@@ -79,9 +80,26 @@ function repoPath(path: string): string {
   return relative(ROOT, path).replace(/\\/g, "/")
 }
 
+function scaled(value: number): number {
+  return Math.max(1, Math.round(value * ARENA_OUTPUT_SCALE))
+}
+
+async function scaledDimensions(path: string): Promise<{ width: number; height: number }> {
+  const metadata = await sharp(path).metadata()
+  if (!metadata.width || !metadata.height) {
+    throw new Error(`Expected image dimensions for ${path}`)
+  }
+  return {
+    width: scaled(metadata.width),
+    height: scaled(metadata.height),
+  }
+}
+
 async function loadRaw(path: string): Promise<RawImage> {
+  const dimensions = await scaledDimensions(path)
   const { data, info } = await sharp(path)
     .ensureAlpha()
+    .resize({ ...dimensions, kernel: sharp.kernel.lanczos3 })
     .raw()
     .toBuffer({ resolveWithObject: true })
   return { data, width: info.width, height: info.height }
@@ -107,7 +125,7 @@ function alphaAt(image: RawImage, x: number, y: number): number {
 }
 
 function isWalkablePixel(walkable: RawImage, x: number, y: number): boolean {
-  return alphaAt(walkable, Math.round(x), Math.round(y)) > 0
+  return alphaAt(walkable, Math.round(x), Math.round(y)) >= 128
 }
 
 function createPropDiffMask(withProps: RawImage, withoutProps: RawImage): Uint8Array {
@@ -392,7 +410,14 @@ function snapSpawn(
 function buildSpawnPoints(walkable: RawImage, propColliders: readonly Rect[]): SpawnPoint[] {
   const spawns: SpawnPoint[] = []
   for (const preferred of PREFERRED_SPAWNS) {
-    spawns.push(snapSpawn(preferred, walkable, propColliders, spawns))
+    spawns.push(
+      snapSpawn(
+        { x: scaled(preferred.x), y: scaled(preferred.y) },
+        walkable,
+        propColliders,
+        spawns,
+      ),
+    )
     if (spawns.length === 12) break
   }
   return spawns
@@ -595,6 +620,7 @@ function writeMetadata(
       lavaNoObstacles: repoPath(LAVA_NO_OBSTACLES),
     },
     arena: { width, height },
+    outputScale: ARENA_OUTPUT_SCALE,
     regionCellPx: REGION_CELL_PX,
     props,
     propColliders,
@@ -670,7 +696,10 @@ async function main(): Promise<void> {
   ])
   assertSameDimensions([walkableNoProps, noBgWithProps, lavaNoProps])
 
-  await sharp(LAVA_NO_OBSTACLES).png().toFile(BASE_OUT)
+  await sharp(LAVA_NO_OBSTACLES)
+    .resize({ ...(await scaledDimensions(LAVA_NO_OBSTACLES)), kernel: sharp.kernel.lanczos3 })
+    .png()
+    .toFile(BASE_OUT)
 
   const propMask = createPropDiffMask(noBgWithProps, walkableNoProps)
   const props = await extractPropInstances(noBgWithProps, propMask)

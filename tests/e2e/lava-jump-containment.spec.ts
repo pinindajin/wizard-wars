@@ -10,7 +10,6 @@ import {
   JUMP_LANDING_GRACE_PX,
   PLAYER_WORLD_COLLISION_FOOTPRINT,
 } from "../../src/shared/balance-config/combat"
-import { TICK_MS } from "../../src/shared/balance-config/rendering"
 import { terrainColliderSetForPlayerState } from "../../src/shared/collision/arenaSpatialIndexes"
 import { terrainStateAtPosition } from "../../src/shared/collision/terrainHazards"
 import { canOccupyWorldPosition } from "../../src/shared/collision/worldCollision"
@@ -58,15 +57,6 @@ function sampleAxisValue(
   return sample.axis === "x" ? point.x : point.y
 }
 
-function isBeforeLandThreshold(
-  point: { readonly x: number; readonly y: number },
-  sample: LavaEscapeSample,
-): boolean {
-  const delta =
-    sampleAxisValue(point, sample) - sampleAxisValue(sample.landThreshold, sample)
-  return delta * sample.direction < 0
-}
-
 function isAtLandThresholdWithJumpGrace(
   point: { readonly x: number; readonly y: number },
   sample: LavaEscapeSample,
@@ -74,6 +64,15 @@ function isAtLandThresholdWithJumpGrace(
   const delta =
     sampleAxisValue(point, sample) - sampleAxisValue(sample.landThreshold, sample)
   return delta * sample.direction >= -JUMP_LANDING_GRACE_PX
+}
+
+function isAtOrPastLandThreshold(
+  point: { readonly x: number; readonly y: number },
+  sample: LavaEscapeSample,
+): boolean {
+  const delta =
+    sampleAxisValue(point, sample) - sampleAxisValue(sample.landThreshold, sample)
+  return delta * sample.direction >= 0
 }
 
 function assertNativeLavaEscapeSample(sample: LavaEscapeSample): LavaEscapeSample {
@@ -460,27 +459,6 @@ async function sendHeldInputUntil(
 }
 
 /**
- * Holds movement for a fixed duration using compact fixed-tick chunks.
- *
- * @param page - Playwright page hosting the live game.
- * @param input - Held movement fields to resend.
- * @param durationMs - Hold duration.
- */
-async function sendHeldInputFor(
-  page: Page,
-  input: PlayerInputOverrides,
-  durationMs: number,
-): Promise<void> {
-  let ticksRemaining = Math.max(1, Math.ceil(durationMs / TICK_MS))
-  while (ticksRemaining > 0) {
-    const ticks = Math.min(HELD_INPUT_CHUNK_TICKS, ticksRemaining)
-    const seq = await sendHeldInputRun(page, input, ticks)
-    await waitForProcessedInput(page, seq)
-    ticksRemaining -= ticks
-  }
-}
-
-/**
  * Uses the E2E-only room hook to place the local player at a deterministic point.
  *
  * @param page - Playwright page hosting the live game.
@@ -559,7 +537,7 @@ async function waitForTerrain(
   return state
 }
 
-test("lava edge blocks WASD exit and Jump escapes to land", async ({ page }) => {
+test("lava edge allows WASD exit and Jump still escapes to land", async ({ page }) => {
   test.slow()
   test.setTimeout(180_000)
 
@@ -579,12 +557,18 @@ test("lava edge blocks WASD exit and Jump escapes to land", async ({ page }) => 
   )
   await waitForTerrain(page, "lava")
 
-  await sendHeldInputFor(page, LAVA_ESCAPE_SAMPLE.input, 900)
+  const afterWalk = await sendHeldInputUntil(
+    page,
+    LAVA_ESCAPE_SAMPLE.input,
+    (state) =>
+      state.terrainState === "land" &&
+      isAtOrPastLandThreshold(state, LAVA_ESCAPE_SAMPLE),
+  )
   const stopRightSeq = await sendPlayerInput(page, { right: false })
   await waitForProcessedInput(page, stopRightSeq)
 
-  const afterWalk = await waitForTerrain(page, "lava")
-  expect(isBeforeLandThreshold(afterWalk, LAVA_ESCAPE_SAMPLE)).toBe(true)
+  expect(isAtOrPastLandThreshold(afterWalk, LAVA_ESCAPE_SAMPLE)).toBe(true)
+  expect(afterWalk.animState).not.toBe("stumble")
 
   await setE2ePlayerPosition(
     page,
@@ -620,4 +604,5 @@ test("lava edge blocks WASD exit and Jump escapes to land", async ({ page }) => 
   const stopJumpSeq = await sendPlayerInput(page, { right: false })
   await waitForProcessedInput(page, stopJumpSeq)
   expect(isAtLandThresholdWithJumpGrace(afterJump, LAVA_ESCAPE_SAMPLE)).toBe(true)
+  expect(afterJump.animState).not.toBe("stumble")
 })

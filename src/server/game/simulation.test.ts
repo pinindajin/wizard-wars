@@ -1325,7 +1325,7 @@ describe("buildGameStateSyncPayload", () => {
 
   it("exposes per-player velocity, move state, and last processed input seq", () => {
     const sim = createGameSimulation(Date.now())
-    sim.addPlayer("user1", "Alice", "red_wizard", 0)
+    sim.addPlayer("user1", "Alice", "red_wizard", 1)
 
     // Hold D for enough ticks to register motion while staying clear of nearby blockers.
     for (let i = 0; i < 30; i++) {

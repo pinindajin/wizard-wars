@@ -32,6 +32,8 @@ describe("arenaSpatialIndexes", () => {
     const cliffSet = terrainColliderSetForPlayerState(0, "cliff")
 
     expect(lavaSet.rects.slice(0, ARENA_PROP_COLLIDERS.length)).toEqual(ARENA_PROP_COLLIDERS)
+    expect(ARENA_CLIFF_COLLIDERS).toEqual([])
+    expect(cliffSet).toBe(ARENA_WORLD_COLLIDER_SET)
     expect(cliffSet.rects.slice(0, ARENA_PROP_COLLIDERS.length)).toEqual(ARENA_PROP_COLLIDERS)
   })
 

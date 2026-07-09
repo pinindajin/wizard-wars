@@ -48,6 +48,7 @@ import {
 } from "@/shared/movementIntent"
 import { moveWithinWorldIndexed } from "@/shared/collision/indexedWorldCollision"
 import { terrainColliderSetForPlayerState } from "@/shared/collision/arenaSpatialIndexes"
+import { effectiveTerrainStateForCurrentArena } from "@/shared/collision/effectiveTerrainState"
 import {
   worldCandidateGateForPlayerState,
 } from "@/shared/collision/worldCollidersForPlayer"
@@ -1493,7 +1494,7 @@ export class PlayerRenderSystem {
     ) {
       return false
     }
-    if (state.terrainState === "cliff") return false
+    if (effectiveTerrainStateForCurrentArena(state.terrainState) === "cliff") return false
     if (
       state.moveState === "rooted" &&
       options.ignoreAuthoritativeRoot !== true
@@ -2507,7 +2508,7 @@ export class PlayerRenderSystem {
 
     return {
       jumpZ: state.jumpZ ?? 0,
-      terrainState: state.terrainState,
+      terrainState: effectiveTerrainStateForCurrentArena(state.terrainState),
       jumpStartedInLava: state.jumpStartedInLava ?? false,
     }
   }

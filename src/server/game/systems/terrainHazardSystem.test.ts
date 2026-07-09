@@ -22,6 +22,8 @@ import {
   Velocity,
   TERRAIN_KIND,
 } from "../components"
+import { computePlayerAnimState } from "../playerAnimState"
+import { computePlayerMoveState } from "../playerMoveState"
 import type { SimCtx } from "../simulation"
 import { jumpPhysicsSystem } from "./jumpPhysicsSystem"
 import { terrainHazardSystem } from "./terrainHazardSystem"
@@ -159,6 +161,23 @@ describe("terrain hazards", () => {
     expect(TerrainState.kind[landPlayer]).toBe(TERRAIN_KIND.land)
     expect(TerrainState.kind[lavaPlayer]).toBe(TERRAIN_KIND.lava)
     expect(TerrainState.kind[laterLavaPlayer]).toBe(TERRAIN_KIND.lava)
+  })
+
+  it("clears stale cliff state on land in arenas without native cliff terrain", () => {
+    const spawn = ARENA_SPAWN_POINTS[0]!
+    const world = createWorld()
+    const eid = addPlayerAt(world, spawn.x, spawn.y)
+    TerrainState.kind[eid] = TERRAIN_KIND.cliff
+
+    terrainHazardSystem(emptyCtx({ world }))
+
+    expect(ARENA_CLIFF_COLLIDERS).toEqual([])
+    expect(TerrainState.kind[eid]).toBe(TERRAIN_KIND.land)
+    expect(Position.x[eid]).toBe(spawn.x)
+    expect(Position.y[eid]).toBe(spawn.y)
+    expect(hasComponent(world, eid, NeedsWorldCollisionResolution)).toBe(false)
+    expect(computePlayerAnimState(world, eid)).not.toBe("stumble")
+    expect(computePlayerMoveState(world, eid)).not.toBe("rooted")
   })
 
   it("has no native cliff terrain to slide players from", () => {

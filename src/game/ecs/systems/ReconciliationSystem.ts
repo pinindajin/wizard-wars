@@ -19,6 +19,7 @@ import {
 } from "@/shared/movementIntent"
 import { moveWithinWorldIndexed } from "@/shared/collision/indexedWorldCollision"
 import { terrainColliderSetForPlayerState } from "@/shared/collision/arenaSpatialIndexes"
+import { effectiveTerrainStateForCurrentArena } from "@/shared/collision/effectiveTerrainState"
 import {
   worldCandidateGateForPlayerState,
 } from "@/shared/collision/worldCollidersForPlayer"
@@ -124,7 +125,8 @@ function stepReplay(
   }
   const mult = replaySpeedMultiplier(ctx)
   if (mult === 0) return { x, y }
-  if (ctx.terrainState === "cliff") return { x, y }
+  const terrainState = effectiveTerrainStateForCurrentArena(ctx.terrainState)
+  if (terrainState === "cliff") return { x, y }
   const step = worldStepFromIntent(
     dx,
     dy,
@@ -132,10 +134,10 @@ function stepReplay(
     TICK_DT_SEC,
     mult,
   )
-  const colliderSet = terrainColliderSetForPlayerState(ctx.jumpZ, ctx.terrainState, {
+  const colliderSet = terrainColliderSetForPlayerState(ctx.jumpZ, terrainState, {
     jumpStartedInLava: ctx.jumpStartedInLava,
   })
-  const candidateGate = worldCandidateGateForPlayerState(ctx.jumpZ, ctx.terrainState)
+  const candidateGate = worldCandidateGateForPlayerState(ctx.jumpZ, terrainState)
   const moved = moveWithinWorldIndexed(
     x,
     y,

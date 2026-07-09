@@ -23,6 +23,7 @@ import {
   TerrainState,
   TERRAIN_KIND,
 } from "../components"
+import { computePlayerAnimState } from "../playerAnimState"
 import type { SimCtx } from "../simulation"
 import { knockbackSystem } from "./knockbackSystem"
 import { terrainHazardSystem } from "./terrainHazardSystem"
@@ -156,7 +157,7 @@ describe("knockbackSystem", () => {
     expect(TerrainState.kind[eid]).toBe(TERRAIN_KIND.lava)
   })
 
-  it("keeps grounded lava players from being knocked off lava", () => {
+  it("lets grounded lava players be knocked back onto land", () => {
     const world = createWorld()
     const eid = addEntity(world)
     addComponent(world, eid, PlayerTag)
@@ -176,7 +177,11 @@ describe("knockbackSystem", () => {
       knockbackSystem({ world } as SimCtx)
     }
 
-    expect(terrainStateAtPosition(Position.x[eid], Position.y[eid])).toBe("lava")
-    expect(TerrainState.kind[eid]).toBe(TERRAIN_KIND.lava)
+    expect(terrainStateAtPosition(Position.x[eid], Position.y[eid])).toBe("land")
+
+    terrainHazardSystem({ world, damageRequests: [] } as unknown as SimCtx)
+
+    expect(TerrainState.kind[eid]).toBe(TERRAIN_KIND.land)
+    expect(computePlayerAnimState(world, eid)).not.toBe("stumble")
   })
 })

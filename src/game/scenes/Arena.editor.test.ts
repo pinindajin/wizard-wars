@@ -61,10 +61,10 @@ describe("Arena Phaser Editor scene", () => {
     }>("src/game/scenes/Arena.scene")
     const metadata = await sharp(resolve(ROOT, "public/assets/maps/arena-base.png")).metadata()
 
-    expect(metadata.width).toBe(4224)
-    expect(metadata.height).toBe(3392)
-    expect(scene.settings.borderWidth).toBe(4224)
-    expect(scene.settings.borderHeight).toBe(3392)
+    expect(metadata.width).toBe(2112)
+    expect(metadata.height).toBe(1696)
+    expect(scene.settings.borderWidth).toBe(2112)
+    expect(scene.settings.borderHeight).toBe(1696)
   })
 
   it("keeps representative arena visuals and collision rectangles aligned", () => {
@@ -82,34 +82,35 @@ describe("Arena Phaser Editor scene", () => {
     }>("src/game/scenes/Arena.scene")
 
     expect(scene.displayList.find((item) => item.label === "arena_prop_000_instance-000")).toMatchObject({
-      x: 2919,
-      y: 376,
+      x: 1459.5,
+      y: 193,
       scaleX: 1,
       scaleY: 1,
     })
     expect(scene.displayList.find((item) => item.label === "propCollider_000")).toMatchObject({
-      x: 2886,
-      y: 342,
-      width: 67,
-      height: 32,
+      x: 1440,
+      y: 173,
+      width: 39,
+      height: 18,
     })
     expect(scene.displayList.find((item) => item.label === "lavaArea_000")).toMatchObject({
       x: 0,
       y: 0,
-      width: 4224,
-      height: 112,
+      width: 2112,
+      height: 48,
     })
     expect(scene.displayList.find((item) => item.label === "nonWalkableArea_000")).toMatchObject({
       x: 0,
       y: 0,
-      width: 4224,
-      height: 112,
+      width: 2112,
+      height: 48,
     })
   })
 
   it("keeps tracked arena metadata aligned with the no-cliff lava source scene", () => {
     const metadata = readJson<{
       readonly arena: { readonly width: number; readonly height: number }
+      readonly outputScale: number
       readonly props: readonly {
         readonly x: number
         readonly y: number
@@ -134,12 +135,13 @@ describe("Arena Phaser Editor scene", () => {
       }[]
     }>("public/assets/arena-review/no-cliff-lava/generated/placements.json")
 
-    expect(metadata.arena).toEqual({ width: 4224, height: 3392 })
-    expect(metadata.props[0]).toMatchObject({ x: 2919, y: 376, width: 108, height: 180 })
-    expect(metadata.propColliders[0]).toMatchObject({ x: 2886, y: 342, width: 67, height: 32 })
-    expect(metadata.spawnPoints[0]).toEqual({ x: 2112, y: 1696 })
-    expect(reviewPlacements.placements[0]).toMatchObject({ x: 2919, y: 376, width: 108, height: 180 })
-    expect(reviewPlacements.propColliders[0]).toMatchObject({ x: 2886, y: 342, width: 67, height: 32 })
+    expect(metadata.arena).toEqual({ width: 2112, height: 1696 })
+    expect(metadata.outputScale).toBe(0.5)
+    expect(metadata.props[0]).toMatchObject({ x: 1459.5, y: 193, width: 63, height: 99 })
+    expect(metadata.propColliders[0]).toMatchObject({ x: 1440, y: 173, width: 39, height: 18 })
+    expect(metadata.spawnPoints[0]).toEqual({ x: 1056, y: 848 })
+    expect(reviewPlacements.placements[0]).toMatchObject({ x: 1459.5, y: 193, width: 63, height: 99 })
+    expect(reviewPlacements.propColliders[0]).toMatchObject({ x: 1440, y: 173, width: 39, height: 18 })
   })
 
   it("exports to the committed arena tilemap without semantic drift", () => {
