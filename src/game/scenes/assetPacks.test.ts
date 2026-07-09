@@ -136,9 +136,9 @@ describe("asset pack URLs are absolute", () => {
     const files = (arenaPack as { arena: { files: PackFile[] } }).arena.files
     const urls = collectUrls(files)
     const propUrls = urls.filter((url) => url.startsWith("/assets/sprites/arena-props/"))
-    expect(propUrls).toHaveLength(72)
+    expect(propUrls).toHaveLength(71)
     expect(urls).toContain("/assets/sprites/arena-props/instance-000.png")
-    expect(urls).toContain("/assets/sprites/arena-props/instance-071.png")
+    expect(urls).toContain("/assets/sprites/arena-props/instance-070.png")
   })
 })
 
@@ -157,9 +157,9 @@ describe("Phaser Editor asset pack exposes arena visual assets", () => {
     expect(urls).toContain("assets/maps/arena-base.png")
     expect(urls).toContain("assets/tilemaps/arena.json")
     const propUrls = urls.filter((url) => url.startsWith("assets/sprites/arena-props/"))
-    expect(propUrls).toHaveLength(72)
+    expect(propUrls).toHaveLength(71)
     expect(urls).toContain("assets/sprites/arena-props/instance-000.png")
-    expect(urls).toContain("assets/sprites/arena-props/instance-071.png")
+    expect(urls).toContain("assets/sprites/arena-props/instance-070.png")
     for (const u of urls) {
       expect(u.startsWith("/"), `editor asset url should be project-relative: ${u}`).toBe(false)
     }

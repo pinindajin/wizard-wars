@@ -122,10 +122,10 @@ describe("arena constants", () => {
 
   it("has no-cliff lava arena dimensions while retaining 64px broadphase cells", () => {
     expect(TILE_SIZE_PX).toBe(64)
-    expect(ARENA_WIDTH).toBe(4224)
-    expect(ARENA_HEIGHT).toBe(3392)
-    expect(ARENA_COLS).toBe(66)
-    expect(ARENA_ROWS).toBe(53)
+    expect(ARENA_WIDTH).toBe(2112)
+    expect(ARENA_HEIGHT).toBe(1696)
+    expect(ARENA_COLS).toBe(33)
+    expect(ARENA_ROWS).toBe(27)
   })
 
   it("has correct center coordinates", () => {
@@ -139,18 +139,18 @@ describe("arena constants", () => {
 
   it("keeps representative stone platforms and bridges walkable", () => {
     const samples = [
-      { label: "center", x: 2112, y: 1696 },
-      { label: "north-west platform", x: 920, y: 520 },
-      { label: "north-east platform", x: 3120, y: 520 },
-      { label: "west platform", x: 680, y: 1584 },
-      { label: "south-west platform", x: 760, y: 2816 },
-      { label: "south platform", x: 2144, y: 2936 },
-      { label: "south-east platform", x: 3264, y: 2688 },
-      { label: "east platform", x: 3512, y: 1888 },
-      { label: "north bridge", x: 2112, y: 1040 },
-      { label: "south bridge", x: 2112, y: 2304 },
-      { label: "west bridge", x: 1320, y: 1696 },
-      { label: "east bridge", x: 2896, y: 1696 },
+      { label: "center", x: 1056, y: 848 },
+      { label: "north-west platform", x: 460, y: 260 },
+      { label: "north-east platform", x: 1568, y: 252 },
+      { label: "west platform", x: 356, y: 776 },
+      { label: "south-west platform", x: 380, y: 1408 },
+      { label: "south platform", x: 1072, y: 1468 },
+      { label: "south-east platform", x: 1632, y: 1344 },
+      { label: "east platform", x: 1756, y: 944 },
+      { label: "north bridge", x: 1056, y: 520 },
+      { label: "south bridge", x: 1056, y: 1152 },
+      { label: "west bridge", x: 660, y: 848 },
+      { label: "east bridge", x: 1448, y: 848 },
     ]
 
     for (const sample of samples) {
@@ -175,8 +175,8 @@ describe("arena constants", () => {
       { label: "south edge", x: ARENA_WIDTH / 2, y: ARENA_HEIGHT - 8 },
       { label: "west edge", x: 8, y: ARENA_HEIGHT / 2 },
       { label: "east edge", x: ARENA_WIDTH - 8, y: ARENA_HEIGHT / 2 },
-      { label: "center-south internal gap", x: 1900, y: 2400 },
-      { label: "east internal gap", x: 3200, y: 2000 },
+      { label: "center-south internal gap", x: 950, y: 1200 },
+      { label: "east internal gap", x: 1600, y: 1000 },
     ]
 
     for (const sample of samples) {
@@ -203,18 +203,18 @@ describe("spawn points", () => {
 
   it("uses generated no-cliff lava arena spawn points", () => {
     expect(ARENA_SPAWN_POINTS).toEqual([
-      { x: 2112, y: 1696 },
-      { x: 1808, y: 1688 },
-      { x: 2416, y: 1696 },
-      { x: 2112, y: 1392 },
-      { x: 2112, y: 1992 },
-      { x: 1744, y: 1448 },
-      { x: 2480, y: 1448 },
-      { x: 1744, y: 1944 },
-      { x: 2480, y: 1944 },
-      { x: 920, y: 520 },
-      { x: 3120, y: 520 },
-      { x: 680, y: 1584 },
+      { x: 1056, y: 848 },
+      { x: 904, y: 824 },
+      { x: 1208, y: 840 },
+      { x: 1056, y: 696 },
+      { x: 1056, y: 1000 },
+      { x: 872, y: 728 },
+      { x: 1240, y: 728 },
+      { x: 872, y: 976 },
+      { x: 1240, y: 976 },
+      { x: 464, y: 264 },
+      { x: 1568, y: 256 },
+      { x: 328, y: 808 },
     ])
   })
 

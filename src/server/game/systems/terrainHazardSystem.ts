@@ -62,7 +62,7 @@ export function terrainHazardSystem(ctx: SimCtx): void {
     }
 
     TerrainState.lavaDamageCarry[eid] = 0
-    if (sampled !== "cliff" && TerrainState.kind[eid] !== TERRAIN_KIND.cliff) {
+    if (sampled !== "cliff") {
       TerrainState.kind[eid] = TERRAIN_KIND.land
       continue
     }

@@ -10,7 +10,9 @@ import {
   NeedsWorldCollisionResolution,
 } from "../components"
 import type { SimCtx } from "../simulation"
+import { computePlayerAnimState } from "../playerAnimState"
 import { playerCollisionSystem } from "./playerCollisionSystem"
+import { terrainHazardSystem } from "./terrainHazardSystem"
 import { ARENA_HEIGHT, ARENA_LAVA_COLLIDERS, ARENA_WIDTH, PLAYER_RADIUS_PX } from "../../../shared/balance-config"
 import { terrainStateAtPosition } from "../../../shared/collision/terrainHazards"
 
@@ -61,7 +63,7 @@ describe("playerCollisionSystem", () => {
     expect(hasComponent(world, b, NeedsWorldCollisionResolution)).toBe(false)
   })
 
-  it("keeps grounded lava players from being shoved out of lava", () => {
+  it("lets grounded lava players be shoved back onto land", () => {
     const world = createWorld()
     const pusher = addEntity(world)
     const lavaPlayer = addEntity(world)
@@ -88,9 +90,13 @@ describe("playerCollisionSystem", () => {
 
     playerCollisionSystem({ world } as SimCtx)
 
-    expect(Position.y[lavaPlayer]).toBe(edge.lavaY)
-    expect(terrainStateAtPosition(Position.x[lavaPlayer], Position.y[lavaPlayer])).toBe("lava")
-    expect(TerrainState.kind[lavaPlayer]).toBe(TERRAIN_KIND.lava)
+    expect(Position.y[lavaPlayer]).toBeGreaterThanOrEqual(edge.blockedY)
+    expect(terrainStateAtPosition(Position.x[lavaPlayer], Position.y[lavaPlayer])).toBe("land")
+
+    terrainHazardSystem({ world, damageRequests: [] } as unknown as SimCtx)
+
+    expect(TerrainState.kind[lavaPlayer]).toBe(TERRAIN_KIND.land)
+    expect(computePlayerAnimState(world, lavaPlayer)).not.toBe("stumble")
   })
 })
 
