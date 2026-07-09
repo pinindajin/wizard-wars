@@ -25,6 +25,7 @@ import {
 } from "../components"
 import type { SimCtx } from "../simulation"
 import { knockbackSystem } from "./knockbackSystem"
+import { terrainHazardSystem } from "./terrainHazardSystem"
 
 const ARENA_BOUNDS = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
 const REPRESENTATIVE_BLOCKER_MIN_AREA_PX = 1_000
@@ -124,27 +125,35 @@ describe("knockbackSystem", () => {
     )
   })
 
-  it("keeps grounded land players out of existing non-walkable colliders during knockback", () => {
-    const blocker = ARENA_NON_WALKABLE_COLLIDERS.find((rect) => {
+  it("lets grounded land players be knocked into lava", () => {
+    const lava = ARENA_NON_WALKABLE_COLLIDERS.find((rect) => {
       if (rect.x <= 0 || rect.y <= 0 || rect.width < 8 || rect.height < 8) return false
       const startX = rect.x - PLAYER_WORLD_COLLISION_FOOTPRINT.radiusX - 2
       const startY = rect.y + rect.height / 2 - PLAYER_WORLD_COLLISION_FOOTPRINT.offsetY
-      return canPlayerOccupy(startX, startY, ARENA_WORLD_COLLIDERS)
+      return (
+        terrainStateAtPosition(startX, startY) === "land" &&
+        canPlayerOccupy(startX, startY, ARENA_WORLD_COLLIDERS)
+      )
     })
-    expect(blocker).toBeDefined()
-    const rect = blocker!
+    expect(lava).toBeDefined()
+    const rect = lava!
     const startX = rect.x - PLAYER_WORLD_COLLISION_FOOTPRINT.radiusX - 2
     const startY = rect.y + rect.height / 2 - PLAYER_WORLD_COLLISION_FOOTPRINT.offsetY
     const { world, eid } = addGroundedPlayerWithKnockback(startX, startY, 1, 0)
 
-    knockbackSystem({ world } as SimCtx)
+    for (let tick = 0; tick < 8; tick++) {
+      knockbackSystem({ world } as SimCtx)
+      if (terrainStateAtPosition(Position.x[eid], Position.y[eid]) === "lava") break
+    }
 
     expect(canPlayerOccupy(Position.x[eid], Position.y[eid], ARENA_WORLD_COLLIDERS)).toBe(
       true,
     )
-    expect(Position.x[eid]).toBeLessThanOrEqual(
-      rect.x - PLAYER_WORLD_COLLISION_FOOTPRINT.radiusX,
-    )
+    expect(terrainStateAtPosition(Position.x[eid], Position.y[eid])).toBe("lava")
+
+    const ctx = { world, damageRequests: [] } as unknown as SimCtx
+    terrainHazardSystem(ctx)
+    expect(TerrainState.kind[eid]).toBe(TERRAIN_KIND.lava)
   })
 
   it("keeps grounded lava players from being knocked off lava", () => {

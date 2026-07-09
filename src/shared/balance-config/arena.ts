@@ -53,8 +53,9 @@ export const ARENA_PROP_COLLIDERS: readonly {
 }[] = GENERATED_ARENA_PROP_COLLIDERS
 
 /**
- * Editor-authored non-walkable area rectangles. These are the source for lava,
- * cliff, and transition areas that block player movement.
+ * Editor-authored non-walkable terrain rectangles. In the current arena these
+ * are lava regions: land players may enter them and then lava terrain rules
+ * apply.
  */
 export const ARENA_NON_WALKABLE_COLLIDERS: readonly {
   x: number
@@ -71,7 +72,7 @@ export const ARENA_LAVA_COLLIDERS: readonly {
   height: number
 }[] = GENERATED_ARENA_LAVA_COLLIDERS
 
-/** Cliff rectangles; jump landings enter stumble/slide state. */
+/** Cliff rectangles. The no-cliff lava arena intentionally generates none. */
 export const ARENA_CLIFF_COLLIDERS: readonly {
   x: number
   y: number
@@ -106,13 +107,16 @@ export const ARENA_NON_HAZARD_COLLIDERS: readonly {
   return !ARENA_LAVA_COLLIDERS.some(overlaps) && !ARENA_CLIFF_COLLIDERS.some(overlaps)
 })
 
-/** All static rectangles that block player movement. */
+/**
+ * Static rectangles that block grounded land movement. Lava is excluded so
+ * players can walk or be pushed off walkable terrain into lava from any edge.
+ */
 export const ARENA_WORLD_COLLIDERS: readonly {
   x: number
   y: number
   width: number
   height: number
-}[] = [...ARENA_PROP_COLLIDERS, ...ARENA_NON_WALKABLE_COLLIDERS]
+}[] = [...ARENA_PROP_COLLIDERS, ...ARENA_NON_HAZARD_COLLIDERS, ...ARENA_CLIFF_COLLIDERS]
 
 /** Fireball despawns this many pixels past any arena edge. */
 export const FIREBALL_DESPAWN_OVERSHOOT_PX = 400

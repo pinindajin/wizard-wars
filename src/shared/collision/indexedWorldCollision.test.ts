@@ -191,7 +191,7 @@ describe("indexedWorldCollision", () => {
         terrainStateAtPosition(point.x, point.y),
       )
     }
-    expect(terrainStateAtPositionIndexed(160, 18)).toBe("cliff")
+    expect(terrainStateAtPositionIndexed(160, 18)).toBe("lava")
   })
 })
 

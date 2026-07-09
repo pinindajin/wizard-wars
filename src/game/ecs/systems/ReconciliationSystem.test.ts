@@ -201,14 +201,14 @@ describe("reconcileLocal", () => {
     ).toBeCloseTo(start.x + baseStep, 5)
   })
 
-  it("replays blocked pending inputs without entering non-walkable terrain", () => {
+  it("replays blocked pending inputs without entering prop terrain", () => {
     const history = new LocalInputHistory()
     history.append(input({ seq: 20, up: true }))
 
     const topStrip = ARENA_WORLD_COLLIDERS[0]!
     const topClearance = PLAYER_WORLD_COLLISION_RADIUS_Y_PX - PLAYER_WORLD_COLLISION_OFFSET_Y_PX
     const start = {
-      x: topStrip.x + 704,
+      x: topStrip.x + topStrip.width / 2,
       y: topStrip.y + topStrip.height + topClearance,
     }
     const ack = { ...start, lastProcessedInputSeq: 19 }
