@@ -161,20 +161,7 @@ describe("terrain hazards", () => {
     expect(TerrainState.kind[laterLavaPlayer]).toBe(TERRAIN_KIND.lava)
   })
 
-  it("slides cliff players toward lava without damage", () => {
-    const cliff = ARENA_CLIFF_COLLIDERS[0]!
-    const world = createWorld()
-    const eid = addPlayerAt(world, cliff.x + cliff.width / 2, cliff.y + cliff.height / 2)
-    TerrainState.kind[eid] = TERRAIN_KIND.cliff
-    const x0 = Position.x[eid]
-    const y0 = Position.y[eid]
-
-    const ctx = emptyCtx({ world })
-    terrainHazardSystem(ctx)
-
-    expect(TerrainState.kind[eid]).toBe(TERRAIN_KIND.cliff)
-    expect(Math.hypot(Position.x[eid] - x0, Position.y[eid] - y0)).toBeGreaterThan(0)
-    expect(hasComponent(world, eid, NeedsWorldCollisionResolution)).toBe(true)
-    expect(ctx.damageRequests).toHaveLength(0)
+  it("has no native cliff terrain to slide players from", () => {
+    expect(ARENA_CLIFF_COLLIDERS).toEqual([])
   })
 })

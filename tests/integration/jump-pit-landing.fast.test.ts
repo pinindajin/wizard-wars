@@ -10,8 +10,6 @@ import {
   TerrainState,
   TERRAIN_KIND,
 } from "@/server/game/components"
-import { computePlayerAnimState } from "@/server/game/playerAnimState"
-import { computePlayerMoveState } from "@/server/game/playerMoveState"
 import {
   PlayerInputQueue,
   type PlayerInputQueueMap,
@@ -20,6 +18,7 @@ import { createGameSimulation } from "@/server/game/simulation"
 import {
   ARENA_CLIFF_COLLIDERS,
   ARENA_HEIGHT,
+  ARENA_LAVA_COLLIDERS,
   ARENA_WIDTH,
   ARENA_WORLD_COLLIDERS,
 } from "@/shared/balance-config/arena"
@@ -135,49 +134,46 @@ function findIllegalGroundPoint(): { x: number; y: number } {
   throw new Error("expected non-walkable landing-edge sample")
 }
 
-function sampleNativeLavaEdgeJump(): {
-  startX: number
-  startY: number
-  minLandingX: number
+function sampleTopLavaEdge(): {
+  x: number
+  jumpStartY: number
+  lavaLandingY: number
+  minLandingY: number
   input: Partial<PlayerInputPayload>
 } {
-  const sample = {
-    startX: 1872,
-    startY: 64,
-    minLandingX: 1976,
-    input: { right: true },
-  }
-  if (terrainStateAtPosition(sample.startX, sample.startY) !== "lava") {
-    throw new Error("expected native lava-edge jump start to be lava")
-  }
-  if (terrainStateAtPosition(sample.minLandingX, sample.startY) !== "land") {
-    throw new Error("expected native lava-edge jump landing threshold to be land")
-  }
-  return sample
-}
+  const topLava = ARENA_LAVA_COLLIDERS.filter((rect) => rect.y === 0).sort(
+    (a, b) => b.width - a.width,
+  )[0]
+  if (!topLava) throw new Error("expected a native top-edge lava band")
 
-function sampleLavaEdge(): {
-  x: number
-  y: number
-  landThresholdX: number
-  exitInput: Partial<PlayerInputPayload>
-} {
-  const sample = { x: 1872, y: 64, landThresholdX: 1976, exitInput: { right: true } }
-  if (
-    terrainStateAtPosition(sample.x, sample.y) === "lava" &&
-    terrainStateAtPosition(sample.landThresholdX, sample.y) === "land"
+  const bounds = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
+  const lavaLandingY = topLava.y + 16
+  const jumpStartY = topLava.y + 24
+  const minLandingY = topLava.y + topLava.height + 16
+
+  for (
+    let x = topLava.x + PLAYER_WORLD_COLLISION_FOOTPRINT.radiusX + 44;
+    x < topLava.x + topLava.width - PLAYER_WORLD_COLLISION_FOOTPRINT.radiusX;
+    x += 16
   ) {
-    return sample
+    if (terrainStateAtPosition(x, lavaLandingY) !== "lava") continue
+    if (terrainStateAtPosition(x, jumpStartY) !== "lava") continue
+    if (terrainStateAtPosition(x, minLandingY) !== "land") continue
+    if (
+      !canOccupyWorldPosition(
+        x,
+        minLandingY,
+        PLAYER_WORLD_COLLISION_FOOTPRINT,
+        bounds,
+        ARENA_WORLD_COLLIDERS,
+      )
+    ) {
+      continue
+    }
+    return { x, jumpStartY, lavaLandingY, minLandingY, input: { down: true } }
   }
-  throw new Error("expected native lava edge to border land")
-}
 
-function sampleCliffOnlyRect(): { x: number; y: number; width: number; height: number } {
-  const cliff = ARENA_CLIFF_COLLIDERS.find((rect) =>
-    terrainStateAtPosition(rect.x + rect.width / 2, rect.y + rect.height / 2) === "cliff",
-  )
-  if (!cliff) throw new Error("expected a native cliff area outside lava")
-  return cliff
+  throw new Error("expected a reachable native lava edge bordering land")
 }
 
 describe("jump pit landing (integration)", () => {
@@ -211,12 +207,12 @@ describe("jump pit landing (integration)", () => {
   it("clears a native lava edge at base movement speed", () => {
     const sim = createGameSimulation(Date.now())
     const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
-    const jump = sampleNativeLavaEdgeJump()
+    const jump = sampleTopLavaEdge()
     const bounds = { width: ARENA_WIDTH, height: ARENA_HEIGHT }
 
     AbilitySlots.slot1[eid] = ABILITY_INDEX.jump
-    Position.x[eid] = jump.startX
-    Position.y[eid] = jump.startY
+    Position.x[eid] = jump.x
+    Position.y[eid] = jump.jumpStartY
 
     for (let tick = 0; tick < 80; tick++) {
       sim.tick(
@@ -228,7 +224,7 @@ describe("jump pit landing (integration)", () => {
 
     expect(Health.current[eid]).toBeGreaterThan(0)
     expect(hasComponent(sim.world, eid, JumpArc)).toBe(false)
-    expect(Position.x[eid]).toBeGreaterThanOrEqual(jump.minLandingX)
+    expect(Position.y[eid]).toBeGreaterThanOrEqual(jump.minLandingY)
     expect(terrainStateAtPosition(Position.x[eid], Position.y[eid])).toBe("land")
     expect(
       canOccupyWorldPosition(
@@ -244,29 +240,29 @@ describe("jump pit landing (integration)", () => {
   it("blocks grounded lava players from walking onto land", () => {
     const sim = createGameSimulation(Date.now())
     const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
-    const lava = sampleLavaEdge()
+    const lava = sampleTopLavaEdge()
 
     Position.x[eid] = lava.x
-    Position.y[eid] = lava.y
+    Position.y[eid] = lava.jumpStartY
     TerrainState.kind[eid] = TERRAIN_KIND.lava
 
     for (let tick = 0; tick < 40; tick++) {
-      sim.tick(queue(input({ ...lava.exitInput, seq: tick })), Date.now() + tick * 16.667)
+      sim.tick(queue(input({ ...lava.input, seq: tick })), Date.now() + tick * 16.667)
     }
 
     expect(terrainStateAtPosition(Position.x[eid], Position.y[eid])).toBe("lava")
-    expect(Position.x[eid]).toBeLessThan(lava.landThresholdX)
+    expect(Position.y[eid]).toBeLessThan(lava.minLandingY)
     expect(TerrainState.kind[eid]).toBe(TERRAIN_KIND.lava)
   })
 
   it("lets a lava player escape to land with jump", () => {
     const sim = createGameSimulation(Date.now())
     const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
-    const jump = sampleNativeLavaEdgeJump()
+    const jump = sampleTopLavaEdge()
 
     AbilitySlots.slot1[eid] = ABILITY_INDEX.jump
-    Position.x[eid] = jump.startX
-    Position.y[eid] = jump.startY
+    Position.x[eid] = jump.x
+    Position.y[eid] = jump.jumpStartY
     TerrainState.kind[eid] = TERRAIN_KIND.lava
 
     for (let tick = 0; tick < 90; tick++) {
@@ -285,10 +281,10 @@ describe("jump pit landing (integration)", () => {
   it("keeps a jump landing in lava from walking out afterward", () => {
     const sim = createGameSimulation(Date.now())
     const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
-    const lava = { x: 648, y: 72, exitInput: { right: true } satisfies Partial<PlayerInputPayload> }
+    const lava = sampleTopLavaEdge()
 
     Position.x[eid] = lava.x
-    Position.y[eid] = lava.y
+    Position.y[eid] = lava.lavaLandingY
     addComponent(sim.world, eid, JumpArc)
     JumpArc.z[eid] = 1
     JumpArc.vz[eid] = -1000
@@ -297,31 +293,29 @@ describe("jump pit landing (integration)", () => {
     expect(TerrainState.kind[eid]).toBe(TERRAIN_KIND.lava)
 
     for (let tick = 1; tick < 41; tick++) {
-      sim.tick(queue(input({ ...lava.exitInput, seq: tick })), Date.now() + tick * 16.667)
+      sim.tick(queue(input({ ...lava.input, seq: tick })), Date.now() + tick * 16.667)
     }
 
     expect(terrainStateAtPosition(Position.x[eid], Position.y[eid])).toBe("lava")
-    expect(Position.x[eid]).toBeLessThanOrEqual(lava.x + 8)
+    expect(Position.y[eid]).toBeLessThan(lava.minLandingY)
     expect(TerrainState.kind[eid]).toBe(TERRAIN_KIND.lava)
   })
 
-  it("turns a cliff landing into rooted stumble slide", () => {
+  it("keeps the native arena free of cliff landings", () => {
     const sim = createGameSimulation(Date.now())
     const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
-    const cliff = sampleCliffOnlyRect()
+    const edge = sampleTopLavaEdge()
 
-    Position.x[eid] = cliff.x + cliff.width / 2
-    Position.y[eid] = cliff.y + cliff.height / 2
-    const startX = Position.x[eid]
+    expect(ARENA_CLIFF_COLLIDERS).toHaveLength(0)
+
+    Position.x[eid] = edge.x
+    Position.y[eid] = edge.minLandingY
     addComponent(sim.world, eid, JumpArc)
     JumpArc.z[eid] = 1
     JumpArc.vz[eid] = -1000
 
     sim.tick(new Map(), Date.now())
 
-    expect(TerrainState.kind[eid]).toBe(TERRAIN_KIND.cliff)
-    expect(computePlayerAnimState(sim.world, eid)).toBe("stumble")
-    expect(computePlayerMoveState(sim.world, eid)).toBe("rooted")
-    expect(Math.abs(Position.x[eid] - startX)).toBeGreaterThan(0)
+    expect(TerrainState.kind[eid]).toBe(TERRAIN_KIND.land)
   })
 })

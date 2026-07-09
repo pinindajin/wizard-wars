@@ -22,9 +22,8 @@ import {
 import { canOccupyWorldPosition, type ArenaPropColliderRect } from "./worldCollision"
 
 const rect: ArenaPropColliderRect = { x: 10, y: 20, width: 30, height: 40 }
-const OPEN_LAND_POINT = { x: 1420, y: 1124 }
-const OPEN_LAVA_POINT = { x: 800, y: 280 }
-const OPEN_CLIFF_POINT = { x: 904, y: 2120 }
+const OPEN_LAND_POINT = { x: 2112, y: 1696 }
+const OPEN_LAVA_POINT = { x: 2112, y: 8 }
 
 function sampleLavaRect(): ArenaPropColliderRect {
   const lava = ARENA_LAVA_COLLIDERS.find((candidate) =>
@@ -32,17 +31,6 @@ function sampleLavaRect(): ArenaPropColliderRect {
   )
   if (!lava) throw new Error("Expected native lava in the upper-left lava pool")
   return lava
-}
-
-function sampleCliffOnlyRect(): ArenaPropColliderRect {
-  const cliff = ARENA_CLIFF_COLLIDERS.find((candidate) =>
-    terrainStateAtPosition(
-      candidate.x + candidate.width / 2,
-      candidate.y + candidate.height / 2,
-    ) === "cliff",
-  )
-  if (!cliff) throw new Error("Expected a native cliff rectangle outside lava")
-  return cliff
 }
 
 describe("terrain geometry helpers", () => {
@@ -56,15 +44,11 @@ describe("terrain geometry helpers", () => {
 
   it("samples points and terrain states from hazard colliders", () => {
     sampleLavaRect()
-    const cliff = sampleCliffOnlyRect()
 
     expect(pointInRects(OPEN_LAVA_POINT.x, OPEN_LAVA_POINT.y, ARENA_LAVA_COLLIDERS)).toBe(true)
     expect(pointInRects(-1, -1, ARENA_LAVA_COLLIDERS)).toBe(false)
     expect(terrainStateAtPosition(OPEN_LAVA_POINT.x, OPEN_LAVA_POINT.y)).toBe("lava")
-    expect(terrainStateAtPosition(cliff.x + cliff.width / 2, cliff.y + cliff.height / 2)).toBe(
-      "cliff",
-    )
-    expect(terrainStateAtPosition(OPEN_CLIFF_POINT.x, OPEN_CLIFF_POINT.y)).toBe("cliff")
+    expect(ARENA_CLIFF_COLLIDERS).toEqual([])
     expect(terrainStateAtPosition(OPEN_LAND_POINT.x, OPEN_LAND_POINT.y)).toBe("land")
   })
 
@@ -80,14 +64,15 @@ describe("terrain geometry helpers", () => {
 })
 
 describe("worldCollidersForPlayerState", () => {
-  it("blocks all hazards on land and submerged lava path does not eject valid lava", () => {
+  it("lets land enter lava and submerged lava path does not eject valid lava", () => {
     expect(worldCollidersForPlayerState(0, "land")).toBe(ARENA_WORLD_COLLIDERS)
+    expect(ARENA_WORLD_COLLIDERS).not.toContain(ARENA_LAVA_COLLIDERS[0])
 
     const lavaColliders = worldCollidersForPlayerState(0, "lava")
     expect(lavaColliders).not.toBe(ARENA_WORLD_COLLIDERS)
     expect(lavaColliders).not.toContain(ARENA_LAVA_COLLIDERS[0])
     expect(lavaColliders).toEqual(expect.arrayContaining([...ARENA_PROP_COLLIDERS]))
-    expect(lavaColliders).toEqual(expect.arrayContaining([...ARENA_CLIFF_COLLIDERS]))
+    expect(ARENA_CLIFF_COLLIDERS).toEqual([])
     if (ARENA_LAVA_TRANSITION_COLLIDERS.length > 0) {
       expect(lavaColliders).not.toContain(ARENA_LAVA_TRANSITION_COLLIDERS[0])
     }
@@ -127,13 +112,13 @@ describe("worldCollidersForPlayerState", () => {
     ).toBe(ARENA_PROP_COLLIDERS)
   })
 
-  it("excludes cliff colliders while already stumbling on a cliff", () => {
+  it("supports legacy cliff state without native cliff colliders", () => {
     const cliffColliders = worldCollidersForPlayerState(0, "cliff")
 
     expect(cliffColliders).not.toBe(ARENA_WORLD_COLLIDERS)
     expect(cliffColliders).toEqual(expect.arrayContaining([...ARENA_PROP_COLLIDERS]))
     expect(cliffColliders).toEqual(expect.arrayContaining([...ARENA_NON_HAZARD_COLLIDERS]))
-    expect(cliffColliders).not.toContain(ARENA_CLIFF_COLLIDERS[0])
+    expect(ARENA_CLIFF_COLLIDERS).toEqual([])
     expect(cliffColliders).not.toContain(ARENA_LAVA_COLLIDERS[0])
   })
 })

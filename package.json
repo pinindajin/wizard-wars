@@ -45,6 +45,7 @@
     "import:triss-source-frames": "tsx scripts/import-triss-source-frames.ts",
     "build:triss-sheets": "tsx scripts/build-hero-sheets.ts triss",
     "build:triss-megasheet": "tsx scripts/build-hero-megasheet.ts triss",
+    "build:no-cliff-lava-arena": "tsx scripts/build-no-cliff-lava-arena.ts && bun run build:arena-colliders",
     "export:arena-tilemap": "tsx scripts/export-arena-tilemap.ts",
     "check:arena-editor-parity": "tsx scripts/export-arena-tilemap.ts --check",
     "build:arena-colliders": "bun run export:arena-tilemap && tsx scripts/compile-arena-colliders.ts",

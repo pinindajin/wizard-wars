@@ -14,7 +14,7 @@ import { playerCollisionSystem } from "./playerCollisionSystem"
 import { ARENA_HEIGHT, ARENA_LAVA_COLLIDERS, ARENA_WIDTH, PLAYER_RADIUS_PX } from "../../../shared/balance-config"
 import { terrainStateAtPosition } from "../../../shared/collision/terrainHazards"
 
-function sampleVerticalLavaToCliffEdge(): {
+function sampleVerticalLavaToLandEdge(): {
   readonly x: number
   readonly pusherY: number
   readonly lavaY: number
@@ -28,14 +28,14 @@ function sampleVerticalLavaToCliffEdge(): {
         if (
           terrainStateAtPosition(x, y) === "lava" &&
           terrainStateAtPosition(x, y - 18) === "lava" &&
-          terrainStateAtPosition(x, y + 7) === "cliff"
+          terrainStateAtPosition(x, y + 7) === "land"
         ) {
           return { x, pusherY: y - 18, lavaY: y, blockedY: y + 7 }
         }
       }
     }
   }
-  throw new Error("Expected native lava with a cliff below it")
+  throw new Error("Expected native lava with land below it")
 }
 
 describe("playerCollisionSystem", () => {
@@ -61,11 +61,11 @@ describe("playerCollisionSystem", () => {
     expect(hasComponent(world, b, NeedsWorldCollisionResolution)).toBe(false)
   })
 
-  it("keeps grounded lava players from being shoved off lava", () => {
+  it("keeps grounded lava players from being shoved out of lava", () => {
     const world = createWorld()
     const pusher = addEntity(world)
     const lavaPlayer = addEntity(world)
-    const edge = sampleVerticalLavaToCliffEdge()
+    const edge = sampleVerticalLavaToLandEdge()
 
     for (const eid of [pusher, lavaPlayer]) {
       addComponent(world, eid, PlayerTag)
@@ -84,7 +84,7 @@ describe("playerCollisionSystem", () => {
     TerrainState.kind[lavaPlayer] = TERRAIN_KIND.lava
 
     expect(terrainStateAtPosition(Position.x[lavaPlayer], Position.y[lavaPlayer])).toBe("lava")
-    expect(terrainStateAtPosition(Position.x[lavaPlayer], edge.blockedY)).toBe("cliff")
+    expect(terrainStateAtPosition(Position.x[lavaPlayer], edge.blockedY)).toBe("land")
 
     playerCollisionSystem({ world } as SimCtx)
 

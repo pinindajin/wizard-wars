@@ -171,36 +171,7 @@ describe("healthSystem damage floats", () => {
     expect(TerrainState.kind[eid]).toBe(TERRAIN_KIND.lava)
   })
 
-  it("reclassifies cliff terrain when knockback cancels an airborne jump", () => {
-    const world = createWorld()
-    const eid = addEntity(world)
-    const cliff = ARENA_CLIFF_COLLIDERS[0]!
-    for (const component of [PlayerTag, Position, Health, Hero, JumpArc, TerrainState]) {
-      addComponent(world, eid, component)
-    }
-    Position.x[eid] = cliff.x + cliff.width / 2
-    Position.y[eid] = cliff.y + cliff.height / 2
-    Health.current[eid] = DEFAULT_PLAYER_HEALTH
-    Health.max[eid] = DEFAULT_PLAYER_HEALTH
-    Hero.typeIndex[eid] = 0
-    JumpArc.z[eid] = JUMP_AIRBORNE_COLLIDER_EPSILON_PX + 1
-    TerrainState.kind[eid] = TERRAIN_KIND.land
-    TerrainState.lavaDamageCarry[eid] = 0.5
-
-    healthSystem(emptyCtx({
-      world,
-      damageRequests: [{
-        targetEid: eid,
-        damage: 1,
-        killerUserId: "caster",
-        killerAbilityId: "fireball",
-        knockbackX: 1,
-        knockbackY: 0,
-        knockbackPx: 20,
-      }],
-    }))
-
-    expect(TerrainState.kind[eid]).toBe(TERRAIN_KIND.cliff)
-    expect(TerrainState.lavaDamageCarry[eid]).toBe(0)
+  it("has no native cliff terrain to reclassify after knockback", () => {
+    expect(ARENA_CLIFF_COLLIDERS).toEqual([])
   })
 })

@@ -23,6 +23,7 @@ describe("arenaSpatialIndexes", () => {
     expect(ARENA_WORLD_COLLIDER_SET.rects).toBe(ARENA_WORLD_COLLIDERS)
     expect(ARENA_LAVA_COLLIDER_SET.rects).toBe(ARENA_LAVA_COLLIDERS)
     expect(ARENA_CLIFF_COLLIDER_SET.rects).toBe(ARENA_CLIFF_COLLIDERS)
+    expect(ARENA_CLIFF_COLLIDER_SET.rects).toHaveLength(0)
     expect(ARENA_PROP_COLLIDER_SET.rects).toBe(ARENA_PROP_COLLIDERS)
   })
 
