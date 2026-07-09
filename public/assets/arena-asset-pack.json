@@ -366,11 +366,6 @@
                 "url": "/assets/sprites/arena-props/instance-070.png"
             },
             {
-                "type": "image",
-                "key": "arena-prop-instance-071",
-                "url": "/assets/sprites/arena-props/instance-071.png"
-            },
-            {
                 "type": "spritesheet",
                 "key": "lady-wizard",
                 "url": "/assets/sprites/heroes/lady-wizard/sheets/lady-wizard-megasheet.png",

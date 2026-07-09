@@ -4,6 +4,7 @@ import { LocalInputHistory } from "../../network/LocalInputHistory"
 import { reconcileLocal } from "./ReconciliationSystem"
 import {
   ARENA_HEIGHT,
+  ARENA_CLIFF_COLLIDERS,
   ARENA_LAVA_COLLIDERS,
   ARENA_SPAWN_POINTS,
   ARENA_WIDTH,
@@ -142,6 +143,22 @@ describe("reconcileLocal", () => {
     expect(r.renderX).toBeCloseTo(r.targetX, 5)
   })
 
+  it("replays legacy cliff terrain as land when no native cliff colliders exist", () => {
+    const history = new LocalInputHistory()
+    history.append(input({ seq: 10, right: true }))
+
+    const start = findRightwardReplayStart()
+    const ack = { x: start.x, y: start.y, lastProcessedInputSeq: 9 }
+    const r = reconcileLocal(ack, history, start, {
+      ...noopCtx,
+      terrainState: "cliff",
+    })
+
+    expect(ARENA_CLIFF_COLLIDERS).toEqual([])
+    expect(r.targetX).toBeGreaterThan(start.x)
+    expect(r.targetY).toBeCloseTo(start.y, 5)
+  })
+
   it("keeps replay still for non-moving and rooted-cast pending inputs", () => {
     const start = findRightwardReplayStart()
     const ack = { x: start.x, y: start.y, lastProcessedInputSeq: 29 }
@@ -219,7 +236,7 @@ describe("reconcileLocal", () => {
     expect(r.correction).toBe("none")
   })
 
-  it("replays lava movement without walking onto land", () => {
+  it("replays lava movement back onto land", () => {
     const lava = sampleLavaRect()
     const start = {
       x: lava.point.x,
@@ -237,7 +254,7 @@ describe("reconcileLocal", () => {
       { ...noopCtx, terrainState: "lava" },
     )
 
-    expect(terrainStateAtPosition(r.targetX, r.targetY)).toBe("lava")
-    expect(r.targetX).toBeLessThanOrEqual(lava.point.x)
+    expect(terrainStateAtPosition(r.targetX, r.targetY)).toBe("land")
+    expect(r.targetX).toBeGreaterThan(lava.point.x)
   })
 })

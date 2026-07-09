@@ -8,6 +8,7 @@ import {
 import { JUMP_AIRBORNE_LAVA_COLLISION_MIN_Z_PX } from "../balance-config/combat"
 import type { PlayerTerrainState } from "../types"
 import { ARENA_LAVA_COLLIDER_SET } from "./arenaSpatialIndexes"
+import { effectiveTerrainStateForCurrentArena } from "./effectiveTerrainState"
 import { queryPointIds } from "./spatialIndex"
 import type { ArenaPropColliderRect, WorldCandidateGate } from "./worldCollision"
 
@@ -60,11 +61,11 @@ export function terrainStateAtPosition(x: number, y: number): PlayerTerrainState
 }
 
 /**
- * Returns whether a grounded lava movement candidate remains inside lava.
+ * Returns whether a point samples as lava using the arena lava spatial index.
  *
  * @param x - Candidate player center x in world pixels.
  * @param y - Candidate player center y in world pixels.
- * @returns True when the candidate center still samples as lava.
+ * @returns True when the candidate center samples as lava.
  */
 export function groundedLavaCandidateCanOccupy(x: number, y: number): boolean {
   return queryPointIds(
@@ -80,15 +81,16 @@ export function groundedLavaCandidateCanOccupy(x: number, y: number): boolean {
  *
  * @param jumpZ - Simulated jump height in world pixels.
  * @param terrainState - Current authoritative terrain state.
- * @returns Candidate predicate for grounded lava, or undefined for normal movement.
+ * @returns Undefined for normal movement; lava/land transitions are collider-legal.
  */
 export function worldCandidateGateForPlayerState(
   jumpZ: number,
   terrainState: PlayerTerrainState,
 ): WorldCandidateGate | undefined {
+  const effectiveTerrainState = effectiveTerrainStateForCurrentArena(terrainState)
   if (jumpZ > 0) return undefined
-  if (terrainState !== "lava") return undefined
-  return groundedLavaCandidateCanOccupy
+  if (effectiveTerrainState === "lava") return undefined
+  return undefined
 }
 
 /**
@@ -103,6 +105,7 @@ export function worldCollidersForPlayerState(
   terrainState: PlayerTerrainState,
   options?: WorldCollidersForPlayerOptions,
 ): readonly ArenaPropColliderRect[] {
+  const effectiveTerrainState = effectiveTerrainStateForCurrentArena(terrainState)
   if (jumpZ > 0) {
     if (options?.jumpStartedInLava === true) {
       return ARENA_PROP_COLLIDERS
@@ -112,14 +115,14 @@ export function worldCollidersForPlayerState(
     }
     return AIRBORNE_COLLIDERS_WITH_LAVA
   }
-  if (terrainState === "lava") {
+  if (effectiveTerrainState === "lava") {
     return [
       ...ARENA_PROP_COLLIDERS,
       ...ARENA_NON_HAZARD_COLLIDERS,
       ...ARENA_CLIFF_COLLIDERS,
     ]
   }
-  if (terrainState === "cliff") {
+  if (effectiveTerrainState === "cliff") {
     return [...ARENA_PROP_COLLIDERS, ...ARENA_NON_HAZARD_COLLIDERS]
   }
   return ARENA_WORLD_COLLIDERS

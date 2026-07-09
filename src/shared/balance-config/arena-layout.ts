@@ -5,58 +5,58 @@
  * sync with `Arena.scene`, `public/assets/tilemaps/arena.json`, and the
  * generated collider files when the arena changes.
  */
-export const ARENA_LAYOUT_WIDTH = 4224
-export const ARENA_LAYOUT_HEIGHT = 3392
-export const ARENA_LAYOUT_COLS = 66
-export const ARENA_LAYOUT_ROWS = 53
+export const ARENA_LAYOUT_WIDTH = 2112
+export const ARENA_LAYOUT_HEIGHT = 1696
+export const ARENA_LAYOUT_COLS = 33
+export const ARENA_LAYOUT_ROWS = 27
 export const ARENA_LAYOUT_IMPORTED_TILE_FIRST_GID = 17
 export const ARENA_LAYOUT_SPAWN_POINTS = [
   {
-    "x": 2112,
-    "y": 1696
+    "x": 1056,
+    "y": 848
   },
   {
-    "x": 1808,
-    "y": 1688
+    "x": 904,
+    "y": 824
   },
   {
-    "x": 2416,
-    "y": 1696
+    "x": 1208,
+    "y": 840
   },
   {
-    "x": 2112,
-    "y": 1392
+    "x": 1056,
+    "y": 696
   },
   {
-    "x": 2112,
-    "y": 1992
+    "x": 1056,
+    "y": 1000
   },
   {
-    "x": 1744,
-    "y": 1448
+    "x": 872,
+    "y": 728
   },
   {
-    "x": 2480,
-    "y": 1448
+    "x": 1240,
+    "y": 728
   },
   {
-    "x": 1744,
-    "y": 1944
+    "x": 872,
+    "y": 976
   },
   {
-    "x": 2480,
-    "y": 1944
+    "x": 1240,
+    "y": 976
   },
   {
-    "x": 920,
-    "y": 520
+    "x": 464,
+    "y": 264
   },
   {
-    "x": 3120,
-    "y": 520
+    "x": 1568,
+    "y": 256
   },
   {
-    "x": 680,
-    "y": 1584
+    "x": 328,
+    "y": 808
   }
 ] as const

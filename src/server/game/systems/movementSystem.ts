@@ -52,6 +52,7 @@ import {
 import { ABILITY_CONFIGS } from "../../../shared/balance-config/abilities"
 import { moveWithinWorldIndexed } from "../../../shared/collision/indexedWorldCollision"
 import { terrainColliderSetForPlayerState } from "../../../shared/collision/arenaSpatialIndexes"
+import { effectiveTerrainStateForCurrentArena } from "../../../shared/collision/effectiveTerrainState"
 import { worldCandidateGateForPlayerState } from "../../../shared/collision/worldCollidersForPlayer"
 import { normalizedMoveFromWASD } from "../../../shared/movementIntent"
 
@@ -76,7 +77,10 @@ export function movementSystem(ctx: SimCtx): void {
       Velocity.vy[eid] = 0
       continue
     }
-    if ((TERRAIN_KIND_TO_STATE[TerrainState.kind[eid]] ?? "land") === "cliff") {
+    const terrainState = effectiveTerrainStateForCurrentArena(
+      TERRAIN_KIND_TO_STATE[TerrainState.kind[eid]] ?? "land",
+    )
+    if (terrainState === "cliff") {
       Velocity.vx[eid] = 0
       Velocity.vy[eid] = 0
       continue
@@ -118,7 +122,6 @@ export function movementSystem(ctx: SimCtx): void {
     const stepX = dx * speedPxPerSec * TICK_DT_SEC
     const stepY = dy * speedPxPerSec * TICK_DT_SEC
     const jumpZForCollider = hasComponent(world, eid, JumpArc) ? JumpArc.z[eid] : 0
-    const terrainState = TERRAIN_KIND_TO_STATE[TerrainState.kind[eid]] ?? "land"
     const jumpStartedInLava =
       hasComponent(world, eid, JumpArc) && JumpArc.startedInLava[eid] === 1
     const worldColliderSet = terrainColliderSetForPlayerState(jumpZForCollider, terrainState, {

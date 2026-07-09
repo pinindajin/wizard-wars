@@ -238,7 +238,7 @@ describe("jump pit landing (integration)", () => {
     ).toBe(true)
   })
 
-  it("blocks grounded lava players from walking onto land", () => {
+  it("lets grounded lava players walk back onto land", () => {
     const sim = createGameSimulation(Date.now())
     const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
     const lava = sampleTopLavaEdge()
@@ -251,9 +251,9 @@ describe("jump pit landing (integration)", () => {
       sim.tick(queue(input({ ...lava.input, seq: tick })), Date.now() + tick * 16.667)
     }
 
-    expect(terrainStateAtPosition(Position.x[eid], Position.y[eid])).toBe("lava")
-    expect(Position.y[eid]).toBeLessThan(lava.minLandingY)
-    expect(TerrainState.kind[eid]).toBe(TERRAIN_KIND.lava)
+    expect(terrainStateAtPosition(Position.x[eid], Position.y[eid])).toBe("land")
+    expect(Position.y[eid]).toBeGreaterThanOrEqual(lava.minLandingY)
+    expect(TerrainState.kind[eid]).toBe(TERRAIN_KIND.land)
     expect(computePlayerAnimState(sim.world, eid)).not.toBe("stumble")
   })
 
@@ -281,7 +281,7 @@ describe("jump pit landing (integration)", () => {
     expect(computePlayerAnimState(sim.world, eid)).not.toBe("stumble")
   })
 
-  it("keeps a jump landing in lava from walking out afterward", () => {
+  it("lets a jump landing in lava walk back onto land afterward", () => {
     const sim = createGameSimulation(Date.now())
     const eid = sim.addPlayer("user1", "Alice", "red_wizard", 0)
     const lava = sampleTopLavaEdge()
@@ -299,9 +299,9 @@ describe("jump pit landing (integration)", () => {
       sim.tick(queue(input({ ...lava.input, seq: tick })), Date.now() + tick * 16.667)
     }
 
-    expect(terrainStateAtPosition(Position.x[eid], Position.y[eid])).toBe("lava")
-    expect(Position.y[eid]).toBeLessThan(lava.minLandingY)
-    expect(TerrainState.kind[eid]).toBe(TERRAIN_KIND.lava)
+    expect(terrainStateAtPosition(Position.x[eid], Position.y[eid])).toBe("land")
+    expect(Position.y[eid]).toBeGreaterThanOrEqual(lava.minLandingY)
+    expect(TerrainState.kind[eid]).toBe(TERRAIN_KIND.land)
     expect(computePlayerAnimState(sim.world, eid)).not.toBe("stumble")
   })
 

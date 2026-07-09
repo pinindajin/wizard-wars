@@ -8,6 +8,7 @@ import {
 } from "../balance-config/arena"
 import { JUMP_AIRBORNE_LAVA_COLLISION_MIN_Z_PX } from "../balance-config/combat"
 import type { PlayerTerrainState } from "../types"
+import { effectiveTerrainStateForCurrentArena } from "./effectiveTerrainState"
 import type { ArenaPropColliderRect } from "./worldCollision"
 import { createSpatialQueryScratch, createStaticAabbIndex } from "./spatialIndex"
 import type { StaticAabbIndex, SpatialQueryScratch } from "./spatialIndex"
@@ -49,13 +50,14 @@ export function terrainColliderSetForPlayerState(
   terrainState: PlayerTerrainState,
   options?: { readonly jumpStartedInLava?: boolean },
 ): IndexedColliderSet {
+  const effectiveTerrainState = effectiveTerrainStateForCurrentArena(terrainState)
   if (jumpZ > 0) {
     if (options?.jumpStartedInLava === true) return ARENA_PROP_COLLIDER_SET
     if (jumpZ < JUMP_AIRBORNE_LAVA_COLLISION_MIN_Z_PX) return ARENA_PROP_COLLIDER_SET
     return AIRBORNE_COLLIDERS_WITH_LAVA_SET
   }
-  if (terrainState === "lava") return LAVA_TERRAIN_COLLIDER_SET
-  if (terrainState === "cliff") return CLIFF_TERRAIN_COLLIDER_SET
+  if (effectiveTerrainState === "lava") return LAVA_TERRAIN_COLLIDER_SET
+  if (effectiveTerrainState === "cliff") return CLIFF_TERRAIN_COLLIDER_SET
   return ARENA_WORLD_COLLIDER_SET
 }
 
