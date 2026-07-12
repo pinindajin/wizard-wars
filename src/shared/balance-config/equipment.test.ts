@@ -36,11 +36,16 @@ describe("PRIMARY_MELEE_ATTACK_CONFIGS", () => {
     }
   })
 
-  it("keeps Yen on the existing melee geometry and gives Triss a longer narrower cone", () => {
-    expect(PRIMARY_MELEE_ATTACK_IDS).toEqual(["yen_cleaver", "triss_big_blast"])
+  it("keeps existing attacks stable and gives Helena the requested cone", () => {
+    expect(PRIMARY_MELEE_ATTACK_IDS).toEqual([
+      "yen_cleaver",
+      "triss_big_blast",
+      "helena_energy_wave",
+    ])
 
     const yen = PRIMARY_MELEE_ATTACK_CONFIGS.yen_cleaver
     const triss = PRIMARY_MELEE_ATTACK_CONFIGS.triss_big_blast
+    const helena = PRIMARY_MELEE_ATTACK_CONFIGS.helena_energy_wave
 
     expect(yen).toMatchObject({
       displayName: "Yen Cleaver",
@@ -58,5 +63,16 @@ describe("PRIMARY_MELEE_ATTACK_CONFIGS", () => {
     expect(triss.dangerousWindowEndMs).toBe(yen.dangerousWindowEndMs)
     expect(triss.damageProperties).toBe(yen.damageProperties)
     expect(triss.swingSfxKey).toBe(yen.swingSfxKey)
+    expect(helena).toMatchObject({
+      displayName: "Helena Energy Wave",
+      hurtboxRadiusPx: 67.5,
+      hurtboxArcDeg: 75.6,
+    })
+    expect(helena.damage).toBe(triss.damage)
+    expect(helena.durationMs).toBe(triss.durationMs)
+    expect(helena.dangerousWindowStartMs).toBe(triss.dangerousWindowStartMs)
+    expect(helena.dangerousWindowEndMs).toBe(triss.dangerousWindowEndMs)
+    expect(helena.damageProperties).toBe(triss.damageProperties)
+    expect(helena.swingSfxKey).toBe(triss.swingSfxKey)
   })
 })

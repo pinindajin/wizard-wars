@@ -1432,6 +1432,25 @@ describe("primary melee attack", () => {
     )
   })
 
+  it("assigns Helena's energy wave geometry from her selected hero", () => {
+    const sim = createGameSimulation(Date.now())
+    const eid = sim.addPlayer("user1", "Helena Player", "helena", 0)
+    expect(Hero.typeIndex[eid]).toBe(2)
+    expect(Equipment.primaryMeleeAttackIndex[eid]).toBe(
+      primaryMeleeAttackIdToIndex("helena_energy_wave"),
+    )
+
+    const output = sim.tick(
+      queueMap([["user1", emptyInput({ weaponPrimary: true })]]),
+      Date.now(),
+    )
+    expect(output.primaryMeleeAttacks[0]).toMatchObject({
+      attackId: "helena_energy_wave",
+      hurtboxRadiusPx: 67.5,
+      hurtboxArcDeg: 75.6,
+    })
+  })
+
   it("emits primary melee attack payload on first weapon primary tick", () => {
     const sim = createGameSimulation(Date.now())
     sim.addPlayer("user1", "Alice", "red_wizard", 0)

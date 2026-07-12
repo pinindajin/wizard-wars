@@ -3,7 +3,7 @@
  */
 import type { PrimaryMeleeAttackId } from "./equipment"
 
-export type HeroId = "yen" | "triss"
+export type HeroId = "yen" | "triss" | "helena"
 
 export type HeroConfig = {
   readonly id: HeroId
@@ -30,6 +30,13 @@ export const HERO_CONFIGS: Record<HeroId, HeroConfig> = {
     spriteKey: "triss",
     primaryMeleeAttackId: "triss_big_blast",
   },
+  helena: {
+    id: "helena",
+    displayName: "Helena",
+    tint: 0x3b82f6,
+    spriteKey: "helena",
+    primaryMeleeAttackId: "helena_energy_wave",
+  },
 }
 
 export const DEFAULT_HERO_ID: HeroId = "yen"
@@ -43,7 +50,8 @@ export const VALID_HERO_IDS = Object.keys(HERO_CONFIGS) as readonly HeroId[]
  * @returns Canonical hero id.
  */
 export function normalizeHeroId(heroId: string): HeroId {
-  return heroId === "triss" ? "triss" : DEFAULT_HERO_ID
+  if (heroId === "triss" || heroId === "helena") return heroId
+  return DEFAULT_HERO_ID
 }
 
 /**

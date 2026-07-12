@@ -200,6 +200,15 @@ describe("animation config", () => {
     expect(megasheetClipForAnimationActionKey("primary:triss_big_blast", "triss")).toBe(
       "big_blast",
     )
+    expect(megasheetClipForAnimationActionKey("spell:fireball", "helena")).toBe(
+      "fire_spell",
+    )
+    expect(megasheetClipForAnimationActionKey("spell:homing_orb", "helena")).toBe(
+      "spell_2",
+    )
+    expect(megasheetClipForAnimationActionKey("spell:lightning_bolt", "helena")).toBe(
+      "spell_2",
+    )
     expect(() => megasheetClipForAnimationActionKey("not-a-real-key")).toThrow(
       /Unknown animation action key/,
     )
@@ -338,6 +347,26 @@ describe("animation config", () => {
     expect(actions.find((action) => action.id === "primary:triss_big_blast")).toMatchObject({
       atlasClipId: "big-blast",
       megasheetClip: "big_blast",
+    })
+  })
+
+  it("defines Helena action clips with ability-aware spell mapping", () => {
+    const actions = getAnimationToolActions("helena")
+    expect(actions.find((action) => action.id === "spell:fireball")).toMatchObject({
+      atlasClipId: "fire-spell",
+      megasheetClip: "fire_spell",
+    })
+    expect(actions.find((action) => action.id === "spell:homing_orb")).toMatchObject({
+      atlasClipId: "spell-2",
+      megasheetClip: "spell_2",
+    })
+    expect(actions.find((action) => action.id === "spell:lightning_bolt")).toMatchObject({
+      atlasClipId: "spell-2",
+      megasheetClip: "spell_2",
+    })
+    expect(actions.find((action) => action.id === "primary:helena_energy_wave")).toMatchObject({
+      atlasClipId: "spell-3",
+      megasheetClip: "spell_3",
     })
   })
 })

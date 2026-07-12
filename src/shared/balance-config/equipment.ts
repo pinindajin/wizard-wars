@@ -49,7 +49,10 @@ export const AUGMENT_CONFIGS: Record<string, AugmentConfig> = {
 }
 
 /** Canonical ids for each hero's primary melee attack (balanceable per hero). */
-export type PrimaryMeleeAttackId = "yen_cleaver" | "triss_big_blast"
+export type PrimaryMeleeAttackId =
+  | "yen_cleaver"
+  | "triss_big_blast"
+  | "helena_energy_wave"
 
 /**
  * Server-authoritative tuning for a hero primary melee hurtbox attack.
@@ -111,12 +114,20 @@ export const PRIMARY_MELEE_ATTACK_CONFIGS: Record<PrimaryMeleeAttackId, PrimaryM
     hurtboxRadiusPx: Math.round(AXE_HURTBOX_RADIUS_PX * 1.2),
     hurtboxArcDeg: Math.round(AXE_HURTBOX_ARC_DEG * 0.7),
   },
+  helena_energy_wave: {
+    id: "helena_energy_wave",
+    displayName: "Helena Energy Wave",
+    ...cleaverBase,
+    hurtboxRadiusPx: 54 * 1.25,
+    hurtboxArcDeg: 126 * 0.6,
+  },
 }
 
 /** Stable index order for ECS `Equipment.primaryMeleeAttackIndex`. */
 export const PRIMARY_MELEE_ATTACK_IDS: readonly PrimaryMeleeAttackId[] = [
   "yen_cleaver",
   "triss_big_blast",
+  "helena_energy_wave",
 ]
 
 /**
