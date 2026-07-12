@@ -21,6 +21,15 @@ describe("LadyWizardAnimDefs", () => {
     expect(getHeroAnimKey("triss", "primary_melee_attack", "north")).toBe(
       "triss-big_blast-north",
     )
+    expect(getHeroAnimKey("helena", "light_cast", "south", "fireball")).toBe(
+      "helena-fire_spell-fireball-south",
+    )
+    expect(getHeroAnimKey("helena", "light_cast", "south", "homing_orb")).toBe(
+      "helena-spell_2-homing_orb-south",
+    )
+    expect(getHeroAnimKey("helena", "heavy_cast", "south", "lightning_bolt")).toBe(
+      "helena-spell_2-lightning_bolt-south",
+    )
     expect(getHeroAnimKey("not-real", "idle", "north")).toBe("lady-wizard-breathing_idle-north")
   })
 
@@ -89,7 +98,7 @@ describe("LadyWizardAnimDefs", () => {
     )
   })
 
-  it("registers Yen and Triss animations from hero sprite metadata", () => {
+  it("registers all hero animations and ability-scoped Helena casts", () => {
     const animManager = {
       exists: vi.fn(() => false),
       generateFrameNumbers: vi.fn((texture: string, range: { start: number; end: number }) => [
@@ -109,6 +118,24 @@ describe("LadyWizardAnimDefs", () => {
     )
     expect(animManager.create).toHaveBeenCalledWith(
       expect.objectContaining({ key: "triss-big_blast-south-west" }),
+    )
+    expect(animManager.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        key: "helena-fire_spell-fireball-south",
+        frameRate: 34,
+      }),
+    )
+    expect(animManager.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        key: "helena-spell_2-homing_orb-south",
+        frameRate: 34,
+      }),
+    )
+    expect(animManager.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        key: "helena-spell_2-lightning_bolt-south",
+        frameRate: 17 / 0.7,
+      }),
     )
   })
 })

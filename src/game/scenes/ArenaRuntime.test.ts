@@ -50,6 +50,11 @@ const playerRenderMock = vi.hoisted(() => ({
   destroy: vi.fn(),
 }))
 
+const helenaEnergyWaveMock = vi.hoisted(() => ({
+  spawn: vi.fn(),
+  destroy: vi.fn(),
+}))
+
 const projectileRenderMock = vi.hoisted(() => ({
   applyFullSyncFireballs: vi.fn(),
   applyFullSyncHomingOrbs: vi.fn(),
@@ -156,6 +161,10 @@ vi.mock("../ecs/systems/CombatTelegraphRenderSystem", () => ({
 
 vi.mock("../ecs/systems/PlayerRenderSystem", () => ({
   PlayerRenderSystem: vi.fn().mockImplementation(() => playerRenderMock),
+}))
+
+vi.mock("../ecs/systems/HelenaEnergyWaveSystem", () => ({
+  HelenaEnergyWaveSystem: vi.fn().mockImplementation(() => helenaEnergyWaveMock),
 }))
 
 vi.mock("../ecs/systems/ProjectileRenderSystem", () => ({
@@ -458,6 +467,31 @@ describe("ArenaRuntime lifecycle", () => {
     })
 
     expect(playerRenderMock.onPrimaryMeleeSwing).not.toHaveBeenCalled()
+  })
+
+  it("routes authoritative Helena melee to animation and cosmetic wave systems", () => {
+    const { runtime, connection } = makeRuntime()
+    runtime.start()
+    playerRenderMock.onPrimaryMeleeSwing.mockClear()
+    helenaEnergyWaveMock.spawn.mockClear()
+
+    const payload = {
+      casterId: "player-1",
+      attackId: "helena_energy_wave",
+      x: 100,
+      y: 200,
+      facingAngle: 0,
+      damage: 10,
+      hurtboxRadiusPx: 67.5,
+      hurtboxArcDeg: 75.6,
+      durationMs: 570,
+      dangerousWindowStartMs: 300,
+      dangerousWindowEndMs: 570,
+    }
+    connection.emit({ type: WsEvent.PrimaryMeleeAttack, payload })
+
+    expect(playerRenderMock.onPrimaryMeleeSwing).toHaveBeenCalledWith(payload)
+    expect(helenaEnergyWaveMock.spawn).toHaveBeenCalledWith(payload)
   })
 
   it("keeps one active room handler across sequential runtimes on the same connection", () => {

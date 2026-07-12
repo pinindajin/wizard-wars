@@ -17,8 +17,8 @@ import {
 } from "./heroSprites"
 
 describe("hero sprite registry", () => {
-  it("defines Yen and Triss sprite layouts with stable frame rows", () => {
-    expect(Object.keys(HERO_SPRITE_CONFIGS)).toEqual(["yen", "triss"])
+  it("defines Yen, Triss, and Helena sprite layouts with stable frame rows", () => {
+    expect(Object.keys(HERO_SPRITE_CONFIGS)).toEqual(["yen", "triss", "helena"])
     expect(HERO_SPRITE_CONFIGS.yen.spriteKey).toBe("lady-wizard")
     expect(HERO_SPRITE_CONFIGS.yen.frameSizePx).toBe(124)
     expect(HERO_SPRITE_CONFIGS.yen.framesPerDirectionRow).toBe(111)
@@ -38,6 +38,29 @@ describe("hero sprite registry", () => {
       "stumble",
     ] as const) {
       expect(HERO_SPRITE_CONFIGS.triss.clips[clipId].frameCount).toBe(17)
+    }
+
+    expect(HERO_SPRITE_CONFIGS.helena).toMatchObject({
+      spriteKey: "helena",
+      frameSizePx: 124,
+      framesPerDirectionRow: 119,
+      spellCastClipByAbilityId: {
+        fireball: "light_spell_cast",
+        homing_orb: "heavy_spell_cast",
+        lightning_bolt: "heavy_spell_cast",
+      },
+    })
+    expect(HERO_SPRITE_CONFIGS.helena.clips.idle.frameCount).toBe(1)
+    expect(HERO_SPRITE_CONFIGS.helena.clips.stumble.frameCount).toBe(16)
+    for (const clipId of [
+      "walk",
+      "death",
+      "light_spell_cast",
+      "heavy_spell_cast",
+      "primary_melee_attack",
+      "jump",
+    ] as const) {
+      expect(HERO_SPRITE_CONFIGS.helena.clips[clipId].frameCount).toBe(17)
     }
   })
 
@@ -62,6 +85,7 @@ describe("hero sprite registry", () => {
   it("normalizes legacy sprite ids to Yen", () => {
     expect(normalizeHeroSpriteId("yen")).toBe("yen")
     expect(normalizeHeroSpriteId("triss")).toBe("triss")
+    expect(normalizeHeroSpriteId("helena")).toBe("helena")
     expect(normalizeHeroSpriteId("red_wizard")).toBe("yen")
     expect(normalizeHeroSpriteId("missing")).toBe("yen")
   })

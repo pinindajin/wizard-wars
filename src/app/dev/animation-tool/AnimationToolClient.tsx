@@ -101,6 +101,7 @@ type TimingValidation = {
 const HERO_SELECTION_COLORS: Record<string, string> = {
   yen: "bg-red-400 shadow-[0_0_18px_rgba(248,113,113,0.8)]",
   triss: "bg-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.65)]",
+  helena: "bg-blue-400 shadow-[0_0_18px_rgba(96,165,250,0.7)]",
 }
 
 /**

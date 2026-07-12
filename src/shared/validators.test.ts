@@ -101,9 +101,10 @@ describe("chatMessagePayloadSchema", () => {
 })
 
 describe("heroSelectPayloadSchema", () => {
-  it("accepts only Yen and Triss public hero ids", () => {
+  it("accepts Yen, Triss, and Helena public hero ids", () => {
     expect(heroSelectPayloadSchema.parse({ heroId: "yen" })).toEqual({ heroId: "yen" })
     expect(heroSelectPayloadSchema.parse({ heroId: "triss" })).toEqual({ heroId: "triss" })
+    expect(heroSelectPayloadSchema.parse({ heroId: "helena" })).toEqual({ heroId: "helena" })
   })
 
   it("rejects legacy and unknown hero ids", () => {

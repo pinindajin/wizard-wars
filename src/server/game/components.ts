@@ -326,10 +326,11 @@ export const ABILITY_INDEX_TO_ID: readonly string[] = [
 export const HERO_INDEX: Record<HeroId, number> = {
   yen: 0,
   triss: 1,
+  helena: 2,
 }
 
 /** Reverse lookup: Hero.typeIndex → hero ID string. */
-export const HERO_INDEX_TO_ID: readonly HeroId[] = ["yen", "triss"]
+export const HERO_INDEX_TO_ID: readonly HeroId[] = ["yen", "triss", "helena"]
 
 /** Maps quick-item string IDs to the integer stored in QuickItemSlots.slotNItem. */
 export const ITEM_INDEX: Record<string, number> = {

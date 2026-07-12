@@ -94,6 +94,17 @@ const TRISS_ACTION_TEST_IDS = [
   "animation-tool-action-primary-triss_big_blast",
 ] as const
 
+const HELENA_ACTION_TEST_IDS = [
+  "animation-tool-action-idle",
+  "animation-tool-action-walk",
+  "animation-tool-action-death",
+  "animation-tool-action-spell-fireball",
+  "animation-tool-action-spell-homing_orb",
+  "animation-tool-action-spell-jump",
+  "animation-tool-action-spell-lightning_bolt",
+  "animation-tool-action-primary-helena_energy_wave",
+] as const
+
 test.describe("animation tool dev route", () => {
   test.describe.configure({ timeout: 180_000 })
 
@@ -126,6 +137,22 @@ test.describe("animation tool dev route", () => {
     await gotoTool(page)
     await page.getByTestId("animation-tool-hero-triss").click()
     await page.getByTestId("animation-tool-action-primary-triss_big_blast").click()
+    await pngOk
+    await waitForWaveformInteractive(page)
+  })
+
+  test("Helena energy wave: requested action list and primary strip load", async ({ page }) => {
+    const pngOk = page.waitForResponse(
+      (response) =>
+        response.url().includes("/assets/sprites/heroes/helena/sheets/spell-3-south.png") &&
+        response.ok(),
+    )
+    await gotoTool(page)
+    await page.getByTestId("animation-tool-hero-helena").click()
+    for (const testId of HELENA_ACTION_TEST_IDS) {
+      await expect(page.getByTestId(testId)).toBeVisible()
+    }
+    await page.getByTestId("animation-tool-action-primary-helena_energy_wave").click()
     await pngOk
     await waitForWaveformInteractive(page)
   })

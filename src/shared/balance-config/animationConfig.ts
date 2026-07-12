@@ -105,9 +105,13 @@ export const animationActionConfigSchema = z.discriminatedUnion("type", [
  * Sprite action clip whose frame count must match `frameDurationsMs` length.
  *
  * @param actionKey - Key under `heroes[*].actions` (e.g. `idle`, `spell:fireball`, `primary:yen_cleaver`).
- * @returns Generic hero sprite action clip id.
+ * @param heroId - Hero whose ability-specific sprite mapping should be used.
+ * @returns Hero sprite action clip id.
  */
-function actionClipForAnimationActionKey(actionKey: string): HeroSpriteActionClipId {
+function actionClipForAnimationActionKey(
+  actionKey: string,
+  heroId: string = DEFAULT_HERO_ID,
+): HeroSpriteActionClipId {
   switch (actionKey) {
     case "idle":
       return "idle"
@@ -122,9 +126,11 @@ function actionClipForAnimationActionKey(actionKey: string): HeroSpriteActionCli
   }
   if (actionKey.startsWith("spell:")) {
     const abilityId = actionKey.slice("spell:".length)
-    if (isLightSpellCastAbilityId(abilityId)) return "light_spell_cast"
     if (abilityId === "jump") return "jump"
-    return "heavy_spell_cast"
+    const spriteConfig = HERO_SPRITE_CONFIGS[normalizeHeroId(heroId)]
+    return spriteConfig.spellCastClipByAbilityId[
+      abilityId as keyof typeof spriteConfig.spellCastClipByAbilityId
+    ] ?? "heavy_spell_cast"
   }
   if (actionKey.startsWith("primary:")) return "primary_melee_attack"
   throw new Error(`Unknown animation action key: ${actionKey}`)
@@ -141,18 +147,8 @@ export function megasheetClipForAnimationActionKey(
   actionKey: string,
   heroId: string = DEFAULT_HERO_ID,
 ): string {
-  const actionClip = actionClipForAnimationActionKey(actionKey)
+  const actionClip = actionClipForAnimationActionKey(actionKey, heroId)
   return HERO_SPRITE_CONFIGS[normalizeHeroId(heroId)].clips[actionClip].megasheetClip
-}
-
-/**
- * Returns whether an ability should use the light spell cast atlas/megasheet clip.
- *
- * @param abilityId - Ability config id.
- * @returns True for spells that share Fireball's light cast animation.
- */
-function isLightSpellCastAbilityId(abilityId: string): boolean {
-  return abilityId === "fireball" || abilityId === "homing_orb"
 }
 
 export const animationConfigSchema = z.object({
@@ -215,7 +211,7 @@ export const animationConfigSchema = z.object({
     for (const [actionKey, action] of Object.entries(heroConfig.actions)) {
       const fd = "frameDurationsMs" in action ? action.frameDurationsMs : undefined
       if (fd === undefined) continue
-      const actionClip = actionClipForAnimationActionKey(actionKey)
+      const actionClip = actionClipForAnimationActionKey(actionKey, heroId)
       const expectedFrames = HERO_SPRITE_CONFIGS[normalizeHeroId(heroId)].clips[actionClip].frameCount
       if (fd.length !== expectedFrames) {
         ctx.addIssue({
@@ -485,13 +481,10 @@ export function getAnimationToolActions(
       config: actions.death,
     },
     ...Object.values(ABILITY_CONFIGS).map((ability): AnimationToolAction => {
-      const light = isLightSpellCastAbilityId(ability.id)
-      const jump = ability.id === "jump"
-      const actionClipId: HeroSpriteActionClipId = light
-        ? "light_spell_cast"
-        : jump
-          ? "jump"
-          : "heavy_spell_cast"
+      const actionClipId = actionClipForAnimationActionKey(
+        spellActionId(ability.id),
+        hero.id,
+      )
       return {
         id: spellActionId(ability.id),
         label: ability.displayName,

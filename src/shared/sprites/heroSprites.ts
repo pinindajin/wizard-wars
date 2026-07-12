@@ -27,6 +27,11 @@ export type HeroSpriteActionClipId =
   | "jump"
   | "stumble"
 
+export type HeroSpellCastAbilityId =
+  | "fireball"
+  | "homing_orb"
+  | "lightning_bolt"
+
 export type HeroSpriteClipConfig = {
   readonly actionClipId: HeroSpriteActionClipId
   readonly atlasClipId: string
@@ -43,6 +48,8 @@ export type HeroSpriteConfig = {
   readonly frameSizePx: number
   readonly displayOffsetX: number
   readonly displayOffsetY: number
+  /** Hero-specific sprite band used for each cast ability. */
+  readonly spellCastClipByAbilityId: Record<HeroSpellCastAbilityId, HeroSpriteActionClipId>
   readonly clipOrder: readonly HeroSpriteActionClipId[]
   readonly clips: Record<HeroSpriteActionClipId, HeroSpriteClipConfig>
   readonly clipBaseFrame: Record<HeroSpriteActionClipId, number>
@@ -194,6 +201,73 @@ const TRISS_CLIPS: Record<HeroSpriteActionClipId, HeroSpriteClipConfig> = {
   },
 }
 
+const HELENA_CLIPS: Record<HeroSpriteActionClipId, HeroSpriteClipConfig> = {
+  idle: {
+    actionClipId: "idle",
+    atlasClipId: "idle",
+    megasheetClip: "idle",
+    sheetPrefix: "idle",
+    frameCount: 1,
+    fps: 6,
+  },
+  walk: {
+    actionClipId: "walk",
+    atlasClipId: "walks",
+    megasheetClip: "walks",
+    sheetPrefix: "walks",
+    frameCount: 17,
+    fps: 10,
+  },
+  death: {
+    actionClipId: "death",
+    atlasClipId: "death",
+    megasheetClip: "death",
+    sheetPrefix: "death",
+    frameCount: 17,
+    fps: 10,
+  },
+  light_spell_cast: {
+    actionClipId: "light_spell_cast",
+    atlasClipId: "fire-spell",
+    megasheetClip: "fire_spell",
+    sheetPrefix: "fire-spell",
+    frameCount: 17,
+    fps: 12,
+  },
+  heavy_spell_cast: {
+    actionClipId: "heavy_spell_cast",
+    atlasClipId: "spell-2",
+    megasheetClip: "spell_2",
+    sheetPrefix: "spell-2",
+    frameCount: 17,
+    fps: 12,
+  },
+  primary_melee_attack: {
+    actionClipId: "primary_melee_attack",
+    atlasClipId: "spell-3",
+    megasheetClip: "spell_3",
+    sheetPrefix: "spell-3",
+    frameCount: 17,
+    fps: 12,
+  },
+  jump: {
+    actionClipId: "jump",
+    atlasClipId: "jump",
+    megasheetClip: "jump",
+    sheetPrefix: "jump",
+    frameCount: 17,
+    fps: 12,
+  },
+  stumble: {
+    actionClipId: "stumble",
+    atlasClipId: "stumble",
+    megasheetClip: "stumble",
+    sheetPrefix: "stumble",
+    frameCount: 16,
+    fps: 12,
+  },
+}
+
 /**
  * Builds base-frame offsets for a hero's clip order.
  *
@@ -236,6 +310,11 @@ export const HERO_SPRITE_CONFIGS: Record<HeroId, HeroSpriteConfig> = {
     frameSizePx: 124,
     displayOffsetX: 0,
     displayOffsetY: 45,
+    spellCastClipByAbilityId: {
+      fireball: "light_spell_cast",
+      homing_orb: "light_spell_cast",
+      lightning_bolt: "heavy_spell_cast",
+    },
     clipOrder: HERO_CLIP_ORDER,
     clips: YEN_CLIPS,
     clipBaseFrame: buildClipBaseFrame(YEN_CLIPS, HERO_CLIP_ORDER),
@@ -248,10 +327,32 @@ export const HERO_SPRITE_CONFIGS: Record<HeroId, HeroSpriteConfig> = {
     frameSizePx: 124,
     displayOffsetX: 0,
     displayOffsetY: 45,
+    spellCastClipByAbilityId: {
+      fireball: "light_spell_cast",
+      homing_orb: "light_spell_cast",
+      lightning_bolt: "heavy_spell_cast",
+    },
     clipOrder: HERO_CLIP_ORDER,
     clips: TRISS_CLIPS,
     clipBaseFrame: buildClipBaseFrame(TRISS_CLIPS, HERO_CLIP_ORDER),
     framesPerDirectionRow: framesPerDirectionRow(TRISS_CLIPS, HERO_CLIP_ORDER),
+  },
+  helena: {
+    id: "helena",
+    spriteKey: "helena",
+    publicHeroDir: "public/assets/sprites/heroes/helena",
+    frameSizePx: 124,
+    displayOffsetX: 0,
+    displayOffsetY: 45,
+    spellCastClipByAbilityId: {
+      fireball: "light_spell_cast",
+      homing_orb: "heavy_spell_cast",
+      lightning_bolt: "heavy_spell_cast",
+    },
+    clipOrder: HERO_CLIP_ORDER,
+    clips: HELENA_CLIPS,
+    clipBaseFrame: buildClipBaseFrame(HELENA_CLIPS, HERO_CLIP_ORDER),
+    framesPerDirectionRow: framesPerDirectionRow(HELENA_CLIPS, HERO_CLIP_ORDER),
   },
 }
 
@@ -262,7 +363,8 @@ export const HERO_SPRITE_CONFIGS: Record<HeroId, HeroSpriteConfig> = {
  * @returns A configured hero sprite id.
  */
 export function normalizeHeroSpriteId(heroId: string): HeroId {
-  return heroId === "triss" ? "triss" : "yen"
+  if (heroId === "triss" || heroId === "helena") return heroId
+  return "yen"
 }
 
 /**

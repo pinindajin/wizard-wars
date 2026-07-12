@@ -43,6 +43,7 @@ Testing:
 - Manual megasheet rebuild remains an operator action.
 - Local archives grow under gitignored `old/` directories and need periodic manual pruning.
 - Hero sprite clip IDs, paths, and UI selection are generalized through the shared hero sprite registry.
+- Spell actions resolve through a hero-specific ability-to-clip mapping, so multiple abilities may share source frames while retaining their own runtime timing keys.
 - Real production hosts must not set E2E bypass variables.
 
 ## Related Code

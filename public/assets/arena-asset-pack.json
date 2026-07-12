@@ -385,6 +385,24 @@
             },
             {
                 "type": "spritesheet",
+                "key": "helena",
+                "url": "/assets/sprites/heroes/helena/sheets/helena-megasheet.png",
+                "frameConfig": {
+                    "frameWidth": 124,
+                    "frameHeight": 124
+                }
+            },
+            {
+                "type": "spritesheet",
+                "key": "helena-energy-wave",
+                "url": "/assets/sprites/effects/helena-energy-wave.png",
+                "frameConfig": {
+                    "frameWidth": 128,
+                    "frameHeight": 128
+                }
+            },
+            {
+                "type": "spritesheet",
                 "key": "fireball",
                 "url": "/assets/sprites/abilities/fireball-fly.png",
                 "frameConfig": {

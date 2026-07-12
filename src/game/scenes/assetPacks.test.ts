@@ -71,6 +71,8 @@ describe("asset pack URLs are absolute", () => {
       "/assets/sprites/heroes/lady-wizard/sheets/lady-wizard-megasheet.png",
     )
     expect(urls).toContain("/assets/sprites/heroes/triss/sheets/triss-megasheet.png")
+    expect(urls).toContain("/assets/sprites/heroes/helena/sheets/helena-megasheet.png")
+    expect(urls).toContain("/assets/sprites/effects/helena-energy-wave.png")
     expect(urls).toContain("/assets/sprites/abilities/fireball-fly.png")
     expect(urls).toContain("/assets/sprites/abilities/homing-orb-fly.png")
     expect(urls).toContain("/assets/sprites/abilities/fireball-channel.png")
@@ -115,12 +117,18 @@ describe("asset pack URLs are absolute", () => {
     const files = (arenaPack as { arena: { files: PackFile[] } }).arena.files
     const yen = packFileForKey(files, "lady-wizard")
     const triss = packFileForKey(files, "triss")
+    const helena = packFileForKey(files, "helena")
+    const helenaWave = packFileForKey(files, "helena-energy-wave")
 
     expect(yen.frameConfig).toEqual({ frameWidth: 124, frameHeight: 124 })
     expect(triss.frameConfig).toEqual({ frameWidth: 124, frameHeight: 124 })
+    expect(helena.frameConfig).toEqual({ frameWidth: 124, frameHeight: 124 })
+    expect(helenaWave.frameConfig).toEqual({ frameWidth: 128, frameHeight: 128 })
 
     const yenMeta = await sharp("public/assets/sprites/heroes/lady-wizard/sheets/lady-wizard-megasheet.png").metadata()
     const trissMeta = await sharp("public/assets/sprites/heroes/triss/sheets/triss-megasheet.png").metadata()
+    const helenaMeta = await sharp("public/assets/sprites/heroes/helena/sheets/helena-megasheet.png").metadata()
+    const helenaWaveMeta = await sharp("public/assets/sprites/effects/helena-energy-wave.png").metadata()
 
     expect({ width: yenMeta.width, height: yenMeta.height }).toEqual({
       width: 111 * 124,
@@ -129,6 +137,14 @@ describe("asset pack URLs are absolute", () => {
     expect({ width: trissMeta.width, height: trissMeta.height }).toEqual({
       width: 120 * 124,
       height: 8 * 124,
+    })
+    expect({ width: helenaMeta.width, height: helenaMeta.height }).toEqual({
+      width: 119 * 124,
+      height: 8 * 124,
+    })
+    expect({ width: helenaWaveMeta.width, height: helenaWaveMeta.height }).toEqual({
+      width: 8 * 128,
+      height: 128,
     })
   })
 

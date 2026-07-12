@@ -1,0 +1,85 @@
+{
+  "frameSize": 124,
+  "clips": {
+    "idle": {
+      "south": 1,
+      "south-east": 1,
+      "east": 1,
+      "north-east": 1,
+      "north": 1,
+      "north-west": 1,
+      "west": 1,
+      "south-west": 1
+    },
+    "walks": {
+      "south": 17,
+      "south-east": 17,
+      "east": 17,
+      "north-east": 17,
+      "north": 17,
+      "north-west": 17,
+      "west": 17,
+      "south-west": 17
+    },
+    "death": {
+      "south": 17,
+      "south-east": 17,
+      "east": 17,
+      "north-east": 17,
+      "north": 17,
+      "north-west": 17,
+      "west": 17,
+      "south-west": 17
+    },
+    "fire-spell": {
+      "south": 17,
+      "south-east": 17,
+      "east": 17,
+      "north-east": 17,
+      "north": 17,
+      "north-west": 17,
+      "west": 17,
+      "south-west": 17
+    },
+    "spell-2": {
+      "south": 17,
+      "south-east": 17,
+      "east": 17,
+      "north-east": 17,
+      "north": 17,
+      "north-west": 17,
+      "west": 17,
+      "south-west": 17
+    },
+    "spell-3": {
+      "south": 17,
+      "south-east": 17,
+      "east": 17,
+      "north-east": 17,
+      "north": 17,
+      "north-west": 17,
+      "west": 17,
+      "south-west": 17
+    },
+    "jump": {
+      "south": 17,
+      "south-east": 17,
+      "east": 17,
+      "north-east": 17,
+      "north": 17,
+      "north-west": 17,
+      "west": 17,
+      "south-west": 17
+    },
+    "stumble": {
+      "south": 16,
+      "south-east": 16,
+      "east": 16,
+      "north-east": 16,
+      "north": 16,
+      "north-west": 16,
+      "west": 16,
+      "south-west": 16
+    }
+  }
+}

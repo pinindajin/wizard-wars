@@ -1283,7 +1283,12 @@ export class PlayerRenderSystem {
         state.animState === "primary_melee_attack" &&
         entry.lockedPrimaryMeleeAnimKey !== null
           ? entry.lockedPrimaryMeleeAnimKey
-          : getHeroAnimKey(entry.heroId, state.animState, direction)
+          : getHeroAnimKey(
+              entry.heroId,
+              state.animState,
+              direction,
+              state.castingAbilityId,
+            )
       if (animKey !== entry.lastAnimKey) {
         entry.sprite.play(animKey, true)
         entry.lastAnimKey = animKey

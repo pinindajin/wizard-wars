@@ -39,6 +39,7 @@ import { PlayerRenderSystem } from "../ecs/systems/PlayerRenderSystem"
 import { ProjectileRenderSystem } from "../ecs/systems/ProjectileRenderSystem"
 import { LightningBoltRenderSystem } from "../ecs/systems/LightningBoltRenderSystem"
 import { CombatTelegraphRenderSystem } from "../ecs/systems/CombatTelegraphRenderSystem"
+import { HelenaEnergyWaveSystem } from "../ecs/systems/HelenaEnergyWaveSystem"
 import { DamageFloatersSystem } from "../ecs/systems/DamageFloatersSystem"
 import { DebugOverlaySystem } from "../ecs/systems/DebugOverlaySystem"
 import { NetworkSyncSystem } from "../ecs/systems/NetworkSyncSystem"
@@ -136,6 +137,7 @@ export class ArenaRuntime {
   private projectileRenderSystem!: ProjectileRenderSystem
   private lightningBoltRenderSystem!: LightningBoltRenderSystem
   private combatTelegraphRenderSystem!: CombatTelegraphRenderSystem
+  private helenaEnergyWaveSystem!: HelenaEnergyWaveSystem
   private damageFloatersSystem!: DamageFloatersSystem
   private debugOverlaySystem!: DebugOverlaySystem
   private networkSyncSystem!: NetworkSyncSystem
@@ -252,6 +254,7 @@ export class ArenaRuntime {
     this.projectileRenderSystem = new ProjectileRenderSystem(this.scene)
     this.lightningBoltRenderSystem = new LightningBoltRenderSystem(this.scene)
     this.combatTelegraphRenderSystem = new CombatTelegraphRenderSystem(this.scene)
+    this.helenaEnergyWaveSystem = new HelenaEnergyWaveSystem(this.scene)
     this.damageFloatersSystem = new DamageFloatersSystem(this.scene)
     this.debugOverlaySystem = new DebugOverlaySystem(this.scene)
     this.debugOverlaySystem.setEnabled(
@@ -424,6 +427,7 @@ export class ArenaRuntime {
         case WsEvent.PrimaryMeleeAttack: {
           const payload = message.payload as PrimaryMeleeAttackPayload
           this.playerRenderSystem.onPrimaryMeleeSwing(payload)
+          this.helenaEnergyWaveSystem.spawn(payload)
           this.soundManager.play(SFX_KEYS.axeSwing)
           break
         }
@@ -683,6 +687,7 @@ export class ArenaRuntime {
     this.connectionUnsub = undefined
     this.playerRenderSystem?.destroy()
     this.combatTelegraphRenderSystem?.destroy()
+    this.helenaEnergyWaveSystem?.destroy()
 
     if (this.ownsConnection) {
       void this.connection?.close()

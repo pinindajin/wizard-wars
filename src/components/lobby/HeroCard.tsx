@@ -47,6 +47,18 @@ export const HERO_CARD_CONFIGS: Record<HeroId, HeroCardConfig> = {
     portraitUrl: "/assets/sprites/heroes/triss/sheets/idle-south.png",
     portraitSheetWidth: 160,
   },
+  helena: {
+    id: "helena",
+    displayName: "Helena",
+    desc: "A blue-energy duelist with the longest, narrowest melee pressure.",
+    accent: "#3b82f6",
+    bg: "linear-gradient(145deg,#172554,#1e3a8a)",
+    portraitBg: "linear-gradient(180deg,#1e3a8a,#172554)",
+    border: "rgba(59,130,246,0.35)",
+    icon: "H",
+    portraitUrl: "/assets/sprites/heroes/helena/sheets/idle-south.png",
+    portraitSheetWidth: 160,
+  },
 }
 
 // Sprite sheet constants (idle-south.png, ~1.29× scale)
@@ -60,6 +72,7 @@ type StatusTone = "neutral" | "accent" | "success" | "warning" | "danger"
 function heroTone(heroId: string): StatusTone {
   if (heroId === "yen") return "danger"
   if (heroId === "triss") return "success"
+  if (heroId === "helena") return "accent"
   return "neutral"
 }
 

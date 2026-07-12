@@ -8,6 +8,7 @@ import {
   type HeroSpriteActionClipId,
   type HeroSpriteDirection,
   type HeroSpriteConfig,
+  type HeroSpellCastAbilityId,
 } from "@/shared/sprites/heroSprites"
 import {
   frameRateForDuration,
@@ -41,6 +42,23 @@ const ANIM_CLIPS: Record<PlayerAnimState, HeroSpriteActionClipId> = {
   stumble: "stumble",
 }
 
+const DIRECTION_ROW_MAP: Record<Direction, number> = {
+  south: 0,
+  "south-east": 1,
+  east: 2,
+  "north-east": 3,
+  north: 4,
+  "north-west": 5,
+  west: 6,
+  "south-west": 7,
+}
+
+const ABILITY_SCOPED_CAST_IDS: readonly HeroSpellCastAbilityId[] = [
+  "fireball",
+  "homing_orb",
+  "lightning_bolt",
+]
+
 /**
  * Returns the canonical animation key for a given player animation state and direction.
  * Format: "lady-wizard-{clip}-{direction}"
@@ -61,16 +79,28 @@ export const getAnimKey = (animState: string, direction: Direction): string => {
  * @param heroId - Runtime or stale hero id.
  * @param animState - The server-reported PlayerAnimState.
  * @param direction - The 8-directional string derived from facing angle.
+ * @param castingAbilityId - Active cast ability when resolving a cast clip.
  * @returns Phaser animation key string.
  */
 export const getHeroAnimKey = (
   heroId: string,
   animState: string,
   direction: Direction,
+  castingAbilityId?: string | null,
 ): string => {
   const config = heroSpriteConfigFor(heroId)
-  const actionClip = ANIM_CLIPS[animState as PlayerAnimState] ?? "idle"
+  const abilityClip =
+    (animState === "light_cast" || animState === "heavy_cast") &&
+    castingAbilityId != null
+      ? config.spellCastClipByAbilityId[
+          castingAbilityId as keyof typeof config.spellCastClipByAbilityId
+        ]
+      : undefined
+  const actionClip = abilityClip ?? ANIM_CLIPS[animState as PlayerAnimState] ?? "idle"
   const clip = config.clips[actionClip].megasheetClip
+  if (abilityClip !== undefined && castingAbilityId != null) {
+    return `${config.spriteKey}-${clip}-${castingAbilityId}-${direction}`
+  }
   return `${config.spriteKey}-${clip}-${direction}`
 }
 
@@ -167,17 +197,6 @@ function registerOneHeroSpriteAnims(
 ): void {
   const LOOP_CLIPS = new Set<HeroSpriteActionClipId>(["idle", "walk", "stumble"])
 
-  const directionRowMap: Record<Direction, number> = {
-    south: 0,
-    "south-east": 1,
-    east: 2,
-    "north-east": 3,
-    north: 4,
-    "north-west": 5,
-    west: 6,
-    "south-west": 7,
-  }
-
   for (const clipId of heroConfig.clipOrder) {
     const clip = heroConfig.clips[clipId]
     const frameCount = clip.frameCount
@@ -192,7 +211,7 @@ function registerOneHeroSpriteAnims(
       const key = `${heroConfig.spriteKey}-${clip.megasheetClip}-${direction}`
       if (animManager.exists(key)) continue
 
-      const rowOffset = directionRowMap[direction] * heroConfig.framesPerDirectionRow
+      const rowOffset = DIRECTION_ROW_MAP[direction] * heroConfig.framesPerDirectionRow
 
       if (useVariable) {
         const frames: Phaser.Types.Animations.AnimationFrame[] = []
@@ -228,6 +247,54 @@ function registerOneHeroSpriteAnims(
   }
 }
 
+/** Registers cast keys whose frame band and timing are selected per ability. */
+function registerOneHeroAbilityCastAnims(
+  animManager: Phaser.Animations.AnimationManager,
+  heroConfig: HeroSpriteConfig,
+): void {
+  for (const abilityId of ABILITY_SCOPED_CAST_IDS) {
+    const clipId = heroConfig.spellCastClipByAbilityId[abilityId]
+    const clip = heroConfig.clips[clipId]
+    const timing = getSpellAnimationConfig(heroConfig.id, abilityId)
+    const perFrameMs = timing.frameDurationsMs
+    const useVariable =
+      perFrameMs !== undefined && perFrameMs.length === clip.frameCount
+
+    for (const direction of DIRECTIONS) {
+      const key = `${heroConfig.spriteKey}-${clip.megasheetClip}-${abilityId}-${direction}`
+      if (animManager.exists(key)) continue
+
+      const start =
+        DIRECTION_ROW_MAP[direction] * heroConfig.framesPerDirectionRow +
+        heroConfig.clipBaseFrame[clipId]
+      if (useVariable) {
+        animManager.create({
+          key,
+          frames: perFrameMs.map((duration, index) => ({
+            key: heroConfig.spriteKey,
+            frame: start + index,
+            duration,
+          })),
+          repeat: 0,
+          yoyo: false,
+        })
+        continue
+      }
+
+      animManager.create({
+        key,
+        frames: animManager.generateFrameNumbers(heroConfig.spriteKey, {
+          start,
+          end: start + clip.frameCount - 1,
+        }),
+        frameRate: frameRateForDuration(clip.frameCount, timing.durationMs),
+        repeat: 0,
+        yoyo: false,
+      })
+    }
+  }
+}
+
 /**
  * Defines per-direction frame ranges for all lady-wizard animation clips on the shared
  * sprite sheet. Each direction-clip combination becomes one Phaser AnimationConfig.
@@ -252,5 +319,6 @@ export const registerHeroSpriteAnims = (
 ): void => {
   for (const heroConfig of Object.values(HERO_SPRITE_CONFIGS)) {
     registerOneHeroSpriteAnims(animManager, heroConfig)
+    registerOneHeroAbilityCastAnims(animManager, heroConfig)
   }
 }

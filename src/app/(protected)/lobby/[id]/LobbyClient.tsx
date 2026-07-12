@@ -58,6 +58,7 @@ const HERO_CARDS = Object.values(HERO_CONFIGS)
 const HERO_ICON: Record<string, string> = {
   yen: "Y",
   triss: "T",
+  helena: "H",
 }
 
 /**
