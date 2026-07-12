@@ -7,6 +7,7 @@ describe("killFeedAbilityLabel", () => {
   it("maps known abilities", () => {
     expect(killFeedAbilityLabel("fireball")).toBe("Fireball")
     expect(killFeedAbilityLabel("yen_cleaver")).toBe("Yen Cleaver")
+    expect(killFeedAbilityLabel("helena_energy_wave")).toBe("Helena Energy Wave")
   })
 
   it("handles null", () => {

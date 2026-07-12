@@ -6,8 +6,8 @@ import { describe, expect, it, vi } from "vitest"
 import { HERO_CARD_CONFIGS, HeroCard } from "./HeroCard"
 
 describe("HeroCard", () => {
-  it("defines only Yen and Triss cards with hero-specific portraits", () => {
-    expect(Object.keys(HERO_CARD_CONFIGS)).toEqual(["yen", "triss"])
+  it("defines Yen, Triss, and Helena cards with hero-specific portraits", () => {
+    expect(Object.keys(HERO_CARD_CONFIGS)).toEqual(["yen", "triss", "helena"])
     expect(HERO_CARD_CONFIGS.yen).toMatchObject({
       id: "yen",
       displayName: "Yen",
@@ -18,6 +18,13 @@ describe("HeroCard", () => {
       id: "triss",
       displayName: "Triss",
       portraitUrl: "/assets/sprites/heroes/triss/sheets/idle-south.png",
+      portraitSheetWidth: 160,
+    })
+    expect(HERO_CARD_CONFIGS.helena).toMatchObject({
+      id: "helena",
+      displayName: "Helena",
+      accent: "#3b82f6",
+      portraitUrl: "/assets/sprites/heroes/helena/sheets/idle-south.png",
       portraitSheetWidth: 160,
     })
   })
